@@ -95,13 +95,12 @@ export default function MapMinersDashboard({
                 description: anyMeta.description || '',
                 difficulty: anyMeta.difficultyOverride !== 'Auto' ? anyMeta.difficultyOverride : (anyMeta.calculatedDifficulty || 'Moderate'),
                 stats: {
-                  distance: 0,
-                  elevationGain: 0,
-                  elevationLoss: 0,
-                  minElevation: 0,
-                  maxElevation: 0,
-                  ...anyMeta.stats,
-                  estimatedHours: anyMeta.hoursOverride !== 'Auto' ? anyMeta.hoursOverride : (anyMeta.stats?.estimatedHours || 0)
+                  distance: Number(anyMeta.distance || anyMeta.stats?.distance || 0),
+                  elevationGain: Number(anyMeta.elevation_gain || anyMeta.elevationGain || anyMeta.stats?.elevationGain || 0),
+                  elevationLoss: Number(anyMeta.elevation_loss || anyMeta.elevationLoss || anyMeta.stats?.elevationLoss || 0),
+                  minElevation: Number(anyMeta.min_elevation || anyMeta.minElevation || anyMeta.stats?.minElevation || 0),
+                  maxElevation: Number(anyMeta.max_elevation || anyMeta.maxElevation || anyMeta.stats?.maxElevation || 0),
+                  estimatedHours: anyMeta.hoursOverride !== 'Auto' ? anyMeta.hoursOverride : (anyMeta.estimated_hours || anyMeta.estimatedHours || anyMeta.stats?.estimatedHours || 0)
                 },
                 province: anyMeta.province || 'Bagmati',
                 district: anyMeta.district || 'Kathmandu',

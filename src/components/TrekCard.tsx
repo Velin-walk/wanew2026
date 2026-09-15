@@ -99,7 +99,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   const fillPercentage = Math.min(100, Math.round((currentParticipants / trek.capacity) * 100));
 
   return (
-    <div className="bg-white rounded-2xl border border-[#EFEAE4] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between w-full max-w-full overflow-hidden">
+    <div className="bg-white rounded-2xl border border-[#D8D2C9] shadow-[0_6px_20px_rgba(0,0,0,0.06)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between w-full max-w-full overflow-hidden">
       {/* Card Image */}
       <div className="relative h-40 sm:h-48 w-full overflow-hidden group">
         <img
@@ -176,7 +176,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-1.5 my-3 py-2 px-2.5 bg-[#F9F7F5] rounded-xl border border-[#F0EBE5] text-center">
+        <div className="grid grid-cols-3 gap-1.5 my-3 py-2 px-2.5 bg-[#F5F2ED] rounded-xl border border-[#E2DDD5] text-center">
           <div>
             <span className="text-[9px] font-bold uppercase text-[#8B8680] tracking-wider block truncate">
               Type / Duration
@@ -273,37 +273,39 @@ export const TrekCard: React.FC<TrekCardProps> = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t border-[#F0EBE5]">
-        <button
-          type="button"
-          onClick={() => onViewItinerary?.(trek)}
-          className="flex items-center justify-center gap-1 min-h-[44px] px-1 text-xs font-semibold text-[#E08828] bg-[#E08828]/10 hover:bg-[#E08828]/15 border border-[#E08828]/20 rounded-xl active:scale-[0.98] transition-all cursor-pointer"
-        >
-          <FileText className="w-3.5 h-3.5 shrink-0" />
-          <span>Itinerary</span>
-        </button>
+      <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4 pt-1">
+        <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-[#F0EBE5]">
+          <button
+            type="button"
+            onClick={() => onViewItinerary?.(trek)}
+            className="flex items-center justify-center gap-1 min-h-[42px] px-1 text-xs font-semibold text-[#E08828] bg-[#E08828]/10 hover:bg-[#E08828]/15 border border-[#E08828]/20 rounded-xl active:scale-[0.98] transition-all cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span>Itinerary</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => onShare(trek)}
-          className="flex items-center justify-center gap-1.5 min-h-[44px] px-1 text-xs font-semibold text-[#5A5551] bg-[#F9F7F5] hover:bg-[#F0ECE7] border border-[#E5E1DB] rounded-xl active:scale-[0.98] transition-all cursor-pointer"
-        >
-          <Share2 className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
-          <span>Invite</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => onShare(trek)}
+            className="flex items-center justify-center gap-1.5 min-h-[42px] px-1 text-xs font-semibold text-[#5A5551] bg-[#F9F7F5] hover:bg-[#F0ECE7] border border-[#E5E1DB] rounded-xl active:scale-[0.98] transition-all cursor-pointer"
+          >
+            <Share2 className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
+            <span>Invite</span>
+          </button>
 
-        <button
-          type="button"
-          disabled={isFull}
-          onClick={() => onRegister(trek)}
-          className={`flex items-center justify-center gap-1.5 min-h-[44px] px-1 text-xs font-bold rounded-xl transition-all text-white cursor-pointer ${
-            isFull
-              ? 'bg-[#8B8680] cursor-not-allowed opacity-70'
-              : 'bg-[#7ABA42] hover:bg-[#6CA838] active:scale-[0.98] shadow-xs'
-          }`}
-        >
-          <span>{isFull ? 'Waitlist' : 'Register'}</span>
-        </button>
+          <button
+            type="button"
+            disabled={isFull}
+            onClick={() => onRegister(trek)}
+            className={`flex items-center justify-center gap-1.5 min-h-[42px] px-1 text-xs font-bold rounded-xl transition-all text-white cursor-pointer ${
+              isFull
+                ? 'bg-[#8B8680] cursor-not-allowed opacity-70'
+                : 'bg-[#7ABA42] hover:bg-[#6CA838] active:scale-[0.98] shadow-xs'
+            }`}
+          >
+            <span>{isFull ? 'Waitlist' : 'Register'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -97,7 +97,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Map Miners
               </h1>
               <p className="text-[10px] text-[#8B8680] leading-none mt-0.5">
-                Community Trail Intelligence
+                Trails contributed by community
               </p>
             </div>
           </div>
@@ -132,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Walk Nepal Walk
               </h1>
               <p className="text-[10px] text-[#8B8680] leading-none mt-0.5">
-                Fitness, Fun & Friendship via Hikes & Treks
+                Fitness, Fun & Friendship with Treks & Hikes
               </p>
             </div>
           </div>

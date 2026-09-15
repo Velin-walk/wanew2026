@@ -111,7 +111,19 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const convertTrekToSavedHikeRecord = (t: any): SavedHikeRecord => {
-    const d = typeof t.data === 'string' ? JSON.parse(t.data) : (t.data || {});
+    let d: any = {};
+    if (t.data) {
+      if (typeof t.data === 'string') {
+        try {
+          d = JSON.parse(t.data);
+        } catch (e) {
+          console.warn('Failed to parse t.data JSON string in AdminDashboard:', t.data, e);
+          d = {};
+        }
+      } else {
+        d = t.data;
+      }
+    }
     return {
       id: t.id,
       hikeNumber: t.hike_number || d.hikeNumber || '',

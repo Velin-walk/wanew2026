@@ -271,9 +271,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F3EFEA] md:bg-[#F9F7F5] flex flex-col items-center justify-start w-full">
+    <div className="min-h-screen bg-[#EAE5DF] md:bg-[#F0EBE5] flex flex-col items-center justify-start w-full">
       {/* Viewport Container: Compact phone container on mobile, full-width responsive on desktop */}
-      <div className="w-full max-w-md sm:max-w-xl md:max-w-none bg-[#F9F7F5] min-h-screen flex flex-col relative shadow-sm sm:shadow-md md:shadow-none sm:border-x md:border-none sm:border-[#E5E1DB]">
+      <div className="w-full max-w-md sm:max-w-xl md:max-w-none bg-[#F0EBE5] md:bg-[#F2ECE5] min-h-screen flex flex-col relative shadow-sm sm:shadow-md md:shadow-none sm:border-x md:border-none sm:border-[#D8D2C9]">
         {/* Mobile Toast notifications (centered, responsive) */}
         {toast && (
           <div

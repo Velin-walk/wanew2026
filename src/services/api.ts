@@ -21,7 +21,19 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<Res
 
 export function normalizeTrek(row: any): Trek {
   // Returns a normalized Trek object from raw API response row
-  const d = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {});
+  let d: any = {};
+  if (row.data) {
+    if (typeof row.data === 'string') {
+      try {
+        d = JSON.parse(row.data);
+      } catch (e) {
+        console.warn('Failed to parse row.data JSON string:', row.data, e);
+        d = {};
+      }
+    } else {
+      d = row.data;
+    }
+  }
   
   // Prefer values from the nested data object if they exist
   const title = d.title || row.title || row.name || row.trek_name || "";
