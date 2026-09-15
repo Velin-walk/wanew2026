@@ -12,7 +12,7 @@ import { InfoPagesModal, SubPageType } from './components/InfoPagesModal';
 import { FALLBACK_TREKS } from './data/fallbackTreks';
 import { CheckCircle2, AlertCircle, Mountain, Heart } from 'lucide-react';
 import MapMinersDashboard from './components/mapminers/MapMinersDashboard';
-import { apiFetch, normalizeTrek } from './services/api';
+import { apiFetch, normalizeTrek, enrichTreksWithRegistrations } from './services/api';
 import { isAdminEmail } from './adminUtils';
 import AdminDashboard from './components/admin/AdminDashboard';
 
@@ -54,61 +54,77 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const fetchTreks = useCallback(async () => {
+  const refreshData = useCallback(async () => {
     try {
-      const res = await apiFetch('/treks');
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const data = await res.json();
-        const trekItems = Array.isArray(data) ? data : data?.data;
-        if (Array.isArray(trekItems) && trekItems.length > 0) {
-          setTreks(trekItems.map(normalizeTrek));
-        } else {
-          setTreks((prev) => (prev.length > 0 ? prev : FALLBACK_TREKS));
+      // 1. Fetch treks (Cloudflare Worker direct or server fallback)
+      let baseTreks: Trek[] = [];
+      try {
+        const res = await apiFetch('/treks');
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          const trekItems = Array.isArray(data) ? data : data?.data;
+          if (Array.isArray(trekItems) && trekItems.length > 0) {
+            baseTreks = trekItems.map(normalizeTrek);
+          }
         }
-      } else {
-        console.warn('Could not retrieve JSON response for treks. Content-Type:', contentType, 'Status:', res.status);
-        setTreks((prev) => (prev.length > 0 ? prev : FALLBACK_TREKS));
+      } catch (err) {
+        console.warn('Network issue fetching treks:', err);
+      }
+
+      if (baseTreks.length === 0) {
+        baseTreks = FALLBACK_TREKS;
+      }
+
+      // 2. Fetch live registrations directly from Cloudflare Worker D1
+      let allRegs: any[] = [];
+      try {
+        const regRes = await apiFetch('/registrations');
+        const regContentType = regRes.headers.get('content-type') || '';
+        if (regRes.ok && regContentType.includes('application/json')) {
+          const regJson = await regRes.json();
+          const items = Array.isArray(regJson) ? regJson : regJson?.data;
+          if (Array.isArray(items)) {
+            allRegs = items;
+          }
+        }
+      } catch (err) {
+        console.warn('Network issue fetching registrations for live roster:', err);
+      }
+
+      // 3. Enrich treks with live participant counts and roster avatars
+      const enrichedTreks = enrichTreksWithRegistrations(baseTreks, allRegs);
+      setTreks(enrichedTreks);
+
+      // 4. Update user's personal bookings
+      if (allRegs.length > 0) {
+        const userEmailLower = currentUserEmail.toLowerCase().trim();
+        const myBookings = allRegs.filter(
+          (r) => (r.email_address || r.user_email || '').toLowerCase().trim() === userEmailLower
+        );
+        setBookings(myBookings);
       }
     } catch (err) {
-      console.warn('Network issue fetching treks, falling back to local trek data:', err);
-      setTreks((prev) => (prev.length > 0 ? prev : FALLBACK_TREKS));
+      console.error('Failed to refresh data:', err);
     } finally {
       setLoadingTreks(false);
-    }
-  }, []);
-
-  const fetchBookings = useCallback(async () => {
-    setLoadingBookings(true);
-    try {
-      const res = await apiFetch(`/registrations?email=${encodeURIComponent(currentUserEmail)}`);
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const data = await res.json();
-        // Worker returns { success: true, data: [...] }
-        const bookingsData = Array.isArray(data) ? data : data?.data;
-        setBookings(Array.isArray(bookingsData) ? bookingsData : []);
-      } else {
-        console.warn('Could not retrieve JSON response for bookings. Content-Type:', contentType, 'Status:', res.status);
-      }
-    } catch (err) {
-      console.error('Failed to fetch bookings:', err);
-    } finally {
       setLoadingBookings(false);
     }
   }, [currentUserEmail]);
 
-  useEffect(() => {
-    fetchTreks();
-    fetchBookings();
+  const fetchTreks = refreshData;
+  const fetchBookings = refreshData;
 
-    // Refresh every 10 seconds for live roster updates
+  useEffect(() => {
+    refreshData();
+
+    // Refresh every 8 seconds for live roster updates
     const interval = setInterval(() => {
-      fetchTreks();
-    }, 10000);
+      refreshData();
+    }, 8000);
 
     return () => clearInterval(interval);
-  }, [fetchTreks, fetchBookings]);
+  }, [refreshData]);
 
   const toggleFavorite = (trekId: string) => {
     setFavorites((prev) => {

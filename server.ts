@@ -16,7 +16,7 @@ async function startServer() {
 
   // Cloudflare Worker Base URL
   const CLOUDFLARE_WORKER_URL = (
-    process.env.CLOUDFLARE_WORKER_URL || 'https://walknepalwalk-api.velinrai-vr.workers.dev'
+    process.env.CLOUDFLARE_WORKER_URL || 'https://walk-nepal-walk-api.velinrai-vr.workers.dev'
   ).replace(/\/+$/, '');
 
   console.log(`[Cloudflare Integration] Configured Worker URL: ${CLOUDFLARE_WORKER_URL}`);
@@ -44,6 +44,20 @@ async function startServer() {
   let itinerariesFilePath = path.join(process.cwd(), 'data', 'itineraries.json');
   const fallbackFilePath = path.join('/tmp', 'itineraries.json');
 
+  function deduplicateHikes(records: SavedHikeRecord[]): SavedHikeRecord[] {
+    const seen = new Set<string>();
+    const result: SavedHikeRecord[] = [];
+    for (const r of records) {
+      if (!r || !r.id) continue;
+      const hNum = (r.hikeNumber || '').trim();
+      const key = (hNum && hNum !== 'TBD') ? `num:${hNum}` : `id:${r.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(r);
+    }
+    return result;
+  }
+
   function loadSavedItineraries(): SavedHikeRecord[] {
     try {
       if (fs.existsSync(fallbackFilePath)) {
@@ -51,14 +65,14 @@ async function startServer() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           itinerariesFilePath = fallbackFilePath;
-          return parsed;
+          return deduplicateHikes(parsed);
         }
       }
       if (fs.existsSync(itinerariesFilePath)) {
         const raw = fs.readFileSync(itinerariesFilePath, 'utf-8');
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return deduplicateHikes(parsed);
         }
       }
     } catch (e) {
@@ -68,16 +82,17 @@ async function startServer() {
   }
 
   function saveItinerariesToDisk(records: SavedHikeRecord[]) {
+    const cleanRecords = deduplicateHikes(records);
     try {
       const dir = path.dirname(itinerariesFilePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(itinerariesFilePath, JSON.stringify(records, null, 2), 'utf-8');
+      fs.writeFileSync(itinerariesFilePath, JSON.stringify(cleanRecords, null, 2), 'utf-8');
     } catch (e) {
       try {
         itinerariesFilePath = fallbackFilePath;
-        fs.writeFileSync(itinerariesFilePath, JSON.stringify(records, null, 2), 'utf-8');
+        fs.writeFileSync(itinerariesFilePath, JSON.stringify(cleanRecords, null, 2), 'utf-8');
       } catch (fallbackErr) {
         console.error('[Itineraries] Error saving to disk:', fallbackErr);
       }
@@ -214,14 +229,51 @@ async function startServer() {
   // Cloudflare D1 Helper Functions
   async function syncItineraryToCloudflare(record: SavedHikeRecord): Promise<{ success: boolean; error?: string }> {
     try {
+      const dataObj: any = record.data || {};
+      const overview = dataObj.overview || {};
+      const priceTiers = dataObj.priceTiers || [];
+      const minPrice = priceTiers.length > 0 ? Math.min(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
+      const maxPrice = priceTiers.length > 0 ? Math.max(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
+
+      const payload = {
+        record,
+        id: record.id,
+        hike_number: (record.hikeNumber || dataObj.hikeNumber || '').trim() || 'TBD',
+        hikeNumber: (record.hikeNumber || dataObj.hikeNumber || '').trim() || 'TBD',
+        title: record.title || dataObj.title || 'Untitled Hike',
+        category: record.category || dataObj.category || 'Overnight Bus Hikes',
+        status: record.status || 'published',
+        cover_image_url: dataObj.coverImageUrl || '',
+        hike_date: dataObj.hikeDate || '',
+        min_price: minPrice,
+        max_price: maxPrice,
+        currency: dataObj.currency || 'NPR',
+        meeting_point: overview.meetingPoint || '',
+        meeting_time: overview.meetingTime || '',
+        expected_duration: overview.expectedDuration || '',
+        difficulty: overview.difficulty || 'Moderate',
+        approx_distance: overview.approxDistance || '',
+        elevation_range: overview.elevationRange || '',
+        elevation_gross: overview.elevationGross || '',
+        ending_point: overview.endingPoint || '',
+        team_leader: dataObj.teamLeader || '',
+        whatsapp_link: dataObj.whatsappLink || '',
+        itinerary_link: dataObj.itineraryLink || '',
+        faq_link: dataObj.faqLink || '',
+        max_capacity: dataObj.maxCapacity || 25,
+        data_json: JSON.stringify(dataObj),
+        data: dataObj,
+        author_email: record.authorEmail || 'walknepalwalk@gmail.com',
+      };
+
       const res = await fetch(`${CLOUDFLARE_WORKER_URL}/treks/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ record }),
-        signal: AbortSignal.timeout(5000),
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000),
       });
       if (res.ok) {
-        console.log(`[Cloudflare D1] Successfully synced Hike #${record.hikeNumber} to Worker D1`);
+        console.log(`[Cloudflare D1] Successfully synced Hike #${payload.hike_number} to Worker D1`);
         return { success: true };
       }
       const errTxt = await res.text().catch(() => '');
@@ -276,6 +328,38 @@ async function startServer() {
       }
     } catch (e: any) {
       console.warn('[Cloudflare Treks Fetch] Cloudflare Worker offline/unreachable, using local itineraries:', e?.message);
+    }
+
+    // Sync registrations from Cloudflare D1 so participant counts and live roster stats are accurate
+    try {
+      const regRes = await fetch(`${CLOUDFLARE_WORKER_URL}/registrations`, { signal: AbortSignal.timeout(5000) });
+      if (regRes.ok) {
+        const regJson = await regRes.json();
+        const liveRegs = regJson.data || (Array.isArray(regJson) ? regJson : []);
+        if (Array.isArray(liveRegs) && liveRegs.length > 0) {
+          for (const lr of liveRegs) {
+            const exists = bookings.some((b) => String(b.id) === String(lr.id));
+            if (!exists) {
+              bookings.push({
+                id: Number(lr.id) || Date.now(),
+                user_email: lr.email_address || lr.user_email || 'anonymous@walknepalwalk.com',
+                full_name: lr.full_name || 'Participant',
+                phone: lr.phone || lr.whatsapp || '',
+                trek_id: String(lr.hike_number || lr.trek_id || ''),
+                hike_number: String(lr.hike_number || ''),
+                trek_name: lr.trek_name || '',
+                trek_date: lr.list_name || lr.timestamp || '',
+                joined_at: lr.timestamp || new Date().toISOString(),
+                age_group: lr.age_group || '20-30',
+                gender: lr.gender || 'Male',
+                team_members: Array.isArray(lr.team_members) ? lr.team_members : undefined,
+              });
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Cloudflare Bookings Sync] Could not sync registrations:', e?.message);
     }
 
     const localTreks = getLocalActiveTreks();
@@ -381,10 +465,10 @@ async function startServer() {
     });
   });
 
-  // ===== BOOKINGS ENDPOINTS =====
+  // ===== REGISTRATIONS / BOOKINGS ENDPOINTS =====
 
-  // GET /api/bookings (Cloudflare D1 + Local Memory)
-  app.get('/api/bookings', async (req, res) => {
+  // GET /api/registrations or /api/bookings (Cloudflare D1 + Local Memory)
+  app.get(['/api/registrations', '/api/bookings'], async (req, res) => {
     const email = (req.query.email as string) || '';
     let cfBookings: Booking[] = [];
     try {
@@ -393,8 +477,38 @@ async function startServer() {
         : `${CLOUDFLARE_WORKER_URL}/registrations`;
       const cfRes = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (cfRes.ok) {
-        const json = await cfRes.json();
-        if (Array.isArray(json)) cfBookings = json;
+        const json: any = await cfRes.json();
+        const rawList = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
+        cfBookings = rawList.map((r: any) => ({
+          id: r.id,
+          trek_id: String(r.hike_number || r.trek_id || ''),
+          hike_number: String(r.hike_number || ''),
+          user_email: r.email_address || r.user_email || r.email || '',
+          email: r.email_address || r.email || r.user_email || '',
+          email_address: r.email_address || r.email || r.user_email || '',
+          full_name: r.full_name || '',
+          phone: r.phone || '',
+          whatsapp: r.whatsapp || r.whatsapp_number || r.phone || '',
+          emergency_contact: r.emergency_backup_contact || r.emergency_contact || '',
+          emergency_backup_contact: r.emergency_backup_contact || r.emergency_contact || '',
+          profession: r.profession || '',
+          is_group: r.part_of_group === 'Group' || !!r.is_group,
+          part_of_group: r.part_of_group || 'Solo',
+          age_group: r.age_group || '',
+          gender: r.gender || '',
+          joined_at: r.timestamp || r.joined_at || new Date().toISOString(),
+          trek_name: r.trek_name || '',
+          trek_date: r.list_name || r.trek_date || '',
+          trek_difficulty: r.difficulty || r.trek_difficulty || 'moderate',
+          trek_days: r.trek_days || '1 Day',
+          team_members: Array.isArray(r.team_members) ? r.team_members : [],
+          due: r.due || '',
+          paid: r.paid || '',
+          agreement: r.agreement || 'Yes',
+          suggestions: r.suggestions || '',
+          guide_mode: r.guide_mode || 'Guided',
+          transport_mode: r.transport_mode || 'Bus',
+        }));
       }
     } catch (e: any) {
       console.warn('[Cloudflare Bookings Fetch] Using local bookings list:', e?.message);
@@ -412,88 +526,113 @@ async function startServer() {
     res.json(Array.from(combinedMap.values()));
   });
 
-  // POST /api/bookings (Sync to Cloudflare D1 + Local)
-  app.post('/api/bookings', async (req, res) => {
+  // POST /api/registrations or /api/bookings (Sync directly to Cloudflare D1)
+  app.post(['/api/registrations', '/api/bookings'], async (req, res) => {
     try {
-      const {
-        trek_id,
-        trek_name,
-        user_email = 'velinrai.VR@gmail.com',
-        full_name,
-        phone,
-        whatsapp,
-        emergency_contact,
-        email,
-        profession,
-        is_group,
-        age_group,
-        gender,
-        team_members = [],
-        has_medical,
-        specify_medical,
-        recent_hikes,
-        agree_rules,
-        guide_preference,
-        transport_preference,
-        suggestions,
-      } = req.body;
+      const body = req.body || {};
+      const fullName = body.full_name || body.name || '';
+      const phone = body.phone || body.whatsapp || '';
+      const email = body.email_address || body.email || body.user_email || 'walknepalwalk@gmail.com';
+      const hikeNumber = String(body.hike_number || body.trek_id || '');
+      const trekName = body.trek_name || '';
 
-      if (!trek_id || !full_name || !phone || !age_group || !gender) {
-        return res.status(400).json({ error: 'Missing required fields' });
+      if (!fullName || !phone) {
+        return res.status(400).json({ error: 'Full name and phone number are required.' });
       }
 
       const localTreks = getLocalActiveTreks();
       const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       const trek = localTreks.find(
         (t) =>
-          t.id === trek_id ||
-          t.hike_number === trek_id ||
-          (t.name && trek_name && norm(t.name) === norm(trek_name))
+          t.id === hikeNumber ||
+          t.hike_number === hikeNumber ||
+          (t.name && trekName && norm(t.name) === norm(trekName))
       );
 
       const bookingId = nextBookingId++;
+      const isGroup = body.part_of_group === 'Group' || body.is_group || (Array.isArray(body.team_members) && body.team_members.length > 0);
+
       const newBooking: Booking = {
         id: bookingId,
-        trek_id,
-        user_email: email || user_email,
-        full_name,
+        trek_id: hikeNumber || trek?.hike_number || trek?.id || '',
+        user_email: email,
+        full_name: fullName,
         phone,
-        whatsapp: whatsapp || phone,
-        emergency_contact,
-        email: email || user_email,
-        profession,
-        is_group,
-        age_group,
-        gender,
+        whatsapp: body.whatsapp || body.whatsapp_number || phone,
+        emergency_contact: body.emergency_backup_contact || body.emergency_contact || '',
+        email: email,
+        profession: body.profession || '',
+        is_group: isGroup,
+        age_group: body.age_group || '20-30',
+        gender: body.gender || 'Not specified',
         joined_at: new Date().toISOString(),
-        trek_name: trek?.name || trek_name || 'Walk Nepal Walk Hike',
-        trek_date: trek?.date || 'Upcoming',
-        trek_difficulty: trek?.difficulty || 'moderate',
+        trek_name: trekName || trek?.name || 'Walk Nepal Walk Hike',
+        trek_date: body.list_name || trek?.date || 'Upcoming',
+        trek_difficulty: body.difficulty || trek?.difficulty || 'moderate',
         trek_days: trek?.days || '1 Day',
-        team_members: Array.isArray(team_members) ? team_members : [],
-        has_medical,
-        specify_medical,
-        recent_hikes,
-        agree_rules,
-        guide_preference,
-        transport_preference,
-        suggestions,
+        team_members: Array.isArray(body.team_members) ? body.team_members : [],
+        has_medical: body.has_medical || (body.medical_condition && body.medical_condition !== 'No'),
+        specify_medical: body.specify_medical || (body.medical_condition !== 'No' ? body.medical_condition : ''),
+        recent_hikes: body.recent_hikes || '',
+        agree_rules: body.agreement || body.agree_rules || 'Yes',
+        guide_preference: body.guide_mode || body.guide_preference || 'Guided',
+        transport_preference: body.transport_mode || body.transport_preference || 'Bus',
+        suggestions: body.suggestions || '',
       };
 
       bookings.unshift(newBooking);
 
-      // Async sync to Cloudflare D1
+      // Cloudflare D1 Registration Payload matching exact D1 columns
+      const cfPayload = {
+        hike_number: hikeNumber || trek?.hike_number || 'TBD',
+        trek_name: trekName || trek?.name || 'Walk Nepal Walk Hike',
+        full_name: fullName,
+        pax: Number(body.pax) || (Array.isArray(body.team_members) ? 1 + body.team_members.length : 1),
+        phone: phone,
+        whatsapp: body.whatsapp || body.whatsapp_number || phone,
+        whatsapp_number: body.whatsapp_number || body.whatsapp || phone,
+        email_address: email,
+        emergency_backup_contact: body.emergency_backup_contact || body.emergency_contact || '',
+        profession: body.profession || '',
+        part_of_group: isGroup ? 'Group' : 'Solo',
+        list_name: body.list_name || (trek ? `${trek.name} (${trek.date})` : trekName),
+        age_group: body.age_group || '20-30',
+        gender: body.gender || 'Not specified',
+        fitness: body.fitness || trek?.fitness_level || 'Moderate',
+        medical_condition: body.medical_condition || (body.has_medical === 'Yes' ? body.specify_medical || 'Yes' : 'No'),
+        recent_hikes: body.recent_hikes || '',
+        agreement: body.agreement || body.agree_rules || 'Yes',
+        suggestions: body.suggestions || '',
+        guide_mode: body.guide_mode || body.guide_preference || 'Guided',
+        transport_mode: body.transport_mode || body.transport_preference || 'Bus',
+        due: body.due || (trek?.price ? `NPR ${trek.price}` : ''),
+        paid: body.paid || '',
+        distance: body.distance || trek?.distance || '',
+        difficulty: body.difficulty || trek?.difficulty || 'moderate',
+        season: body.season || trek?.season || 'Autumn / Year-round',
+        type_of_trail: body.type_of_trail || trek?.type_of_trail || '',
+        person_remarks: body.person_remarks || (Array.isArray(body.team_members) && body.team_members.length > 0 ? `Primary contact with ${body.team_members.length} companion(s)` : 'Solo registration'),
+        updates: body.updates || '',
+        pickup_point: body.pickup_point || '',
+      };
+
+      // Direct Sync to Cloudflare D1
       let cfSynced = false;
+      let cfResponse: any = null;
       try {
         const cfRes = await fetch(`${CLOUDFLARE_WORKER_URL}/registrations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newBooking),
-          signal: AbortSignal.timeout(5000),
+          body: JSON.stringify(cfPayload),
+          signal: AbortSignal.timeout(8000),
         });
         if (cfRes.ok) {
           cfSynced = true;
-          console.log(`[Cloudflare D1] Registration saved for ${full_name}`);
+          cfResponse = await cfRes.json().catch(() => ({}));
+          console.log(`[Cloudflare D1] Registration successfully saved for ${fullName} (${email}) to Cloudflare D1`);
+        } else {
+          const errTxt = await cfRes.text().catch(() => '');
+          console.warn(`[Cloudflare D1] Registration failed (status ${cfRes.status}):`, errTxt);
         }
       } catch (cfErr: any) {
         console.warn('[Cloudflare D1] Could not sync registration:', cfErr?.message);
@@ -505,15 +644,16 @@ async function startServer() {
         message: cfSynced ? 'Successfully registered & saved to Cloudflare D1!' : 'Successfully registered!',
         booking: newBooking,
         cloudflare_synced: cfSynced,
+        cloudflare_response: cfResponse,
       });
     } catch (err: any) {
-      console.error('Error handling booking:', err);
+      console.error('Error handling booking/registration:', err);
       res.status(500).json({ error: err.message || 'Server error processing booking' });
     }
   });
 
-  // DELETE /api/bookings/:bookingId
-  app.delete('/api/bookings/:bookingId', (req, res) => {
+  // DELETE /api/registrations/:bookingId or /api/bookings/:bookingId
+  app.delete(['/api/registrations/:bookingId', '/api/bookings/:bookingId'], (req, res) => {
     const bookingId = parseInt(req.params.bookingId);
     const index = bookings.findIndex((b) => b.id === bookingId);
 
@@ -651,31 +791,54 @@ async function startServer() {
   // POST /api/mapminers/upload & POST /api/mapminers/contribute - Save to Cloudflare R2/D1 & local
   app.post(['/api/mapminers/upload', '/api/mapminers/contribute'], async (req, res) => {
     try {
-      const { fileName, fileContent, name, description, difficultyOverride, hoursOverride, province, district, nearbyCity, highlights, contributorName, contributorEmail } = req.body;
+      const {
+        fileName,
+        fileContent,
+        name,
+        description,
+        difficulty,
+        difficultyOverride,
+        hoursOverride,
+        province,
+        district,
+        nearbyCity,
+        highlights,
+        contributorName,
+        contributorEmail,
+        startPos,
+        bounds,
+        stats
+      } = req.body;
 
       if (!fileName || !name) {
         return res.status(400).json({ error: 'Missing required parameters: fileName or name' });
       }
 
+      const id = req.body.id || `trail_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
       const newTrail = {
-        id: `trail_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        id,
         fileName,
         file_name: fileName,
         name,
         description: description || '',
-        difficultyOverride: difficultyOverride || 'Auto',
+        difficulty: difficulty || difficultyOverride || 'Moderate',
+        difficultyOverride: difficultyOverride || difficulty || 'Auto',
         hoursOverride: hoursOverride || 'Auto',
         province: province || 'Bagmati',
         district: district || 'Kathmandu',
         nearbyCity: nearbyCity || 'Kathmandu',
         highlights: highlights || '',
         uploadedAt: new Date().toISOString(),
+        uploaded_at: new Date().toISOString(),
         contributorName: contributorName || 'Community Member',
+        contributor_name: contributorName || 'Community Member',
         contributorEmail: contributorEmail || '',
+        contributor_email: contributorEmail || '',
         fileContent: fileContent || `<gpx version="1.1"><trk><name>${name}</name></trk></gpx>`,
-        startPos: { lat: 27.7, lng: 85.3 },
-        bounds: [[27.6, 85.2], [27.8, 85.4]],
-        stats: {
+        startPos: startPos || { lat: 27.7, lng: 85.3 },
+        start_pos: typeof startPos === 'string' ? startPos : JSON.stringify(startPos || { lat: 27.7, lng: 85.3 }),
+        bounds: bounds || [[27.6, 85.2], [27.8, 85.4]],
+        stats: stats || {
           distance: 12.5,
           elevationGain: 650,
           elevationLoss: 650,
@@ -689,23 +852,39 @@ async function startServer() {
 
       // Sync to Cloudflare Worker
       let cfSynced = false;
+      let cfError: string | null = null;
+      let cfData: any = null;
       try {
         const cfRes = await fetch(`${CLOUDFLARE_WORKER_URL}/mapminers/upload`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newTrail),
-          signal: AbortSignal.timeout(6000),
+          body: JSON.stringify({
+            ...newTrail,
+            file_size: fileContent ? Buffer.byteLength(fileContent, 'utf8') : 0,
+            fileSize: fileContent ? Buffer.byteLength(fileContent, 'utf8') : 0,
+          }),
+          signal: AbortSignal.timeout(8000),
         });
-        if (cfRes.ok) cfSynced = true;
+        if (cfRes.ok) {
+          cfSynced = true;
+          cfData = await cfRes.json().catch(() => ({}));
+        } else {
+          const errData = await cfRes.json().catch(() => ({}));
+          cfError = errData?.error || `Cloudflare HTTP ${cfRes.status}`;
+          console.warn('[MapMiners] Cloudflare upload warning:', cfError);
+        }
       } catch (err: any) {
-        console.warn('[MapMiners] Could not sync trail upload to Cloudflare:', err?.message);
+        cfError = err?.message || 'Network error connecting to Cloudflare';
+        console.warn('[MapMiners] Could not sync trail upload to Cloudflare:', cfError);
       }
 
       res.json({
         success: true,
-        message: cfSynced ? 'Trail uploaded to Cloudflare R2 & D1 successfully' : 'Trail uploaded successfully',
+        message: cfSynced ? 'Trail uploaded to Cloudflare R2 & D1 successfully' : 'Trail saved locally & R2',
         trail: newTrail,
         cloudflare_synced: cfSynced,
+        cloudflare_error: cfError,
+        cloudflare_response: cfData,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to process trail upload' });
@@ -824,17 +1003,52 @@ async function startServer() {
   // POST /api/admin/itineraries
   app.post('/api/admin/itineraries', async (req, res) => {
     try {
-      const { data, status = 'draft', authorEmail = 'admin@walknepalwalk.com' } = req.body;
+      const { id, data, status = 'draft', authorEmail = 'admin@walknepalwalk.com' } = req.body;
       if (!data || !data.title) {
         return res.status(400).json({ success: false, error: 'Missing hike data or title' });
       }
 
       const hikeNum = (data.hikeNumber || '').trim();
+
+      // Check if this hike already exists to prevent duplicate cards
+      let existingIndex = -1;
+      if (id) {
+        existingIndex = savedItineraries.findIndex((h) => h.id === id);
+      }
+      if (existingIndex === -1 && hikeNum && hikeNum !== 'TBD') {
+        existingIndex = savedItineraries.findIndex((h) => (h.hikeNumber || '').trim() === hikeNum);
+      }
+
+      if (existingIndex !== -1) {
+        // UPDATE existing record instead of creating duplicate
+        const existing = savedItineraries[existingIndex];
+        const updatedRecord: SavedHikeRecord = {
+          ...existing,
+          hikeNumber: hikeNum || existing.hikeNumber,
+          title: data.title,
+          category: data.category || existing.category,
+          status: status as any,
+          updatedAt: new Date().toISOString(),
+          data: data,
+        };
+        savedItineraries[existingIndex] = updatedRecord;
+        savedItineraries = deduplicateHikes(savedItineraries);
+        saveItinerariesToDisk(savedItineraries);
+
+        const syncResult = await syncItineraryToCloudflare(updatedRecord);
+        return res.status(200).json({
+          success: true,
+          data: updatedRecord,
+          sync: syncResult,
+          updated: true,
+        });
+      }
+
       const slug = (data.title || 'hike')
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
-      const uniqueId = `hike-${hikeNum ? hikeNum + '-' : ''}${slug}-${Date.now().toString(36)}`;
+      const uniqueId = id || `hike-${hikeNum ? hikeNum + '-' : ''}${slug}-${Date.now().toString(36)}`;
 
       const newRecord: SavedHikeRecord = {
         id: uniqueId,
@@ -849,6 +1063,7 @@ async function startServer() {
       };
 
       savedItineraries.unshift(newRecord);
+      savedItineraries = deduplicateHikes(savedItineraries);
       saveItinerariesToDisk(savedItineraries);
 
       // Sync to Cloudflare D1

@@ -1,11 +1,11 @@
-name = "walknepalwalk-api"
+name = "walk-nepal-walk-api"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
 # D1 Database binding for itineraries, registrations, feedback, and MapMiners trails
 [[d1_databases]]
 binding = "DB"
-database_name = "walknepalwalk-db"
+database_name = "walk_nepal_walk_db"
 database_id = "dfa42e3a-2b93-4c42-9aac-4e5aad60905e"
 
 # R2 Bucket binding for MapMiners GPX / KML trail files

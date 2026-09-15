@@ -190,26 +190,60 @@ export default {
       // 8. MAPMINERS TRAILS (/mapminers/trails)
       if (path === '/mapminers/trails' && method === 'GET') {
         if (!env.DB) return jsonResponse({ success: true, data: {} });
-        const { results } = await env.DB.prepare("SELECT * FROM mapminers_trails").all();
+        let rows = [];
+        try {
+          const res = await env.DB.prepare("SELECT * FROM community_trails ORDER BY uploaded_at DESC").all();
+          rows = res.results || [];
+        } catch (e) {
+          try {
+            const res = await env.DB.prepare("SELECT * FROM mapminers_trails ORDER BY uploaded_at DESC").all();
+            rows = res.results || [];
+          } catch (e2) {}
+        }
+
         const map = {};
-        (results || []).forEach(row => {
+        rows.forEach(row => {
+          let statsObj = {};
+          try {
+            statsObj = row.stats ? (typeof row.stats === 'string' ? JSON.parse(row.stats) : row.stats) : {};
+          } catch (e) {}
+
+          let startCoord = { lat: 27.7, lng: 85.3 };
+          try {
+            if (row.start_pos) {
+              startCoord = typeof row.start_pos === 'string' ? JSON.parse(row.start_pos) : row.start_pos;
+            } else if (row.start_lat && row.start_lng) {
+              startCoord = { lat: row.start_lat, lng: row.start_lng };
+            }
+          } catch (e) {}
+
           map[row.file_name] = {
             id: row.id,
             fileName: row.file_name,
             file_name: row.file_name,
             name: row.name,
             description: row.description,
-            difficultyOverride: row.difficulty_override,
-            hoursOverride: row.hours_override,
-            province: row.province,
-            district: row.district,
-            nearbyCity: row.nearby_city,
-            highlights: row.highlights,
+            difficulty: row.difficulty || row.difficulty_override || 'Moderate',
+            difficultyOverride: row.difficulty_override || row.difficulty || 'Auto',
+            hoursOverride: row.hours_override || 'Auto',
+            province: row.province || 'Bagmati',
+            district: row.district || 'Kathmandu',
+            nearbyCity: row.nearby_city || 'Kathmandu',
+            highlights: row.highlights || '',
             uploadedAt: row.uploaded_at,
-            contributorName: row.contributor_name,
-            contributorEmail: row.contributor_email,
-            startPos: { lat: row.start_lat || 27.7, lng: row.start_lng || 85.3 },
-            stats: row.stats ? JSON.parse(row.stats) : {}
+            uploaded_at: row.uploaded_at,
+            contributorName: row.contributor_name || 'Community Member',
+            contributorEmail: row.contributor_email || '',
+            startPos: startCoord,
+            bounds: row.bounds ? (typeof row.bounds === 'string' ? JSON.parse(row.bounds) : row.bounds) : undefined,
+            stats: {
+              distance: row.distance ?? statsObj.distance ?? 0,
+              elevationGain: row.elevation_gain ?? statsObj.elevationGain ?? 0,
+              elevationLoss: row.elevation_loss ?? statsObj.elevationLoss ?? 0,
+              minElevation: row.min_elevation ?? statsObj.minElevation ?? 0,
+              maxElevation: row.max_elevation ?? statsObj.maxElevation ?? 0,
+              estimatedHours: row.estimated_hours ?? statsObj.estimatedHours ?? 0,
+            }
           };
         });
         return jsonResponse({ success: true, data: map });
@@ -236,7 +270,24 @@ export default {
       // 10. MAPMINERS UPLOAD (/mapminers/upload OR /mapminers/contribute)
       if ((path === '/mapminers/upload' || path === '/mapminers/contribute') && method === 'POST') {
         const body = await request.json();
-        const { fileName, fileContent, name, description, difficultyOverride, hoursOverride, province, district, nearbyCity, highlights, contributorName, contributorEmail, startPos, stats } = body;
+        const {
+          fileName,
+          fileContent,
+          name,
+          description,
+          difficulty,
+          difficultyOverride,
+          hoursOverride,
+          province,
+          district,
+          nearbyCity,
+          highlights,
+          contributorName,
+          contributorEmail,
+          startPos,
+          bounds,
+          stats
+        } = body;
 
         // Store file in R2 Bucket if available
         if (env.TRAILS_BUCKET && fileName && fileContent) {
@@ -248,20 +299,82 @@ export default {
         // Store metadata in D1 if available
         if (env.DB && fileName && name) {
           const id = body.id || `trail_${Date.now()}`;
-          await env.DB.prepare(`
-            INSERT INTO mapminers_trails (id, file_name, name, description, difficulty_override, hours_override, province, district, nearby_city, highlights, uploaded_at, contributor_name, contributor_email, start_lat, start_lng, stats)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(file_name) DO UPDATE SET
-              name = excluded.name,
-              description = excluded.description,
-              highlights = excluded.highlights,
-              stats = excluded.stats
-          `).bind(
-            id, fileName, name, description || '', difficultyOverride || 'Auto', hoursOverride || 'Auto',
-            province || 'Bagmati', district || 'Kathmandu', nearbyCity || 'Kathmandu', highlights || '',
-            new Date().toISOString(), contributorName || 'Community Member', contributorEmail || '',
-            startPos?.lat || 27.7, startPos?.lng || 85.3, JSON.stringify(stats || {})
-          ).run();
+          const diff = difficulty || difficultyOverride || 'Moderate';
+          const dist = Number(stats?.distance || 0);
+          const elevGain = Number(stats?.elevationGain || 0);
+          const elevLoss = Number(stats?.elevationLoss || 0);
+          const minElev = Number(stats?.minElevation || 0);
+          const maxElev = Number(stats?.maxElevation || 0);
+          const hours = Number(stats?.estimatedHours || 0);
+          const boundsJson = typeof bounds === 'string' ? bounds : JSON.stringify(bounds || []);
+          const startPosJson = typeof startPos === 'string' ? startPos : JSON.stringify(startPos || { lat: 27.7, lng: 85.3 });
+          const startLat = startPos?.lat || 27.7;
+          const startLng = startPos?.lng || 85.3;
+
+          let inserted = false;
+          // Attempt 1: community_trails with file_size
+          try {
+            await env.DB.prepare(`
+              INSERT INTO community_trails (
+                id, file_name, name, description, difficulty, distance,
+                elevation_gain, elevation_loss, min_elevation, max_elevation,
+                estimated_hours, bounds, start_pos, contributor_name, contributor_email,
+                province, district, nearby_city, highlights, uploaded_at, file_size
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(file_name) DO UPDATE SET
+                name = excluded.name, description = excluded.description,
+                highlights = excluded.highlights, distance = excluded.distance,
+                elevation_gain = excluded.elevation_gain, elevation_loss = excluded.elevation_loss
+            `).bind(
+              id, fileName, name, description || '', diff, dist,
+              elevGain, elevLoss, minElev, maxElev, hours, boundsJson, startPosJson,
+              contributorName || 'Community Member', contributorEmail || '',
+              province || 'Bagmati', district || 'Kathmandu', nearbyCity || 'Kathmandu',
+              highlights || '', new Date().toISOString(), fileContent ? fileContent.length : 0
+            ).run();
+            inserted = true;
+          } catch (e1) {
+            // Attempt 2: community_trails without file_size (in case column does not exist)
+            try {
+              await env.DB.prepare(`
+                INSERT INTO community_trails (
+                  id, file_name, name, description, difficulty, distance,
+                  elevation_gain, elevation_loss, min_elevation, max_elevation,
+                  estimated_hours, bounds, start_pos, contributor_name, contributor_email,
+                  province, district, nearby_city, highlights, uploaded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(file_name) DO UPDATE SET
+                  name = excluded.name, description = excluded.description,
+                  highlights = excluded.highlights, distance = excluded.distance,
+                  elevation_gain = excluded.elevation_gain, elevation_loss = excluded.elevation_loss
+              `).bind(
+                id, fileName, name, description || '', diff, dist,
+                elevGain, elevLoss, minElev, maxElev, hours, boundsJson, startPosJson,
+                contributorName || 'Community Member', contributorEmail || '',
+                province || 'Bagmati', district || 'Kathmandu', nearbyCity || 'Kathmandu',
+                highlights || '', new Date().toISOString()
+              ).run();
+              inserted = true;
+            } catch (e2) {
+              // Attempt 3: mapminers_trails table
+              try {
+                await env.DB.prepare(`
+                  INSERT INTO mapminers_trails (id, file_name, name, description, difficulty_override, hours_override, province, district, nearby_city, highlights, uploaded_at, contributor_name, contributor_email, start_lat, start_lng, stats)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(file_name) DO UPDATE SET
+                    name = excluded.name, description = excluded.description, highlights = excluded.highlights, stats = excluded.stats
+                `).bind(
+                  id, fileName, name, description || '', diff, hoursOverride || 'Auto',
+                  province || 'Bagmati', district || 'Kathmandu', nearbyCity || 'Kathmandu', highlights || '',
+                  new Date().toISOString(), contributorName || 'Community Member', contributorEmail || '',
+                  startLat, startLng, JSON.stringify(stats || {})
+                ).run();
+                inserted = true;
+              } catch (e3) {
+                console.warn('D1 insert failed across all tables:', e3?.message);
+              }
+            }
+          }
         }
 
         return jsonResponse({ success: true, message: 'Trail uploaded to Cloudflare R2 & D1', fileName });

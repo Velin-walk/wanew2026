@@ -1,14 +1,36 @@
 import { Trek } from "../types";
 
-export const API_BASE_URL = "/api";
+export const CLOUDFLARE_WORKER_URL = "https://walk-nepal-walk-api.velinrai-vr.workers.dev";
+export const LOCAL_API_URL = "/api";
 
-export function apiUrl(path: string): string {
+export function apiUrl(path: string, directCloudflare = true): string {
   const cleanPath = path.replace(/^\/+/, "");
+  if (directCloudflare) {
+    return `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
+  }
   return `/api/${cleanPath}`;
 }
 
-export function apiFetch(path: string, options?: RequestInit): Promise<Response> {
-  return fetch(apiUrl(path), options);
+export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+  const cleanPath = path.replace(/^\/+/, "");
+  const directUrl = `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
+  const localUrl = `/api/${cleanPath}`;
+
+  // Prioritize Cloudflare Direct
+  try {
+    const directRes = await fetch(directUrl, options);
+    // If Cloudflare returns a valid response (2xx, 3xx, or expected 4xx), return it directly
+    if (directRes.status < 500 && directRes.status !== 404) {
+      return directRes;
+    }
+    // If the live worker route returned 502/503 or 404 (e.g. route not yet deployed on worker), fallback to local API
+    console.warn(`[Cloudflare Direct] Route ${cleanPath} returned status ${directRes.status}. Using fallback.`);
+  } catch (err: any) {
+    console.warn(`[Cloudflare Direct] Failed to reach Cloudflare Worker directly for ${cleanPath}:`, err?.message);
+  }
+
+  // Local server fallback so the UI never crashes
+  return fetch(localUrl, options);
 }
 
 export function normalizeTrek(row: any): Trek {
@@ -64,4 +86,101 @@ export function normalizeTrek(row: any): Trek {
     itinerary: row.itinerary || "",
     data: d,
   };
+}
+
+export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]): Trek[] {
+  if (!Array.isArray(treks)) return [];
+  if (!Array.isArray(registrations) || registrations.length === 0) return treks;
+
+  const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  return treks.map((trek) => {
+    const tNum = String(trek.hike_number || trek.id || '').trim();
+    const tName = norm(trek.name);
+
+    const matched = registrations.filter((r) => {
+      const rNum = String(r.hike_number || r.trek_id || '').trim();
+      if (rNum && tNum && rNum === tNum) return true;
+
+      const rTrekName = norm(r.trek_name);
+      const rListName = norm(r.list_name);
+
+      if (rTrekName && (rTrekName === tName || rTrekName.includes(tName) || tName.includes(rTrekName))) return true;
+      if (rListName && (rListName.includes(tName) || tName.includes(rListName))) return true;
+      return false;
+    });
+
+    let totalPax = 0;
+    let maleCount = 0;
+    let femaleCount = 0;
+    const recentList: Array<{ name: string; gender: 'm' | 'f' }> = [];
+    const seenNames = new Set<string>();
+
+    for (const r of matched) {
+      const name = (r.full_name || '').trim();
+      if (name && !seenNames.has(name.toLowerCase())) {
+        seenNames.add(name.toLowerCase());
+        const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
+        if (isFemale) femaleCount += 1;
+        else maleCount += 1;
+        totalPax += 1;
+
+        recentList.unshift({
+          name,
+          gender: isFemale ? 'f' : 'm',
+        });
+
+        // Check for companions in team_members or person_remarks
+        if (Array.isArray(r.team_members)) {
+          for (const tm of r.team_members) {
+            const tmName = (tm.full_name || '').trim();
+            if (tmName && !seenNames.has(tmName.toLowerCase())) {
+              seenNames.add(tmName.toLowerCase());
+              totalPax += 1;
+              const tmFemale = String(tm.gender || '').toLowerCase().startsWith('f');
+              if (tmFemale) femaleCount += 1;
+              else maleCount += 1;
+              recentList.unshift({
+                name: tmName,
+                gender: tmFemale ? 'f' : 'm',
+              });
+            }
+          }
+        } else {
+          const remarks = String(r.person_remarks || '');
+          const matchComp = remarks.match(/companion\(?s?\)?:\s*([^,\n]+)/i);
+          if (matchComp && matchComp[1]) {
+            const compNames = matchComp[1].split(',').map((n: string) => n.trim()).filter(Boolean);
+            for (const cName of compNames) {
+              if (!seenNames.has(cName.toLowerCase())) {
+                seenNames.add(cName.toLowerCase());
+                totalPax += 1;
+                femaleCount += 1;
+                recentList.unshift({
+                  name: cName,
+                  gender: 'f',
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // If total calculated from registrations is > 0, override the trek roster fields
+    if (totalPax > 0 || recentList.length > 0) {
+      return {
+        ...trek,
+        participants: totalPax,
+        participants_by_gender: {
+          total: totalPax,
+          male: maleCount,
+          female: femaleCount,
+        },
+        recent_participants: recentList,
+      };
+    }
+
+    return trek;
+  });
 }

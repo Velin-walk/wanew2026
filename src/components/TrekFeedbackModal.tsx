@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Star, X, CheckCircle2, User, MessageSquare, Heart, Award, Shield } from 'lucide-react';
 import { Trek, Booking } from '../types';
+import { apiFetch } from '../services/api';
 
 interface TrekFeedbackModalProps {
   isOpen: boolean;
@@ -73,7 +74,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
     };
 
     try {
-      const res = await fetch('/api/feedback', {
+      const res = await apiFetch('/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

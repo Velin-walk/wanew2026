@@ -55,7 +55,32 @@ CREATE TABLE IF NOT EXISTS feedback (
   submitted_at TEXT
 );
 
--- MapMiners Trails Metadata Table
+-- Community Trails Metadata Table (used by Walk Nepal Walk & MapMiners)
+CREATE TABLE IF NOT EXISTS community_trails (
+  id TEXT PRIMARY KEY,
+  file_name TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  difficulty TEXT DEFAULT 'Moderate',
+  distance REAL DEFAULT 0,
+  elevation_gain REAL DEFAULT 0,
+  elevation_loss REAL DEFAULT 0,
+  min_elevation REAL DEFAULT 0,
+  max_elevation REAL DEFAULT 0,
+  estimated_hours REAL DEFAULT 0,
+  bounds TEXT,
+  start_pos TEXT,
+  contributor_name TEXT,
+  contributor_email TEXT,
+  province TEXT,
+  district TEXT,
+  nearby_city TEXT,
+  highlights TEXT,
+  uploaded_at TEXT,
+  file_size INTEGER DEFAULT 0
+);
+
+-- MapMiners Trails Metadata Table (alias/legacy)
 CREATE TABLE IF NOT EXISTS mapminers_trails (
   id TEXT PRIMARY KEY,
   file_name TEXT UNIQUE NOT NULL,

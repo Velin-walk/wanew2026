@@ -74,10 +74,11 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
     const q = searchQuery.toLowerCase().trim();
     const matchQuery =
       !q ||
-      h.title.toLowerCase().includes(q) ||
-      h.hikeNumber.toLowerCase().includes(q) ||
-      h.data.overview.meetingPoint.toLowerCase().includes(q) ||
-      h.data.overview.endingPoint.toLowerCase().includes(q);
+      h.title?.toLowerCase().includes(q) ||
+      h.hikeNumber?.toLowerCase().includes(q) ||
+      h.data?.hikeNumber?.toLowerCase().includes(q) ||
+      h.data?.overview?.meetingPoint?.toLowerCase().includes(q) ||
+      h.data?.overview?.endingPoint?.toLowerCase().includes(q);
 
     const matchCategory =
       selectedCategory === 'all' || h.category === selectedCategory;
@@ -291,17 +292,18 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filteredHikes.map((hike) => {
+            const priceTiers = hike.data?.priceTiers || [];
             const minPrice =
-              hike.data.priceTiers && hike.data.priceTiers.length > 0
-                ? Math.min(...hike.data.priceTiers.map((t) => t.price))
+              priceTiers.length > 0
+                ? Math.min(...priceTiers.map((t) => t.price))
                 : null;
             const maxPrice =
-              hike.data.priceTiers && hike.data.priceTiers.length > 0
-                ? Math.max(...hike.data.priceTiers.map((t) => t.price))
+              priceTiers.length > 0
+                ? Math.max(...priceTiers.map((t) => t.price))
                 : null;
 
             const coverImg =
-              hike.data.coverImageUrl ||
+              hike.data?.coverImageUrl ||
               'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80';
 
             return (
@@ -329,7 +331,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                   <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-white border border-white/20 shadow-xs">
-                        Hike #{hike.data.hikeNumber || hike.hikeNumber || 'TBA'}
+                        Hike #{hike.data?.hikeNumber || hike.hikeNumber || 'TBA'}
                       </span>
                       <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white/20 backdrop-blur-md text-white border border-white/20 truncate max-w-[120px]">
                         {hike.category}
@@ -360,7 +362,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                   <div className="absolute bottom-2.5 right-3">
                     <span className="text-xs font-black text-white bg-[#E08828] px-2.5 py-1 rounded-lg shadow-sm">
                       {minPrice !== null
-                        ? `${hike.data.currency} ${minPrice.toLocaleString()}${
+                        ? `${hike.data?.currency || 'NPR'} ${minPrice.toLocaleString()}${
                             maxPrice && maxPrice !== minPrice ? `+` : ''
                           }`
                         : 'Price TBD'}
@@ -381,11 +383,11 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                       <div className="flex items-center gap-2">
                         <Calendar className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
                         <span className="font-semibold text-[#1F1F1F]">
-                          {hike.data.hikeDate || 'Date to be announced'}
+                          {hike.data?.hikeDate || 'Date to be announced'}
                         </span>
                       </div>
 
-                      {hike.data.overview.meetingPoint && (
+                      {hike.data?.overview?.meetingPoint && (
                         <div className="flex items-center gap-2">
                           <MapPin className="w-3.5 h-3.5 text-[#8B8680] shrink-0" />
                           <span className="truncate">{hike.data.overview.meetingPoint}</span>
@@ -398,24 +400,24 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                       <div>
                         <span className="text-[#8B8680] block text-[10px]">Distance & Difficulty</span>
                         <span className="font-bold text-[#1F1F1F] truncate block">
-                          {hike.data.overview.approxDistance || 'N/A'} • {hike.data.overview.difficulty || 'Moderate'}
+                          {hike.data?.overview?.approxDistance || 'N/A'} • {hike.data?.overview?.difficulty || 'Moderate'}
                         </span>
                       </div>
                       <div>
                         <span className="text-[#8B8680] block text-[10px]">Leader & Capacity</span>
                         <span className="font-bold text-[#3D3A37] truncate block">
-                          {hike.data.teamLeader || 'TBD'} • {hike.data.maxCapacity || 'TBD'} pax
+                          {hike.data?.teamLeader || 'TBD'} • {hike.data?.maxCapacity || 'TBD'} pax
                         </span>
                       </div>
                     </div>
 
                     {/* Meta items badge row */}
                     <div className="flex items-center gap-2 mt-3 text-[10px] text-[#8B8680]">
-                      <span>{hike.data.itineraryDays?.length || 1}-Day Plan</span>
+                      <span>{hike.data?.itineraryDays?.length || 1}-Day Plan</span>
                       <span>•</span>
-                      <span>{hike.data.costIncludes?.length || 0} Inclusions</span>
+                      <span>{hike.data?.costIncludes?.length || 0} Inclusions</span>
                       <span>•</span>
-                      <span>{hike.data.addOns?.length || 0} Add-ons</span>
+                      <span>{hike.data?.addOns?.length || 0} Add-ons</span>
                     </div>
                   </div>
 

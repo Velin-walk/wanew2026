@@ -9,9 +9,7 @@ import {
   Shield,
   Layers,
   Plus,
-  RefreshCw,
-  AlertTriangle,
-  CloudUpload
+  RefreshCw
 } from 'lucide-react';
 import { ItineraryBuilder } from './ItineraryBuilder';
 import { HikeLibraryList } from './HikeLibraryList';
@@ -49,6 +47,45 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     }
   }, [activeTab]);
 
+  const ensureHikeData = (h: SavedHikeRecord): SavedHikeRecord => {
+    if (!h) return h;
+    const data = h.data || ({} as any);
+    return {
+      ...h,
+      data: {
+        ...data,
+        hikeNumber: data.hikeNumber || h.hikeNumber || '',
+        title: data.title || h.title || '',
+        category: data.category || h.category || 'Overnight Bus Hikes',
+        overview: {
+          meetingTime: '',
+          meetingPoint: '',
+          expectedDuration: '1 Day',
+          difficulty: 'Moderate',
+          approxDistance: '',
+          elevationRange: '',
+          elevationGross: '',
+          endingPoint: '',
+          ...(data.overview || {}),
+        },
+      },
+    };
+  };
+
+  const deduplicateHikesList = (records: SavedHikeRecord[]): SavedHikeRecord[] => {
+    const seen = new Set<string>();
+    const result: SavedHikeRecord[] = [];
+    for (const r of records) {
+      if (!r || !r.id) continue;
+      const hNum = (r.hikeNumber || '').trim();
+      const key = (hNum && hNum !== 'TBD') ? `num:${hNum}` : `id:${r.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(ensureHikeData(r));
+    }
+    return result;
+  };
+
   const getUnsyncedLocalHikes = (serverHikes: SavedHikeRecord[]): SavedHikeRecord[] => {
     const cached = localStorage.getItem('wnw_saved_itineraries_cache');
     if (!cached) return [];
@@ -56,7 +93,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const parsed = JSON.parse(cached);
       if (!Array.isArray(parsed)) return [];
       const serverIds = new Set(serverHikes.map(h => h.id));
-      return parsed.filter(h => h && h.id && !serverIds.has(h.id));
+      const serverHikeNums = new Set(
+        serverHikes
+          .map(h => (h.hikeNumber || '').trim())
+          .filter(num => num && num !== 'TBD')
+      );
+      return parsed.filter(h => {
+        if (!h || !h.id) return false;
+        if (serverIds.has(h.id)) return false;
+        const hNum = (h.hikeNumber || '').trim();
+        if (hNum && hNum !== 'TBD' && serverHikeNums.has(hNum)) return false;
+        return true;
+      });
     } catch {
       return [];
     }
@@ -69,11 +117,11 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          const serverHikes = json.data;
+          const serverHikes = deduplicateHikesList(json.data);
           setServerHikeIds(serverHikes.map(h => h.id));
 
           const unsynced = getUnsyncedLocalHikes(serverHikes);
-          const merged = [...unsynced, ...serverHikes];
+          const merged = deduplicateHikesList([...unsynced, ...serverHikes]);
 
           setHikes(merged);
           localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(merged));
@@ -85,20 +133,25 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         try {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setHikes(parsed);
+            const deduped = deduplicateHikesList(parsed);
+            setHikes(deduped);
+            localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
             return;
           }
         } catch (e) {
           console.warn('Failed parsing cached itineraries:', e);
         }
       }
-      setHikes(DEFAULT_SAVED_HIKES);
+      setHikes(deduplicateHikesList(DEFAULT_SAVED_HIKES));
     } catch (e) {
       console.warn('Network error fetching itineraries, using default cache:', e);
       const cached = localStorage.getItem('wnw_saved_itineraries_cache');
       if (cached) {
         try {
-          setHikes(JSON.parse(cached));
+          const parsed = JSON.parse(cached);
+          const deduped = deduplicateHikesList(parsed);
+          setHikes(deduped);
+          localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
         } catch {}
       }
     } finally {
@@ -161,7 +214,21 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const handleUploadToDatabase = async () => {
-    const unsyncedList = hikes.filter(h => !serverHikeIds.includes(h.id));
+    // Only target truly unsynced itineraries that don't exist on the server
+    const serverHikeNumSet = new Set(
+      hikes
+        .filter(h => serverHikeIds.includes(h.id))
+        .map(h => (h.hikeNumber || '').trim())
+        .filter(num => num && num !== 'TBD')
+    );
+
+    const unsyncedList = hikes.filter(h => {
+      if (serverHikeIds.includes(h.id)) return false;
+      const hNum = (h.hikeNumber || '').trim();
+      if (hNum && hNum !== 'TBD' && serverHikeNumSet.has(hNum)) return false;
+      return true;
+    });
+
     setIsSyncingAll(true);
     setSyncMessage(
       unsyncedList.length > 0
@@ -171,7 +238,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
     let uploadedLocalCount = 0;
 
-    // 1. Upload unsynced local cache items to the server API
+    // 1. Upload unsynced local cache items to the server API with existing id to prevent duplicates
     for (const rawUnsynced of unsyncedList) {
       try {
         const unsynced = normalizeLocalHikeToUpload(rawUnsynced);
@@ -181,6 +248,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            id: unsynced.id,
             data: unsynced.data,
             status: unsynced.status,
             authorEmail: unsynced.authorEmail || currentUserEmail || 'walknepalwalk@gmail.com',
@@ -191,6 +259,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           const resJson = await res.json().catch(() => ({}));
           if (resJson.success) {
             uploadedLocalCount++;
+            if (resJson.data?.id) {
+              setServerHikeIds(prev => Array.from(new Set([...prev, resJson.data.id, unsynced.id])));
+            }
           }
         }
       } catch (err) {
@@ -202,7 +273,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     try {
       const res = await apiFetch('admin/sync-all', { method: 'POST' });
       if (res.ok) {
-        setSyncMessage(`🎉 Successfully saved and synced all itineraries to database!`);
+        const json = await res.json().catch(() => ({}));
+        setSyncMessage(json.message || `🎉 Successfully synced all itineraries to database!`);
       } else {
         setSyncMessage(`🎉 Uploaded itineraries to database successfully!`);
       }
@@ -321,8 +393,12 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const handleSaveRecord = (savedRecord: SavedHikeRecord) => {
+    setServerHikeIds((prev) => Array.from(new Set([...prev, savedRecord.id])));
     setHikes((prev) => {
-      const idx = prev.findIndex((h) => h.id === savedRecord.id);
+      const idx = prev.findIndex((h) => 
+        h.id === savedRecord.id || 
+        (savedRecord.hikeNumber && savedRecord.hikeNumber !== 'TBD' && (h.hikeNumber || '').trim() === (savedRecord.hikeNumber || '').trim())
+      );
       let next: SavedHikeRecord[];
       if (idx !== -1) {
         next = [...prev];
@@ -330,44 +406,27 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       } else {
         next = [savedRecord, ...prev];
       }
-      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
-      return next;
+      const deduped = deduplicateHikesList(next);
+      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
+      return deduped;
     });
     setEditingHike(savedRecord);
   };
 
-  const unsyncedLocalCount = hikes.filter(h => !serverHikeIds.includes(h.id)).length;
+  const unsyncedLocalCount = hikes.filter(h => {
+    if (serverHikeIds.includes(h.id)) return false;
+    const hNum = (h.hikeNumber || '').trim();
+    if (hNum && hNum !== 'TBD') {
+      const existsOnServer = hikes.some(
+        other => other.id !== h.id && serverHikeIds.includes(other.id) && (other.hikeNumber || '').trim() === hNum
+      );
+      if (existsOnServer) return false;
+    }
+    return true;
+  }).length;
 
   return (
     <div className="w-full space-y-4">
-      {/* Unsynced Local-Cache Notice Banner */}
-      {activeTab === 'library' && unsyncedLocalCount > 0 && (
-        <div className="bg-[#FFF9F2] border border-[#F3E0C8] p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex gap-2.5 items-start">
-            <AlertTriangle className="w-5 h-5 text-[#E08828] shrink-0 mt-0.5" />
-            <div>
-              <h4 className="text-xs font-bold text-[#6B3E08]">Unsynced Itineraries Found in Browser</h4>
-              <p className="text-[11px] text-[#8C5D23] mt-0.5">
-                We detected {unsyncedLocalCount} itinerary template(s) saved in this browser's local cache.
-              </p>
-            </div>
-          </div>
-          <button
-            id="btn-unsynced-upload-db"
-            onClick={handleUploadToDatabase}
-            disabled={isSyncingAll}
-            className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-1.5 px-4 py-2 bg-[#E08828] hover:bg-[#C86B1A] disabled:bg-[#E08828]/50 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
-          >
-            {isSyncingAll ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <CloudUpload className="w-3.5 h-3.5" />
-            )}
-            <span>{isSyncingAll ? 'Uploading...' : 'Upload to Database'}</span>
-          </button>
-        </div>
-      )}
-
       {syncMessage && (
         <div className="bg-[#E6F4EA] border border-[#B7E1CD] text-[#137333] px-4 py-3 rounded-2xl text-xs font-bold animate-in fade-in duration-200">
           {syncMessage}
