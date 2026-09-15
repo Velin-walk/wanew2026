@@ -151,7 +151,7 @@ export default function RouteDetail({ route, onClose, isMobile }: RouteDetailPro
             <span className="text-[8px] uppercase font-bold tracking-wider text-amber-500">
               ACTIVE ROUTE
             </span>
-            <h3 className="text-xs font-bold text-white truncate leading-tight mt-0.5" title={route.name}>
+            <h3 className="text-xs font-bold text-white break-words [overflow-wrap:anywhere] leading-snug mt-0.5" title={route.name}>
               {route.name}
             </h3>
             

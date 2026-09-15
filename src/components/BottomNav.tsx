@@ -12,14 +12,17 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
+import { useAuth } from '../context/AuthContext';
+import { User, LogOut } from 'lucide-react';
 
 interface BottomNavProps {
   currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'admin';
   onTabChange: (tab: any) => void;
-  userEmail: string;
+  userEmail?: string;
   bookingCount: number;
   savedCount: number;
   onOpenInfoPage?: (page: SubPageType) => void;
+  onOpenProfile?: () => void;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -28,10 +31,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   bookingCount,
   savedCount,
   onOpenInfoPage,
-  userEmail,
+  onOpenProfile,
 }) => {
+  const { user, isAdmin, openAuthModal } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleMobileTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'admin') => {
+    if (tab === 'mapminers' && !user) {
+      openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers'));
+      return;
+    }
+    if (tab === 'admin' && (!user || !isAdmin)) {
+      openAuthModal('Sign in with Admin email (walknepalwalk@gmail.com) to access the Admin Panel', () => onTabChange('admin'));
+      return;
+    }
+    onTabChange(tab);
+  };
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -65,7 +81,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           id="tab-treks"
-          onClick={() => onTabChange('treks')}
+          onClick={() => handleMobileTabClick('treks')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all relative ${
             currentTab === 'treks'
               ? 'text-[#E08828] font-bold'
@@ -86,7 +102,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           id="tab-bookings"
-          onClick={() => onTabChange('bookings')}
+          onClick={() => handleMobileTabClick('bookings')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all relative ${
             currentTab === 'bookings'
               ? 'text-[#7ABA42] font-bold'
@@ -112,7 +128,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           id="tab-saved"
-          onClick={() => onTabChange('saved')}
+          onClick={() => handleMobileTabClick('saved')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all relative ${
             currentTab === 'saved'
               ? 'text-rose-600 font-bold'
@@ -138,7 +154,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           id="tab-mapminers"
-          onClick={() => onTabChange('mapminers')}
+          onClick={() => handleMobileTabClick('mapminers')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all relative ${
             currentTab === 'mapminers'
               ? 'text-[#7ABA42] font-bold'

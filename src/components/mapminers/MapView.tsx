@@ -264,7 +264,7 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                         eventHandlers={{ click: () => onRouteClick(route) }}
                       >
                         <Tooltip sticky>
-                          <div className="font-bold text-xs p-1">{route.name}</div>
+                          <div className="font-bold text-xs p-1 max-w-[200px] break-words [overflow-wrap:anywhere]">{route.name}</div>
                           <div className="text-[10px] text-neutral-500 p-1 mt-0.5">{route.stats?.distance ?? 0}km • {route.difficulty}</div>
                         </Tooltip>
                       </Polyline>
@@ -279,9 +279,9 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                     eventHandlers={{ click: () => onRouteClick(route) }}
                   >
                     <Popup>
-                      <div className="min-w-[180px] text-xs">
-                        <div className="font-bold text-neutral-800 text-sm mb-1">{route.name}</div>
-                        <div className="text-neutral-500 mb-2 truncate">{route.fileName}</div>
+                      <div className="min-w-[180px] max-w-[240px] text-xs">
+                        <div className="font-bold text-neutral-800 text-sm mb-1 break-words [overflow-wrap:anywhere] leading-tight">{route.name}</div>
+                        <div className="text-neutral-500 mb-2 text-[10px] break-words [overflow-wrap:anywhere]">{route.fileName}</div>
                         <div className="grid grid-cols-2 gap-2 text-center pt-1 border-t border-neutral-100">
                           <div>
                             <div className="font-bold" style={{ color }}>{route.stats?.distance ?? 0}km</div>
@@ -316,7 +316,7 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                   eventHandlers={{ click: () => onRouteClick(route) }}
                 >
                   <Tooltip sticky>
-                    <div className="font-bold text-xs">{route.name}</div>
+                    <div className="font-bold text-xs max-w-[200px] break-words [overflow-wrap:anywhere]">{route.name}</div>
                   </Tooltip>
                 </CircleMarker>
               );

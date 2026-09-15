@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "User profile document stored under users/{userId}",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 512 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["email"]
+    },
+    "registration": {
+      "title": "Hiker Registration",
+      "description": "Trek booking registration by a hiker",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "trekId": { "type": "string", "maxLength": 128 },
+        "trekTitle": { "type": "string", "maxLength": 256 },
+        "hikerName": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "email": { "type": "string", "maxLength": 256 },
+        "pickupPoint": { "type": "string", "maxLength": 128 },
+        "paxCount": { "type": "number" },
+        "registeredAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["trekId", "hikerName", "email", "phone"]
+    },
+    "community_trail": {
+      "title": "Community Trail",
+      "description": "Map Miners community uploaded GPX or KML track",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "authorEmail": { "type": "string", "maxLength": 256 },
+        "authorUid": { "type": "string", "maxLength": 128 },
+        "fileUrl": { "type": "string", "maxLength": 512 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["title", "authorEmail"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/user" },
+      "description": "User account documents"
+    },
+    "/registrations/{registrationId}": {
+      "schema": { "$ref": "#/entities/registration" },
+      "description": "Public and user trek registrations"
+    },
+    "/community_trails/{trailId}": {
+      "schema": { "$ref": "#/entities/community_trail" },
+      "description": "Map Miners GPX/KML trails"
+    }
+  }
+}

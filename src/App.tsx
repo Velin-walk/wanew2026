@@ -15,13 +15,18 @@ import MapMinersDashboard from './components/mapminers/MapMinersDashboard';
 import { apiFetch, normalizeTrek, enrichTreksWithRegistrations } from './services/api';
 import { isAdminEmail } from './adminUtils';
 import AdminDashboard from './components/admin/AdminDashboard';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthModal } from './components/AuthModal';
+import { ProfileModal } from './components/ProfileModal';
 
-export default function App() {
+function MainApp() {
+  const { user, userEmail, isAdmin, openAuthModal } = useAuth();
   const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'admin'>('treks');
   const [treks, setTreks] = useState<Trek[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingTreks, setLoadingTreks] = useState(true);
   const [loadingBookings, setLoadingBookings] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const [selectedTrekForRegister, setSelectedTrekForRegister] = useState<Trek | null>(null);
   const [selectedTrekForInvite, setSelectedTrekForInvite] = useState<Trek | null>(null);
@@ -47,7 +52,7 @@ export default function App() {
     }
   });
 
-  const currentUserEmail = 'velinrai.VR@gmail.com';
+  const activeUserEmail = userEmail || 'walknepalwalk@gmail.com';
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -98,9 +103,11 @@ export default function App() {
 
       // 4. Update user's personal bookings
       if (allRegs.length > 0) {
-        const userEmailLower = currentUserEmail.toLowerCase().trim();
+        const userEmailLower = activeUserEmail.toLowerCase().trim();
         const myBookings = allRegs.filter(
-          (r) => (r.email_address || r.user_email || '').toLowerCase().trim() === userEmailLower
+          (r) =>
+            (r.email_address || r.user_email || r.email || '').toLowerCase().trim() === userEmailLower ||
+            (user?.uid && r.userId === user.uid)
         );
         setBookings(myBookings);
       }
@@ -110,7 +117,7 @@ export default function App() {
       setLoadingTreks(false);
       setLoadingBookings(false);
     }
-  }, [currentUserEmail]);
+  }, [activeUserEmail, user?.uid]);
 
   const fetchTreks = refreshData;
   const fetchBookings = refreshData;
@@ -161,7 +168,7 @@ export default function App() {
       pax: totalNewPeople,
       phone: formData.phone,
       whatsapp: formData.whatsapp || formData.phone,
-      email_address: formData.email || currentUserEmail,
+      email_address: formData.email || activeUserEmail,
       emergency_backup_contact: formData.emergency_contact || '',
       profession: formData.profession || '',
       part_of_group: formData.is_group || (formData.team_members && formData.team_members.length > 0 ? 'Group' : 'Solo'),
@@ -213,7 +220,7 @@ export default function App() {
               pax: 1,
               phone: tm.phone || '',
               whatsapp: tm.phone || '',
-              email_address: formData.email || currentUserEmail,
+              email_address: formData.email || activeUserEmail,
               emergency_backup_contact: formData.phone,
               profession: '',
               part_of_group: 'Group',
@@ -301,7 +308,8 @@ export default function App() {
           savedCount={favorites.length}
           onOpenContribute={() => setShowMapMinerContribute(true)}
           onOpenInfoPage={(page) => setInfoModalPage(page)}
-          userEmail={currentUserEmail}
+          userEmail={activeUserEmail}
+          onOpenProfile={() => setProfileModalOpen(true)}
         />
 
         {/* Content Area - Scrollable with safe bottom padding for Mobile Tab Bar, full width desktop */}
@@ -389,13 +397,13 @@ export default function App() {
             />
           )}
 
-          {currentTab === 'admin' && isAdminEmail(currentUserEmail) && (
-            <AdminDashboard currentUserEmail={currentUserEmail} />
+          {currentTab === 'admin' && (isAdmin || isAdminEmail(activeUserEmail)) && (
+            <AdminDashboard currentUserEmail={activeUserEmail} />
           )}
 
           {currentTab === 'mapminers' && (
             <MapMinersDashboard
-              currentUserEmail={currentUserEmail}
+              currentUserEmail={activeUserEmail}
               isContributionOpen={showMapMinerContribute}
               onOpenContribution={() => setShowMapMinerContribute(true)}
               onCloseContribution={() => setShowMapMinerContribute(false)}
@@ -418,12 +426,13 @@ export default function App() {
 
         {/* Mobile Bottom Tab Navigation */}
         <BottomNav
-            userEmail={currentUserEmail}
+          userEmail={activeUserEmail}
           currentTab={currentTab}
           onTabChange={setCurrentTab}
           bookingCount={bookings.length}
           savedCount={favorites.length}
           onOpenInfoPage={(page) => setInfoModalPage(page)}
+          onOpenProfile={() => setProfileModalOpen(true)}
         />
 
         {/* Booking Registration Modal (Mobile Bottom Sheet) */}
@@ -431,7 +440,7 @@ export default function App() {
           <RegistrationModal
             trek={selectedTrekForRegister}
             allTreks={treks}
-            userEmail={currentUserEmail}
+            userEmail={activeUserEmail}
             isOpen={Boolean(selectedTrekForRegister)}
             onClose={() => setSelectedTrekForRegister(null)}
             onSubmit={handleRegisterSubmit}
@@ -472,8 +481,8 @@ export default function App() {
             trek={feedbackModalTrek}
             booking={feedbackModalBooking}
             currentUser={{
-              name: feedbackModalBooking?.full_name || 'Velin Rai',
-              email: currentUserEmail,
+              name: feedbackModalBooking?.full_name || user?.displayName || 'Nepal Hiker',
+              email: activeUserEmail,
             }}
             onSubmitSuccess={() => {
               showToast('Thank you for your feedback! Review saved.', 'success');
@@ -489,7 +498,27 @@ export default function App() {
             initialPage={infoModalPage || 'payment'}
           />
         )}
+
+        {/* Firebase Authentication Modal */}
+        <AuthModal />
+
+        {/* Hiker Profile & Booking History Modal */}
+        <ProfileModal
+          isOpen={profileModalOpen}
+          onClose={() => setProfileModalOpen(false)}
+          userBookings={bookings}
+          allTreks={treks}
+          onOpenTrek={(t) => setItineraryModalTrek(t)}
+        />
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }

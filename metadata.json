@@ -2,5 +2,5 @@
   "name": "Walk Nepal Walk",
   "description": "Trekking registration platform with live roster, booking management, and team registration for Nepal treks",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
