@@ -394,6 +394,47 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
       localStorage.setItem('wnw_itinerary_template_draft', JSON.stringify(formData));
 
       let res;
+      
+      // Calculate min/max price for D1 treks table matching server.ts
+      const priceTiers = formData.priceTiers || [];
+      const minPrice = priceTiers.length > 0 ? Math.min(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
+      const maxPrice = priceTiers.length > 0 ? Math.max(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
+
+      const syncPayload = {
+        id: recordId || `hike-${formData.hikeNumber ? formData.hikeNumber + '-' : ''}${Date.now()}`,
+        hike_number: (formData.hikeNumber || '').trim() || 'TBD',
+        hikeNumber: (formData.hikeNumber || '').trim() || 'TBD',
+        title: formData.title || 'Walk Nepal Walk Hike',
+        category: formData.category || 'Overnight Bus Hikes',
+        status: statusToSave,
+        cover_image_url: formData.coverImageUrl || '',
+        hike_date: formData.hikeDate || '',
+        min_price: minPrice,
+        max_price: maxPrice,
+        currency: formData.currency || 'NPR',
+        meeting_point: formData.overview?.meetingPoint || '',
+        meeting_time: formData.overview?.meetingTime || '',
+        expected_duration: formData.overview?.expectedDuration || '',
+        difficulty: formData.overview?.difficulty || 'Moderate',
+        approx_distance: formData.overview?.approxDistance || '',
+        elevation_range: formData.overview?.elevationRange || '',
+        max_capacity: formData.maxCapacity || 25,
+        data: formData,
+        author_email: 'walknepalwalk@gmail.com',
+      };
+
+      // 1. Save directly to Cloudflare Worker treks table
+      try {
+        await apiFetch('treks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(syncPayload),
+        });
+      } catch (cfErr) {
+        console.warn('[ItineraryBuilder] Failed direct Cloudflare save:', cfErr);
+      }
+
+      // 2. Also save to local Express fallback
       if (recordId) {
         // Update existing record
         res = await apiFetch(`admin/itineraries/${recordId}`, {

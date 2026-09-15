@@ -1,389 +1,484 @@
 /**
- * Cloudflare Worker API for Walk Nepal Walk & MapMiners
- * Integrates D1 Database (DB) and R2 Bucket (TRAILS_BUCKET)
+ * Walk Nepal Walk API - Cloudflare Worker
+ * Direct D1 & R2 Backend for Walk Nepal Walk Application
+ * 
+ * Bindings required in Cloudflare Worker configuration:
+ * - D1 Database Binding: DB (bound to your D1 database, e.g., walk-nepal-walk-db)
+ * - R2 Bucket Binding: BUCKET (bound to your R2 bucket, e.g., walk-nepal-walk-storage)
  */
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+};
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...corsHeaders,
+    },
+  });
+}
+
+function errorResponse(errorMsg, status = 500) {
+  return jsonResponse({ success: false, error: errorMsg }, status);
+}
 
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    let path = url.pathname;
-    
-    // ✅ Strip /api prefix if present
-    if (path.startsWith('/api')) {
-      path = path.replace(/^\/api/, '');
-    }
-    
-    if (!path.startsWith('/')) {
-      path = '/' + path;
-    }
-    
-    const method = request.method;
-
-    // CORS Headers
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
-
-    if (method === 'OPTIONS') {
+    // Handle CORS preflight
+    if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
 
-    const jsonResponse = (data, status = 200) => {
-      return new Response(JSON.stringify(data), {
-        status,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders,
-        },
-      });
-    };
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, '') || '/';
+    const method = request.method.toUpperCase();
 
     try {
-      // 1. HEALTH CHECK
-      if (path === '/' || path === '/api/health') {
-        return jsonResponse({ status: 'ok', service: 'Walk Nepal Walk Cloudflare Worker', timestamp: new Date().toISOString() });
+      // ===== HEALTH CHECK =====
+      if (path === '' || path === '/' || path === '/health') {
+        return jsonResponse({
+          success: true,
+          status: 'ok',
+          service: 'Walk Nepal Walk Cloudflare API',
+          timestamp: new Date().toISOString(),
+        });
       }
 
-      // 2. GET ALL TREKS / ITINERARIES (/treks)
-      if (path === '/treks' && method === 'GET') {
-        if (!env.DB) return jsonResponse({ success: false, message: 'D1 binding missing' }, 500);
-        const { results } = await env.DB.prepare("SELECT * FROM treks ORDER BY created_at DESC").all();
-        const treks = (results || []).map(row => {
+      // ===== TREKS ENDPOINTS =====
+      
+      // GET /treks - List all treks (with CPU exhaustion optimization)
+      if (method === 'GET' && path === '/treks') {
+        if (!env.DB) return jsonResponse({ success: true, data: [] });
+        const { results } = await env.DB.prepare(
+          'SELECT * FROM treks ORDER BY created_at DESC'
+        ).all();
+
+        const data = (results || []).map((row) => {
           let parsedData = {};
-          try { parsedData = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {}); } catch(e){}
+          try {
+            const rawData = row.data_json || row.data || '{}';
+            parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+          } catch (e) {}
+
           return {
-            id: row.id,
+            ...row,
+            hikeNumber: row.hike_number,
             hike_number: row.hike_number,
-            title: row.title,
-            category: row.category,
-            status: row.status,
             data: parsedData,
-            ...parsedData
           };
         });
-        return jsonResponse({ success: true, data: treks });
+
+        return jsonResponse({ success: true, data });
       }
 
-      // 3. SINGLE TREK BY ID OR HIKE NUMBER (/treks/:id)
-      if (path.startsWith('/treks/') && method === 'GET') {
-        const id = path.replace('/treks/', '');
-        if (id !== 'sync') {
-          if (!env.DB) return jsonResponse({ error: 'D1 binding missing' }, 500);
-          const row = await env.DB.prepare("SELECT * FROM treks WHERE id = ? OR hike_number = ? LIMIT 1").bind(id, id).first();
-          if (!row) return jsonResponse({ error: 'Trek not found' }, 404);
-          let parsedData = {};
-          try { parsedData = typeof row.data === 'string' ? JSON.parse(row.data) : {}; } catch(e){}
-          return jsonResponse({ id: row.id, hike_number: row.hike_number, title: row.title, data: parsedData, ...parsedData });
+      // GET /treks/:id - Get single trek
+      if (method === 'GET' && path.startsWith('/treks/')) {
+        const idOrNum = decodeURIComponent(path.replace('/treks/', ''));
+        if (!env.DB) return errorResponse('Database not bound', 500);
+
+        const row = await env.DB.prepare(
+          'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
+        ).bind(idOrNum, idOrNum).first();
+
+        if (!row) {
+          return errorResponse('Trek not found', 404);
         }
+
+        // Strict hike_number matching for live roster
+        const regs = await env.DB.prepare(
+          'SELECT * FROM registrations WHERE hike_number = ?'
+        ).bind(String(row.hike_number || '')).all();
+
+        const roster = regs.results || [];
+        const total_pax = roster.reduce((acc, r) => acc + (Number(r.pax) || 1), 0);
+
+        let parsedData = {};
+        try {
+          const rawData = row.data_json || row.data || '{}';
+          parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+        } catch (e) {}
+
+        return jsonResponse({
+          success: true,
+          trek: {
+            ...row,
+            hikeNumber: row.hike_number,
+            hike_number: row.hike_number,
+            data: parsedData,
+          },
+          roster,
+          total_pax,
+        });
       }
 
-      // 4. SYNC / SAVE ITINERARY (/treks/sync OR POST /treks)
-      if ((path === '/treks/sync' || path === '/treks') && (method === 'POST' || method === 'PUT')) {
-        if (!env.DB) return jsonResponse({ success: false, error: 'D1 binding missing' }, 500);
+      // POST /treks/sync or POST /treks - Upsert trek
+      if (method === 'POST' && (path === '/treks/sync' || path === '/treks')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
         const body = await request.json();
-        const record = body.record || body;
-        const hikeNumber = record.hikeNumber || record.hike_number || body.hikeNumber || 'TBD';
-        const title = record.title || body.title || 'Untitled Hike';
-        const id = record.id || `hike-${hikeNumber}-${Date.now()}`;
-        const category = record.category || 'Overnight Bus Hikes';
-        const status = record.status || 'published';
-        const authorEmail = record.authorEmail || 'admin@walknepalwalk.com';
-        const now = new Date().toISOString();
-        const dataJson = JSON.stringify(record.data || body.data || record);
+        const hikeNum = String(body.hike_number || body.hikeNumber || 'TBD').trim();
+        const title = body.title || body.trek_name || 'Walk Nepal Walk Hike';
+        const trekId = body.id || `hike-${hikeNum !== 'TBD' ? hikeNum + '-' : ''}${Date.now()}`;
+        const dataJson = typeof body.data === 'object' ? JSON.stringify(body.data) : (body.data_json || '{}');
 
-        await env.DB.prepare(`
-          INSERT INTO treks (id, hike_number, title, category, status, author_email, created_at, updated_at, data)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            hike_number = excluded.hike_number,
-            title = excluded.title,
-            category = excluded.category,
-            status = excluded.status,
-            updated_at = excluded.updated_at,
-            data = excluded.data
-        `).bind(id, hikeNumber, title, category, status, authorEmail, now, now, dataJson).run();
+        // Check if existing record exists by hike_number or id
+        const existing = await env.DB.prepare(
+          'SELECT id FROM treks WHERE hike_number = ? OR id = ?'
+        ).bind(hikeNum, trekId).first();
 
-        return jsonResponse({ success: true, message: `Synced Hike #${hikeNumber} to Cloudflare D1`, id, hikeNumber });
-      }
-
-      // 5. DELETE TREK (/treks/:id - DELETE)
-      if (path.startsWith('/treks/') && method === 'DELETE') {
-        const id = path.replace('/treks/', '');
-        if (!env.DB) return jsonResponse({ error: 'D1 binding missing' }, 500);
-        await env.DB.prepare("DELETE FROM treks WHERE id = ? OR hike_number = ?").bind(id, id).run();
-        return jsonResponse({ success: true, message: `Deleted hike ${id}` });
-      }
-
-      // 6. REGISTRATIONS / BOOKINGS (/registrations)
-      if (path === '/registrations' && method === 'GET') {
-        if (!env.DB) return jsonResponse([], 200);
-        const email = url.searchParams.get('email');
-        let query = "SELECT * FROM registrations ORDER BY id DESC";
-        let stmt = env.DB.prepare(query);
-        if (email) {
-          query = "SELECT * FROM registrations WHERE LOWER(user_email) = LOWER(?) ORDER BY id DESC";
-          stmt = env.DB.prepare(query).bind(email);
+        if (existing) {
+          // Update existing trek
+          await env.DB.prepare(`
+            UPDATE treks SET
+              title = ?, category = ?, status = ?, cover_image_url = ?, hike_date = ?,
+              min_price = ?, max_price = ?, currency = ?, meeting_point = ?, meeting_time = ?,
+              expected_duration = ?, difficulty = ?, approx_distance = ?, elevation_range = ?,
+              elevation_gross = ?, ending_point = ?, team_leader = ?, whatsapp_link = ?,
+              itinerary_link = ?, faq_link = ?, max_capacity = ?, data_json = ?,
+              author_email = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? OR hike_number = ?
+          `).bind(
+            title,
+            body.category || 'Overnight Bus Hikes',
+            body.status || 'published',
+            body.cover_image_url || body.featured_image || '',
+            body.hike_date || body.date || '',
+            Number(body.min_price) || 0,
+            Number(body.max_price) || 0,
+            body.currency || 'NPR',
+            body.meeting_point || body.start_location || '',
+            body.meeting_time || '',
+            body.expected_duration || body.days || '',
+            body.difficulty || 'Moderate',
+            body.approx_distance || '',
+            body.elevation_range || body.elevation || '',
+            body.elevation_gross || '',
+            body.ending_point || '',
+            body.team_leader || body.leader || '',
+            body.whatsapp_link || '',
+            body.itinerary_link || '',
+            body.faq_link || '',
+            Number(body.max_capacity || body.capacity) || 25,
+            dataJson,
+            body.author_email || body.authorEmail || 'walknepalwalk@gmail.com',
+            existing.id,
+            hikeNum
+          ).run();
+        } else {
+          // Insert new trek
+          await env.DB.prepare(`
+            INSERT INTO treks (
+              id, hike_number, title, category, status, cover_image_url, hike_date,
+              min_price, max_price, currency, meeting_point, meeting_time, expected_duration,
+              difficulty, approx_distance, elevation_range, elevation_gross, ending_point,
+              team_leader, whatsapp_link, itinerary_link, faq_link, max_capacity, data_json, author_email
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            trekId,
+            hikeNum,
+            title,
+            body.category || 'Overnight Bus Hikes',
+            body.status || 'published',
+            body.cover_image_url || body.featured_image || '',
+            body.hike_date || body.date || '',
+            Number(body.min_price) || 0,
+            Number(body.max_price) || 0,
+            body.currency || 'NPR',
+            body.meeting_point || body.start_location || '',
+            body.meeting_time || '',
+            body.expected_duration || body.days || '',
+            body.difficulty || 'Moderate',
+            body.approx_distance || '',
+            body.elevation_range || body.elevation || '',
+            body.elevation_gross || '',
+            body.ending_point || '',
+            body.team_leader || body.leader || '',
+            body.whatsapp_link || '',
+            body.itinerary_link || '',
+            body.faq_link || '',
+            Number(body.max_capacity || body.capacity) || 25,
+            dataJson,
+            body.author_email || body.authorEmail || 'walknepalwalk@gmail.com'
+          ).run();
         }
-        const { results } = await stmt.all();
-        const registrations = (results || []).map(r => ({
-          ...r,
-          team_members: r.team_members ? JSON.parse(r.team_members) : []
-        }));
-        return jsonResponse(registrations);
+
+        return jsonResponse({
+          success: true,
+          message: 'Trek synced to Cloudflare D1 successfully',
+          hike_number: hikeNum,
+        });
       }
 
-      if (path === '/registrations' && method === 'POST') {
-        if (!env.DB) return jsonResponse({ success: false, message: 'D1 binding missing' }, 500);
-        const b = await request.json();
-        const res = await env.DB.prepare(`
-          INSERT INTO registrations (
-            trek_id, user_email, full_name, phone, whatsapp, emergency_contact,
-            profession, is_group, age_group, gender, joined_at, trek_name,
-            trek_date, trek_difficulty, trek_days, team_members, has_medical,
-            specify_medical, recent_hikes, agree_rules, guide_preference,
-            transport_preference, suggestions
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          b.trek_id || '', b.user_email || b.email || '', b.full_name || '',
-          b.phone || '', b.whatsapp || b.phone || '', b.emergency_contact || '',
-          b.profession || '', b.is_group ? 1 : 0, b.age_group || '', b.gender || '',
-          new Date().toISOString(), b.trek_name || '', b.trek_date || '',
-          b.trek_difficulty || '', b.trek_days || '', JSON.stringify(b.team_members || []),
-          b.has_medical ? 1 : 0, b.specify_medical || '', b.recent_hikes || '',
-          b.agree_rules ? 1 : 0, b.guide_preference || '', b.transport_preference || '', b.suggestions || ''
-        ).run();
+      // DELETE /treks/:hikeNumber - Delete trek
+      if (method === 'DELETE' && path.startsWith('/treks/')) {
+        const idOrNum = decodeURIComponent(path.replace('/treks/', ''));
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
 
-        return jsonResponse({ success: true, message: 'Registration saved to Cloudflare D1', result: res });
+        await env.DB.prepare(
+          'DELETE FROM treks WHERE hike_number = ? OR id = ?'
+        ).bind(idOrNum, idOrNum).run();
+
+        return jsonResponse({ success: true, message: `Deleted trek ${idOrNum}` });
       }
 
-      // 7. FEEDBACK (/feedback)
-      if (path === '/feedback' && method === 'GET') {
-        if (!env.DB) return jsonResponse([]);
+      // ===== REGISTRATIONS ENDPOINTS =====
+
+      // GET /registrations - List registrations
+      if (method === 'GET' && path === '/registrations') {
+        if (!env.DB) return jsonResponse({ success: true, data: [] });
+        const email = url.searchParams.get('email');
         const hikeNum = url.searchParams.get('hike_number');
-        let query = "SELECT * FROM feedback ORDER BY submitted_at DESC";
+
+        let query = 'SELECT * FROM registrations ORDER BY timestamp DESC';
         let stmt = env.DB.prepare(query);
-        if (hikeNum) {
-          query = "SELECT * FROM feedback WHERE hike_number = ? ORDER BY submitted_at DESC";
+
+        if (email) {
+          query = 'SELECT * FROM registrations WHERE email_address = ? ORDER BY timestamp DESC';
+          stmt = env.DB.prepare(query).bind(email);
+        } else if (hikeNum) {
+          query = 'SELECT * FROM registrations WHERE hike_number = ? ORDER BY timestamp DESC';
           stmt = env.DB.prepare(query).bind(hikeNum);
         }
+
         const { results } = await stmt.all();
-        return jsonResponse(results || []);
+        return jsonResponse({ success: true, data: results || [] });
       }
 
-      if (path === '/feedback' && method === 'POST') {
-        if (!env.DB) return jsonResponse({ success: false, message: 'D1 binding missing' }, 500);
-        const fb = await request.json();
-        const id = fb.id || `fb_${Date.now()}`;
-        await env.DB.prepare(`
-          INSERT INTO feedback (id, name, email, recent_walk, hike_number, team_feedback, team_rating, overall_feedback, overall_rating, submitted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          id, fb.name || '', fb.email || '', fb.recentWalk || '', fb.hikeNumber || '',
-          fb.teamFeedback || '', Number(fb.teamRating) || 5, fb.overallFeedback || '', Number(fb.overallRating) || 5,
-          new Date().toISOString()
-        ).run();
-        return jsonResponse({ success: true, message: 'Feedback saved to Cloudflare D1', id });
-      }
+      // POST /registrations - Create registration
+      if (method === 'POST' && path === '/registrations') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
 
-      // 8. MAPMINERS TRAILS (/mapminers/trails)
-      if (path === '/mapminers/trails' && method === 'GET') {
-        if (!env.DB) return jsonResponse({ success: true, data: {} });
-        let rows = [];
-        try {
-          const res = await env.DB.prepare("SELECT * FROM community_trails ORDER BY uploaded_at DESC").all();
-          rows = res.results || [];
-        } catch (e) {
-          try {
-            const res = await env.DB.prepare("SELECT * FROM mapminers_trails ORDER BY uploaded_at DESC").all();
-            rows = res.results || [];
-          } catch (e2) {}
-        }
-
-        const map = {};
-        rows.forEach(row => {
-          let statsObj = {};
-          try {
-            statsObj = row.stats ? (typeof row.stats === 'string' ? JSON.parse(row.stats) : row.stats) : {};
-          } catch (e) {}
-
-          let startCoord = { lat: 27.7, lng: 85.3 };
-          try {
-            if (row.start_pos) {
-              startCoord = typeof row.start_pos === 'string' ? JSON.parse(row.start_pos) : row.start_pos;
-            } else if (row.start_lat && row.start_lng) {
-              startCoord = { lat: row.start_lat, lng: row.start_lng };
-            }
-          } catch (e) {}
-
-          map[row.file_name] = {
-            id: row.id,
-            fileName: row.file_name,
-            file_name: row.file_name,
-            name: row.name,
-            description: row.description,
-            difficulty: row.difficulty || row.difficulty_override || 'Moderate',
-            difficultyOverride: row.difficulty_override || row.difficulty || 'Auto',
-            hoursOverride: row.hours_override || 'Auto',
-            province: row.province || 'Bagmati',
-            district: row.district || 'Kathmandu',
-            nearbyCity: row.nearby_city || 'Kathmandu',
-            highlights: row.highlights || '',
-            uploadedAt: row.uploaded_at,
-            uploaded_at: row.uploaded_at,
-            contributorName: row.contributor_name || 'Community Member',
-            contributorEmail: row.contributor_email || '',
-            startPos: startCoord,
-            bounds: row.bounds ? (typeof row.bounds === 'string' ? JSON.parse(row.bounds) : row.bounds) : undefined,
-            stats: {
-              distance: row.distance ?? statsObj.distance ?? 0,
-              elevationGain: row.elevation_gain ?? statsObj.elevationGain ?? 0,
-              elevationLoss: row.elevation_loss ?? statsObj.elevationLoss ?? 0,
-              minElevation: row.min_elevation ?? statsObj.minElevation ?? 0,
-              maxElevation: row.max_elevation ?? statsObj.maxElevation ?? 0,
-              estimatedHours: row.estimated_hours ?? statsObj.estimatedHours ?? 0,
-            }
-          };
-        });
-        return jsonResponse({ success: true, data: map });
-      }
-
-      // 9. MAPMINERS FILE DOWNLOAD (/mapminers/download/:fileName)
-      if (path.startsWith('/mapminers/download/')) {
-        const fileName = path.replace('/mapminers/download/', '');
-        if (env.TRAILS_BUCKET) {
-          const fileObj = await env.TRAILS_BUCKET.get(fileName);
-          if (fileObj) {
-            const body = await fileObj.arrayBuffer();
-            return new Response(body, {
-              headers: {
-                'Content-Type': 'application/xml',
-                ...corsHeaders
-              }
-            });
-          }
-        }
-        return jsonResponse({ error: 'File not found in R2 bucket' }, 404);
-      }
-
-      // 10. MAPMINERS UPLOAD (/mapminers/upload OR /mapminers/contribute)
-      if ((path === '/mapminers/upload' || path === '/mapminers/contribute') && method === 'POST') {
         const body = await request.json();
-        const {
-          fileName,
-          fileContent,
-          name,
-          description,
-          difficulty,
-          difficultyOverride,
-          hoursOverride,
-          province,
-          district,
-          nearbyCity,
-          highlights,
-          contributorName,
-          contributorEmail,
-          startPos,
-          bounds,
-          stats
-        } = body;
+        const whatsappVal = body.whatsapp_number || body.whatsapp || '';
+        const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-        // Store file in R2 Bucket if available
-        if (env.TRAILS_BUCKET && fileName && fileContent) {
-          await env.TRAILS_BUCKET.put(fileName, fileContent, {
-            httpMetadata: { contentType: 'application/xml' }
+        await env.DB.prepare(`
+          INSERT INTO registrations (
+            hike_number, trek_name, full_name, email_address, phone, whatsapp, whatsapp_number,
+            emergency_backup_contact, profession, pickup_point, part_of_group, pax, age_group, gender,
+            fitness, medical_condition, recent_hikes, agreement, suggestions, guide_mode,
+            transport_mode, distance, difficulty, season, type_of_trail, person_remarks,
+            updates, due, paid, list_name, timestamp
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          String(body.hike_number || ''),
+          body.trek_name || '',
+          body.full_name || 'Anonymous Hiker',
+          body.email_address || '',
+          body.phone || '',
+          whatsappVal,
+          whatsappVal,
+          body.emergency_backup_contact || '',
+          body.profession || '',
+          body.pickup_point || '',
+          body.part_of_group || 'Solo',
+          Number(body.pax) || 1,
+          body.age_group || '',
+          body.gender || '',
+          body.fitness || '',
+          body.medical_condition || 'No',
+          body.recent_hikes || '',
+          body.agreement || 'Yes',
+          body.suggestions || '',
+          body.guide_mode || 'Guided',
+          body.transport_mode || 'Bus',
+          body.distance || '',
+          body.difficulty || '',
+          body.season || '',
+          body.type_of_trail || '',
+          body.person_remarks || '',
+          body.updates || '',
+          body.due || '',
+          body.paid || '',
+          body.list_name || '',
+          currentTimestamp
+        ).run();
+
+        return jsonResponse({ success: true, message: 'Registration saved successfully' });
+      }
+
+      // ===== FEEDBACK ENDPOINTS =====
+
+      // GET /feedback
+      if (method === 'GET' && path === '/feedback') {
+        if (!env.DB) return jsonResponse({ success: true, data: [] });
+        const hikeNum = url.searchParams.get('hike_number');
+
+        let stmt = env.DB.prepare('SELECT * FROM feedback ORDER BY submitted_at DESC');
+        if (hikeNum) {
+          stmt = env.DB.prepare('SELECT * FROM feedback WHERE hike_number = ? ORDER BY submitted_at DESC').bind(hikeNum);
+        }
+
+        const { results } = await stmt.all();
+        return jsonResponse({ success: true, data: results || [] });
+      }
+
+      // POST /feedback
+      if (method === 'POST' && path === '/feedback') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const body = await request.json();
+        const userUid = body.uid || body.user_id || `user_${Date.now()}`;
+        const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+        await env.DB.prepare(`
+          INSERT INTO feedback (
+            uid, hike_number, trek_name, full_name, email_address,
+            team_rating, team_feedback, overall_rating, overall_feedback, submitted_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          userUid,
+          String(body.hike_number || ''),
+          body.trek_name || '',
+          body.full_name || body.name || 'Anonymous',
+          body.email_address || body.email || '',
+          Number(body.team_rating || body.teamRating) || 5,
+          body.team_feedback || body.teamFeedback || '',
+          Number(body.overall_rating || body.overallRating) || 5,
+          body.overall_feedback || body.overallFeedback || '',
+          currentTimestamp
+        ).run();
+
+        return jsonResponse({ success: true, message: 'Feedback submitted successfully' });
+      }
+
+      // ===== MAPMINERS / COMMUNITY TRAILS ENDPOINTS =====
+
+      // GET /mapminers/trails or GET /community_trails - List trails
+      if (method === 'GET' && (path === '/mapminers/trails' || path === '/community_trails')) {
+        if (!env.DB) return jsonResponse({ success: true, data: [] });
+        let results = [];
+        try {
+          const res = await env.DB.prepare('SELECT * FROM community_trails ORDER BY uploaded_at DESC').all();
+          results = res.results || [];
+        } catch (e) {
+          console.error('Error querying community_trails:', e);
+        }
+
+        const data = results.map((r) => ({
+          ...r,
+          file_name: r.file_name || r.fileName,
+          fileName: r.fileName || r.file_name,
+          contributor_email: r.contributor_email || r.contributorEmail,
+          contributorEmail: r.contributorEmail || r.contributor_email,
+          file_size: r.file_size || r.fileSize || 0,
+          fileSize: r.fileSize || r.file_size || 0,
+        }));
+
+        return jsonResponse({ success: true, data });
+      }
+
+      // GET /mapminers/download/:fileName - Download file from R2
+      if (method === 'GET' && (path.startsWith('/mapminers/download/') || path.startsWith('/community_trails/download/'))) {
+        const fileName = decodeURIComponent(path.replace(/^\/(mapminers|community_trails)\/download\//, ''));
+        if (!env.BUCKET) return errorResponse('R2 Storage binding BUCKET missing', 500);
+
+        const object = await env.BUCKET.get(fileName);
+        if (!object) {
+          return errorResponse('Trail file not found in R2 storage', 404);
+        }
+
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set('etag', object.httpEtag);
+        headers.set('Content-Type', headers.get('Content-Type') || 'application/xml');
+        headers.set('Access-Control-Allow-Origin', '*');
+
+        return new Response(object.body, { headers });
+      }
+
+      // POST /mapminers/upload or POST /community_trails/upload (Fills all snake_case and camelCase metadata)
+      if (method === 'POST' && (path === '/mapminers/upload' || path === '/community_trails/upload')) {
+        if (!env.DB || !env.BUCKET) return errorResponse('DB or BUCKET binding missing', 500);
+
+        const contentType = request.headers.get('content-type') || '';
+        let fileName = '';
+        let fileContent = '';
+        let trailName = '';
+        let contributorEmail = '';
+        let body = {};
+
+        if (contentType.includes('application/json')) {
+          body = await request.json();
+          fileName = body.file_name || body.fileName || `trail_${Date.now()}.gpx`;
+          fileContent = body.fileContent || body.file_content || '';
+          trailName = body.name || fileName;
+          contributorEmail = body.contributor_email || body.contributorEmail || '';
+        } else {
+          return errorResponse('Please upload JSON payload with fileName and fileContent', 400);
+        }
+
+        // Put file in R2
+        if (fileContent) {
+          await env.BUCKET.put(fileName, fileContent, {
+            httpMetadata: { contentType: 'application/xml' },
           });
         }
 
-        // Store metadata in D1 if available
-        if (env.DB && fileName && name) {
-          const id = body.id || `trail_${Date.now()}`;
-          const diff = difficulty || difficultyOverride || 'Moderate';
-          const dist = Number(stats?.distance || 0);
-          const elevGain = Number(stats?.elevationGain || 0);
-          const elevLoss = Number(stats?.elevationLoss || 0);
-          const minElev = Number(stats?.minElevation || 0);
-          const maxElev = Number(stats?.maxElevation || 0);
-          const hours = Number(stats?.estimatedHours || 0);
-          const boundsJson = typeof bounds === 'string' ? bounds : JSON.stringify(bounds || []);
-          const startPosJson = typeof startPos === 'string' ? startPos : JSON.stringify(startPos || { lat: 27.7, lng: 85.3 });
-          const startLat = startPos?.lat || 27.7;
-          const startLng = startPos?.lng || 85.3;
+        // Extract metadata fields sent from frontend
+        const description = body.description || '';
+        const difficulty = body.difficulty || 'Moderate';
+        const stats = body.stats || {};
+        const distance = Number(stats.distance || 0);
+        const elevation_gain = Number(stats.elevationGain || stats.elevation_gain || 0);
+        const elevation_loss = Number(stats.elevationLoss || stats.elevation_loss || 0);
+        const min_elevation = Number(stats.minElevation || stats.min_elevation || 0);
+        const max_elevation = Number(stats.maxElevation || stats.max_elevation || 0);
+        const estimated_hours = Number(stats.estimatedHours || stats.estimated_hours || 0);
+        const bounds = typeof body.bounds === 'string' ? body.bounds : JSON.stringify(body.bounds || []);
+        const start_pos = typeof body.startPos === 'string' ? body.startPos : (typeof body.start_pos === 'string' ? body.start_pos : JSON.stringify(body.startPos || body.start_pos || { lat: 27.7, lng: 85.3 }));
+        const contributor_name = body.contributorName || body.contributor_name || 'Map Miner';
+        const province = body.province || '';
+        const district = body.district || '';
+        const nearby_city = body.nearbyCity || body.nearby_city || '';
+        const highlights = body.highlights || '';
+        const trailId = body.id || `trail_${Date.now()}`;
 
-          let inserted = false;
-          // Attempt 1: community_trails with file_size
-          try {
-            await env.DB.prepare(`
-              INSERT INTO community_trails (
-                id, file_name, name, description, difficulty, distance,
-                elevation_gain, elevation_loss, min_elevation, max_elevation,
-                estimated_hours, bounds, start_pos, contributor_name, contributor_email,
-                province, district, nearby_city, highlights, uploaded_at, file_size
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(file_name) DO UPDATE SET
-                name = excluded.name, description = excluded.description,
-                highlights = excluded.highlights, distance = excluded.distance,
-                elevation_gain = excluded.elevation_gain, elevation_loss = excluded.elevation_loss
-            `).bind(
-              id, fileName, name, description || '', diff, dist,
-              elevGain, elevLoss, minElev, maxElev, hours, boundsJson, startPosJson,
-              contributorName || 'Community Member', contributorEmail || '',
-              province || 'Bagmati', district || 'Kathmandu', nearbyCity || 'Kathmandu',
-              highlights || '', new Date().toISOString(), fileContent ? fileContent.length : 0
-            ).run();
-            inserted = true;
-          } catch (e1) {
-            // Attempt 2: community_trails without file_size (in case column does not exist)
-            try {
-              await env.DB.prepare(`
-                INSERT INTO community_trails (
-                  id, file_name, name, description, difficulty, distance,
-                  elevation_gain, elevation_loss, min_elevation, max_elevation,
-                  estimated_hours, bounds, start_pos, contributor_name, contributor_email,
-                  province, district, nearby_city, highlights, uploaded_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(file_name) DO UPDATE SET
-                  name = excluded.name, description = excluded.description,
-                  highlights = excluded.highlights, distance = excluded.distance,
-                  elevation_gain = excluded.elevation_gain, elevation_loss = excluded.elevation_loss
-              `).bind(
-                id, fileName, name, description || '', diff, dist,
-                elevGain, elevLoss, minElev, maxElev, hours, boundsJson, startPosJson,
-                contributorName || 'Community Member', contributorEmail || '',
-                province || 'Bagmati', district || 'Kathmandu', nearbyCity || 'Kathmandu',
-                highlights || '', new Date().toISOString()
-              ).run();
-              inserted = true;
-            } catch (e2) {
-              // Attempt 3: mapminers_trails table
-              try {
-                await env.DB.prepare(`
-                  INSERT INTO mapminers_trails (id, file_name, name, description, difficulty_override, hours_override, province, district, nearby_city, highlights, uploaded_at, contributor_name, contributor_email, start_lat, start_lng, stats)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(file_name) DO UPDATE SET
-                    name = excluded.name, description = excluded.description, highlights = excluded.highlights, stats = excluded.stats
-                `).bind(
-                  id, fileName, name, description || '', diff, hoursOverride || 'Auto',
-                  province || 'Bagmati', district || 'Kathmandu', nearbyCity || 'Kathmandu', highlights || '',
-                  new Date().toISOString(), contributorName || 'Community Member', contributorEmail || '',
-                  startLat, startLng, JSON.stringify(stats || {})
-                ).run();
-                inserted = true;
-              } catch (e3) {
-                console.warn('D1 insert failed across all tables:', e3?.message);
-              }
-            }
-          }
-        }
+        // Store in D1 community_trails table filling both snake_case and camelCase columns exactly matching schema
+        await env.DB.prepare(`
+          INSERT INTO community_trails (
+            id, file_name, fileName, name, description, difficulty, distance,
+            elevation_gain, elevation_loss, min_elevation, max_elevation,
+            estimated_hours, bounds, start_pos, contributor_name, contributor_email, contributorEmail,
+            province, district, nearby_city, highlights, uploaded_at, file_size, fileSize
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+        `).bind(
+          trailId,
+          fileName,
+          fileName,
+          trailName,
+          description,
+          difficulty,
+          distance,
+          elevation_gain,
+          elevation_loss,
+          min_elevation,
+          max_elevation,
+          estimated_hours,
+          bounds,
+          start_pos,
+          contributor_name,
+          contributor_email,
+          contributor_email,
+          province,
+          district,
+          nearby_city,
+          highlights,
+          fileContent.length,
+          fileContent.length
+        ).run();
 
-        return jsonResponse({ success: true, message: 'Trail uploaded to Cloudflare R2 & D1', fileName });
+        return jsonResponse({ success: true, message: 'Trail uploaded successfully to D1', id: trailId, fileName });
       }
 
-      return jsonResponse({ error: 'Endpoint not found' }, 404);
-
+      return errorResponse(`Route ${method} ${path} not found`, 404);
     } catch (err) {
-      return jsonResponse({ error: err.message || 'Worker Internal Error' }, 500);
+      return errorResponse(err.message || 'Server error', 500);
     }
-  }
+  },
 };

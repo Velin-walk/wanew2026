@@ -110,14 +110,36 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     }
   };
 
+  const convertTrekToSavedHikeRecord = (t: any): SavedHikeRecord => {
+    const d = typeof t.data === 'string' ? JSON.parse(t.data) : (t.data || {});
+    return {
+      id: t.id,
+      hikeNumber: t.hike_number || d.hikeNumber || '',
+      title: t.name || t.title || d.title || '',
+      category: t.category || d.category || 'Overnight Bus Hikes',
+      status: t.is_active || t.status === 'published' ? 'published' : 'draft',
+      createdAt: t.created_at || t.createdAt || new Date().toISOString(),
+      updatedAt: t.updated_at || t.updatedAt || new Date().toISOString(),
+      authorEmail: t.author_email || t.authorEmail || 'walknepalwalk@gmail.com',
+      data: {
+        ...d,
+        hikeNumber: t.hike_number || d.hikeNumber || '',
+        title: t.name || t.title || d.title || '',
+        category: t.category || d.category || 'Overnight Bus Hikes',
+      }
+    };
+  };
+
   const fetchItineraries = async () => {
     setLoadingHikes(true);
     try {
-      const res = await apiFetch('admin/itineraries');
+      // 1. Fetch directly from Cloudflare Worker treks table
+      const res = await apiFetch('treks');
       if (res.ok) {
         const json = await res.json();
-        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          const serverHikes = deduplicateHikesList(json.data);
+        const trekItems = Array.isArray(json) ? json : json?.data;
+        if (Array.isArray(trekItems) && trekItems.length > 0) {
+          const serverHikes = deduplicateHikesList(trekItems.map(convertTrekToSavedHikeRecord));
           setServerHikeIds(serverHikes.map(h => h.id));
 
           const unsynced = getUnsyncedLocalHikes(serverHikes);
@@ -128,6 +150,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           return;
         }
       }
+
       const cached = localStorage.getItem('wnw_saved_itineraries_cache');
       if (cached) {
         try {

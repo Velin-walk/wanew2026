@@ -14,23 +14,9 @@ export function apiUrl(path: string, directCloudflare = true): string {
 export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
   const cleanPath = path.replace(/^\/+/, "");
   const directUrl = `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
-  const localUrl = `/api/${cleanPath}`;
 
-  // Prioritize Cloudflare Direct
-  try {
-    const directRes = await fetch(directUrl, options);
-    // If Cloudflare returns a valid response (2xx, 3xx, or expected 4xx), return it directly
-    if (directRes.status < 500 && directRes.status !== 404) {
-      return directRes;
-    }
-    // If the live worker route returned 502/503 or 404 (e.g. route not yet deployed on worker), fallback to local API
-    console.warn(`[Cloudflare Direct] Route ${cleanPath} returned status ${directRes.status}. Using fallback.`);
-  } catch (err: any) {
-    console.warn(`[Cloudflare Direct] Failed to reach Cloudflare Worker directly for ${cleanPath}:`, err?.message);
-  }
-
-  // Local server fallback so the UI never crashes
-  return fetch(localUrl, options);
+  // Direct fetch to Cloudflare Worker
+  return fetch(directUrl, options);
 }
 
 export function normalizeTrek(row: any): Trek {
