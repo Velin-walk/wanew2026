@@ -24,8 +24,7 @@ interface MapViewProps {
 }
 
 const ROUTE_COLORS = [
-  '#f97316', '#60a5fa', '#34d399', '#f59e0b', '#a78bfa',
-  '#fb7185', '#22d3ee', '#84cc16', '#e879f9', '#38bdf8',
+  '#fc6600', '#fc6600',
 ];
 
 interface MapErrorBoundaryProps {

@@ -6,7 +6,17 @@
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const path = url.pathname;
+    let path = url.pathname;
+    
+    // ✅ Strip /api prefix if present
+    if (path.startsWith('/api')) {
+      path = path.replace(/^\/api/, '');
+    }
+    
+    if (!path.startsWith('/')) {
+      path = '/' + path;
+    }
+    
     const method = request.method;
 
     // CORS Headers
