@@ -356,3 +356,40 @@ export async function fetchUserBookings(email: string): Promise<any[]> {
     return [];
   }
 }
+
+/**
+ * Fetch Leaderboard aggregated stats designed specifically for Community Dashboard.
+ * Tries Cloudflare endpoint first, with fallback to Google Apps Script proxy.
+ */
+export async function fetchLeaderboardData(): Promise<any> {
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyIT-PJSPuLLUT-7d3CYnyjg0juWHoLbkVDMrNh9GK7_KidnsZZBLkQiYVxyft29KtHvA/exec';
+  
+  // Try direct Cloudflare Worker endpoint first
+  try {
+    const cfRes = await apiFetch('leaderboard', { cacheTtl: 5 * 60 * 1000 });
+    if (cfRes.ok) {
+      const data = await cfRes.json();
+      if (data && data.hikers && Array.isArray(data.hikers) && data.hikers.length > 0) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('Direct Cloudflare leaderboard fetch fallback to script source:', err);
+  }
+
+  // Fallback to Dashboard Apps Script API
+  try {
+    const gasRes = await fetch(GAS_URL);
+    if (gasRes.ok) {
+      const data = await gasRes.json();
+      if (data && (data.ok || data.hikers)) {
+        return data;
+      }
+    }
+  } catch (gasErr) {
+    console.warn('Dashboard script fetch error:', gasErr);
+  }
+
+  return null;
+}
+

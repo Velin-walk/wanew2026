@@ -668,6 +668,8 @@ function MainApp() {
           onClose={() => setProfileModalOpen(false)}
           userBookings={bookings}
           allTreks={treks}
+          favorites={favorites}
+          onToggleFavorite={toggleFavorite}
           onOpenTrek={(t) => setItineraryModalTrek(t)}
         />
       </div>

@@ -294,32 +294,35 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-[#F0EBE5]">
           <button
             type="button"
+            id={`trek-card-itinerary-btn-${trek.id}`}
             onClick={() => onViewItinerary?.(trek)}
-            className="flex items-center justify-center gap-1 min-h-[42px] px-1 text-xs font-semibold text-[#E08828] bg-[#E08828]/10 hover:bg-[#E08828]/15 border border-[#E08828]/20 rounded-xl active:scale-[0.98] transition-all cursor-pointer"
+            className="flex items-center justify-center gap-1.5 min-h-[44px] px-2 text-xs font-black text-[#E08828] bg-[#FFF8F0] hover:bg-[#FFEEDD] border-2 border-[#E08828]/30 hover:border-[#E08828]/60 rounded-xl shadow-xs hover:shadow-md active:scale-95 transition-all cursor-pointer select-none group"
           >
-            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <FileText className="w-3.5 h-3.5 shrink-0 transition-transform group-hover:scale-110" />
             <span>Itinerary</span>
           </button>
 
           <button
             type="button"
+            id={`trek-card-invite-btn-${trek.id}`}
             onClick={() => onShare(trek)}
-            className="flex items-center justify-center gap-1.5 min-h-[42px] px-1 text-xs font-semibold text-[#5A5551] bg-[#F9F7F5] hover:bg-[#F0ECE7] border border-[#E5E1DB] rounded-xl active:scale-[0.98] transition-all cursor-pointer"
+            className="flex items-center justify-center gap-1.5 min-h-[44px] px-2 text-xs font-bold text-[#4A4540] bg-[#FAF8F5] hover:bg-white border-2 border-[#E5E1DB] hover:border-[#C8C2B8] rounded-xl shadow-xs hover:shadow-md active:scale-95 transition-all cursor-pointer select-none group"
           >
-            <Share2 className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
+            <Share2 className="w-3.5 h-3.5 text-[#E08828] shrink-0 transition-transform group-hover:scale-110" />
             <span>Invite</span>
           </button>
 
           <button
             type="button"
+            id={`trek-card-register-btn-${trek.id}`}
             disabled={isFull || trek.is_cancelled}
             onClick={() => onRegister(trek)}
-            className={`flex items-center justify-center gap-1.5 min-h-[42px] px-1 text-xs font-bold rounded-xl transition-all text-white cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 min-h-[44px] px-2 text-xs font-black rounded-xl transition-all shadow-sm select-none ${
               trek.is_cancelled
-                ? 'bg-rose-400 cursor-not-allowed opacity-80'
+                ? 'bg-rose-100 text-rose-700 border-2 border-rose-300 cursor-not-allowed opacity-90'
                 : isFull
-                ? 'bg-[#8B8680] cursor-not-allowed opacity-70'
-                : 'bg-[#7ABA42] hover:bg-[#6CA838] active:scale-[0.98] shadow-xs'
+                ? 'bg-[#8B8680] text-white cursor-not-allowed opacity-75'
+                : 'bg-[#7ABA42] hover:bg-[#6AA437] hover:shadow-md active:scale-95 text-white cursor-pointer ring-2 ring-[#7ABA42]/30'
             }`}
           >
             <span>{trek.is_cancelled ? 'Cancelled' : isFull ? 'Waitlist' : 'Register'}</span>

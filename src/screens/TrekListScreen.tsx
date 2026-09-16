@@ -150,43 +150,55 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Hero Banner with Nepal Himalayan vibe - mobile optimized */}
+      {/* Hero Banner with Nepal Himalayan green & orange vibe - mobile optimized */}
       {!savedOnly && (
-        <div className="bg-gradient-to-br from-[#1F1F1F] via-[#2A2521] to-[#1F1F1F] text-white rounded-2xl p-4 sm:p-5 shadow-sm relative overflow-hidden border border-neutral-800">
-          <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none">
-            <Mountain className="w-48 h-48 text-white" />
+        <div className="bg-gradient-to-br from-[#1B361D] via-[#254A23] to-[#1E381C] text-white rounded-2xl p-4 sm:p-5 shadow-md relative overflow-hidden border border-[#7ABA42]/30">
+          {/* Ambient Warm Sunset Orange Glow */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-[#E08828]/15 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+          
+          <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#A8D878]">
+            <Mountain className="w-52 h-52" />
           </div>
 
           <div className="relative z-10 w-full">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E08828]/20 border border-[#E08828]/40 text-[#F5A844] text-[10px] sm:text-xs font-semibold uppercase tracking-wider mb-2">
-              <Flame className="w-3 h-3 text-[#E08828] shrink-0" />
-              <span>All season Himalayan treks & hikes</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E08828]/25 border border-[#F5A844]/50 text-[#FED7AA] text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2.5 shadow-3xs">
+              <Flame className="w-3.5 h-3.5 text-[#F5A844] shrink-0" />
+              <span>All Season Himalayan Treks & Hikes</span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white leading-tight">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
               Trek Schedule & Archive
             </h1>
-            <p className="text-neutral-300 text-xs sm:text-sm mt-1 leading-relaxed font-semibold tracking-wider text-[#A8D878]">
-              FITNESS . FUN . FRIENDSHIP
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="w-2 h-2 rounded-full bg-[#7ABA42]" />
+              <p className="text-xs sm:text-sm font-extrabold tracking-widest text-[#B5F07E] uppercase">
+                Fitness • Fun • Friendship
+              </p>
+            </div>
 
-            {/* Quick Mobile Roster Stats */}
-            <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-white/10 text-[11px] text-neutral-300">
+            {/* Quick Mobile Roster Stats with Frosted Glass styling */}
+            <div className="grid grid-cols-3 gap-2 mt-3.5 pt-3 border-t border-white/15 bg-black/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3 text-[11px]">
               <div className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
-                <span className="truncate">
-                  <strong className="text-white">{upcomingTreks.length}</strong> Upcoming
+                <div className="p-1 rounded-md bg-[#E08828]/20">
+                  <Sparkles className="w-3.5 h-3.5 text-[#F5A844] shrink-0" />
+                </div>
+                <span className="truncate text-stone-200">
+                  <strong className="text-white font-extrabold">{upcomingTreks.length}</strong> Upcoming
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <History className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
-                <span className="truncate">
-                  <strong className="text-white">{pastTreks.length}</strong> Completed
+                <div className="p-1 rounded-md bg-[#7ABA42]/20">
+                  <History className="w-3.5 h-3.5 text-[#A8E063] shrink-0" />
+                </div>
+                <span className="truncate text-stone-200">
+                  <strong className="text-white font-extrabold">{pastTreks.length}</strong> Completed
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-white shrink-0" />
-                <span className="truncate">Official Guides</span>
+                <div className="p-1 rounded-md bg-white/15">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#E5E1DB] shrink-0" />
+                </div>
+                <span className="truncate text-stone-200 font-medium">Official Guides</span>
               </div>
             </div>
           </div>
@@ -226,8 +238,8 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
 
         {/* Trip Type Pills */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-          <span className="text-[#8B8680] font-medium text-[11px] flex items-center gap-1 mr-1 shrink-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+          <span className="text-[#8B8680] font-bold text-[11px] flex items-center gap-1 mr-1 shrink-0">
             Trip:
           </span>
           {(
@@ -242,10 +254,10 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
               key={item.id}
               type="button"
               onClick={() => setTripTypeFilter(item.id)}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all shrink-0 active:scale-95 cursor-pointer ${
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shrink-0 active:scale-95 cursor-pointer shadow-3xs select-none ${
                 tripTypeFilter === item.id
-                  ? 'bg-[#7ABA42] text-white shadow-xs'
-                  : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:bg-[#F3F1ED]'
+                  ? 'bg-[#7ABA42] text-white shadow-sm ring-2 ring-[#7ABA42]/30 font-black'
+                  : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'
               }`}
             >
               {item.label}
@@ -254,9 +266,9 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
 
         {/* Grade / Difficulty Tags */}
-        <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-[#F0EBE5] text-xs">
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-            <span className="text-[#8B8680] font-medium text-[11px] flex items-center gap-1 mr-1 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2.5 border-t border-[#F0EBE5] text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+            <span className="text-[#8B8680] font-bold text-[11px] flex items-center gap-1 mr-1 shrink-0">
               <SlidersHorizontal className="w-3 h-3" /> Grade:
             </span>
             {(['all', 'easy', 'moderate', 'difficult'] as const).map((diff) => (
@@ -264,10 +276,10 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                 key={diff}
                 type="button"
                 onClick={() => setDifficultyFilter(diff)}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-semibold capitalize transition-all shrink-0 ${
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold capitalize transition-all shrink-0 active:scale-95 cursor-pointer shadow-3xs select-none ${
                   difficultyFilter === diff
-                    ? 'bg-[#1F1F1F] text-white'
-                    : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:bg-[#F3F1ED]'
+                    ? 'bg-[#1F1F1F] text-white shadow-xs font-black'
+                    : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'
                 }`}
               >
                 {diff}

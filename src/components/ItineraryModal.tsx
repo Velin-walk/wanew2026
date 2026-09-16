@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Compass,
@@ -25,6 +25,8 @@ import {
   Milestone,
   ClipboardList,
   AlertTriangle,
+  ArrowRight,
+  ChevronLeft,
 } from 'lucide-react';
 import { Trek } from '../types';
 import { TrekItineraryData } from '../data/defaultItineraryTemplate';
@@ -46,6 +48,7 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'experience' | 'logistics'>('experience');
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+  const contentScrollRef = useRef<HTMLDivElement>(null);
 
   // Reset states when a new trek opens
   useEffect(() => {
@@ -55,6 +58,13 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
       setExpandedDays({ 'day-1': true });
     }
   }, [isOpen, trek?.id]);
+
+  const switchTab = (tab: 'experience' | 'logistics') => {
+    setActiveTab(tab);
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   if (!isOpen || !trek) return null;
 
@@ -162,39 +172,61 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
           </div>
         )}
 
-        {/* Immersive Dual-Tab Bar */}
+        {/* Immersive Dual-Tab Segmented Controller */}
         {!isFaq && (
-          <div className="bg-white border-b border-[#E5E1DB] px-4 sm:px-6 py-2 shrink-0 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('experience')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
-                activeTab === 'experience'
-                  ? 'bg-[#E08828] text-white shadow-sm'
-                  : 'text-[#5A5551] hover:text-[#1F1F1F] hover:bg-[#F4EFEA]'
-              }`}
-            >
-              <Compass className="w-4 h-4" />
-              <span>Hike Experience</span>
-            </button>
+          <div className="bg-[#FAF8F5] border-b border-[#E5E1DB] px-3 sm:px-6 py-2.5 shrink-0 flex items-center justify-between gap-2">
+            <div className="flex items-center p-1 bg-[#EAE4DC] rounded-2xl w-full sm:w-auto shadow-inner border border-[#DDD6CC]/60">
+              <button
+                type="button"
+                id="itinerary-tab-experience"
+                onClick={() => switchTab('experience')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-5 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer select-none active:scale-95 ${
+                  activeTab === 'experience'
+                    ? 'bg-white text-[#E08828] shadow-sm font-black border border-black/5'
+                    : 'text-[#6A645D] hover:text-[#1F1F1F] hover:bg-white/50 font-bold'
+                }`}
+              >
+                <Compass className={`w-4 h-4 shrink-0 transition-transform ${activeTab === 'experience' ? 'text-[#E08828] scale-110' : 'text-[#8B8680]'}`} />
+                <span className="whitespace-nowrap">Hike Experience</span>
+                {activeTab === 'experience' && (
+                  <span className="hidden sm:inline-block w-1.5 h-1.5 rounded-full bg-[#E08828]" />
+                )}
+              </button>
 
+              <button
+                type="button"
+                id="itinerary-tab-logistics"
+                onClick={() => switchTab('logistics')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-5 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer select-none active:scale-95 ${
+                  activeTab === 'logistics'
+                    ? 'bg-[#E08828] text-white shadow-md font-black ring-2 ring-[#E08828]/20'
+                    : 'text-[#6A645D] hover:text-[#1F1F1F] hover:bg-white/50 font-bold'
+                }`}
+              >
+                <ClipboardList className={`w-4 h-4 shrink-0 transition-transform ${activeTab === 'logistics' ? 'text-white scale-110' : 'text-[#8B8680]'}`} />
+                <span className="whitespace-nowrap">Logistics & Booking</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                  activeTab === 'logistics' ? 'bg-white/20 text-white' : 'bg-[#E08828]/15 text-[#E08828]'
+                }`}>
+                  Cost & Guide
+                </span>
+              </button>
+            </div>
+
+            {/* Quick Next/Prev helper on desktop */}
             <button
               type="button"
-              onClick={() => setActiveTab('logistics')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
-                activeTab === 'logistics'
-                  ? 'bg-[#E08828] text-white shadow-sm'
-                  : 'text-[#5A5551] hover:text-[#1F1F1F] hover:bg-[#F4EFEA]'
-              }`}
+              onClick={() => switchTab(activeTab === 'experience' ? 'logistics' : 'experience')}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-[#E08828] hover:text-white bg-[#E08828]/10 hover:bg-[#E08828] rounded-xl border border-[#E08828]/30 transition-all cursor-pointer shadow-3xs active:scale-95"
             >
-              <ClipboardList className="w-4 h-4" />
-              <span>Logistics & Booking</span>
+              <span>{activeTab === 'experience' ? 'Jump to Pricing & Logistics' : 'Back to Hike Route'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div ref={contentScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           
           {/* Cover image header */}
           <div className="relative h-44 sm:h-56 w-full rounded-2xl overflow-hidden bg-neutral-900 shadow-xs shrink-0">
@@ -409,6 +441,33 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                 )}
               </div>
 
+              {/* Seamless Continue to Logistics & Booking Section */}
+              <div className="p-5 sm:p-6 bg-gradient-to-br from-[#FFF9F2] to-[#F5ECE0] rounded-2xl border-2 border-[#E08828]/30 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#E08828] animate-ping" />
+                    <span className="text-[11px] font-black uppercase tracking-wider text-[#E08828]">Next Step</span>
+                  </div>
+                  <h4 className="text-sm sm:text-base font-black text-[#1F1F1F]">
+                    Ready to check Pricing, What's Included & Logistics?
+                  </h4>
+                  <p className="text-xs text-[#6A645D] font-medium leading-relaxed">
+                    View package costs, vehicle pickup points, gear checklists, and official reservation steps.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  id="itinerary-scroll-to-logistics-btn"
+                  onClick={() => switchTab('logistics')}
+                  className="w-full sm:w-auto px-5 py-3 bg-[#E08828] hover:bg-[#D07717] active:scale-95 text-white text-xs sm:text-sm font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 group"
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  <span>View Logistics & Booking</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+
             </div>
           ) : activeTab === 'logistics' && !isFaq ? (
             /* Logistics Tab View */
@@ -605,6 +664,33 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                       ))}
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* Return to Hike Experience Navigation Helper */}
+              <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-[#E5E1DB] shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => switchTab('experience')}
+                  className="flex items-center gap-2 text-xs font-black text-[#5A5551] hover:text-[#1F1F1F] px-3 py-2 rounded-xl hover:bg-[#F4EFEA] transition-all cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4 text-[#E08828]" />
+                  <span>Back to Hike Timeline & Overview</span>
+                </button>
+                {onRegister && (
+                  <button
+                    type="button"
+                    disabled={trek.is_cancelled}
+                    onClick={() => onRegister(trek)}
+                    className={`px-4 py-2 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs shrink-0 ${
+                      trek.is_cancelled
+                        ? 'bg-rose-400 cursor-not-allowed opacity-80'
+                        : 'bg-[#7ABA42] hover:bg-[#6AA437] cursor-pointer active:scale-95'
+                    }`}
+                  >
+                    <span>{trek.is_cancelled ? 'Hike Cancelled' : 'Proceed to Registration'}</span>
+                    {!trek.is_cancelled && <ChevronRight className="w-3.5 h-3.5" />}
+                  </button>
                 )}
               </div>
 

@@ -202,7 +202,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-[#5A5551] hover:text-[#1F1F1F]'
             }`}
           >
-            <Heart className={`w-4 h-4 ${currentTab === 'saved' ? 'fill-rose-500' : ''}`} />
+            <Heart className={`w-4 h-4 ${currentTab === 'saved' ? 'fill-rose-500 text-rose-500' : 'text-[#8B8680]'}`} />
             <span>Saved</span>
             {savedCount > 0 && (
               <span className="px-1.5 py-0.2 bg-rose-500 text-white text-[10px] font-extrabold rounded-full">
@@ -397,6 +397,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="flex items-center gap-2.5">
                       <UserIcon className="w-4 h-4 text-[#7ABA42] group-hover:scale-110 transition-transform" />
                       <span>My Profile & Bookings</span>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAvatarDropdownOpen(false);
+                      onTabChange('saved');
+                    }}
+                    className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Heart className="w-4 h-4 text-rose-500 fill-rose-500/30 group-hover:scale-110 transition-transform" />
+                      <span>Saved Hikes ({savedCount})</span>
                     </div>
                     <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
                   </button>

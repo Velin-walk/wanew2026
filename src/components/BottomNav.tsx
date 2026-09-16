@@ -140,7 +140,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               currentTab === 'saved' ? 'bg-rose-50 scale-105' : ''
             }`}
           >
-            <Heart className={`w-5 h-5 ${currentTab === 'saved' ? 'fill-rose-500' : ''}`} />
+            <Heart className={`w-5 h-5 ${currentTab === 'saved' ? 'fill-rose-500 text-rose-500' : ''}`} />
             {savedCount > 0 && (
               <span className="absolute -top-1 -right-1.5 px-1 min-w-[16px] h-4 bg-rose-500 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center shadow-xs">
                 {savedCount}
@@ -213,6 +213,21 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               <div className="px-3 py-1.5 border-b border-[#F9F7F5] mb-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-[#8B8680]">Guides & Support</span>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDropdownOpen(false);
+                  onTabChange('saved');
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-rose-500 fill-rose-500/30" />
+                  <span>Saved Hikes ({savedCount})</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
+              </button>
 
               <button
                 type="button"
