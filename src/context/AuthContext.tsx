@@ -16,6 +16,7 @@ interface AuthContextType {
   isAdmin: boolean;
   userEmail: string;
   signInWithGoogle: () => Promise<User | null>;
+  signInWithDevAccount: (email: string, displayName?: string) => User;
   signOutUser: () => Promise<void>;
   authModalOpen: boolean;
   authModalReason: string;
@@ -35,7 +36,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+        localStorage.removeItem('wnw_dev_user');
+      } else {
+        const savedDevUser = localStorage.getItem('wnw_dev_user');
+        if (savedDevUser) {
+          try {
+            const parsed = JSON.parse(savedDevUser);
+            if (parsed?.email) {
+              setUser({
+                uid: parsed.uid || 'dev-user-saved',
+                email: parsed.email,
+                displayName: parsed.displayName || parsed.email.split('@')[0],
+                photoURL: parsed.photoURL || '',
+                emailVerified: true,
+              } as unknown as User);
+            }
+          } catch (e) {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -59,7 +83,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signInWithDevAccount = (email: string, displayName?: string) => {
+    const mockUser = {
+      uid: 'dev-user-' + Date.now(),
+      email: email,
+      displayName: displayName || email.split('@')[0],
+      photoURL: '',
+      emailVerified: true,
+    } as unknown as User;
+
+    setUser(mockUser);
+    localStorage.setItem(
+      'wnw_dev_user',
+      JSON.stringify({
+        uid: mockUser.uid,
+        email: mockUser.email,
+        displayName: mockUser.displayName,
+      })
+    );
+
+    if (pendingAction) {
+      pendingAction();
+      setPendingAction(null);
+    }
+    setAuthModalOpen(false);
+    return mockUser;
+  };
+
   const signOutUser = async () => {
+    localStorage.removeItem('wnw_dev_user');
+    setUser(null);
     try {
       await firebaseSignOut(auth);
     } catch (error) {
@@ -97,6 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         userEmail,
         signInWithGoogle,
+        signInWithDevAccount,
         signOutUser,
         authModalOpen,
         authModalReason,

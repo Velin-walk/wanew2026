@@ -13,12 +13,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
 };
 
-function jsonResponse(data, status = 200) {
+function jsonResponse(data, status = 200, customHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
       ...corsHeaders,
+      ...customHeaders,
     },
   });
 }
@@ -121,12 +122,85 @@ export default {
 
       // ===== TREKS & ADMIN ITINERARIES ENDPOINTS =====
       
-      // GET /treks or GET /admin/itineraries - List all treks (with CPU exhaustion optimization)
+      // GET /treks or GET /admin/itineraries - List all treks with server-side anonymous participant aggregation
       if (method === 'GET' && (path === '/treks' || path === '/admin/itineraries')) {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
-        const { results } = await env.DB.prepare(
-          'SELECT * FROM treks ORDER BY created_at DESC'
-        ).all();
+        
+        let results = [];
+        try {
+          const { results: joined } = await env.DB.prepare(`
+            SELECT 
+              t.*,
+              e.execution_status,
+              e.is_cancelled as exec_is_cancelled,
+              e.cancellation_reason as exec_cancellation_reason,
+              e.capacity as exec_capacity,
+              e.assigned_leader as exec_assigned_leader
+            FROM treks t
+            LEFT JOIN event_executions e ON t.hike_number = e.hike_number
+            ORDER BY t.created_at DESC
+          `).all();
+          results = joined;
+        } catch (joinErr) {
+          console.warn('Failed to join treks with event_executions:', joinErr);
+          const { results: rawTreks } = await env.DB.prepare(
+            'SELECT * FROM treks ORDER BY created_at DESC'
+          ).all();
+          results = rawTreks;
+        }
+
+        // Server-Side Anonymous Aggregate:
+        // Calculates participant counts, gender ratio, and initialed avatars on the server.
+        // Public visitors never download private registrant emails, phones, or notes.
+        const aggMap = new Map();
+        try {
+          const { results: aggRows } = await env.DB.prepare(`
+            SELECT 
+              hike_number,
+              full_name,
+              gender,
+              COALESCE(CAST(pax AS INTEGER), 1) as pax_count
+            FROM registrations
+            WHERE hike_number IS NOT NULL AND hike_number != ''
+            ORDER BY timestamp DESC
+          `).all();
+
+          for (const r of (aggRows || [])) {
+            const hn = String(r.hike_number || '').trim();
+            if (!hn) continue;
+            if (!aggMap.has(hn)) {
+              aggMap.set(hn, {
+                total: 0,
+                male: 0,
+                female: 0,
+                recent: [],
+                seenNames: new Set(),
+              });
+            }
+            const stat = aggMap.get(hn);
+            const pCount = Number(r.pax_count) || 1;
+            const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
+            stat.total += pCount;
+            if (isFemale) stat.female += pCount;
+            else stat.male += pCount;
+
+            const rawName = (r.full_name || '').trim();
+            const lowerName = rawName.toLowerCase();
+            if (rawName && !stat.seenNames.has(lowerName) && stat.recent.length < 6) {
+              stat.seenNames.add(lowerName);
+              const parts = rawName.split(/\s+/).filter(Boolean);
+              const anonymized = parts.length > 1
+                ? `${parts[0]} ${parts[1].charAt(0)}.`
+                : (parts[0] || 'Hiker');
+              stat.recent.push({
+                name: anonymized,
+                gender: isFemale ? 'f' : 'm',
+              });
+            }
+          }
+        } catch (aggErr) {
+          console.warn('Could not compute registration aggregates in D1:', aggErr);
+        }
 
         const data = (results || []).map((row) => {
           let parsedData = {};
@@ -136,15 +210,48 @@ export default {
             cleanLightweightData(parsedData);
           } catch (e) {}
 
+          // Merge event_executions values into parsedData
+          if (row.exec_is_cancelled !== undefined) {
+            parsedData.is_cancelled = row.exec_is_cancelled === 1;
+          }
+          if (row.exec_cancellation_reason !== undefined) {
+            parsedData.cancellation_reason = row.exec_cancellation_reason;
+          }
+          if (row.execution_status !== undefined) {
+            parsedData.execution_status = row.execution_status;
+          }
+          if (row.exec_capacity !== undefined) {
+            parsedData.maxCapacity = row.exec_capacity;
+          }
+          if (row.exec_assigned_leader !== undefined) {
+            parsedData.teamLeader = row.exec_assigned_leader;
+          }
+
+          const hn = String(row.hike_number || '').trim();
+          const trekId = String(row.id || '').trim();
+          const agg = aggMap.get(hn) || aggMap.get(trekId) || { total: 0, male: 0, female: 0, recent: [] };
+
           return {
             ...row,
+            max_capacity: row.exec_capacity !== undefined ? row.exec_capacity : row.max_capacity,
+            team_leader: row.exec_assigned_leader !== undefined ? row.exec_assigned_leader : row.team_leader,
             hikeNumber: row.hike_number,
             hike_number: row.hike_number,
+            participants: agg.total,
+            registered_pax: agg.total,
+            participants_by_gender: {
+              total: agg.total,
+              male: agg.male,
+              female: agg.female,
+            },
+            recent_participants: agg.recent,
             data: parsedData,
           };
         });
 
-        return jsonResponse({ success: true, data });
+        return jsonResponse({ success: true, data }, 200, {
+          'Cache-Control': 'public, max-age=120, stale-while-revalidate=300'
+        });
       }
 
       // GET /treks/:id or GET /admin/itineraries/:id - Get single trek
@@ -160,13 +267,53 @@ export default {
           return errorResponse('Trek not found', 404);
         }
 
-        // Strict hike_number matching for live roster
+        // Strict hike_number matching for live roster with anonymous privacy protection
         const regs = await env.DB.prepare(
           'SELECT * FROM registrations WHERE hike_number = ?'
         ).bind(String(row.hike_number || '')).all();
 
         const roster = regs.results || [];
         const total_pax = roster.reduce((acc, r) => acc + (Number(r.pax) || 1), 0);
+        let male_count = 0;
+        let female_count = 0;
+        const recent_participants = [];
+        const seenNames = new Set();
+
+        for (const r of roster) {
+          const pCount = Number(r.pax) || 1;
+          const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
+          if (isFemale) female_count += pCount;
+          else male_count += pCount;
+
+          const rawName = (r.full_name || '').trim();
+          const lowerName = rawName.toLowerCase();
+          if (rawName && !seenNames.has(lowerName) && recent_participants.length < 6) {
+            seenNames.add(lowerName);
+            const parts = rawName.split(/\s+/).filter(Boolean);
+            const anonymized = parts.length > 1
+              ? `${parts[0]} ${parts[1].charAt(0)}.`
+              : (parts[0] || 'Hiker');
+            recent_participants.push({
+              name: anonymized,
+              gender: isFemale ? 'f' : 'm',
+            });
+          }
+        }
+
+        const sanitizedRoster = roster.map((r) => {
+          const rawName = (r.full_name || '').trim();
+          const parts = rawName.split(/\s+/).filter(Boolean);
+          const anonymized = parts.length > 1
+            ? `${parts[0]} ${parts[1].charAt(0)}.`
+            : (parts[0] || 'Hiker');
+          return {
+            full_name: anonymized,
+            gender: r.gender,
+            pax: r.pax,
+            hike_number: r.hike_number,
+            timestamp: r.timestamp,
+          };
+        });
 
         let parsedData = {};
         try {
@@ -174,22 +321,29 @@ export default {
           parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
         } catch (e) {}
 
+        const trekObj = {
+          ...row,
+          hikeNumber: row.hike_number,
+          hike_number: row.hike_number,
+          participants: total_pax,
+          registered_pax: total_pax,
+          participants_by_gender: {
+            total: total_pax,
+            male: male_count,
+            female: female_count,
+          },
+          recent_participants,
+          data: parsedData,
+        };
+
         return jsonResponse({
           success: true,
-          data: {
-            ...row,
-            hikeNumber: row.hike_number,
-            hike_number: row.hike_number,
-            data: parsedData,
-          },
-          trek: {
-            ...row,
-            hikeNumber: row.hike_number,
-            hike_number: row.hike_number,
-            data: parsedData,
-          },
-          roster,
+          data: trekObj,
+          trek: trekObj,
+          roster: sanitizedRoster,
           total_pax,
+        }, 200, {
+          'Cache-Control': 'public, max-age=180, stale-while-revalidate=300'
         });
       }
 
@@ -272,6 +426,128 @@ export default {
           success: true,
           message: 'Trek cloned successfully',
           data: { id: newId, title: newTitle },
+        });
+      }
+
+      // PATCH /admin/itineraries/:id - Event Execution Details
+      if (method === 'PATCH' && path.startsWith('/admin/itineraries/')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        const idOrNum = decodeURIComponent(path.replace('/admin/itineraries/', ''));
+        const body = await request.json();
+
+        // 1. Fetch current trek record
+        const row = await env.DB.prepare(
+          'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
+        ).bind(idOrNum, idOrNum).first();
+
+        if (!row) {
+          return errorResponse('Trek not found to update execution', 404);
+        }
+
+        let parsedData = {};
+        try {
+          const rawData = row.data_json || row.data || '{}';
+          parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+        } catch (e) {}
+
+        // Merge incoming Event Execution updates strictly
+        const maxCapacity = body.capacity !== undefined ? Number(body.capacity) : row.max_capacity;
+        const teamLeader = body.leader !== undefined ? body.leader : row.team_leader;
+        
+        if (body.data) {
+          parsedData = {
+            ...parsedData,
+            ...body.data,
+            maxCapacity: body.capacity !== undefined ? Number(body.capacity) : parsedData.maxCapacity,
+            teamLeader: body.leader !== undefined ? body.leader : parsedData.teamLeader,
+          };
+        }
+
+        const dataJson = JSON.stringify(parsedData);
+
+        // Map status based on execution status
+        let newStatus = row.status;
+        if (body.data && body.data.execution_status) {
+          const execStat = String(body.data.execution_status).toLowerCase();
+          newStatus = execStat === 'cancelled' ? 'draft' : 'published';
+        }
+
+        await env.DB.prepare(`
+          UPDATE treks SET
+            max_capacity = ?,
+            team_leader = ?,
+            status = ?,
+            data_json = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? OR hike_number = ?
+        `).bind(
+          maxCapacity,
+          teamLeader,
+          newStatus,
+          dataJson,
+          row.id,
+          row.hike_number
+        ).run();
+
+        // 2. Upsert into event_executions table
+        try {
+          const hikeNum = row.hike_number || idOrNum;
+          const trekName = row.title || '';
+          const eventDate = row.hike_date || '';
+          
+          const existingExec = await env.DB.prepare(
+            'SELECT id FROM event_executions WHERE hike_number = ?'
+          ).bind(hikeNum).first();
+
+          if (existingExec) {
+            await env.DB.prepare(`
+              UPDATE event_executions SET
+                execution_status = ?,
+                is_cancelled = ?,
+                cancellation_reason = ?,
+                capacity = ?,
+                assigned_leader = ?,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE hike_number = ?
+            `).bind(
+              body.data?.execution_status || 'Scheduled',
+              body.data?.is_cancelled ? 1 : 0,
+              body.data?.cancellation_reason || '',
+              maxCapacity,
+              teamLeader,
+              hikeNum
+            ).run();
+          } else {
+            await env.DB.prepare(`
+              INSERT INTO event_executions (
+                hike_number, trek_name, event_date, execution_status, is_cancelled,
+                cancellation_reason, capacity, assigned_leader, leader_phone, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `).bind(
+              hikeNum,
+              trekName,
+              eventDate,
+              body.data?.execution_status || 'Scheduled',
+              body.data?.is_cancelled ? 1 : 0,
+              body.data?.cancellation_reason || '',
+              maxCapacity,
+              teamLeader,
+              body.data?.leader_phone || '',
+            ).run();
+          }
+        } catch (execErr) {
+          console.warn('Error syncing event_executions table, proceeding:', execErr);
+        }
+
+        return jsonResponse({
+          success: true,
+          message: 'Event Execution updated in D1 successfully',
+          data: {
+            id: row.id,
+            hike_number: row.hike_number,
+            max_capacity: maxCapacity,
+            team_leader: teamLeader
+          }
         });
       }
 
@@ -444,8 +720,155 @@ export default {
           stmt = env.DB.prepare(query).bind(hikeNum);
         }
 
-        const { results } = await stmt.all();
-        return jsonResponse({ success: true, data: results || [] });
+        let baseJoinQuery = `
+          SELECT 
+            r.*,
+            b.registration_status,
+            b.payment_status as roster_payment_status,
+            b.paid_amount as roster_paid_amount,
+            b.due_amount as roster_due_amount,
+            b.admin_notes as roster_admin_notes,
+            b.pickup_point as roster_pickup_point
+          FROM registrations r
+          LEFT JOIN bookings_roster b ON CAST(r.id AS TEXT) = CAST(b.registration_id AS TEXT)
+        `;
+        let joinParams = [];
+        if (email) {
+          baseJoinQuery += ' WHERE LOWER(r.email_address) = LOWER(?) OR LOWER(r.user_email) = LOWER(?)';
+          joinParams.push(email.trim(), email.trim());
+        } else if (hikeNum) {
+          baseJoinQuery += ' WHERE r.hike_number = ?';
+          joinParams.push(hikeNum.trim());
+        }
+        baseJoinQuery += ' ORDER BY r.timestamp DESC';
+
+        let results = [];
+        try {
+          const stmt = env.DB.prepare(baseJoinQuery);
+          const { results: joined } = joinParams.length > 0 ? await stmt.bind(...joinParams).all() : await stmt.all();
+          results = joined;
+        } catch (joinErr) {
+          console.warn('Failed to join registrations with bookings_roster, falling back:', joinErr);
+          const { results: rawRegs } = await stmt.all();
+          results = rawRegs;
+        }
+
+        const mapped = (results || []).map((r) => ({
+          ...r,
+          person_remarks: r.list_name || '', // Backward-compatibility mapping for companion parsing
+          status: r.registration_status || r.status || 'Confirmed',
+          payment_status: r.roster_payment_status || r.payment_status || 'Unpaid',
+          paid_amount: r.roster_paid_amount !== undefined ? Number(r.roster_paid_amount) : 0,
+          due_amount: r.roster_due_amount !== undefined ? Number(r.roster_due_amount) : 0,
+          admin_notes: r.roster_admin_notes || r.admin_notes || '',
+          pickup_point: r.roster_pickup_point || r.pickup_point || '',
+        }));
+
+        return jsonResponse({ success: true, data: mapped });
+      }
+
+      // PATCH /registrations/:id - Update Bookings & Roster details in Cloudflare D1
+      if (method === 'PATCH' && path.startsWith('/registrations/')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        const id = decodeURIComponent(path.replace('/registrations/', ''));
+        const body = await request.json();
+
+        // 1. Fetch the original registration record for pre-populating bookings_roster if needed
+        let regRow = null;
+        try {
+          regRow = await env.DB.prepare('SELECT * FROM registrations WHERE id = ?').bind(id).first();
+          if (!regRow) {
+            regRow = await env.DB.prepare('SELECT * FROM registrations WHERE id = ?').bind(Number(id) || id).first();
+          }
+        } catch (regErr) {
+          console.warn('Could not query registrations table:', regErr);
+        }
+
+        // 2. Strict target field mapping for Bookings & Roster edits
+        const status = body.status !== undefined ? body.status : 'Confirmed';
+        const payment_status = body.payment_status !== undefined ? body.payment_status : 'Unpaid';
+        const paid = body.paid_amount !== undefined ? Number(body.paid_amount) : 0;
+        const due = body.due_amount !== undefined ? Number(body.due_amount) : 0;
+        const updates = body.admin_notes !== undefined ? body.admin_notes : '';
+        const pickup_point = body.pickup_point !== undefined ? body.pickup_point : '';
+
+        // 3. Upsert into bookings_roster table
+        try {
+          const existingRoster = await env.DB.prepare(
+            'SELECT id FROM bookings_roster WHERE registration_id = ?'
+          ).bind(String(id)).first();
+
+          if (existingRoster) {
+            await env.DB.prepare(`
+              UPDATE bookings_roster SET
+                registration_status = ?,
+                payment_status = ?,
+                paid_amount = ?,
+                due_amount = ?,
+                admin_notes = ?,
+                pickup_point = ?,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE registration_id = ?
+            `).bind(
+              status,
+              payment_status,
+              paid,
+              due,
+              updates,
+              pickup_point,
+              String(id)
+            ).run();
+          } else {
+            await env.DB.prepare(`
+              INSERT INTO bookings_roster (
+                registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
+                registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `).bind(
+              String(id),
+              regRow ? String(regRow.hike_number || '') : '',
+              regRow ? String(regRow.trek_name || '') : '',
+              regRow ? String(regRow.trek_date || regRow.timestamp || '') : '',
+              regRow ? String(regRow.full_name || '') : '',
+              regRow ? String(regRow.phone || '') : '',
+              regRow ? String(regRow.email_address || '') : '',
+              regRow ? String(regRow.whatsapp || regRow.whatsapp_number || '') : '',
+              status,
+              payment_status,
+              paid,
+              due,
+              updates,
+              pickup_point
+            ).run();
+          }
+        } catch (rosterErr) {
+          console.error('Error syncing bookings_roster table:', rosterErr);
+          return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
+        }
+
+        return jsonResponse({
+          success: true,
+          message: 'Bookings & Roster details updated in D1 successfully'
+        });
+      }
+
+      // DELETE /registrations/:id - Delete registration from Cloudflare D1
+      if (method === 'DELETE' && path.startsWith('/registrations/')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        const id = decodeURIComponent(path.replace('/registrations/', ''));
+
+        try {
+          await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(id).run();
+          return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully' });
+        } catch (dbErr) {
+          console.error('Failed to delete registration from D1:', dbErr);
+          try {
+            await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(Number(id) || id).run();
+            return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully (fallback ID type)' });
+          } catch (fallbackErr) {
+            return errorResponse(`D1 delete error: ${fallbackErr.message}`, 500);
+          }
+        }
       }
 
       // POST /registrations - Create registration
@@ -456,14 +879,16 @@ export default {
         const whatsappVal = body.whatsapp_number || body.whatsapp || '';
         const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-        await env.DB.prepare(`
+        // Map list_name value dynamically as requested
+        const finalListName = body.person_remarks || body.list_name || 'Solo registration';
+
+        const regResult = await env.DB.prepare(`
           INSERT INTO registrations (
-            hike_number, trek_name, full_name, email_address, phone, whatsapp, whatsapp_number,
-            emergency_backup_contact, profession, pickup_point, part_of_group, pax, age_group, gender,
+            hike_number, trek_name, full_name, email_address, phone, whatsapp_number,
+            emergency_backup_contact, profession, part_of_group, pax, age_group, gender,
             fitness, medical_condition, recent_hikes, agreement, suggestions, guide_mode,
-            transport_mode, distance, difficulty, season, type_of_trail, person_remarks,
-            updates, due, paid, list_name, timestamp
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            transport_mode, list_name, timestamp
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           String(body.hike_number || ''),
           body.trek_name || '',
@@ -471,10 +896,8 @@ export default {
           body.email_address || '',
           body.phone || '',
           whatsappVal,
-          whatsappVal,
           body.emergency_backup_contact || '',
           body.profession || '',
-          body.pickup_point || '',
           body.part_of_group || 'Solo',
           Number(body.pax) || 1,
           body.age_group || '',
@@ -486,17 +909,38 @@ export default {
           body.suggestions || '',
           body.guide_mode || 'Guided',
           body.transport_mode || 'Bus',
-          body.distance || '',
-          body.difficulty || '',
-          body.season || '',
-          body.type_of_trail || '',
-          body.person_remarks || '',
-          body.updates || '',
-          body.due || '',
-          body.paid || '',
-          body.list_name || '',
+          finalListName,
           currentTimestamp
         ).run();
+
+        const insertedId = regResult?.meta?.last_row_id || regResult?.lastRowId;
+        if (insertedId) {
+          try {
+            await env.DB.prepare(`
+              INSERT INTO bookings_roster (
+                registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
+                registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `).bind(
+              String(insertedId),
+              String(body.hike_number || ''),
+              body.trek_name || '',
+              body.trek_date || body.timestamp || currentTimestamp,
+              body.full_name || 'Anonymous Hiker',
+              body.phone || '',
+              body.email_address || '',
+              whatsappVal,
+              'Confirmed',
+              'Unpaid',
+              0,
+              0,
+              '',
+              body.pickup_point || body.pickupPoint || body.pickup || ''
+            ).run();
+          } catch (rErr) {
+            console.warn('Error auto-populating bookings_roster from registration:', rErr);
+          }
+        }
 
         return jsonResponse({ success: true, message: 'Registration saved successfully' });
       }
@@ -553,6 +997,11 @@ export default {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
         let results = [];
         try {
+          // Auto-migrate: ensure status column exists in community_trails
+          try {
+            await env.DB.prepare("ALTER TABLE community_trails ADD COLUMN status TEXT DEFAULT 'approved'").run();
+          } catch (_) {}
+
           const res = await env.DB.prepare('SELECT * FROM community_trails ORDER BY uploaded_at DESC').all();
           results = res.results || [];
         } catch (e) {
@@ -567,9 +1016,84 @@ export default {
           contributorEmail: r.contributorEmail || r.contributor_email,
           file_size: r.file_size || r.fileSize || 0,
           fileSize: r.fileSize || r.file_size || 0,
+          status: r.status || 'approved',
         }));
 
         return jsonResponse({ success: true, data });
+      }
+
+      // PATCH /mapminers/trails/:id or PATCH /community_trails/:id - Update trail status (Approve / Reject)
+      const patchTrailMatch = path.match(/^\/(mapminers|community_trails)(\/trails)?\/([^/]+)$/);
+      if (method === 'PATCH' && patchTrailMatch) {
+        const trailId = decodeURIComponent(patchTrailMatch[3]);
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+
+        const body = await request.json();
+        const status = body.status;
+        if (!status || !['approved', 'rejected', 'pending'].includes(status)) {
+          return errorResponse('Invalid status. Must be approved, rejected, or pending.', 400);
+        }
+
+        try {
+          await env.DB.prepare("ALTER TABLE community_trails ADD COLUMN status TEXT DEFAULT 'approved'").run();
+        } catch (_) {}
+
+        await env.DB.prepare('UPDATE community_trails SET status = ? WHERE id = ? OR file_name = ?')
+          .bind(status, trailId, trailId)
+          .run();
+
+        return jsonResponse({
+          success: true,
+          message: `Trail ${trailId} status updated to ${status}`,
+          id: trailId,
+          status
+        });
+      }
+
+      // DELETE /mapminers/trails/:id or DELETE /community_trails/:id - Delete from D1 AND Cloudflare R2
+      const deleteTrailMatch = path.match(/^\/(mapminers|community_trails)(\/trails)?\/([^/]+)$/);
+      if (method === 'DELETE' && deleteTrailMatch) {
+        const trailId = decodeURIComponent(deleteTrailMatch[3]);
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+
+        // 1. Find the trail in D1 to get the exact file_name stored in R2
+        let fileName = null;
+        try {
+          const row = await env.DB.prepare('SELECT file_name FROM community_trails WHERE id = ? OR file_name = ?')
+            .bind(trailId, trailId)
+            .first();
+          if (row && row.file_name) {
+            fileName = row.file_name;
+          }
+        } catch (err) {
+          console.warn('Could not query trail for deletion:', err);
+        }
+
+        // 2. Permanently delete the file from Cloudflare R2 storage bucket
+        const bucket = env.TRAILS_BUCKET || env.BUCKET;
+        let r2Deleted = false;
+        if (bucket && fileName) {
+          try {
+            await bucket.delete(fileName);
+            r2Deleted = true;
+            console.log(`✅ Permanently deleted ${fileName} from Cloudflare R2 bucket`);
+          } catch (r2Err) {
+            console.error(`❌ Failed to delete ${fileName} from R2 bucket:`, r2Err);
+          }
+        }
+
+        // 3. Permanently delete the record from Cloudflare D1
+        await env.DB.prepare('DELETE FROM community_trails WHERE id = ? OR file_name = ?')
+          .bind(trailId, trailId)
+          .run();
+
+        return jsonResponse({
+          success: true,
+          message: `Trail ${trailId} deleted from D1 and R2`,
+          id: trailId,
+          fileName,
+          r2Deleted
+        });
       }
 
       // GET /images/:fileName - Serve R2 uploaded images directly
@@ -615,6 +1139,7 @@ export default {
         headers.set('etag', object.httpEtag);
         headers.set('Content-Type', headers.get('Content-Type') || 'application/xml');
         headers.set('Access-Control-Allow-Origin', '*');
+        headers.set('Cache-Control', 'public, max-age=2592000, immutable');
 
         return new Response(object.body, { headers });
       }
@@ -681,7 +1206,8 @@ export default {
               nearby_city TEXT,
               highlights TEXT,
               uploaded_at TEXT,
-              file_size INTEGER DEFAULT 0
+              file_size INTEGER DEFAULT 0,
+              status TEXT DEFAULT 'pending'
             )
           `).run();
         } catch (tblErr) {
@@ -707,6 +1233,7 @@ export default {
         const nearby_city = body.nearbyCity || body.nearby_city || '';
         const highlights = body.highlights || '';
         const trailId = body.id || `trail_${Date.now()}`;
+        const status = body.status || 'pending';
 
         // Try full column insert first, and fall back to minimal core columns if D1 table lacks extra columns
         try {
@@ -715,8 +1242,8 @@ export default {
               id, file_name, name, description, difficulty, distance,
               elevation_gain, elevation_loss, min_elevation, max_elevation,
               estimated_hours, bounds, start_pos, contributor_name, contributor_email,
-              province, district, nearby_city, highlights, uploaded_at, file_size
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+              province, district, nearby_city, highlights, uploaded_at, file_size, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
           `).bind(
             trailId,
             fileName,
@@ -737,14 +1264,15 @@ export default {
             district,
             nearby_city,
             highlights,
-            fileContent.length
+            fileContent.length,
+            status
           ).run();
         } catch (d1Err) {
           console.warn('Full D1 insert failed, trying minimal core columns fallback:', d1Err);
           await env.DB.prepare(`
             INSERT INTO community_trails (
-              id, name, description, difficulty, distance, bounds, start_pos, contributor_email
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              id, name, description, difficulty, distance, bounds, start_pos, contributor_email, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             trailId,
             trailName,
@@ -753,7 +1281,8 @@ export default {
             distance,
             bounds,
             start_pos,
-            contributor_email
+            contributor_email,
+            status
           ).run();
         }
 

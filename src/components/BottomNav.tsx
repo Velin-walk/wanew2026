@@ -76,7 +76,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       aria-label="Mobile Navigation"
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-[#EFEAE4] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] select-none"
     >
-      <div className="max-w-md sm:max-w-xl mx-auto px-2 py-1.5 flex items-center justify-around">
+      <div className="w-full max-w-3xl mx-auto px-2 py-1.5 flex items-center justify-around">
         {/* Treks Home Tab */}
         <button
           type="button"

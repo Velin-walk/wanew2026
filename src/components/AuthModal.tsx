@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { X, ShieldCheck, Compass, Sparkles, User } from 'lucide-react';
+import { X, ShieldCheck, Compass, Sparkles, User, AlertTriangle, Copy, Check, Mail, Key } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthModal: React.FC = () => {
-  const { authModalOpen, authModalReason, closeAuthModal, signInWithGoogle } = useAuth();
+  const { authModalOpen, authModalReason, closeAuthModal, signInWithGoogle, signInWithDevAccount } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+  const [emailVal, setEmailVal] = useState('');
+  const [showEmailForm, setShowEmailForm] = useState(false);
 
   if (!authModalOpen) return null;
 
@@ -13,12 +17,30 @@ export const AuthModal: React.FC = () => {
     try {
       setLoading(true);
       setError('');
+      setIsUnauthorizedDomain(false);
       await signInWithGoogle();
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in with Google');
+      console.error('Google Auth caught error:', err);
+      const isDomainErr =
+        err?.code === 'auth/unauthorized-domain' ||
+        (err?.message && err.message.includes('unauthorized-domain'));
+
+      if (isDomainErr) {
+        setIsUnauthorizedDomain(true);
+        setError(`Firebase Auth: The domain "${window.location.hostname}" is not authorized in your Firebase console settings.`);
+      } else {
+        setError(err.message || 'Failed to sign in with Google');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailVal.trim()) return;
+    signInWithDevAccount(emailVal.trim());
+    setEmailVal('');
   };
 
   // Determine modal icon and header color based on context
@@ -39,6 +61,8 @@ export const AuthModal: React.FC = () => {
     badgeText = 'Hiker Account';
     badgeBg = 'bg-orange-100 text-[#E08828] border-orange-200';
   }
+
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -72,13 +96,38 @@ export const AuthModal: React.FC = () => {
 
         {/* Content */}
         <div className="p-6 space-y-4 text-center">
-          {error && (
+          {/* Unauthorized Domain Callout */}
+          {isUnauthorizedDomain && (
+            <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-left space-y-2.5">
+              <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <span>Unauthorized Firebase Domain</span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Google Auth popup requires adding your domain <strong className="font-bold underline">{currentHost}</strong> to your Firebase Console under <em>Authentication &gt; Settings &gt; Authorized Domains</em>.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(currentHost);
+                  setCopiedDomain(true);
+                  setTimeout(() => setCopiedDomain(false), 2000);
+                }}
+                className="w-full py-2 px-3 bg-white border border-amber-300 rounded-xl text-amber-900 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-amber-100 transition-colors cursor-pointer shadow-2xs"
+              >
+                {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-amber-700" />}
+                <span>{copiedDomain ? 'Domain Copied!' : `Copy Hostname (${currentHost})`}</span>
+              </button>
+            </div>
+          )}
+
+          {error && !isUnauthorizedDomain && (
             <div className="p-3 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl text-left">
               {error}
             </div>
           )}
 
-          {/* Google Sign-In Only */}
+          {/* Google Sign-In */}
           <button
             type="button"
             onClick={handleGoogleSignIn}
@@ -106,8 +155,53 @@ export const AuthModal: React.FC = () => {
             <span>{loading ? 'Signing in with Google...' : 'Sign In with Google'}</span>
           </button>
 
-          <p className="text-[11px] text-[#8B8680] leading-relaxed pt-2">
-            One-click secure authentication powered by Google & Firebase.
+          {/* Quick Sign In / Dev Options */}
+          <div className="pt-2 border-t border-[#EFEAE4] space-y-3">
+            <div className="flex items-center justify-between text-xs text-[#5A5551]">
+              <span className="font-semibold">Alternative Sign In:</span>
+              <button
+                type="button"
+                onClick={() => setShowEmailForm(!showEmailForm)}
+                className="text-[#E08828] font-bold text-xs hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>{showEmailForm ? 'Hide Email Input' : 'Use Email Address'}</span>
+              </button>
+            </div>
+
+            {/* Quick 1-Click Admin Sign-In */}
+            <button
+              type="button"
+              onClick={() => signInWithDevAccount('walknepalwalk@gmail.com', 'Walk Nepal Walk Admin')}
+              className="w-full py-2.5 px-4 bg-[#FFF9F2] hover:bg-[#FFE8CC] border border-[#FFE0BA] text-[#E08828] font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+            >
+              <Key className="w-3.5 h-3.5 text-[#E08828]" />
+              <span>1-Click Sign In as Admin (walknepalwalk@gmail.com)</span>
+            </button>
+
+            {/* Custom Email Form */}
+            {showEmailForm && (
+              <form onSubmit={handleEmailSubmit} className="flex items-center gap-2 pt-1">
+                <input
+                  type="email"
+                  value={emailVal}
+                  onChange={(e) => setEmailVal(e.target.value)}
+                  placeholder="Enter email address..."
+                  className="flex-1 p-2.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:outline-none focus:border-[#E08828]"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 bg-[#1F1F1F] hover:bg-black text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  Continue
+                </button>
+              </form>
+            )}
+          </div>
+
+          <p className="text-[10px] text-[#8B8680] leading-relaxed pt-1">
+            One-click authentication powered by Google &amp; Firebase Auth.
           </p>
         </div>
       </div>

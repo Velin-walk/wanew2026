@@ -44,6 +44,18 @@
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["title", "authorEmail"]
+    },
+    "trail_moderation": {
+      "title": "Trail Moderation Status",
+      "description": "Admin review decisions and approval statuses for community trails",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 32 },
+        "moderatedAt": { "type": "string", "maxLength": 64 },
+        "moderatedBy": { "type": "string", "maxLength": 256 }
+      },
+      "required": ["id", "status"]
     }
   },
   "firestore": {
@@ -58,6 +70,10 @@
     "/community_trails/{trailId}": {
       "schema": { "$ref": "#/entities/community_trail" },
       "description": "Map Miners GPX/KML trails"
+    },
+    "/trail_moderation/{trailId}": {
+      "schema": { "$ref": "#/entities/trail_moderation" },
+      "description": "Moderation status tracking for submissions"
     }
   }
 }

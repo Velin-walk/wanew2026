@@ -1,0 +1,828 @@
+import React, { useState, useMemo } from 'react';
+import {
+  FileSpreadsheet,
+  Printer,
+  Calendar,
+  Phone,
+  MessageSquare,
+  AlertTriangle,
+  MapPin,
+  CheckCircle,
+  Users,
+  Search,
+  RefreshCw,
+  Copy,
+  Check,
+  ChevronRight
+} from 'lucide-react';
+import { Trek } from '../../types';
+import { AdminRegistration } from './BookingsManager';
+
+interface CoordinatorHubProps {
+  treks: Trek[];
+  registrations: AdminRegistration[];
+  loading: boolean;
+  onRefresh: () => void;
+}
+
+type FilterType = 'all' | 'paid' | 'pending' | 'due';
+type SortCol =
+  | 'sn'
+  | 'name'
+  | 'phone'
+  | 'pickup'
+  | 'paid'
+  | 'due'
+  | 'gender'
+  | 'age'
+  | 'suggestions'
+  | 'updates'
+  | 'medical'
+  | 'totalHikes';
+
+export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
+  treks,
+  registrations,
+  loading,
+  onRefresh,
+}) => {
+  const [selectedTrekId, setSelectedTrekId] = useState<string>(
+    treks[0]?.id || treks[0]?.hike_number || ''
+  );
+  const [tableFilter, setTableFilter] = useState<FilterType>('all');
+  const [sortCol, setSortCol] = useState<SortCol>('name');
+  const [sortAsc, setSortAsc] = useState<boolean>(true);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 50;
+
+  // Selected Active Trek
+  const currentTrek = useMemo(() => {
+    return (
+      treks.find((t) => t.id === selectedTrekId || t.hike_number === selectedTrekId) ||
+      treks[0] ||
+      null
+    );
+  }, [treks, selectedTrekId]);
+
+  // Registrations matching active trek
+  const trekRegistrations = useMemo(() => {
+    if (!currentTrek) return [];
+    const queryId = (currentTrek.hike_number || currentTrek.id).toLowerCase();
+    const trekTitle = currentTrek.name.toLowerCase();
+
+    return registrations.filter((r) => {
+      const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase();
+      const regTrekName = (r.trek_name || '').toLowerCase();
+      const matchesTrek =
+        (regTrekId && queryId && (regTrekId.includes(queryId) || queryId.includes(regTrekId))) ||
+        (regTrekName && trekTitle && (regTrekName.includes(trekTitle) || trekTitle.includes(regTrekName)));
+
+      const isNotCancelled = r.status?.toLowerCase() !== 'cancelled';
+      return matchesTrek && isNotCancelled;
+    });
+  }, [currentTrek, registrations]);
+
+  // Lifetime Hike Count Map
+  const hikerPastHikesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    registrations.forEach((r) => {
+      const ph = (r.phone || r.whatsapp || '').trim();
+      const nameKey = (r.full_name || '').toLowerCase().trim();
+      if (ph) {
+        map.set(ph, (map.get(ph) || 0) + 1);
+      }
+      if (nameKey) {
+        map.set(`name:${nameKey}`, (map.get(`name:${nameKey}`) || 0) + 1);
+      }
+    });
+    return map;
+  }, [registrations]);
+
+  const getHikerPastCount = (phone: string, name: string): number => {
+    const ph = phone.trim();
+    const nameKey = `name:${name.toLowerCase().trim()}`;
+    if (ph && hikerPastHikesMap.has(ph)) {
+      return hikerPastHikesMap.get(ph) || 1;
+    }
+    if (nameKey && hikerPastHikesMap.has(nameKey)) {
+      return hikerPastHikesMap.get(nameKey) || 1;
+    }
+    return 1;
+  };
+
+  // Metrics Calculations
+  const totalRegistered = trekRegistrations.reduce((acc, r) => acc + (r.paxCount || 1), 0);
+  const paidCount = trekRegistrations.filter(
+    (r) => r.payment_status?.toLowerCase() === 'fully paid' || r.paid_amount > 0
+  ).length;
+  const totalRevenue = trekRegistrations.reduce((acc, r) => acc + (r.paid_amount || 0), 0);
+  const dueCount = trekRegistrations.filter((r) => r.due_amount > 0).length;
+
+  const returningCount = trekRegistrations.filter(
+    (r) => getHikerPastCount(r.phone || '', r.full_name) > 1
+  ).length;
+  const firstTimersCount = trekRegistrations.length - returningCount;
+
+  // Demographic Calculations
+  const genderBreakdown = useMemo(() => {
+    let female = 0;
+    let male = 0;
+    let other = 0;
+    trekRegistrations.forEach((r) => {
+      const g = (r.gender || '').toLowerCase().trim();
+      if (g.includes('female') || g === 'f') female++;
+      else if (g.includes('male') || g === 'm') male++;
+      else other++;
+    });
+    const total = trekRegistrations.length || 1;
+    return {
+      female,
+      male,
+      other,
+      femalePct: Math.round((female / total) * 100),
+      malePct: Math.round((male / total) * 100),
+    };
+  }, [trekRegistrations]);
+
+  const ageBreakdown = useMemo(() => {
+    const groups: Record<string, number> = {};
+    trekRegistrations.forEach((r) => {
+      const a = (r.age_group || 'Unspecified').trim();
+      groups[a] = (groups[a] || 0) + 1;
+    });
+    const total = trekRegistrations.length || 1;
+    return Object.entries(groups).map(([group, count]) => ({
+      group,
+      count,
+      pct: Math.round((count / total) * 100),
+    }));
+  }, [trekRegistrations]);
+
+  // Table Filtering & Sorting
+  const filteredAndSortedRegistrations = useMemo(() => {
+    let result = [...trekRegistrations];
+
+    // Apply Filter Chips
+    if (tableFilter === 'paid') {
+      result = result.filter(
+        (r) => r.payment_status?.toLowerCase() === 'fully paid' || r.paid_amount > 0
+      );
+    } else if (tableFilter === 'pending') {
+      result = result.filter(
+        (r) => r.payment_status?.toLowerCase() !== 'fully paid' && r.paid_amount === 0
+      );
+    } else if (tableFilter === 'due') {
+      result = result.filter((r) => r.due_amount > 0);
+    }
+
+    // Apply Sorting
+    result.sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+
+      switch (sortCol) {
+        case 'name':
+          valA = a.full_name.toLowerCase();
+          valB = b.full_name.toLowerCase();
+          break;
+        case 'phone':
+          valA = a.phone;
+          valB = b.phone;
+          break;
+        case 'pickup':
+          valA = (a.pickup_point || '').toLowerCase();
+          valB = (b.pickup_point || '').toLowerCase();
+          break;
+        case 'paid':
+          valA = a.paid_amount;
+          valB = b.paid_amount;
+          break;
+        case 'due':
+          valA = a.due_amount;
+          valB = b.due_amount;
+          break;
+        case 'gender':
+          valA = (a.gender || '').toLowerCase();
+          valB = (b.gender || '').toLowerCase();
+          break;
+        case 'age':
+          valA = (a.age_group || '').toLowerCase();
+          valB = (b.age_group || '').toLowerCase();
+          break;
+        case 'updates':
+          valA = (a.admin_notes || '').toLowerCase();
+          valB = (b.admin_notes || '').toLowerCase();
+          break;
+        case 'totalHikes':
+          valA = getHikerPastCount(a.phone || '', a.full_name);
+          valB = getHikerPastCount(b.phone || '', b.full_name);
+          break;
+        default:
+          valA = a.full_name.toLowerCase();
+          valB = b.full_name.toLowerCase();
+      }
+
+      if (valA < valB) return sortAsc ? -1 : 1;
+      if (valA > valB) return sortAsc ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [trekRegistrations, tableFilter, sortCol, sortAsc]);
+
+  const totalRows = filteredAndSortedRegistrations.length;
+  const totalPages = Math.ceil(totalRows / pageSize) || 1;
+  const paginatedRegistrations = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedRegistrations.slice(start, start + pageSize);
+  }, [filteredAndSortedRegistrations, currentPage]);
+
+  const handleSort = (col: SortCol) => {
+    if (sortCol === col) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortCol(col);
+      setSortAsc(true);
+    }
+  };
+
+  // Export CSV Excel
+  const handleExportExcel = () => {
+    if (!currentTrek) return;
+    const headers = [
+      'S.N.',
+      'Full Name',
+      'Phone',
+      'Pickup Point',
+      'Paid (NPR)',
+      'Due (NPR)',
+      'Gender',
+      'Age Group',
+      'Suggestions',
+      'Updates',
+      'Medical Notes',
+      'Total Hikes'
+    ];
+
+    const rows = trekRegistrations.map((r, i) => [
+      i + 1,
+      `"${r.full_name.replace(/"/g, '""')}"`,
+      `"${r.phone}"`,
+      `"${r.pickup_point || '—'}"`,
+      r.paid_amount || 0,
+      r.due_amount || 0,
+      `"${r.gender || '—'}"`,
+      `"${r.age_group || '—'}"`,
+      `"${(r.suggestions || '').replace(/"/g, '""')}"`,
+      `"${(r.admin_notes || '').replace(/"/g, '""')}"`,
+      `"${(r.has_medical || '').replace(/"/g, '""')}"`,
+      getHikerPastCount(r.phone || '', r.full_name)
+    ]);
+
+    const csvContent =
+      '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${currentTrek.name}_Coordinator_Manifest.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintManifest = () => {
+    window.print();
+  };
+
+  return (
+    <div className="w-full space-y-5 font-sans text-stone-800 print:m-0 print:p-0">
+      {/* ── HEADER TITLE BAR ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-[#1F2937] tracking-tight">
+            Upcoming <span className="text-[#16A34A]">Events</span>
+          </h1>
+          <p className="text-xs font-semibold text-[#8B8680] mt-0.5">
+            Click an event to view its registered hikers
+          </p>
+        </div>
+
+        {/* Top Export Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            className="px-3.5 py-2 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrintManifest}
+            title="Print roster or Save as PDF"
+            className="px-3.5 py-2 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Printer className="w-4 h-4 text-stone-600" />
+            <span>Print / PDF</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── TOP EVENT CARDS STRIP ── */}
+      <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200 print:hidden">
+        {treks.map((t) => {
+          const isSelected = (currentTrek?.id === t.id) || (currentTrek?.hike_number === t.hike_number);
+          const tRegsCount = registrations.filter((r) => {
+            const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase();
+            const queryId = (t.hike_number || t.id).toLowerCase();
+            return regTrekId && queryId && (regTrekId.includes(queryId) || queryId.includes(regTrekId));
+          }).length;
+
+          return (
+            <div
+              key={t.id}
+              onClick={() => setSelectedTrekId(t.id)}
+              className={`p-4 rounded-2xl min-w-[210px] max-w-[230px] shrink-0 cursor-pointer transition-all border ${
+                isSelected
+                  ? 'border-2 border-[#16A34A] bg-white shadow-md ring-2 ring-[#16A34A]/10'
+                  : 'border-stone-200 bg-white hover:border-stone-300 shadow-2xs'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[11px] font-bold text-stone-400 mb-1">
+                <span>{t.date || '18 Sept 2026'} • {t.days}D</span>
+                {t.is_cancelled && (
+                  <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 text-[9px] font-extrabold border border-rose-200">
+                    CANCELLED
+                  </span>
+                )}
+              </div>
+              <h3 className="text-sm font-extrabold text-[#1F2937] truncate mb-2">
+                {t.name}
+              </h3>
+              <div className="flex items-center gap-1.5 mb-3">
+                <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[#2563EB] text-[10px] font-bold border border-blue-100">
+                  🥾 Trek
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[10px] font-bold">
+                  {t.difficulty || 'Moderate'}
+                </span>
+              </div>
+              <div className="text-xl font-black text-[#1F2937]">{tRegsCount || 0}</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                REGISTERED
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── CANCELLATION NOTICE BANNER (IF EVENT CANCELLED) ── */}
+      {currentTrek?.is_cancelled && (
+        <div className="p-4 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-900 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-rose-100 rounded-xl text-rose-700 shrink-0">
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-rose-900">
+                  EVENT CANCELLED IN EVENT EXECUTION
+                </h3>
+                <span className="px-2 py-0.5 bg-rose-200 text-rose-800 text-[10px] font-black rounded-md">
+                  HALT DEPLOYMENT
+                </span>
+              </div>
+              <p className="text-xs text-rose-800 mt-0.5 font-medium">
+                {currentTrek.cancellation_reason
+                  ? `Reason: ${currentTrek.cancellation_reason}`
+                  : 'This event has been marked as cancelled by the organizer. Do not dispatch field guides or buses.'}
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold text-rose-700 bg-rose-100 px-3 py-1.5 rounded-xl border border-rose-200 whitespace-nowrap">
+            {trekRegistrations.length} Registrations on File
+          </span>
+        </div>
+      )}
+
+      {/* ── KPI STAT CARDS (4 CARDS WITH TOP ACCENT BARS) ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Card 1: Registered */}
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-[#16A34A]" />
+          <div className="text-3xl font-black text-[#1F2937] mb-0.5">{totalRegistered}</div>
+          <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
+            REGISTERED
+          </div>
+          <div className="text-xs font-semibold text-stone-600 mt-1">
+            🥾 Trek • {currentTrek?.days || 4}D 3N
+          </div>
+        </div>
+
+        {/* Card 2: Paid */}
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-stone-300" />
+          <div className="text-3xl font-black text-[#1F2937] mb-0.5">{paidCount}</div>
+          <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
+            PAID
+          </div>
+          <div className="text-xs font-semibold text-stone-600 mt-1">
+            {totalRegistered > 0 ? Math.round((paidCount / totalRegistered) * 100) : 0}% conversion
+          </div>
+        </div>
+
+        {/* Card 3: Revenue Collected */}
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-[#2563EB]" />
+          <div className="text-3xl font-black text-[#1F2937] mb-0.5">
+            Rs {totalRevenue.toLocaleString()}
+          </div>
+          <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
+            REVENUE COLLECTED
+          </div>
+          <div className="text-xs font-semibold text-stone-600 mt-1">
+            {dueCount} with outstanding dues
+          </div>
+        </div>
+
+        {/* Card 4: Returning */}
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-[#2563EB]" />
+          <div className="text-3xl font-black text-[#1F2937] mb-0.5">{returningCount}</div>
+          <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
+            RETURNING
+          </div>
+          <div className="text-xs font-semibold text-stone-600 mt-1">
+            {firstTimersCount} first-timers
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3 DEMOGRAPHIC PROGRESS BAR CARDS (IN 1 ROW) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Card 1: New vs Returning */}
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-extrabold text-[#1F2937]">New vs Returning</h3>
+            <div className="flex items-center gap-2 text-[10px] font-bold">
+              <span className="flex items-center gap-1 text-[#2563EB]">
+                <span className="w-2 h-2 rounded-xs bg-[#2563EB]" /> New
+              </span>
+              <span className="flex items-center gap-1 text-[#16A34A]">
+                <span className="w-2 h-2 rounded-xs bg-[#16A34A]" /> Returning
+              </span>
+            </div>
+          </div>
+
+          <div className="h-8 w-full bg-stone-100 rounded-lg overflow-hidden flex text-white text-[11px] font-extrabold">
+            <div
+              style={{ width: `${totalRegistered > 0 ? (firstTimersCount / totalRegistered) * 100 : 50}%` }}
+              className="bg-[#2563EB] h-full flex items-center justify-center"
+            >
+              {firstTimersCount} new
+            </div>
+            <div
+              style={{ width: `${totalRegistered > 0 ? (returningCount / totalRegistered) * 100 : 50}%` }}
+              className="bg-[#16A34A] h-full flex items-center justify-center"
+            >
+              {returningCount} ret.
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] font-semibold text-stone-400">
+            <span>{firstTimersCount} new hikers ({totalRegistered > 0 ? Math.round((firstTimersCount / totalRegistered) * 100) : 50}%)</span>
+            <span>{returningCount} returning ({totalRegistered > 0 ? Math.round((returningCount / totalRegistered) * 100) : 50}%)</span>
+          </div>
+        </div>
+
+        {/* Card 2: Gender Breakdown */}
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-extrabold text-[#1F2937]">Gender Breakdown</h3>
+          </div>
+
+          <div className="h-8 w-full bg-stone-100 rounded-lg overflow-hidden flex text-white text-[11px] font-extrabold">
+            <div
+              style={{ width: `${genderBreakdown.femalePct}%` }}
+              className="bg-[#E11D48] h-full flex items-center justify-center"
+            >
+              {genderBreakdown.female}
+            </div>
+            <div
+              style={{ width: `${genderBreakdown.malePct}%` }}
+              className="bg-[#2563EB] h-full flex items-center justify-center"
+            >
+              {genderBreakdown.male}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-[11px] font-semibold text-stone-600">
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-xs bg-[#E11D48]" /> Female {genderBreakdown.female} ({genderBreakdown.femalePct}%)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-xs bg-[#2563EB]" /> Male {genderBreakdown.male} ({genderBreakdown.malePct}%)
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Age Group Breakdown */}
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-extrabold text-[#1F2937]">Age Group Breakdown</h3>
+          </div>
+
+          <div className="h-8 w-full bg-stone-100 rounded-lg overflow-hidden flex text-white text-[11px] font-extrabold">
+            {ageBreakdown.map((item, idx) => {
+              const bgColors = ['bg-[#DC2626]', 'bg-[#EA580C]', 'bg-[#D97706]', 'bg-[#2563EB]'];
+              return (
+                <div
+                  key={item.group}
+                  style={{ width: `${item.pct}%` }}
+                  className={`${bgColors[idx % bgColors.length]} h-full flex items-center justify-center`}
+                >
+                  {item.count}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-3 text-[11px] font-semibold text-stone-600 flex-wrap">
+            {ageBreakdown.map((item, idx) => {
+              const bgColors = ['bg-[#DC2626]', 'bg-[#EA580C]', 'bg-[#D97706]', 'bg-[#2563EB]'];
+              return (
+                <span key={item.group} className="flex items-center gap-1">
+                  <span className={`w-2.5 h-2.5 rounded-xs ${bgColors[idx % bgColors.length]}`} /> {item.group} {item.count} ({item.pct}%)
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── HIKER ROSTER TABLE WRAP ── */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-2xs overflow-hidden">
+        {/* Table Header Bar */}
+        <div className="p-4 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className="text-base font-extrabold text-[#1F2937]">
+            {currentTrek?.name || 'Pachpokhari'} ({currentTrek?.date || '18 Sep 2026'}) — {trekRegistrations.length} hikers
+          </h2>
+
+          {/* Filter Chips */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setTableFilter('all')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                tableFilter === 'all'
+                  ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
+                  : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('paid')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                tableFilter === 'paid'
+                  ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
+                  : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
+              }`}
+            >
+              ✅ Paid
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('pending')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                tableFilter === 'pending'
+                  ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
+                  : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
+              }`}
+            >
+              ⏳ Pending
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('due')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                tableFilter === 'due'
+                  ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
+                  : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
+              }`}
+            >
+              🔴 Has Due
+            </button>
+          </div>
+        </div>
+
+        {/* Table Content */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-[#F8FAFC] border-b border-stone-200 text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
+                <th className="py-3 px-3 text-center w-[40px]">S.N.</th>
+                <th
+                  onClick={() => handleSort('name')}
+                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  NAME {sortCol === 'name' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
+                  onClick={() => handleSort('phone')}
+                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  PHONE {sortCol === 'phone' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
+                  onClick={() => handleSort('pickup')}
+                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  PICKUP {sortCol === 'pickup' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
+                  onClick={() => handleSort('paid')}
+                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  PAID {sortCol === 'paid' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
+                  onClick={() => handleSort('due')}
+                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  DUE {sortCol === 'due' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
+                  onClick={() => handleSort('gender')}
+                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  GENDER {sortCol === 'gender' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
+                  onClick={() => handleSort('age')}
+                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  AGE GROUP {sortCol === 'age' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th className="py-3 px-3 select-none">SUGGESTIONS ⇅</th>
+                <th
+                  onClick={() => handleSort('updates')}
+                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  UPDATES {sortCol === 'updates' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th className="py-3 px-3 select-none">MEDICAL ⇅</th>
+                <th
+                  onClick={() => handleSort('totalHikes')}
+                  className="py-3 px-3 text-center cursor-pointer hover:text-stone-700 select-none"
+                >
+                  TOTAL HIKES {sortCol === 'totalHikes' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-stone-100">
+              {paginatedRegistrations.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="py-8 text-center text-stone-400 font-semibold">
+                    No registered hikers found matching criteria
+                  </td>
+                </tr>
+              ) : (
+                paginatedRegistrations.map((r, index) => {
+                  const isFemale =
+                    (r.gender || '').toLowerCase().includes('female') ||
+                    (r.gender || '').toLowerCase() === 'f';
+
+                  const pastHikes = getHikerPastCount(r.phone || '', r.full_name);
+
+                  const sn = (currentPage - 1) * pageSize + index + 1;
+
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`transition-colors ${
+                        isFemale ? 'bg-pink-50/50 hover:bg-pink-100/50' : 'hover:bg-stone-50/80'
+                      }`}
+                    >
+                      {/* S.N. */}
+                      <td className="py-3 px-3 text-center font-extrabold text-stone-700">
+                        {sn}
+                      </td>
+
+                      {/* NAME */}
+                      <td className="py-3 px-3 font-extrabold text-[#1F2937]">
+                        {r.full_name}
+                      </td>
+
+                      {/* PHONE */}
+                      <td className="py-3 px-3 font-medium text-stone-600">
+                        {r.phone || '—'}
+                      </td>
+
+                      {/* PICKUP */}
+                      <td className="py-3 px-3 font-medium text-stone-500">
+                        {r.pickup_point || '—'}
+                      </td>
+
+                      {/* PAID */}
+                      <td className="py-3 px-3">
+                        {r.paid_amount > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-extrabold">
+                            Rs {r.paid_amount}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-black">
+                            -
+                          </span>
+                        )}
+                      </td>
+
+                      {/* DUE */}
+                      <td className="py-3 px-3">
+                        {r.due_amount > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-extrabold">
+                            Rs {r.due_amount}
+                          </span>
+                        ) : (
+                          <span className="text-stone-400">—</span>
+                        )}
+                      </td>
+
+                      {/* GENDER */}
+                      <td className="py-3 px-3 font-semibold text-stone-700">
+                        {r.gender || '—'}
+                      </td>
+
+                      {/* AGE GROUP */}
+                      <td className="py-3 px-3 font-semibold text-stone-700">
+                        {r.age_group || '—'}
+                      </td>
+
+                      {/* SUGGESTIONS */}
+                      <td className="py-3 px-3 text-stone-500 max-w-[150px] truncate" title={r.suggestions}>
+                        {r.suggestions || '—'}
+                      </td>
+
+                      {/* UPDATES */}
+                      <td className="py-3 px-3 text-stone-500 max-w-[150px] truncate" title={r.admin_notes}>
+                        {r.admin_notes || '—'}
+                      </td>
+
+                      {/* MEDICAL */}
+                      <td className="py-3 px-3 font-semibold">
+                        {r.has_medical && r.has_medical.toLowerCase() !== 'no' && r.has_medical.toLowerCase() !== 'none' ? (
+                          <span className="text-rose-600 font-extrabold flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <span>{r.has_medical}</span>
+                          </span>
+                        ) : (
+                          <span className="text-rose-500 font-bold">⚠ None</span>
+                        )}
+                      </td>
+
+                      {/* TOTAL HIKES */}
+                      <td className="py-3 px-3 text-center font-extrabold text-stone-700">
+                        {pastHikes}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Bottom Pagination Bar */}
+        <div className="p-4 bg-[#F8FAFC] border-t border-stone-200 flex items-center justify-between text-xs font-semibold text-stone-500">
+          <div>
+            Showing {totalRows > 0 ? (currentPage - 1) * pageSize + 1 : 0}–
+            {Math.min(currentPage * pageSize, totalRows)} of {totalRows}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <button
+                key={i + 1}
+                type="button"
+                onClick={() => setCurrentPage(i + 1)}
+                className={`w-7 h-7 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  currentPage === i + 1
+                    ? 'bg-[#16A34A] text-white'
+                    : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

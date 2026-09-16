@@ -88,7 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       id="top-header"
       className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#EFEAE4] w-full"
     >
-      <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4">
+      <div className="w-full px-3.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4">
         {/* Brand / Screen Title */}
         {isMapMiners ? (
           <div className="flex items-center gap-2.5 select-none">

@@ -1,73 +1,112 @@
--- D1 Schema for Walk Nepal Walk & MapMiners
+-- Walk Nepal Walk D1 Database Schema
+-- Matches the active Cloudflare D1 production database layout
 
--- Treks / Itineraries Table
+-- 1. Treks / Itineraries Table
 CREATE TABLE IF NOT EXISTS treks (
-  id TEXT PRIMARY KEY,
-  hike_number TEXT UNIQUE,
-  title TEXT NOT NULL,
-  category TEXT DEFAULT 'Overnight Bus Hikes',
-  status TEXT DEFAULT 'published',
+  hike_number TEXT PRIMARY KEY,
+  id TEXT,
+  title TEXT,
+  category TEXT,
+  status TEXT,
+  cover_image_url TEXT,
+  hike_date TEXT,
+  min_price INTEGER,
+  max_price INTEGER,
+  currency TEXT,
+  meeting_point TEXT,
+  meeting_time TEXT,
+  expected_duration TEXT,
+  difficulty TEXT,
+  approx_distance TEXT,
+  elevation_range TEXT,
+  elevation_gross TEXT,
+  ending_point TEXT,
+  team_leader TEXT,
+  whatsapp_link TEXT,
+  itinerary_link TEXT,
+  faq_link TEXT,
+  max_capacity INTEGER,
+  data_json TEXT,
   author_email TEXT,
-  created_at TEXT,
-  updated_at TEXT,
-  data TEXT -- JSON blob containing complete itinerary details
+  created_at DATETIME,
+  updated_at DATETIME
 );
 
--- Registrations / Bookings Table
+-- 2. Registrations / Bookings Table (Consolidated layout)
 CREATE TABLE IF NOT EXISTS registrations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  trek_id TEXT NOT NULL,
-  user_email TEXT NOT NULL,
-  full_name TEXT NOT NULL,
-  phone TEXT,
-  whatsapp TEXT,
-  emergency_contact TEXT,
+  timestamp TEXT,
+  trek_name TEXT,
+  full_name TEXT,
+  pax INTEGER,
+  whatsapp_number TEXT,
+  emergency_backup_contact TEXT,
+  email_address TEXT,
   profession TEXT,
-  is_group INTEGER DEFAULT 0,
+  part_of_group TEXT,
+  list_name TEXT, -- Captures the role & context (e.g., Solo, Primary contact with companions, Companion of ...)
   age_group TEXT,
   gender TEXT,
-  joined_at TEXT,
+  fitness TEXT,
+  medical_condition TEXT,
+  recent_hikes TEXT,
+  agreement TEXT,
+  suggestions TEXT,
+  guide_mode TEXT,
+  transport_mode TEXT,
+  hike_number TEXT
+);
+
+-- 3. Bookings Roster / Active Edits Table
+CREATE TABLE IF NOT EXISTS bookings_roster (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  registration_id TEXT,
+  hike_number TEXT,
   trek_name TEXT,
   trek_date TEXT,
-  trek_difficulty TEXT,
-  trek_days TEXT,
-  team_members TEXT, -- JSON string of companions
-  has_medical INTEGER DEFAULT 0,
-  specify_medical TEXT,
-  recent_hikes TEXT,
-  agree_rules INTEGER DEFAULT 1,
-  guide_preference TEXT,
-  transport_preference TEXT,
-  suggestions TEXT
-);
-
--- Feedback Table
-CREATE TABLE IF NOT EXISTS feedback (
-  id TEXT PRIMARY KEY,
-  name TEXT,
+  full_name TEXT,
+  phone TEXT,
   email TEXT,
-  recent_walk TEXT,
-  hike_number TEXT,
-  team_feedback TEXT,
-  team_rating INTEGER DEFAULT 5,
-  overall_feedback TEXT,
-  overall_rating INTEGER DEFAULT 5,
-  submitted_at TEXT
+  whatsapp TEXT,
+  registration_status TEXT,
+  payment_status TEXT,
+  paid_amount REAL,
+  due_amount REAL,
+  admin_notes TEXT,
+  pickup_point TEXT,
+  created_at DATETIME,
+  updated_at DATETIME
 );
 
--- Community Trails Metadata Table (used by Walk Nepal Walk & MapMiners)
+-- 4. Event Executions Table
+CREATE TABLE IF NOT EXISTS event_executions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  hike_number TEXT,
+  trek_name TEXT,
+  event_date TEXT,
+  execution_status TEXT,
+  is_cancelled INTEGER,
+  cancellation_reason TEXT,
+  capacity INTEGER,
+  assigned_leader TEXT,
+  leader_phone TEXT,
+  created_at DATETIME,
+  updated_at DATETIME
+);
+
+-- 5. Community Trails Table (Integrated for MapMiners)
 CREATE TABLE IF NOT EXISTS community_trails (
   id TEXT PRIMARY KEY,
-  file_name TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL,
+  file_name TEXT,
+  name TEXT,
   description TEXT,
-  difficulty TEXT DEFAULT 'Moderate',
-  distance REAL DEFAULT 0,
-  elevation_gain REAL DEFAULT 0,
-  elevation_loss REAL DEFAULT 0,
-  min_elevation REAL DEFAULT 0,
-  max_elevation REAL DEFAULT 0,
-  estimated_hours REAL DEFAULT 0,
+  difficulty TEXT,
+  distance REAL,
+  elevation_gain REAL,
+  elevation_loss REAL,
+  min_elevation REAL,
+  max_elevation REAL,
+  estimated_hours REAL,
   bounds TEXT,
   start_pos TEXT,
   contributor_name TEXT,
@@ -76,26 +115,31 @@ CREATE TABLE IF NOT EXISTS community_trails (
   district TEXT,
   nearby_city TEXT,
   highlights TEXT,
-  uploaded_at TEXT,
-  file_size INTEGER DEFAULT 0
+  uploaded_at DATETIME,
+  fileName TEXT,
+  fileSize INTEGER,
+  contributorEmail TEXT,
+  file_size INTEGER
 );
 
--- MapMiners Trails Metadata Table (alias/legacy)
-CREATE TABLE IF NOT EXISTS mapminers_trails (
-  id TEXT PRIMARY KEY,
-  file_name TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  difficulty_override TEXT,
-  hours_override TEXT,
-  province TEXT,
-  district TEXT,
-  nearby_city TEXT,
-  highlights TEXT,
-  uploaded_at TEXT,
-  contributor_name TEXT,
-  contributor_email TEXT,
-  start_lat REAL,
-  start_lng REAL,
-  stats TEXT -- JSON string containing distance, elevationGain, etc.
+-- 6. Feedback Table
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT,
+  hike_number TEXT,
+  trek_name TEXT,
+  full_name TEXT,
+  email_address TEXT,
+  team_rating INTEGER,
+  team_feedback TEXT,
+  overall_rating INTEGER,
+  overall_feedback TEXT,
+  submitted_at TIMESTAMP
+);
+
+-- 7. Items / Dynamic Tags Table
+CREATE TABLE IF NOT EXISTS items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT,
+  updated_at DATETIME
 );

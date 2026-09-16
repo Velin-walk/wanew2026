@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiFetch } from '../../services/api';
+import { apiFetch, normalizeTrek, enrichTreksWithRegistrations } from '../../services/api';
 import {
   CheckCircle,
   XCircle,
@@ -9,24 +9,51 @@ import {
   Shield,
   Layers,
   Plus,
-  RefreshCw
+  RefreshCw,
+  Users,
+  Compass,
+  DollarSign,
+  Eye,
+  X,
+  MapPin,
+  Database,
+  Wifi
 } from 'lucide-react';
+import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { parseGPX, parseKML } from '../mapminers/kmlParser';
 import { ItineraryBuilder } from './ItineraryBuilder';
 import { HikeLibraryList } from './HikeLibraryList';
+import { BookingsManager, AdminRegistration } from './BookingsManager';
+import { EventExecutionManager } from './EventExecutionManager';
+import { SalesAnalyticsManager } from './SalesAnalyticsManager';
+import { CoordinatorHub } from './CoordinatorHub';
+import { CloudflareRegistrationsTable } from './CloudflareRegistrationsTable';
 import {
   SavedHikeRecord,
   DEFAULT_SAVED_HIKES
 } from '../../data/defaultItineraryTemplate';
+import { Trek } from '../../types';
+import { db } from '../../lib/firebase';
+import { collection, getDocs, doc, deleteDoc, updateDoc, setDoc } from 'firebase/firestore';
 
 interface AdminDashboardProps {
   currentUserEmail: string;
 }
 
 export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'library' | 'editor' | 'maps'>('library');
+  const [activeTab, setActiveTab] = useState<
+    'bookings' | 'd1_table' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps'
+  >('bookings');
   const [hikes, setHikes] = useState<SavedHikeRecord[]>(DEFAULT_SAVED_HIKES);
   const [loadingHikes, setLoadingHikes] = useState(true);
   const [editingHike, setEditingHike] = useState<SavedHikeRecord | null>(null);
+
+  // Registrations state
+  const [registrations, setRegistrations] = useState<AdminRegistration[]>([]);
+  const [rawRegistrations, setRawRegistrations] = useState<any[]>([]);
+  const [loadingRegistrations, setLoadingRegistrations] = useState(false);
 
   // Database upload & sync state
   const [serverHikeIds, setServerHikeIds] = useState<string[]>([]);
@@ -36,9 +63,49 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   // Community Map Moderation State
   const [trails, setTrails] = useState<any[]>([]);
   const [loadingTrails, setLoadingTrails] = useState(false);
+  const [trailModeration, setTrailModeration] = useState<Record<string, string>>({});
+  const [previewTrail, setPreviewTrail] = useState<any | null>(null);
+  const [previewRoute, setPreviewRoute] = useState<any | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [moderationMessage, setModerationMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
+
+  // Cloudflare D1 Connection Diagnostic state
+  const [d1Status, setD1Status] = useState<'testing' | 'healthy' | 'error'>('testing');
+  const [d1Stats, setD1Stats] = useState<{ treks: number; bookings: number; lastChecked: string } | null>(null);
+  const [d1ErrorMsg, setD1ErrorMsg] = useState<string | null>(null);
+
+  const runD1Diagnostic = async () => {
+    setD1Status('testing');
+    try {
+      const treksRes = await apiFetch('treks', { forceFresh: true });
+      if (!treksRes.ok) throw new Error(`Treks D1 endpoint returned status ${treksRes.status}`);
+      const treksData = await treksRes.json();
+      const treksCount = Array.isArray(treksData) ? treksData.length : 0;
+
+      const regsRes = await apiFetch('registrations', { forceFresh: true });
+      if (!regsRes.ok) throw new Error(`Registrations D1 endpoint returned status ${regsRes.status}`);
+      const regsData = await regsRes.json();
+      const regsCount = Array.isArray(regsData) ? regsData.length : 0;
+
+      setD1Stats({
+        treks: treksCount,
+        bookings: regsCount,
+        lastChecked: new Date().toLocaleTimeString()
+      });
+      setD1Status('healthy');
+      setD1ErrorMsg(null);
+    } catch (err: any) {
+      console.error('D1 diagnostic failed:', err);
+      setD1Status('error');
+      setD1ErrorMsg(err.message || 'Connection timeout');
+    }
+  };
 
   useEffect(() => {
     fetchItineraries();
+    fetchRegistrations();
+    // Intentionally omit runD1Diagnostic() here on mount to prevent duplicate requests;
+    // status is set automatically by fetchItineraries and fetchRegistrations.
   }, []);
 
   useEffect(() => {
@@ -46,6 +113,184 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       fetchPendingTrails();
     }
   }, [activeTab]);
+
+  const fetchRegistrations = async () => {
+    setLoadingRegistrations(true);
+    let loaded: AdminRegistration[] = [];
+
+    // 1. Try Cloudflare Worker API
+    try {
+      const res = await apiFetch('registrations');
+      if (res.ok) {
+        const json = await res.json();
+        const items = Array.isArray(json) ? json : json?.data;
+        if (Array.isArray(items) && items.length > 0) {
+          setRawRegistrations(items);
+          loaded = items.map((r: any) => ({
+            id: String(r.id || r.registration_id || Math.random()),
+            trek_id: r.trek_id || r.hike_number || '',
+            hike_number: r.hike_number || r.trek_id || '',
+            trek_name: r.trek_name || r.list_name || 'Himalayan Trek',
+            trek_date: r.trek_date || r.date || '',
+            full_name: r.full_name || r.hikerName || r.name || 'Anonymous Hiker',
+            phone: r.phone || r.contact || '',
+            whatsapp: r.whatsapp || r.phone || '',
+            email: r.email_address || r.email || r.user_email || '',
+            paxCount: Number(r.pax || r.paxCount || 1),
+            emergency_contact: r.emergency_contact || '',
+            profession: r.profession || '',
+            pickup_point: r.pickup_point || r.pickupPoint || r.pickup || '',
+            gender: r.gender || '',
+            age_group: r.age_group || '',
+            team_members: r.team_members || [],
+            has_medical: r.has_medical || '',
+            specify_medical: r.specify_medical || '',
+            recent_hikes: r.recent_hikes || '',
+            guide_preference: r.guide_preference || '',
+            transport_preference: r.transport_preference || '',
+            suggestions: r.suggestions || '',
+            person_remarks: r.person_remarks || r.list_name || '',
+            status: r.status || 'Confirmed',
+            payment_status: r.payment_status || r.paymentStatus || 'Unpaid',
+            paid_amount: Number(r.paid_amount ?? r.paidAmount ?? 0),
+            due_amount: Number(r.due_amount ?? r.dueAmount ?? 0),
+            admin_notes: r.admin_notes || r.notes || '',
+            created_at: r.created_at || r.registeredAt || new Date().toISOString(),
+          }));
+
+          setD1Status('healthy');
+          setD1Stats(prev => ({
+            treks: prev?.treks ?? 0,
+            bookings: items.length,
+            lastChecked: new Date().toLocaleTimeString()
+          }));
+          setD1ErrorMsg(null);
+        }
+      }
+    } catch (err) {
+      console.warn('API fetch registrations error:', err);
+    }
+
+    // 2. Fallback to Firestore registrations collection
+    if (loaded.length === 0) {
+      try {
+        const querySnap = await getDocs(collection(db, 'registrations'));
+        const fsRegs: AdminRegistration[] = [];
+        querySnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          fsRegs.push({
+            id: docSnap.id,
+            trek_id: data.trekId || data.trek_id || '',
+            hike_number: data.hike_number || data.trekId || '',
+            trek_name: data.trekTitle || data.trek_name || 'Himalayan Trek',
+            trek_date: data.trek_date || '',
+            full_name: data.hikerName || data.full_name || 'Hiker',
+            phone: data.phone || '',
+            email: data.email || '',
+            pickup_point: data.pickup_point || data.pickupPoint || data.pickup || '',
+            paxCount: data.paxCount || 1,
+            status: data.status || 'Confirmed',
+            payment_status: data.payment_status || 'Unpaid',
+            paid_amount: Number(data.paid_amount ?? data.paidAmount ?? 0),
+            due_amount: Number(data.due_amount ?? data.dueAmount ?? 0),
+            admin_notes: data.admin_notes || '',
+            created_at: data.registeredAt || new Date().toISOString(),
+          });
+        });
+        if (fsRegs.length > 0) {
+          loaded = fsRegs;
+          setRawRegistrations(fsRegs);
+        }
+      } catch (e) {
+        console.warn('Firestore fetch registrations fallback error:', e);
+      }
+    }
+
+    setRegistrations(loaded);
+    if (rawRegistrations.length === 0 && loaded.length > 0) {
+      setRawRegistrations(loaded);
+    }
+    setLoadingRegistrations(false);
+  };
+
+  const handleDeleteRegistration = async (id: string) => {
+    // 1. Try deleting via API
+    try {
+      await apiFetch(`registrations/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn('API delete registration fallback:', err);
+    }
+
+    // 2. Try deleting from Firestore
+    try {
+      await deleteDoc(doc(db, 'registrations', id));
+    } catch (err) {
+      console.warn('Firestore delete registration fallback:', err);
+    }
+
+    setRegistrations((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handleUpdateRegistration = async (id: string, updates: Partial<AdminRegistration>) => {
+    // 1. Update API
+    try {
+      await apiFetch(`registrations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.warn('API update registration fallback:', err);
+    }
+
+    // 2. Update Firestore
+    try {
+      await updateDoc(doc(db, 'registrations', id), updates);
+    } catch (err) {
+      console.warn('Firestore update registration fallback:', err);
+    }
+
+    setRegistrations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+    );
+  };
+
+  const handleUpdateTrekExecution = async (
+    trekId: string,
+    updates: Partial<Trek> & { is_cancelled?: boolean; cancellation_reason?: string }
+  ) => {
+    // Update local hikes cache
+    setHikes((prev) =>
+      prev.map((h) => {
+        if (h.id === trekId || h.hikeNumber === trekId) {
+          const data = h.data || ({} as any);
+          return {
+            ...h,
+            data: {
+              ...data,
+              maxCapacity: updates.capacity ?? data.maxCapacity,
+              teamLeader: updates.leader ?? data.teamLeader,
+              is_cancelled: updates.data?.is_cancelled ?? data.is_cancelled,
+              cancellation_reason: updates.data?.cancellation_reason ?? data.cancellation_reason,
+              execution_status: updates.data?.execution_status ?? data.execution_status,
+            },
+          };
+        }
+        return h;
+      })
+    );
+
+    // Save to server
+    try {
+      await apiFetch(`admin/itineraries/${trekId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.warn('Network update trek execution:', err);
+    }
+  };
 
   const ensureHikeData = (h: SavedHikeRecord): SavedHikeRecord => {
     if (!h) return h;
@@ -159,6 +404,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
           setHikes(merged);
           localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(merged));
+          setD1Status('healthy');
+          setD1Stats(prev => ({
+            treks: serverHikes.length,
+            bookings: prev?.bookings ?? 0,
+            lastChecked: new Date().toLocaleTimeString()
+          }));
+          setD1ErrorMsg(null);
           return;
         }
       }
@@ -329,17 +581,117 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.data) {
-          const loadedTrails = Object.entries(data.data).map(([fileName, meta]: [string, any]) => ({
-            ...meta,
-            fileName,
-          }));
+          const rawItems = Array.isArray(data.data)
+            ? data.data
+            : Object.entries(data.data).map(([fileName, meta]: [string, any]) => ({
+                ...meta,
+                fileName,
+              }));
+
+          const loadedTrails = rawItems.map((meta: any, index: number) => {
+            const fileName = meta.fileName || meta.file_name || `trail_${index}.gpx`;
+            const trailId = meta.id || fileName;
+            const status = (meta.status || 'pending').toLowerCase();
+            return {
+              ...meta,
+              id: trailId,
+              fileName,
+              status
+            };
+          });
+
           setTrails(loadedTrails);
         }
       }
     } catch (e) {
-      console.error('Error fetching trails:', e);
+      console.error('Error fetching trails from Cloudflare:', e);
     } finally {
       setLoadingTrails(false);
+    }
+  };
+
+  const handleApproveTrail = async (trailId: string) => {
+    try {
+      const res = await apiFetch(`mapminers/trails/${encodeURIComponent(trailId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' })
+      });
+      if (res.ok) {
+        setTrails(prev => prev.map(t => t.id === trailId ? { ...t, status: 'approved' } : t));
+        setModerationMessage({ text: 'Map approved successfully in Cloudflare D1! It is now live in MapMiners.', type: 'success' });
+      } else {
+        throw new Error('Cloudflare update returned non-200');
+      }
+    } catch (err) {
+      console.error('Error approving trail on Cloudflare:', err);
+      setModerationMessage({ text: 'Failed to approve trail on Cloudflare.', type: 'error' });
+    }
+    setTimeout(() => setModerationMessage(null), 5000);
+  };
+
+  const handleRejectTrail = async (trailId: string) => {
+    try {
+      const res = await apiFetch(`mapminers/trails/${encodeURIComponent(trailId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' })
+      });
+      if (res.ok) {
+        setTrails(prev => prev.map(t => t.id === trailId ? { ...t, status: 'rejected' } : t));
+        setModerationMessage({ text: 'Map marked as rejected in Cloudflare D1.', type: 'info' });
+      } else {
+        throw new Error('Cloudflare update returned non-200');
+      }
+    } catch (err) {
+      console.error('Error rejecting trail on Cloudflare:', err);
+      setModerationMessage({ text: 'Failed to reject trail on Cloudflare.', type: 'error' });
+    }
+    setTimeout(() => setModerationMessage(null), 5000);
+  };
+
+  const handleDeleteTrailRecord = async (trailId: string) => {
+    try {
+      const res = await apiFetch(`mapminers/trails/${encodeURIComponent(trailId)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setTrails(prev => prev.filter(t => t.id !== trailId));
+        setModerationMessage({ text: 'Map file permanently deleted from Cloudflare R2 bucket & D1 database!', type: 'success' });
+      } else {
+        throw new Error('Cloudflare delete returned non-200');
+      }
+    } catch (err) {
+      console.error('Error deleting trail on Cloudflare:', err);
+      setModerationMessage({ text: 'Failed to delete trail from Cloudflare R2/D1.', type: 'error' });
+    }
+    setTimeout(() => setModerationMessage(null), 5000);
+  };
+
+  const handlePreviewTrail = async (trail: any) => {
+    setPreviewTrail(trail);
+    setPreviewRoute(null);
+    setLoadingPreview(true);
+
+    try {
+      const res = await apiFetch(`mapminers/download/${encodeURIComponent(trail.fileName)}`);
+      if (res.ok) {
+        const fileText = await res.text();
+        const extension = trail.fileName.split('.').pop()?.toLowerCase();
+        const parser = extension === 'gpx' ? parseGPX : parseKML;
+        const parsed = parser(fileText, trail.fileName, trail.name);
+        if (parsed) {
+          setPreviewRoute(parsed);
+        } else {
+          console.warn('Could not parse route track file text');
+        }
+      } else {
+        console.warn('Failed to download trail GPX/KML file from backend');
+      }
+    } catch (err) {
+      console.error('Error downloading/parsing trail file:', err);
+    } finally {
+      setLoadingPreview(false);
     }
   };
 
@@ -460,6 +812,28 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     return true;
   }).length;
 
+  const convertedTreks: Trek[] = hikes.map((h) => {
+    const d = h.data || ({} as any);
+    return {
+      id: h.id,
+      hike_number: h.hikeNumber || d.hikeNumber || '',
+      name: h.title || d.title || 'Himalayan Trek',
+      date: d.hikeDate || d.date || '',
+      days: d.overview?.expectedDuration || '1',
+      difficulty: (d.overview?.difficulty || 'easy').toLowerCase() as any,
+      leader: d.teamLeader || 'Walk Nepal Walk Guide',
+      capacity: Number(d.maxCapacity) || 25,
+      participants: 0,
+      price: d.priceTiers?.length ? `NPR ${d.priceTiers[0].price}` : 'NPR 1,500',
+      featured_image: d.coverImageUrl || '',
+      is_cancelled: Boolean(d.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled')),
+      cancellation_reason: d.cancellation_reason || '',
+      data: d,
+    };
+  });
+
+  const enrichedTreks = enrichTreksWithRegistrations(convertedTreks, registrations);
+
   return (
     <div className="w-full space-y-4">
       {syncMessage && (
@@ -468,9 +842,152 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         </div>
       )}
 
+      {/* Cloudflare D1 Database Connectivity Diagnostic Widget */}
+      <div className="bg-stone-50 border border-[#E5E1DB] rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-xl flex items-center justify-center ${
+            d1Status === 'healthy' 
+              ? 'bg-emerald-100 text-emerald-700' 
+              : d1Status === 'error' 
+              ? 'bg-rose-100 text-rose-700' 
+              : 'bg-amber-100 text-amber-700 animate-pulse'
+          }`}>
+            <Database className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black text-stone-800 tracking-tight">Cloudflare D1 & Worker Connection</h3>
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase ${
+                d1Status === 'healthy' 
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                  : d1Status === 'error' 
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200' 
+                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+              }`}>
+                <Wifi className="w-2.5 h-2.5" />
+                <span>{d1Status === 'healthy' ? 'Connected' : d1Status === 'error' ? 'Failed' : 'Checking'}</span>
+              </div>
+            </div>
+            <p className="text-xs text-stone-500 mt-0.5">
+              {d1Status === 'healthy' && d1Stats
+                ? `System is online. Verified active connection to Cloudflare D1 with ${d1Stats.treks} treks and ${d1Stats.bookings} bookings synchronized successfully.`
+                : d1Status === 'error'
+                ? `Connection error: ${d1ErrorMsg || 'API offline'}. Verify Cloudflare worker routing settings.`
+                : 'Diagnosing connectivity with walk-nepal-walk-api.workers.dev...'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 self-stretch md:self-auto justify-between md:justify-end border-t border-[#E5E1DB] md:border-none pt-3 md:pt-0">
+          {d1Stats && (
+            <div className="text-right text-[11px] font-semibold text-stone-500 hidden sm:block">
+              <span>Last verified: {d1Stats.lastChecked}</span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={runD1Diagnostic}
+            disabled={d1Status === 'testing'}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#D5D1CB] text-stone-700 rounded-xl text-xs font-bold shadow-2xs hover:bg-[#FAF8F5] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${d1Status === 'testing' ? 'animate-spin text-[#E08828]' : ''}`} />
+            <span>{d1Status === 'testing' ? 'Testing Connection...' : 'Test D1 Connection'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Admin Sub-navigation Segment */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-white p-2 sm:p-2.5 rounded-2xl border border-[#E5E1DB] shadow-2xs gap-2">
-        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {/* Bookings & Applications Tab */}
+          <button
+            id="admin-tab-bookings"
+            type="button"
+            onClick={() => setActiveTab('bookings')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'bookings'
+                ? 'bg-[#E08828] text-white shadow-xs'
+                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Bookings & Roster</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                activeTab === 'bookings' ? 'bg-white/20 text-white' : 'bg-[#EFEAE4] text-[#5A5551]'
+              }`}
+            >
+              {registrations.length}
+            </span>
+          </button>
+
+          {/* Applications Tab (Cloudflare D1 Registrations Table - Read-Only) */}
+          <button
+            id="admin-tab-applications"
+            type="button"
+            onClick={() => setActiveTab('d1_table')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'd1_table'
+                ? 'bg-[#1D1B19] text-white shadow-xs border border-stone-800'
+                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+            }`}
+          >
+            <Database className="w-4 h-4 text-[#F38020]" />
+            <span>Applications</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+                activeTab === 'd1_table' ? 'bg-[#F38020] text-white' : 'bg-[#EFEAE4] text-[#5A5551]'
+              }`}
+            >
+              {rawRegistrations.length || registrations.length}
+            </span>
+          </button>
+
+          {/* Event Execution Tab */}
+          <button
+            id="admin-tab-execution"
+            type="button"
+            onClick={() => setActiveTab('execution')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'execution'
+                ? 'bg-[#E08828] text-white shadow-xs'
+                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+            }`}
+          >
+            <Compass className="w-4 h-4" />
+            <span>Event Execution</span>
+          </button>
+
+          {/* Coordinator Hub Tab */}
+          <button
+            id="admin-tab-coordinator"
+            type="button"
+            onClick={() => setActiveTab('coordinator')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'coordinator'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            <span>Coordinator View</span>
+          </button>
+
+          {/* Sales & Revenue Analytics Tab */}
+          <button
+            id="admin-tab-sales"
+            type="button"
+            onClick={() => setActiveTab('sales')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'sales'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+            }`}
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Sales & Revenue</span>
+          </button>
+
           {/* Hike Library Tab */}
           <button
             id="admin-tab-library"
@@ -545,6 +1062,56 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       </div>
 
       {/* Main Tab Content */}
+      {activeTab === 'bookings' && (
+        <BookingsManager
+          registrations={registrations}
+          treks={enrichedTreks}
+          loading={loadingRegistrations}
+          onRefresh={fetchRegistrations}
+          onDeleteRegistration={handleDeleteRegistration}
+          onUpdateRegistration={handleUpdateRegistration}
+        />
+      )}
+
+      {activeTab === 'd1_table' && (
+        <CloudflareRegistrationsTable
+          registrations={rawRegistrations.length > 0 ? rawRegistrations : registrations}
+          loading={loadingRegistrations}
+          onRefresh={fetchRegistrations}
+        />
+      )}
+
+      {activeTab === 'execution' && (
+        <EventExecutionManager
+          treks={enrichedTreks}
+          loading={loadingHikes}
+          onRefresh={fetchItineraries}
+          onUpdateTrekExecution={handleUpdateTrekExecution}
+          onSelectViewRoster={(trekId) => {
+            setActiveTab('bookings');
+          }}
+        />
+      )}
+
+      {activeTab === 'coordinator' && (
+        <CoordinatorHub
+          treks={enrichedTreks}
+          registrations={registrations}
+          loading={loadingRegistrations}
+          onRefresh={fetchRegistrations}
+        />
+      )}
+
+      {activeTab === 'sales' && (
+        <SalesAnalyticsManager
+          treks={enrichedTreks}
+          registrations={registrations}
+          onSelectTrekRoster={(hikeNum) => {
+            setActiveTab('bookings');
+          }}
+        />
+      )}
+
       {activeTab === 'library' && (
         <HikeLibraryList
           hikes={hikes}
@@ -579,9 +1146,44 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             </div>
             <div>
               <h2 className="text-xl font-black text-[#1F1F1F] tracking-tight">Admin Moderation</h2>
-              <p className="text-xs text-[#8B8680] mt-0.5">Approve or reject community map submissions.</p>
+              <p className="text-xs text-[#8B8680] mt-0.5">Approve, reject or preview community map submissions.</p>
             </div>
           </div>
+
+          {moderationMessage && (
+            <div
+              className={`mb-6 p-4 rounded-xl border flex items-center justify-between gap-3 text-sm font-bold transition-all duration-300 ${
+                moderationMessage.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : moderationMessage.type === 'error'
+                  ? 'bg-rose-50 border-rose-200 text-rose-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-800'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {moderationMessage.type === 'success' ? (
+                  <CheckCircle className="w-5 h-5 text-emerald-600 animate-bounce" />
+                ) : moderationMessage.type === 'error' ? (
+                  <XCircle className="w-5 h-5 text-rose-600" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-amber-600" />
+                )}
+                <span>{moderationMessage.text}</span>
+              </div>
+              <button
+                onClick={() => setModerationMessage(null)}
+                className={`text-xs hover:underline cursor-pointer ${
+                  moderationMessage.type === 'success'
+                    ? 'text-emerald-600 hover:text-emerald-800'
+                    : moderationMessage.type === 'error'
+                    ? 'text-rose-600 hover:text-rose-800'
+                    : 'text-amber-600 hover:text-amber-800'
+                }`}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
           {loadingTrails ? (
             <div className="flex justify-center items-center h-32">
@@ -602,25 +1204,235 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                     <h3 className="font-bold text-sm text-[#1F1F1F]">{trail.name}</h3>
                     <p className="text-[11px] text-[#5A5551] mt-0.5">Submitted by {trail.contributorEmail || 'Community'}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-yellow-100 text-yellow-800">
-                        Pending Review
-                      </span>
+                      {trail.status === 'approved' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                          Approved & Live
+                        </span>
+                      ) : trail.status === 'rejected' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-800">
+                          Rejected
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-yellow-100 text-yellow-800">
+                          Pending Review
+                        </span>
+                      )}
                       <span className="text-[10px] text-[#8B8680]">{trail.fileName}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <button className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors">
-                      <CheckCircle className="w-3.5 h-3.5" /> Approve
+                    <button
+                      onClick={() => handlePreviewTrail(trail)}
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Preview
                     </button>
-                    <button className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-lg text-xs font-bold transition-colors">
-                      <XCircle className="w-3.5 h-3.5" /> Reject
-                    </button>
-                    <button className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-bold transition-colors" title="Delete">
+                    
+                    {trail.status !== 'approved' && (
+                      <button
+                        onClick={() => handleApproveTrail(trail.id)}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" /> Approve
+                      </button>
+                    )}
+
+                    {trail.status !== 'rejected' && (
+                      <button
+                        onClick={() => handleRejectTrail(trail.id)}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Reject
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => handleDeleteTrailRecord(trail.id)}
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      title="Delete"
+                    >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Map Preview Overlay Modal */}
+          {previewTrail && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[9999] p-4">
+              <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[90vh]">
+                <div className="flex justify-between items-center px-6 py-4 border-b border-[#F0EBE5]">
+                  <div>
+                    <h3 className="font-black text-lg text-[#1F1F1F] tracking-tight">
+                      Preview: {previewTrail.name}
+                    </h3>
+                    <p className="text-xs text-[#8B8680]">
+                      Submitted by {previewTrail.contributorEmail || 'Community'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPreviewTrail(null);
+                      setPreviewRoute(null);
+                    }}
+                    className="p-1.5 hover:bg-[#F9F7F5] rounded-lg text-[#8B8680] hover:text-[#1F1F1F] transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                  {loadingPreview ? (
+                    <div className="flex flex-col items-center justify-center py-24 gap-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                      <p className="text-xs text-[#8B8680] font-semibold">Downloading and parsing GPX/KML file...</p>
+                    </div>
+                  ) : previewRoute ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="md:col-span-2 space-y-4">
+                        <div className="h-[350px] w-full rounded-xl border border-[#E5E1DB] overflow-hidden relative">
+                          {previewRoute.coordinates && previewRoute.coordinates.length > 0 ? (
+                            <MapContainer
+                              center={[previewRoute.coordinates[0].lat, previewRoute.coordinates[0].lng]}
+                              zoom={13}
+                              scrollWheelZoom={true}
+                              className="h-full w-full z-10"
+                            >
+                              <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                              />
+                              <Polyline
+                                positions={previewRoute.coordinates.map((c: any) => [c.lat, c.lng])}
+                                color="#a855f7"
+                                weight={4}
+                                opacity={0.8}
+                              />
+                              <CircleMarker
+                                center={[previewRoute.coordinates[0].lat, previewRoute.coordinates[0].lng]}
+                                radius={6}
+                                fillColor="#22c55e"
+                                color="#ffffff"
+                                weight={2}
+                                fillOpacity={1}
+                              >
+                                <Popup>
+                                  <div className="text-xs font-semibold">Start Location</div>
+                                </Popup>
+                              </CircleMarker>
+                              <CircleMarker
+                                center={[previewRoute.coordinates[previewRoute.coordinates.length - 1].lat, previewRoute.coordinates[previewRoute.coordinates.length - 1].lng]}
+                                radius={6}
+                                fillColor="#ef4444"
+                                color="#ffffff"
+                                weight={2}
+                                fillOpacity={1}
+                              >
+                                <Popup>
+                                  <div className="text-xs font-semibold">End Location</div>
+                                </Popup>
+                              </CircleMarker>
+                            </MapContainer>
+                          ) : (
+                            <div className="w-full h-full bg-neutral-50 flex items-center justify-center text-xs text-[#8B8680]">
+                              No route path coordinates found to render on map.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="bg-[#F9F7F5] rounded-xl border border-[#E5E1DB] p-4 space-y-3">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-[#8B8680]">Trail Metadata</h4>
+                          
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between border-b border-[#F0EBE5] pb-1.5">
+                              <span className="text-[#8B8680]">Difficulty</span>
+                              <span className="font-bold text-[#1F1F1F]">{previewRoute.difficulty || 'Moderate'}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-[#F0EBE5] pb-1.5">
+                              <span className="text-[#8B8680]">Distance</span>
+                              <span className="font-bold text-[#1F1F1F]">
+                                {(previewRoute.stats?.distance || 0).toFixed(2)} km
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-b border-[#F0EBE5] pb-1.5">
+                              <span className="text-[#8B8680]">Elevation Gain</span>
+                              <span className="font-bold text-emerald-600">
+                                +{(previewRoute.stats?.elevationGain || 0).toFixed(0)}m
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-b border-[#F0EBE5] pb-1.5">
+                              <span className="text-[#8B8680]">Elevation Loss</span>
+                              <span className="font-bold text-rose-600">
+                                -{(previewRoute.stats?.elevationLoss || 0).toFixed(0)}m
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[#8B8680]">Est. Duration</span>
+                              <span className="font-bold text-[#1F1F1F]">
+                                {(previewRoute.stats?.estimatedHours || 0).toFixed(1)} hrs
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-purple-50/50 rounded-xl border border-purple-100 p-4 space-y-2">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-purple-700">Description</h4>
+                          <p className="text-xs text-[#5A5551] leading-relaxed max-h-[120px] overflow-y-auto">
+                            {previewRoute.description || 'No description provided by contributor.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-24 text-rose-600 bg-rose-50 border border-rose-100 rounded-xl">
+                      <p className="text-sm font-bold">Failed to load route preview data.</p>
+                      <p className="text-xs text-[#8B8680] mt-1">Please make sure the GPX/KML file was not corrupted.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#F0EBE5] bg-[#FAF9F7]">
+                  <button
+                    onClick={() => {
+                      setPreviewTrail(null);
+                      setPreviewRoute(null);
+                    }}
+                    className="px-4 py-2 bg-white hover:bg-[#F9F7F5] border border-[#E5E1DB] text-[#5A5551] rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  
+                  {previewTrail.status !== 'approved' && (
+                    <button
+                      onClick={async () => {
+                        await handleApproveTrail(previewTrail.id);
+                        setPreviewTrail(null);
+                        setPreviewRoute(null);
+                      }}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                    >
+                      Approve Trail
+                    </button>
+                  )}
+
+                  {previewTrail.status !== 'rejected' && (
+                    <button
+                      onClick={async () => {
+                        await handleRejectTrail(previewTrail.id);
+                        setPreviewTrail(null);
+                        setPreviewRoute(null);
+                      }}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                    >
+                      Reject Trail
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

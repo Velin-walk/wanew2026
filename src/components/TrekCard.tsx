@@ -13,6 +13,8 @@ import {
   UserCheck,
   FileText,
   HelpCircle,
+  AlertCircle,
+  Ban,
 } from 'lucide-react';
 
 interface TrekCardProps {
@@ -138,11 +140,17 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         <div className="flex items-start justify-between gap-2.5">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-              <span
-                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${badge.bg}`}
-              >
-                {badge.label}
-              </span>
+              {trek.is_cancelled ? (
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md border bg-rose-50 text-rose-700 border-rose-200 flex items-center gap-1">
+                  <Ban className="w-3 h-3 text-rose-600" /> Cancelled
+                </span>
+              ) : (
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${badge.bg}`}
+                >
+                  {badge.label}
+                </span>
+              )}
               {trek.hike_number && (
                 <span className="text-[10px] font-bold text-[#5A5551] bg-[#F4EFEA] px-2 py-0.5 rounded-md border border-[#E5E1DB]">
                   Hike #{trek.hike_number}
@@ -155,6 +163,15 @@ export const TrekCard: React.FC<TrekCardProps> = ({
                 </span>
               )}
             </div>
+
+            {trek.is_cancelled && trek.cancellation_reason && (
+              <div className="mb-2 p-2 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                <span className="text-[11px] leading-snug font-medium">
+                  <strong>Notice:</strong> {trek.cancellation_reason}
+                </span>
+              </div>
+            )}
 
             <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F] leading-snug">
               {trek.name}
@@ -295,15 +312,17 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 
           <button
             type="button"
-            disabled={isFull}
+            disabled={isFull || trek.is_cancelled}
             onClick={() => onRegister(trek)}
             className={`flex items-center justify-center gap-1.5 min-h-[42px] px-1 text-xs font-bold rounded-xl transition-all text-white cursor-pointer ${
-              isFull
+              trek.is_cancelled
+                ? 'bg-rose-400 cursor-not-allowed opacity-80'
+                : isFull
                 ? 'bg-[#8B8680] cursor-not-allowed opacity-70'
                 : 'bg-[#7ABA42] hover:bg-[#6CA838] active:scale-[0.98] shadow-xs'
             }`}
           >
-            <span>{isFull ? 'Waitlist' : 'Register'}</span>
+            <span>{trek.is_cancelled ? 'Cancelled' : isFull ? 'Waitlist' : 'Register'}</span>
           </button>
         </div>
       </div>

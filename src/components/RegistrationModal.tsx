@@ -30,6 +30,7 @@ interface RegistrationModalProps {
   onClose: () => void;
   onSubmit: (formData: BookingFormData) => Promise<void>;
   userEmail?: string;
+  latestBooking?: any;
 }
 
 export const RegistrationModal: React.FC<RegistrationModalProps> = ({
@@ -39,6 +40,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   onClose,
   onSubmit,
   userEmail = 'velinrai.VR@gmail.com',
+  latestBooking,
 }) => {
   // Helper to accurately parse trek date
   const parseTrekDate = (dateStr?: string): Date | null => {
@@ -119,6 +121,36 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAutoFilled, setIsAutoFilled] = useState(false);
+
+  // Auto-fill when latestBooking details are provided and modal opens
+  useEffect(() => {
+    if (isOpen && latestBooking) {
+      if (latestBooking.full_name) setFullName(latestBooking.full_name);
+      if (latestBooking.phone) setPhone(latestBooking.phone);
+      if (latestBooking.whatsapp_number || latestBooking.whatsapp) {
+        setWhatsapp(latestBooking.whatsapp_number || latestBooking.whatsapp || '');
+      }
+      if (latestBooking.emergency_backup_contact) {
+        setEmergencyContact(latestBooking.emergency_backup_contact);
+      }
+      if (latestBooking.profession) setProfession(latestBooking.profession);
+      if (latestBooking.age_group) setAgeGroup(latestBooking.age_group);
+      if (latestBooking.gender) setGender(latestBooking.gender);
+      
+      if (latestBooking.medical_condition && latestBooking.medical_condition !== 'No') {
+        setHasMedical('Yes');
+        setSpecifyMedical(latestBooking.medical_condition);
+      } else {
+        setHasMedical('No');
+        setSpecifyMedical('');
+      }
+      if (latestBooking.recent_hikes) setRecentHikes(latestBooking.recent_hikes);
+      setIsAutoFilled(true);
+    } else if (!isOpen) {
+      setIsAutoFilled(false);
+    }
+  }, [isOpen, latestBooking]);
 
   // Reset or pre-fill when active trek or email changes
   useEffect(() => {
@@ -171,6 +203,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     setError(null);
     if (!selectedTrekId) {
       setError('Please select a trek.');
+      return false;
+    }
+    if (activeTrek?.is_cancelled) {
+      setError(`This trek has been cancelled: ${activeTrek.cancellation_reason || 'Registrations are closed.'}`);
       return false;
     }
     if (!fullName.trim()) {
@@ -254,6 +290,32 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const ageOptions = ['Under 20', '20-30', '31-40', '41-50', 'Over 50'];
   const genderOptions = ['Female', 'Male', 'Non-Binary', 'Prefer not to say'];
 
+  // Mobile swipe down to dismiss handling
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState<number>(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+    setDragOffsetY(0);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY === null) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY;
+    if (diff > 0) {
+      setDragOffsetY(diff);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (dragOffsetY > 75) {
+      onClose();
+    }
+    setTouchStartY(null);
+    setDragOffsetY(0);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -263,10 +325,21 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     >
       <div
         id="modal-registration-sheet"
+        style={{
+          transform: dragOffsetY > 0 ? `translateY(${dragOffsetY}px)` : undefined,
+          transition: dragOffsetY === 0 ? 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
+        }}
         className="bg-[#FAFAF9] rounded-t-3xl sm:rounded-2xl max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 border border-[#E5E1DB]"
       >
-        {/* Mobile drag bar */}
-        <div className="w-10 h-1 rounded-full bg-[#D6D3CD] mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
+        {/* Mobile drag bar with touch gesture listeners */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="w-full pt-2.5 pb-1 sm:hidden shrink-0 cursor-grab active:cursor-grabbing flex justify-center touch-none select-none"
+        >
+          <div className="w-10 h-1.5 rounded-full bg-[#D6D3CD]" />
+        </div>
 
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[#EBE7E1] bg-white shrink-0">
@@ -369,7 +442,13 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   <span className="flex items-center gap-1">
                     <User className="w-3.5 h-3.5" /> Primary Hiker Details
                   </span>
-                  <span className="text-[10px] text-[#A8A29E] font-normal">* Required</span>
+                  {isAutoFilled ? (
+                    <span className="flex items-center gap-1 text-[10px] text-[#7ABA42] bg-[#EEF8E7] px-2 py-0.5 rounded-full font-bold animate-pulse">
+                      <Sparkles className="w-3 h-3 text-[#7ABA42]" /> Prefilled from previous trek
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-[#A8A29E] font-normal">* Required</span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

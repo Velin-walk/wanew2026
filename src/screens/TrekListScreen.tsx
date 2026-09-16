@@ -342,7 +342,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 lg:gap-5 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4 lg:gap-5 w-full">
                 {upcomingTreks.map((trek) => (
                   <TrekCard
                     key={trek.id}

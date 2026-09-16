@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Trek, Booking, TeamMember, BookingFormData } from './types';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
@@ -10,9 +10,16 @@ import { ItineraryModal } from './components/ItineraryModal';
 import { TrekFeedbackModal } from './components/TrekFeedbackModal';
 import { InfoPagesModal, SubPageType } from './components/InfoPagesModal';
 import { FALLBACK_TREKS } from './data/fallbackTreks';
-import { CheckCircle2, AlertCircle, Mountain, Heart } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Mountain, Heart, RefreshCw } from 'lucide-react';
 import MapMinersDashboard from './components/mapminers/MapMinersDashboard';
-import { apiFetch, normalizeTrek, enrichTreksWithRegistrations } from './services/api';
+import {
+  apiFetch,
+  normalizeTrek,
+  enrichTreksWithRegistrations,
+  clearApiCache,
+  fetchSingleTrek,
+  fetchUserBookings,
+} from './services/api';
 import { isAdminEmail } from './adminUtils';
 import AdminDashboard from './components/admin/AdminDashboard';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -54,17 +61,41 @@ function MainApp() {
 
   const activeUserEmail = userEmail || 'walknepalwalk@gmail.com';
 
+  // Look up the most recent booking/registration made by the user to prefill future forms
+  const latestUserBooking = React.useMemo(() => {
+    if (!activeUserEmail) return null;
+    const userEmailLower = activeUserEmail.toLowerCase().trim();
+    const userBookings = bookings.filter(
+      (b: any) => (b.email_address || b.user_email || b.email || '').toLowerCase().trim() === userEmailLower
+    );
+    return userBookings[0] || null;
+  }, [bookings, activeUserEmail]);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const lastFetchTimeRef = useRef<number>(0);
+
+  // Pull-to-refresh mobile gesture state
+  const [pullDistance, setPullDistance] = useState(0);
+  const touchStartY = useRef(0);
+  const isPullingRef = useRef(false);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (options?: { force?: boolean }) => {
+    const isForce = !!options?.force;
+    if (isForce) {
+      setIsRefreshing(true);
+      clearApiCache();
+    }
+
     try {
-      // 1. Fetch treks (Cloudflare Worker direct or server fallback)
+      // 1. Fetch treks (uses persistent 10-minute session/memory cache if not forced)
       let baseTreks: Trek[] = [];
       try {
-        const res = await apiFetch('/treks');
+        const res = await apiFetch('/treks', { forceFresh: isForce });
         const contentType = res.headers.get('content-type') || '';
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
@@ -81,57 +112,153 @@ function MainApp() {
         baseTreks = FALLBACK_TREKS;
       }
 
-      // 2. Fetch live registrations directly from Cloudflare Worker D1
-      let allRegs: any[] = [];
-      try {
-        const regRes = await apiFetch('/registrations');
-        const regContentType = regRes.headers.get('content-type') || '';
-        if (regRes.ok && regContentType.includes('application/json')) {
-          const regJson = await regRes.json();
-          const items = Array.isArray(regJson) ? regJson : regJson?.data;
-          if (Array.isArray(items)) {
-            allRegs = items;
-          }
+      setTreks(baseTreks);
+
+      // 2. Targeted User Bookings: Only fetch personal bookings if user is logged in
+      // Notice: Public visitors never fetch the full registrations table
+      if (activeUserEmail) {
+        try {
+          const userRegs = await fetchUserBookings(activeUserEmail);
+          // Enrich bookings with trek is_cancelled and cancellation_reason if matched
+          const enrichedBookings = userRegs.map((b: any) => {
+            const matchedTrek = baseTreks.find(
+              (t) =>
+                (t.id && (t.id === b.trek_id || t.id === b.hike_id)) ||
+                (t.hike_number && (t.hike_number === b.hike_number || t.hike_number === b.trek_id)) ||
+                (t.name && b.trek_name && t.name.toLowerCase().trim() === b.trek_name.toLowerCase().trim())
+            );
+            return {
+              ...b,
+              is_cancelled: Boolean(b.is_cancelled || matchedTrek?.is_cancelled),
+              cancellation_reason: b.cancellation_reason || matchedTrek?.cancellation_reason || '',
+            };
+          });
+          setBookings(enrichedBookings);
+        } catch (err) {
+          console.warn('Could not fetch user personal bookings:', err);
         }
-      } catch (err) {
-        console.warn('Network issue fetching registrations for live roster:', err);
+      } else {
+        setBookings([]);
       }
 
-      // 3. Enrich treks with live participant counts and roster avatars
-      const enrichedTreks = enrichTreksWithRegistrations(baseTreks, allRegs);
-      setTreks(enrichedTreks);
-
-      // 4. Update user's personal bookings
-      if (allRegs.length > 0) {
-        const userEmailLower = activeUserEmail.toLowerCase().trim();
-        const myBookings = allRegs.filter(
-          (r) =>
-            (r.email_address || r.user_email || r.email || '').toLowerCase().trim() === userEmailLower ||
-            (user?.uid && r.userId === user.uid)
-        );
-        setBookings(myBookings);
+      lastFetchTimeRef.current = Date.now();
+      if (isForce) {
+        showToast('Live database refreshed', 'success');
       }
     } catch (err) {
       console.error('Failed to refresh data:', err);
     } finally {
       setLoadingTreks(false);
       setLoadingBookings(false);
+      setIsRefreshing(false);
     }
-  }, [activeUserEmail, user?.uid]);
+  }, [activeUserEmail]);
 
   const fetchTreks = refreshData;
   const fetchBookings = refreshData;
 
+  // On mount: Check if URL targets a specific shared trek (?trek=..., ?hike=..., or #itinerary-...)
+  // Option 4: Immediately load ONLY that single itinerary row and its roster in <150ms!
   useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash || '';
+      let targetTrekId = searchParams.get('trek') || searchParams.get('hike') || searchParams.get('id') || '';
+
+      if (!targetTrekId && hash) {
+        const hashMatch = hash.match(/^#(?:itinerary|trek)-(.+)$/i);
+        if (hashMatch) {
+          targetTrekId = decodeURIComponent(hashMatch[1]);
+        }
+      }
+
+      if (targetTrekId && targetTrekId !== 'preview') {
+        fetchSingleTrek(targetTrekId).then((singleTrek) => {
+          if (singleTrek) {
+            setItineraryModalTrek(singleTrek);
+            setItineraryModalType('itinerary');
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Could not parse shared trek URL parameter:', e);
+    }
+  }, []);
+
+  // When user visits Bookings tab, fetch their targeted bookings if logged in
+  useEffect(() => {
+    if (currentTab === 'bookings' && activeUserEmail) {
+      setLoadingBookings(true);
+      fetchUserBookings(activeUserEmail).then((userRegs) => {
+        setBookings(userRegs);
+        setLoadingBookings(false);
+      });
+    }
+  }, [currentTab, activeUserEmail]);
+
+  // Keep a stable ref to refreshData to avoid re-attaching listeners
+  const refreshDataRef = useRef(refreshData);
+  useEffect(() => {
+    refreshDataRef.current = refreshData;
+  }, [refreshData]);
+
+  useEffect(() => {
+    // Initial fetch on mount
     refreshData();
 
-    // Refresh every 8 seconds for live roster updates
-    const interval = setInterval(() => {
-      refreshData();
-    }, 8000);
+    // Throttled focus listener: only re-fetch if at least 5 minutes have elapsed since last fetch
+    const handleFocusOrVisibility = () => {
+      const elapsed = Date.now() - lastFetchTimeRef.current;
+      if (elapsed >= 5 * 60 * 1000) {
+        refreshDataRef.current();
+      }
+    };
 
-    return () => clearInterval(interval);
-  }, [refreshData]);
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+    };
+  }, []); // Empty dependency array prevents double-fetching on auth resolution
+
+  // Mobile pull-to-refresh touch event handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY <= 2 && !isRefreshing) {
+      touchStartY.current = e.touches[0].clientY;
+      isPullingRef.current = true;
+    } else {
+      isPullingRef.current = false;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPullingRef.current || isRefreshing) return;
+    if (window.scrollY > 2) {
+      isPullingRef.current = false;
+      setPullDistance(0);
+      return;
+    }
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY.current;
+    if (diff > 0) {
+      // Damped elastic resistance
+      const damped = Math.min(diff * 0.4, 75);
+      setPullDistance(damped);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (!isPullingRef.current) return;
+    isPullingRef.current = false;
+    if (pullDistance >= 48) {
+      setPullDistance(0);
+      await refreshData({ force: true });
+    } else {
+      setPullDistance(0);
+    }
+  };
 
   const toggleFavorite = (trekId: string) => {
     setFavorites((prev) => {
@@ -251,8 +378,7 @@ function MainApp() {
 
     const toastMsg = data.message || 'Successfully registered & saved to Cloudflare D1!';
     showToast(toastMsg, 'success');
-    await fetchTreks();
-    await fetchBookings();
+    await refreshData({ force: true });
     setCurrentTab('bookings');
   };
 
@@ -273,14 +399,39 @@ function MainApp() {
     }
 
     showToast('Registration cancelled successfully', 'success');
-    await fetchTreks();
-    await fetchBookings();
+    await refreshData({ force: true });
   };
 
   return (
-    <div className="min-h-screen bg-[#EAE5DF] md:bg-[#F0EBE5] flex flex-col items-center justify-start w-full">
-      {/* Viewport Container: Compact phone container on mobile, full-width responsive on desktop */}
-      <div className="w-full max-w-md sm:max-w-xl md:max-w-none bg-[#F0EBE5] md:bg-[#F2ECE5] min-h-screen flex flex-col relative shadow-sm sm:shadow-md md:shadow-none sm:border-x md:border-none sm:border-[#D8D2C9]">
+    <div
+      className="min-h-screen bg-[#F0EBE5] md:bg-[#F2ECE5] flex flex-col items-center justify-start w-full"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Mobile Pull-to-Refresh Floating Indicator */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div
+          id="pull-to-refresh-indicator"
+          className="fixed top-2 left-1/2 -translate-x-1/2 z-50 transition-all duration-150 pointer-events-none flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 backdrop-blur-md shadow-lg border border-[#E5E1DB] text-xs font-bold text-[#1F1F1F]"
+          style={{
+            transform: `translate(-50%, ${pullDistance > 0 ? Math.min(pullDistance - 12, 28) : (isRefreshing ? 6 : -60)}px)`,
+            opacity: isRefreshing ? 1 : Math.min(pullDistance / 40, 1),
+          }}
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-[#E08828] ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span>
+            {isRefreshing
+              ? 'Refreshing live data...'
+              : pullDistance >= 48
+              ? 'Release to refresh'
+              : 'Pull down to refresh'}
+          </span>
+        </div>
+      )}
+
+      {/* Viewport Container: Full screen width layout */}
+      <div className="w-full bg-[#F0EBE5] md:bg-[#F2ECE5] min-h-screen flex flex-col relative">
         {/* Mobile Toast notifications (centered, responsive) */}
         {toast && (
           <div
@@ -312,8 +463,8 @@ function MainApp() {
           onOpenProfile={() => setProfileModalOpen(true)}
         />
 
-        {/* Content Area - Scrollable with safe bottom padding for Mobile Tab Bar, full width desktop */}
-        <main className={`flex-1 w-full ${currentTab === 'mapminers' ? 'p-0 max-w-none' : 'max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-3 sm:py-6 pb-28 md:pb-12'}`}>
+        {/* Content Area - Full width responsive screen */}
+        <main className={`flex-1 w-full ${currentTab === 'mapminers' ? 'p-0 max-w-none' : 'w-full px-3.5 sm:px-6 lg:px-8 py-3 sm:py-6 pb-28 md:pb-12'}`}>
           {currentTab === 'treks' && (
             <TrekListScreen
               treks={treks}
@@ -441,6 +592,7 @@ function MainApp() {
             trek={selectedTrekForRegister}
             allTreks={treks}
             userEmail={activeUserEmail}
+            latestBooking={latestUserBooking}
             isOpen={Boolean(selectedTrekForRegister)}
             onClose={() => setSelectedTrekForRegister(null)}
             onSubmit={handleRegisterSubmit}
@@ -466,6 +618,10 @@ function MainApp() {
             onClose={() => setItineraryModalTrek(null)}
             trek={itineraryModalTrek}
             type={itineraryModalType}
+            onRegister={(t) => {
+              setItineraryModalTrek(null);
+              setSelectedTrekForRegister(t);
+            }}
           />
         )}
 
@@ -496,6 +652,10 @@ function MainApp() {
             isOpen={Boolean(infoModalPage)}
             onClose={() => setInfoModalPage(null)}
             initialPage={infoModalPage || 'payment'}
+            onSuccessSubmitted={async () => {
+              await fetchBookings();
+              showToast('Private Trek Request saved to Cloudflare!', 'success');
+            }}
           />
         )}
 

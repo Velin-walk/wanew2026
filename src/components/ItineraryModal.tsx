@@ -23,7 +23,8 @@ import {
   Moon,
   Flame,
   Milestone,
-  ClipboardList
+  ClipboardList,
+  AlertTriangle,
 } from 'lucide-react';
 import { Trek } from '../types';
 import { TrekItineraryData } from '../data/defaultItineraryTemplate';
@@ -33,6 +34,7 @@ interface ItineraryModalProps {
   onClose: () => void;
   trek: Trek | null;
   type?: 'itinerary' | 'faq';
+  onRegister?: (trek: Trek) => void;
 }
 
 export const ItineraryModal: React.FC<ItineraryModalProps> = ({
@@ -40,6 +42,7 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
   onClose,
   trek,
   type = 'itinerary',
+  onRegister,
 }) => {
   const [activeTab, setActiveTab] = useState<'experience' | 'logistics'>('experience');
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
@@ -145,6 +148,19 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Cancellation Alert Banner */}
+        {trek.is_cancelled && (
+          <div className="bg-rose-50 border-b border-rose-200 px-4 sm:px-6 py-2.5 flex items-start sm:items-center gap-2.5 text-rose-800 text-xs shrink-0">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <span className="font-bold">Notice: This hike has been cancelled by the organizer.</span>{' '}
+              <span className="text-[11px] text-rose-700">
+                {trek.cancellation_reason ? trek.cancellation_reason : 'Registrations are currently closed.'}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Immersive Dual-Tab Bar */}
         {!isFaq && (
@@ -652,12 +668,29 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
         </div>
 
         {/* Bottom Bar */}
-        <div className="p-3 bg-white border-t border-[#E5E1DB] flex items-center justify-between text-[10px] font-bold text-[#8B8680] uppercase tracking-wider shrink-0">
-          <div className="flex items-center gap-1.5">
+        <div className="p-3 bg-white border-t border-[#E5E1DB] flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">
             <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-            <span>Walk Nepal Walk Booking System</span>
+            <span className="hidden sm:inline">Walk Nepal Walk Booking System</span>
+            <span className="sm:hidden">WNW Live</span>
           </div>
-          <span>Cloudflare Database Sync</span>
+
+          {onRegister && trek && (
+            <button
+              type="button"
+              id="itinerary-modal-register-btn"
+              disabled={trek.is_cancelled}
+              onClick={() => onRegister(trek)}
+              className={`px-4 py-2 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs shrink-0 ${
+                trek.is_cancelled
+                  ? 'bg-rose-400 cursor-not-allowed opacity-80'
+                  : 'bg-[#7ABA42] hover:bg-[#6AA437] cursor-pointer active:scale-95'
+              }`}
+            >
+              <span>{trek.is_cancelled ? 'Hike Cancelled' : 'Book / Register Now'}</span>
+              {!trek.is_cancelled && <ChevronRight className="w-3.5 h-3.5" />}
+            </button>
+          )}
         </div>
 
       </div>

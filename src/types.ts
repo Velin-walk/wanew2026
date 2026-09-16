@@ -31,6 +31,8 @@ export interface Trek {
   fitness_level?: string;
   season?: string;
   type_of_trail?: string;
+  is_cancelled?: boolean;
+  cancellation_reason?: string;
   data?: any;
 }
 
@@ -94,6 +96,8 @@ export interface Booking {
   itinerary_link?: string;
   faq_link?: string;
   whatsapp_link?: string;
+  is_cancelled?: boolean;
+  cancellation_reason?: string;
 }
 
 export interface Invite {

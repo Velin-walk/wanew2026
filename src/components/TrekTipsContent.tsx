@@ -401,17 +401,20 @@ const PreparednessQuiz: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setScores(prev => ({ ...prev, [id]: val }));
   };
 
-  const calculateResult = () => {
+  const getPercentage = () => {
     let total = 0;
     const allQuestions = categories.flatMap(c => c.questions);
     allQuestions.forEach(q => {
       total += scores[q.id] || 3;
     });
-    
-    const percentage = Math.round((total / (allQuestions.length * 5)) * 100);
-    setShowResult(true);
-    return percentage;
+    return Math.round((total / (allQuestions.length * 5)) * 100);
   };
+
+  const handleFinishQuiz = () => {
+    setShowResult(true);
+  };
+
+  const percentage = getPercentage();
 
   return (
     <div className="space-y-5 animate-in slide-in-from-right-4 duration-200 pb-10">
@@ -457,7 +460,7 @@ const PreparednessQuiz: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           ))}
 
           <button
-            onClick={calculateResult}
+            onClick={handleFinishQuiz}
             className="w-full mt-8 py-3.5 bg-[#ffb703] hover:bg-[#fb8500] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-98"
           >
             Finish & See My Preparedness
@@ -465,10 +468,10 @@ const PreparednessQuiz: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
       ) : (
         <div className="p-6 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] text-center space-y-4 animate-in zoom-in-95 duration-200">
-          <div className="text-4xl font-black text-[#7ABA42] mb-2">{calculateResult()}%</div>
+          <div className="text-4xl font-black text-[#7ABA42] mb-2">{percentage}%</div>
           <h3 className="text-lg font-bold text-[#1F1F1F]">
-            {calculateResult() >= 80 ? "Excellent! You're trek-ready!" : 
-             calculateResult() >= 50 ? "You're somewhat ready, some prep needed." : 
+            {percentage >= 80 ? "Excellent! You're trek-ready!" : 
+             percentage >= 50 ? "You're somewhat ready, some prep needed." : 
              "More preparation required before your trek."}
           </h3>
           <p className="text-xs text-[#5A5551]">

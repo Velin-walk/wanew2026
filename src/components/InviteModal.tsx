@@ -14,6 +14,32 @@ export const InviteModal: React.FC<InviteModalProps> = ({
   selectedTrek,
 }) => {
   const [copied, setCopied] = useState(false);
+  // Mobile swipe down to dismiss handling
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState<number>(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+    setDragOffsetY(0);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY === null) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY;
+    if (diff > 0) {
+      setDragOffsetY(diff);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (dragOffsetY > 75) {
+      onClose();
+    }
+    setTouchStartY(null);
+    setDragOffsetY(0);
+  };
+
   const shareUrl = selectedTrek
     ? `${window.location.origin}/?trek=${encodeURIComponent(selectedTrek.id)}`
     : window.location.origin;
@@ -56,10 +82,21 @@ export const InviteModal: React.FC<InviteModalProps> = ({
     >
       <div
         id="modal-invite-sheet"
+        style={{
+          transform: dragOffsetY > 0 ? `translateY(${dragOffsetY}px)` : undefined,
+          transition: dragOffsetY === 0 ? 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
+        }}
         className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-4 sm:p-5 shadow-2xl animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200 overflow-hidden max-h-[90vh] flex flex-col"
       >
-        {/* Mobile drag handle indicator */}
-        <div className="w-12 h-1.5 rounded-full bg-[#E5E1DB] mx-auto mb-2 sm:hidden shrink-0" />
+        {/* Mobile drag handle indicator with touch listeners */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="w-full pt-1 pb-2 sm:hidden shrink-0 cursor-grab active:cursor-grabbing flex justify-center touch-none select-none"
+        >
+          <div className="w-12 h-1.5 rounded-full bg-[#E5E1DB]" />
+        </div>
 
         <div className="flex items-center justify-between pb-3 border-b border-[#F0EBE5]">
           <div className="flex items-center gap-2">

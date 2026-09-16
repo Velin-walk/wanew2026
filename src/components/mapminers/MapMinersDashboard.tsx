@@ -50,6 +50,7 @@ export default function MapMinersDashboard({
   const [contributionFile, setContributionFile] = useState<File | null>(null);
   const [contributionError, setContributionError] = useState('');
   const [isContributing, setIsContributing] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -57,7 +58,7 @@ export default function MapMinersDashboard({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Load trails from Cloudflare D1 via backend API
+  // Load trails directly from Cloudflare D1 and R2 via backend API
   const loadKMLFolder = useCallback(async () => {
     setLoadingState({ status: 'loading', errors: [] });
     setRoutes([]);
@@ -86,10 +87,12 @@ export default function MapMinersDashboard({
             const loadedRoutes = rawItems.map((anyMeta: any, index: number) => {
               const startPosObj = parseStartPos(anyMeta.startPos);
               const realFileName = anyMeta.fileName || anyMeta.file_name || anyMeta.name || `trail_${index}.gpx`;
+              const trailId = anyMeta.id || realFileName;
+              const moderationStatus = (anyMeta.status || 'approved').toLowerCase();
 
               return {
                 ...anyMeta,
-                id: anyMeta.id || `trail-${index}-${Math.random().toString(36).substring(2, 7)}`,
+                id: trailId,
                 fileName: realFileName,
                 name: anyMeta.name || realFileName,
                 description: anyMeta.description || '',
@@ -112,12 +115,34 @@ export default function MapMinersDashboard({
                 bounds: anyMeta.bounds,
                 coordinates: startPosObj ? [startPosObj, startPosObj] : [],
                 isLazyLoaded: false,
-                isCommunityTrail: true
+                isCommunityTrail: true,
+                moderationStatus
               };
             });
 
-            loadedRoutes.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-            setRoutes(loadedRoutes);
+            // Filter routes based on Cloudflare status
+            const filteredRoutes = loadedRoutes.filter((r: any) => {
+              const status = (r.moderationStatus || 'approved').toLowerCase();
+              
+              // 1. Explicitly approved trails are always visible to everyone
+              if (status === 'approved') return true;
+              
+              // 2. Explicitly rejected or deleted trails are hidden
+              if (status === 'rejected' || status === 'deleted') return false;
+              
+              // 3. Pending review trails are only visible to the contributor who submitted them
+              if (status === 'pending' || status === 'pending review') {
+                if (currentUserEmail && r.contributorEmail && r.contributorEmail.toLowerCase() === currentUserEmail.toLowerCase()) {
+                  return true;
+                }
+                return false;
+              }
+              
+              return true;
+            });
+
+            filteredRoutes.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+            setRoutes(filteredRoutes);
             setLoadingState({ status: 'done', errors: [] });
             return;
           }
@@ -135,7 +160,7 @@ export default function MapMinersDashboard({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentUserEmail]);
 
   useEffect(() => {
     loadKMLFolder();
@@ -199,14 +224,42 @@ export default function MapMinersDashboard({
     }
   }, [isMobile]);
 
-  const handleDeleteRoute = useCallback((id: string) => {
+  // Auto-open targeted trail if ?route=... parameter is provided in the URL
+  useEffect(() => {
+    if (routes.length === 0) return;
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const routeParam = searchParams.get('route');
+      if (routeParam && !activeRoute) {
+        const decodedParam = decodeURIComponent(routeParam).toLowerCase();
+        const matched = routes.find(
+          (r) =>
+            r.fileName?.toLowerCase() === decodedParam ||
+            r.id?.toLowerCase() === decodedParam ||
+            r.name?.toLowerCase() === decodedParam
+        );
+        if (matched) {
+          handleRouteClick(matched);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not parse route parameter:', e);
+    }
+  }, [routes, activeRoute, handleRouteClick]);
+
+  const handleDeleteRoute = useCallback(async (id: string) => {
     setRoutes(prev => prev.filter(r => r.id !== id));
     setActiveRoute(null);
+    try {
+      await apiFetch(`mapminers/trails/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      console.warn('Could not delete trail from Cloudflare R2 / D1:', err);
+    }
   }, []);
 
-  const handleContributionFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const processFile = (file: File) => {
     const extension = file.name.split('.').pop()?.toLowerCase();
 
     if (extension === 'kmz') {
@@ -228,6 +281,12 @@ export default function MapMinersDashboard({
     }
     setContributionFile(file);
     setContributionError('');
+  };
+
+  const handleContributionFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    processFile(file);
   };
 
   const handleContributeSubmit = async (event: React.FormEvent) => {
@@ -558,16 +617,46 @@ export default function MapMinersDashboard({
                 <label className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block mb-1">
                   GPS Track File (GPX or KML)
                 </label>
-                <div className="border border-dashed border-neutral-300 rounded-xl p-4 bg-neutral-50/50 text-center relative hover:bg-neutral-50 hover:border-[#7ABA42] transition-colors cursor-pointer">
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingFile(true);
+                  }}
+                  onDragEnter={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingFile(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingFile(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingFile(false);
+                    const droppedFile = e.dataTransfer.files?.[0];
+                    if (droppedFile) {
+                      processFile(droppedFile);
+                    }
+                  }}
+                  className={`border border-dashed rounded-xl p-4 text-center relative transition-all cursor-pointer ${
+                    isDraggingFile
+                      ? 'border-[#7ABA42] bg-[#7ABA42]/10 ring-2 ring-[#7ABA42]/30'
+                      : 'border-neutral-300 bg-neutral-50/50 hover:bg-neutral-50 hover:border-[#7ABA42]'
+                  }`}
+                >
                   <input
                     type="file"
                     accept=".gpx,.kml"
                     onChange={handleContributionFile}
                     className="absolute inset-0 opacity-0 cursor-pointer"
                   />
-                  <Upload className="w-6 h-6 text-neutral-400 mx-auto mb-2" />
-                  <span className="font-bold text-neutral-600 block mb-1">
-                    {contributionFile ? contributionFile.name : 'Choose file or drag here'}
+                  <Upload className={`w-6 h-6 mx-auto mb-2 transition-colors ${isDraggingFile ? 'text-[#7ABA42] scale-110' : 'text-neutral-400'}`} />
+                  <span className={`font-bold block mb-1 transition-colors ${isDraggingFile ? 'text-[#5C942D]' : 'text-neutral-600'}`}>
+                    {contributionFile ? contributionFile.name : isDraggingFile ? 'Drop trail file here...' : 'Choose file or drag here'}
                   </span>
                   <span className="text-[10px] text-neutral-400 block">
                     Supports .gpx and .kml formats

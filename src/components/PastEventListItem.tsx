@@ -1,6 +1,6 @@
 import React from 'react';
 import { Trek } from '../types';
-import { Calendar, UserCheck, FileText, ExternalLink, CheckCircle, Star } from 'lucide-react';
+import { Calendar, UserCheck, FileText, ExternalLink, CheckCircle, Star, Ban } from 'lucide-react';
 
 interface PastEventListItemProps {
   trek: Trek;
@@ -107,10 +107,17 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
                 <span>Guide: <strong className="text-[#5A5551] font-semibold">{trek.leader}</strong></span>
               </span>
             )}
-            <span className="inline-flex items-center gap-1 text-[#8B8680]">
-              <CheckCircle className="w-3 h-3 text-emerald-600" />
-              <span>Concluded</span>
-            </span>
+            {trek.is_cancelled ? (
+              <span className="inline-flex items-center gap-1 text-rose-600 font-semibold">
+                <Ban className="w-3 h-3 text-rose-600" />
+                <span>Cancelled</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[#8B8680]">
+                <CheckCircle className="w-3 h-3 text-emerald-600" />
+                <span>Concluded</span>
+              </span>
+            )}
           </div>
         </div>
       </div>

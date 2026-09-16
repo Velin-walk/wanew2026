@@ -3,6 +3,74 @@ import { Trek } from "../types";
 export const CLOUDFLARE_WORKER_URL = "https://walk-nepal-walk-api.velinrai-vr.workers.dev";
 export const LOCAL_API_URL = "/api";
 
+export interface ApiFetchOptions extends RequestInit {
+  forceFresh?: boolean;
+  cacheTtl?: number; // duration in milliseconds
+}
+
+interface CacheItem {
+  data: any;
+  timestamp: number;
+  contentType: string;
+}
+
+// In-memory cache + persistent sessionStorage cache to minimize Cloudflare Worker and D1 queries
+const memoryCache = new Map<string, CacheItem>();
+export const DEFAULT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes in ms
+
+function getSessionCache(key: string): CacheItem | null {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    const raw = sessionStorage.getItem('wnw_cache_' + key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setSessionCache(key: string, item: CacheItem) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    sessionStorage.setItem('wnw_cache_' + key, JSON.stringify(item));
+  } catch {
+    // Silently ignore quota / privacy mode errors
+  }
+}
+
+function clearSessionCache(prefix?: string) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('wnw_cache_')) {
+        if (!prefix || k.includes(prefix)) {
+          keysToRemove.push(k);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+  } catch {
+    // Ignore
+  }
+}
+
+export function clearApiCache(pathPrefix?: string) {
+  if (!pathPrefix) {
+    memoryCache.clear();
+    clearSessionCache();
+    return;
+  }
+  const cleanPrefix = pathPrefix.replace(/^\/+/, "");
+  for (const key of Array.from(memoryCache.keys())) {
+    if (key.includes(cleanPrefix)) {
+      memoryCache.delete(key);
+    }
+  }
+  clearSessionCache(cleanPrefix);
+}
+
 export function apiUrl(path: string, directCloudflare = true): string {
   const cleanPath = path.replace(/^\/+/, "");
   if (directCloudflare) {
@@ -11,12 +79,71 @@ export function apiUrl(path: string, directCloudflare = true): string {
   return `/api/${cleanPath}`;
 }
 
-export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+export async function apiFetch(path: string, options?: ApiFetchOptions): Promise<Response> {
   const cleanPath = path.replace(/^\/+/, "");
   const directUrl = `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
+  const method = (options?.method || "GET").toUpperCase();
 
-  // Direct fetch to Cloudflare Worker
-  return fetch(directUrl, options);
+  // If this is a mutation (POST, PUT, DELETE, PATCH), invalidate relevant caches
+  if (method !== "GET") {
+    clearApiCache(); // Invalidate cached queries on any state mutation
+    return fetch(directUrl, options);
+  }
+
+  const ttl = options?.cacheTtl ?? DEFAULT_CACHE_TTL;
+
+  // Handle GET caching if forceFresh is not set
+  if (!options?.forceFresh) {
+    // 1. Check ultra-fast memory cache
+    const cached = memoryCache.get(directUrl);
+    if (cached && Date.now() - cached.timestamp < ttl) {
+      return new Response(JSON.stringify(cached.data), {
+        status: 200,
+        headers: {
+          "Content-Type": cached.contentType,
+          "X-WNW-Cache": "HIT-MEMORY",
+        },
+      });
+    }
+
+    // 2. Check persistent sessionStorage cache (persists across reloads/new tabs in session)
+    const sessionItem = getSessionCache(directUrl);
+    if (sessionItem && Date.now() - sessionItem.timestamp < ttl) {
+      memoryCache.set(directUrl, sessionItem);
+      return new Response(JSON.stringify(sessionItem.data), {
+        status: 200,
+        headers: {
+          "Content-Type": sessionItem.contentType,
+          "X-WNW-Cache": "HIT-STORAGE",
+        },
+      });
+    }
+  }
+
+  // Perform live network fetch to Cloudflare Worker
+  const res = await fetch(directUrl, options);
+
+  // Cache successful JSON responses
+  if (res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        const cloned = res.clone();
+        const json = await cloned.json();
+        const cacheItem: CacheItem = {
+          data: json,
+          timestamp: Date.now(),
+          contentType,
+        };
+        memoryCache.set(directUrl, cacheItem);
+        setSessionCache(directUrl, cacheItem);
+      } catch (err) {
+        // Silently skip caching if unparseable
+      }
+    }
+  }
+
+  return res;
 }
 
 export function normalizeTrek(row: any): Trek {
@@ -82,6 +209,8 @@ export function normalizeTrek(row: any): Trek {
     start_location: d.overview?.meetingPoint || row.meeting_point || row.start_location || "",
     elevation: d.overview?.elevationRange || row.elevation_range || row.elevation || "",
     itinerary: row.itinerary || "",
+    is_cancelled: Boolean(d.is_cancelled || row.exec_is_cancelled || row.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled')),
+    cancellation_reason: d.cancellation_reason || row.exec_cancellation_reason || row.cancellation_reason || "",
     data: d,
   };
 }
@@ -181,4 +310,49 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
 
     return trek;
   });
+}
+
+/**
+ * High-performance single trek loader.
+ * Fetches ONLY the requested itinerary and its targeted roster from Cloudflare D1.
+ * Bypasses downloading the entire treks and registrations database.
+ */
+export async function fetchSingleTrek(idOrHikeNumber: string): Promise<Trek | null> {
+  if (!idOrHikeNumber) return null;
+  try {
+    const cleanId = String(idOrHikeNumber).trim();
+    const res = await apiFetch(`treks/${encodeURIComponent(cleanId)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const raw = json.trek || json.data;
+    if (!raw) return null;
+    const normalized = normalizeTrek(raw);
+    if (json.roster && Array.isArray(json.roster)) {
+      const enriched = enrichTreksWithRegistrations([normalized], json.roster);
+      return enriched[0] || normalized;
+    }
+    return normalized;
+  } catch (e) {
+    console.warn(`Failed to fetch single trek ${idOrHikeNumber}:`, e);
+    return null;
+  }
+}
+
+/**
+ * User-specific bookings loader.
+ * Queries Cloudflare D1 with a targeted email filter instead of downloading all registrations.
+ */
+export async function fetchUserBookings(email: string): Promise<any[]> {
+  if (!email || !email.trim()) return [];
+  try {
+    const cleanEmail = email.trim().toLowerCase();
+    const res = await apiFetch(`registrations?email=${encodeURIComponent(cleanEmail)}`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    const items = Array.isArray(json) ? json : json?.data;
+    return Array.isArray(items) ? items : [];
+  } catch (e) {
+    console.warn(`Failed to fetch user bookings for ${email}:`, e);
+    return [];
+  }
 }

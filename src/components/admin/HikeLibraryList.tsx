@@ -23,7 +23,9 @@ import {
   Layers,
   Archive,
   RefreshCw,
-  CloudUpload
+  CloudUpload,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { ShareHikeModal } from './ShareHikeModal';
 import { apiFetch } from '../../services/api';
@@ -60,6 +62,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [sharingHike, setSharingHike] = useState<SavedHikeRecord | null>(null);
   const [deletingHike, setDeletingHike] = useState<SavedHikeRecord | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -240,32 +243,64 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
           </div>
         </div>
 
-        {/* Category Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pt-1">
-          {[
-            { id: 'all', label: 'All Categories' },
-            { id: 'Day Hikes', label: 'Day Hikes' },
-            { id: 'Overnight Bus Hikes', label: 'Overnight Bus Hikes' },
-            { id: 'Multi Day Treks', label: 'Multi Day Treks' },
-            { id: 'Subscription Hikes', label: 'Subscription Hikes' },
-          ].map((cat) => (
+        {/* Category Filter Pills & View Mode Toggle */}
+        <div className="flex items-center justify-between gap-3 pt-1 flex-wrap">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {[
+              { id: 'all', label: 'All Categories' },
+              { id: 'Day Hikes', label: 'Day Hikes' },
+              { id: 'Overnight Bus Hikes', label: 'Overnight Bus Hikes' },
+              { id: 'Multi Day Treks', label: 'Multi Day Treks' },
+              { id: 'Subscription Hikes', label: 'Subscription Hikes' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition-all ${
+                  selectedCategory === cat.id
+                    ? 'bg-[#E08828] text-white shadow-xs'
+                    : 'bg-[#FAF8F5] text-[#5A5551] border border-[#EFEAE4] hover:bg-[#F0EBE5]'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* View Mode Switcher: Table vs Cards Grid */}
+          <div className="flex items-center gap-1 border border-[#E5E1DB] bg-[#FAF8F5] p-1 rounded-xl shrink-0">
             <button
-              key={cat.id}
               type="button"
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition-all ${
-                selectedCategory === cat.id
-                  ? 'bg-[#E08828] text-white shadow-xs'
-                  : 'bg-[#FAF8F5] text-[#5A5551] border border-[#EFEAE4] hover:bg-[#F0EBE5]'
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-white text-[#1F1F1F] shadow-2xs border border-[#E5E1DB]'
+                  : 'text-[#8B8680] hover:text-[#1F1F1F]'
               }`}
+              title="Quick Tabular Roster View"
             >
-              {cat.label}
+              <List className="w-3.5 h-3.5 text-[#E08828]" />
+              <span>Table View</span>
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-white text-[#1F1F1F] shadow-2xs border border-[#E5E1DB]'
+                  : 'text-[#8B8680] hover:text-[#1F1F1F]'
+              }`}
+              title="Grid Cards View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5 text-[#E08828]" />
+              <span>Grid View</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Hike Cards Grid */}
+      {/* Hike Cards Grid OR Table View */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-[#E5E1DB]">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E08828]"></div>
@@ -289,8 +324,198 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
             <span>Create First Itinerary</span>
           </button>
         </div>
+      ) : viewMode === 'table' ? (
+        /* TABULAR VIEW FOR ITINERARY LIBRARY */
+        <div className="bg-white rounded-2xl border border-[#E5E1DB] shadow-2xs overflow-hidden">
+          <div className="p-4 border-b border-[#F0EBE5] flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black text-[#1F1F1F] tracking-tight">Itinerary Catalog Table</h3>
+              <p className="text-[11px] text-[#8B8680] mt-0.5">
+                Showing {filteredHikes.length} itinerary record(s) • Quick actions &amp; status management
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-[#FAF8F5] border-b border-[#F0EBE5] text-[10px] font-extrabold uppercase text-[#5A5551] tracking-wider">
+                  <th className="py-3 px-4 min-w-[240px]">Hike # &amp; Title</th>
+                  <th className="py-3 px-3 w-[140px]">Category</th>
+                  <th className="py-3 px-3 min-w-[170px]">Date &amp; Meeting</th>
+                  <th className="py-3 px-3 min-w-[150px]">Stats &amp; Leader</th>
+                  <th className="py-3 px-3 w-[130px]">Price (NPR)</th>
+                  <th className="py-3 px-3 w-[110px]">Status</th>
+                  <th className="py-3 px-4 w-[190px] text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F0EBE5]">
+                {filteredHikes.map((hike) => {
+                  const priceTiers = hike.data?.priceTiers || [];
+                  const minPrice =
+                    priceTiers.length > 0
+                      ? Math.min(...priceTiers.map((t) => t.price))
+                      : null;
+                  const maxPrice =
+                    priceTiers.length > 0
+                      ? Math.max(...priceTiers.map((t) => t.price))
+                      : null;
+
+                  const coverImg =
+                    hike.data?.coverImageUrl ||
+                    'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80';
+
+                  return (
+                    <tr key={hike.id} className="hover:bg-[#FAF8F5] transition-colors">
+                      {/* Hike # & Title */}
+                      <td className="py-3 px-4 align-middle">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={coverImg}
+                            alt={hike.title}
+                            className="w-10 h-10 rounded-xl object-cover shrink-0 border border-[#E5E1DB]"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80';
+                            }}
+                          />
+                          <div className="space-y-0.5 min-w-0">
+                            <span className="text-[10px] font-black text-[#E08828] uppercase tracking-wider block">
+                              Hike #{hike.data?.hikeNumber || hike.hikeNumber || 'TBA'}
+                            </span>
+                            <span className="font-extrabold text-xs text-[#1F1F1F] block truncate max-w-[220px]" title={hike.title}>
+                              {hike.title}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Category */}
+                      <td className="py-3 px-3 align-middle">
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#FAF8F5] text-[#5A5551] border border-[#E5E1DB] inline-block whitespace-nowrap">
+                          {hike.category}
+                        </span>
+                      </td>
+
+                      {/* Date & Meeting Location */}
+                      <td className="py-3 px-3 align-middle">
+                        <div className="space-y-1 text-xs text-[#5A5551]">
+                          <div className="flex items-center gap-1.5 font-semibold text-[#1F1F1F]">
+                            <Calendar className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
+                            <span className="truncate">{hike.data?.hikeDate || 'TBD Date'}</span>
+                          </div>
+                          {hike.data?.overview?.meetingPoint && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-[#8B8680]">
+                              <MapPin className="w-3 h-3 shrink-0" />
+                              <span className="truncate max-w-[150px]">{hike.data.overview.meetingPoint}</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Stats & Leader */}
+                      <td className="py-3 px-3 align-middle">
+                        <div className="space-[#0.5] text-xs">
+                          <div className="font-bold text-[#1F1F1F] truncate">
+                            {hike.data?.overview?.approxDistance || 'N/A'} • {hike.data?.overview?.difficulty || 'Moderate'}
+                          </div>
+                          <div className="text-[11px] text-[#8B8680] truncate">
+                            Leader: {hike.data?.teamLeader || 'TBD'} ({hike.data?.maxCapacity || 'TBD'} pax)
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Price Tier */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        <span className="text-xs font-black text-[#1F1F1F] bg-[#FAF8F5] px-2.5 py-1 rounded-lg border border-[#E5E1DB]">
+                          {minPrice !== null
+                            ? `${hike.data?.currency || 'NPR'} ${minPrice.toLocaleString()}${
+                                maxPrice && maxPrice !== minPrice ? '+' : ''
+                              }`
+                            : 'Price TBD'}
+                        </span>
+                      </td>
+
+                      {/* Status Toggle */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onToggleStatus(
+                              hike.id,
+                              hike.status === 'published' ? 'draft' : 'published'
+                            )
+                          }
+                          title="Click to toggle status"
+                          className={`text-[10px] font-black px-2.5 py-1 rounded-full cursor-pointer transition-all ${
+                            hike.status === 'published'
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                              : 'bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300'
+                          }`}
+                        >
+                          {hike.status === 'published' ? '● Published' : '● Draft'}
+                        </button>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => onSelectEdit(hike)}
+                            className="p-1.5 bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white text-[#1F1F1F] border border-[#E5E1DB] rounded-xl transition-all cursor-pointer"
+                            title="Edit itinerary"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleClone(hike)}
+                            className="p-1.5 bg-[#FAF8F5] hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 text-[#5A5551] border border-[#E5E1DB] rounded-xl transition-all cursor-pointer"
+                            title="Duplicate itinerary"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => onSelectPreview(hike)}
+                            className="p-1.5 bg-[#FAF8F5] hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 text-[#5A5551] border border-[#E5E1DB] rounded-xl transition-all cursor-pointer"
+                            title="Preview public page"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setSharingHike(hike)}
+                            className="p-1.5 bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366] hover:text-white border border-[#25D366]/30 rounded-xl transition-all cursor-pointer"
+                            title="Share & WhatsApp broadcast"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(hike)}
+                            className="p-1.5 text-[#8B8680] hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                            title="Delete itinerary"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        /* GRID CARDS VIEW */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
           {filteredHikes.map((hike) => {
             const priceTiers = hike.data?.priceTiers || [];
             const minPrice =

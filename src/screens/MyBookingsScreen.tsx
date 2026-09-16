@@ -165,14 +165,32 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#7ABA42] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      <CheckCircle2 className="w-3 h-3" /> Confirmed
-                    </span>
+                    {booking.is_cancelled ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                        <AlertTriangle className="w-3 h-3 text-rose-600" /> Cancelled
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#7ABA42] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3" /> Confirmed
+                      </span>
+                    )}
                     <div className="text-[#8B8680] p-1">
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </div>
                   </div>
                 </div>
+
+                {booking.is_cancelled && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">Event Cancelled by Organizer</span>
+                      <span className="text-[11px] text-rose-700">
+                        {booking.cancellation_reason || 'This trek has been cancelled. Please contact organizer for details or refunds.'}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <h3 className="text-base font-bold text-[#1F1F1F] leading-snug">
