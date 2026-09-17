@@ -1112,6 +1112,129 @@ export default {
         }
       }
 
+      // ===== PHOTO COMMENTS ENDPOINTS (Cloudflare D1) =====
+
+      // GET /photo_comments - List comments for a photo
+      if (method === 'GET' && path === '/photo_comments') {
+        const photoId = url.searchParams.get('photoId') || url.searchParams.get('photo_id');
+        if (!env.DB) {
+          return jsonResponse({ success: true, data: [] });
+        }
+
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS photo_comments (
+              id TEXT PRIMARY KEY,
+              photo_id TEXT,
+              user_uid TEXT,
+              user_name TEXT,
+              user_avatar TEXT,
+              comment_text TEXT,
+              created_at DATETIME
+            )
+          `).run();
+
+          try {
+            await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_photo_comments_photo_id ON photo_comments (photo_id)`).run();
+          } catch (_) {}
+
+          let results = [];
+          if (photoId) {
+            const res = await env.DB.prepare(
+              'SELECT * FROM photo_comments WHERE photo_id = ? ORDER BY created_at ASC'
+            ).bind(photoId).all();
+            results = res.results || [];
+          } else {
+            const res = await env.DB.prepare(
+              'SELECT * FROM photo_comments ORDER BY created_at ASC'
+            ).all();
+            results = res.results || [];
+          }
+
+          const mapped = results.map(r => ({
+            id: r.id,
+            photoId: r.photo_id,
+            userUid: r.user_uid,
+            userName: r.user_name,
+            userAvatar: r.user_avatar || '',
+            commentText: r.comment_text || '',
+            createdAt: r.created_at,
+          }));
+
+          return jsonResponse({ success: true, data: mapped });
+        } catch (err) {
+          console.warn('Error querying photo_comments in D1:', err);
+          return jsonResponse({ success: true, data: [] });
+        }
+      }
+
+      // POST /photo_comments - Create comment in Cloudflare D1
+      if (method === 'POST' && path === '/photo_comments') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const body = await request.json();
+        const commentId = body.id || `comment_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const currentTimestamp = body.createdAt || new Date().toISOString();
+
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS photo_comments (
+              id TEXT PRIMARY KEY,
+              photo_id TEXT,
+              user_uid TEXT,
+              user_name TEXT,
+              user_avatar TEXT,
+              comment_text TEXT,
+              created_at DATETIME
+            )
+          `).run();
+
+          await env.DB.prepare(`
+            INSERT INTO photo_comments (
+              id, photo_id, user_uid, user_name, user_avatar, comment_text, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            commentId,
+            body.photoId || body.photo_id || '',
+            body.userUid || body.user_uid || '',
+            body.userName || body.user_name || 'Nepal Hiker',
+            body.userAvatar || body.user_avatar || '',
+            body.commentText || body.comment_text || '',
+            currentTimestamp
+          ).run();
+
+          return jsonResponse({
+            success: true,
+            message: 'Comment saved to Cloudflare D1 successfully',
+            data: {
+              id: commentId,
+              photoId: body.photoId || body.photo_id || '',
+              userUid: body.userUid || body.user_uid || '',
+              userName: body.userName || body.user_name || 'Nepal Hiker',
+              userAvatar: body.userAvatar || body.user_avatar || '',
+              commentText: body.commentText || body.comment_text || '',
+              createdAt: currentTimestamp,
+            }
+          });
+        } catch (err) {
+          console.error('Error saving photo comment to Cloudflare D1:', err);
+          return errorResponse(`Cloudflare D1 comment save error: ${err.message}`, 500);
+        }
+      }
+
+      // DELETE /photo_comments/:id - Delete comment from Cloudflare D1
+      if (method === 'DELETE' && path.startsWith('/photo_comments/')) {
+        const commentId = decodeURIComponent(path.replace('/photo_comments/', ''));
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        try {
+          await env.DB.prepare('DELETE FROM photo_comments WHERE id = ?').bind(commentId).run();
+          return jsonResponse({ success: true, message: 'Comment deleted successfully' });
+        } catch (err) {
+          return errorResponse(`Cloudflare D1 comment delete error: ${err.message}`, 500);
+        }
+      }
+
       // ===== MAPMINERS / COMMUNITY TRAILS ENDPOINTS =====
 
       // GET /mapminers/trails or GET /community_trails - List trails

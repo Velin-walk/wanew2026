@@ -120,3 +120,14 @@ export interface TrekFeedback {
   overallRating: number;
   submittedAt?: string;
 }
+
+export interface PhotoComment {
+  id: string;
+  photoId: string;
+  userUid: string;
+  userName: string;
+  userAvatar?: string;
+  commentText: string;
+  createdAt: string;
+}
+

@@ -157,3 +157,17 @@ CREATE TABLE IF NOT EXISTS trek_photos (
   uploaded_at DATETIME
 );
 
+-- 9. Photo Comments Table
+CREATE TABLE IF NOT EXISTS photo_comments (
+  id TEXT PRIMARY KEY,
+  photo_id TEXT,
+  user_uid TEXT,
+  user_name TEXT,
+  user_avatar TEXT,
+  comment_text TEXT,
+  created_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_photo_comments_photo_id ON photo_comments (photo_id);
+
+

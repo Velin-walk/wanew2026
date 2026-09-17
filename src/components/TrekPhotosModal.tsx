@@ -21,6 +21,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Trek } from '../types';
 import { apiFetch } from '../services/api';
+import { PhotoCommentsSection } from './PhotoCommentsSection';
 
 interface TrekPhotosModalProps {
   isOpen: boolean;
@@ -41,6 +42,20 @@ interface TrekPhoto {
   caption?: string;
 }
 
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    return null;
+  }
+};
+
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {}
+};
+
 export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   isOpen,
   onClose,
@@ -60,6 +75,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   const [uploadingPreviews, setUploadingPreviews] = useState<{ id: string; url: string; file: File }[]>([]);
   const [stagedFiles, setStagedFiles] = useState<{ id: string; url: string; file: File }[]>([]);
   const [uploadCaption, setUploadCaption] = useState('');
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Exact Cloudinary credentials for the walknepalwalk preset
@@ -106,11 +122,11 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
     if (!fetchSucceeded) {
       try {
         const localKey = `wnw_photos_${trek.id}`;
-        const localSaved = JSON.parse(localStorage.getItem(localKey) || '[]');
+        const localSaved = JSON.parse(safeGetItem(localKey) || '[]');
         if (Array.isArray(localSaved)) {
-          const existingIds = new Set(list.map((p) => p.id));
+          const existingIds = new Set(list.filter(p => p && p.id).map((p) => p.id));
           for (const lp of localSaved) {
-            if (!existingIds.has(lp.id)) {
+            if (lp && lp.id && !existingIds.has(lp.id)) {
               list.push(lp);
             }
           }
@@ -120,13 +136,18 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
       // Keep local storage clean to prevent stale/deleted photos from being resurrected
       try {
         const localKey = `wnw_photos_${trek.id}`;
-        localStorage.setItem(localKey, JSON.stringify(list));
+        safeSetItem(localKey, JSON.stringify(list));
       } catch (e) {}
     }
 
-    // Sort newest first
-    list.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-    setPhotos(list);
+    // Sort newest first & filter out any null/undefined or invalid photos
+    const cleanList = list.filter((p) => p && p.id && p.url);
+    cleanList.sort((a, b) => {
+      const timeA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+      const timeB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+      return timeB - timeA;
+    });
+    setPhotos(cleanList);
     setLoading(false);
   };
 
@@ -208,7 +229,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
 
     const todayStr = new Date().toISOString().split('T')[0];
     const uploadCountKey = `wnw_uploads_${user.uid}_${todayStr}`;
-    const currentCount = parseInt(localStorage.getItem(uploadCountKey) || '0', 10);
+    const currentCount = parseInt(safeGetItem(uploadCountKey) || '0', 10);
 
     // Daily upload throttling check (max 4 per day for regular users; unlimited for admins)
     if (!isAdmin) {
@@ -251,7 +272,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
 
     const todayStr = new Date().toISOString().split('T')[0];
     const uploadCountKey = `wnw_uploads_${user.uid}_${todayStr}`;
-    const currentCount = parseInt(localStorage.getItem(uploadCountKey) || '0', 10);
+    const currentCount = parseInt(safeGetItem(uploadCountKey) || '0', 10);
 
     // Final limit check right before processing
     if (!isAdmin) {
@@ -334,16 +355,16 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
       // Update local storage cache
       try {
         const localKey = `wnw_photos_${trek.id}`;
-        const existing = JSON.parse(localStorage.getItem(localKey) || '[]');
+        const existing = JSON.parse(safeGetItem(localKey) || '[]');
         const updated = [...newPhotosToAppend, ...existing];
-        localStorage.setItem(localKey, JSON.stringify(updated));
+        safeSetItem(localKey, JSON.stringify(updated));
       } catch (e) {}
 
       // Update local state immediately
       setPhotos((prev) => [...newPhotosToAppend, ...prev]);
 
       // Update daily counter
-      localStorage.setItem(uploadCountKey, String(currentCount + uploadedThisBatch));
+      safeSetItem(uploadCountKey, String(currentCount + uploadedThisBatch));
 
       setUploadSuccessMsg(`✓ Post Shared Successfully! ${uploadedThisBatch} photo(s) added to live gallery.`);
     } catch (err: any) {
@@ -371,9 +392,9 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
     setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
     try {
       const localKey = `wnw_photos_${trek.id}`;
-      const existing: TrekPhoto[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const existing: TrekPhoto[] = JSON.parse(safeGetItem(localKey) || '[]');
       const filtered = existing.filter((p) => p.id !== photo.id);
-      localStorage.setItem(localKey, JSON.stringify(filtered));
+      safeSetItem(localKey, JSON.stringify(filtered));
     } catch (e) {}
 
     if (activePhoto?.id === photo.id) {
@@ -414,8 +435,6 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   };
 
   // Touch Swipe Handlers for Lightbox Modal
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartX(e.touches[0].clientX);
   };
@@ -438,7 +457,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
 
   const todayStr = new Date().toISOString().split('T')[0];
   const uploadCountKey = user ? `wnw_uploads_${user.uid}_${todayStr}` : null;
-  const currentCount = uploadCountKey ? parseInt(localStorage.getItem(uploadCountKey) || '0', 10) : 0;
+  const currentCount = uploadCountKey ? parseInt(safeGetItem(uploadCountKey) || '0', 10) : 0;
   const remainingToday = Math.max(0, 4 - currentCount);
 
   return createPortal(
@@ -817,114 +836,125 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
           )}
 
           <div
-            className="relative max-w-4xl max-h-[85vh] flex flex-col items-center justify-center"
+            className="relative max-w-5xl w-full bg-[#121214] border border-stone-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <img
-              src={activePhoto.url}
-              alt="Full view memory"
-              className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl"
-            />
+            {/* Left side: Image Panel */}
+            <div className="flex-1 bg-black/60 flex flex-col items-center justify-center p-4 relative min-h-[250px] md:min-h-0">
+              <img
+                src={activePhoto.url}
+                alt="Full view memory"
+                className="max-w-full max-h-[45vh] md:max-h-[70vh] object-contain rounded-xl"
+              />
+            </div>
 
-            {activePhoto.caption && (
-              <p className="mt-3 text-center text-sm font-bold italic text-stone-100 max-w-2xl px-4 py-2 bg-black/40 border border-white/10 rounded-xl">
-                "{activePhoto.caption}"
-              </p>
-            )}
+            {/* Right side: Sidebar with details & Comments */}
+            <div className="w-full md:w-[320px] lg:w-[380px] bg-[#0c0c0e] border-t md:border-t-0 md:border-l border-stone-800 flex flex-col p-4 overflow-y-auto">
+              <div className="flex items-center justify-between mb-3 text-white text-xs gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-[#7ABA42] text-sm">{activePhoto.uploadedBy}</span>
+                  <span className="text-stone-400">•</span>
+                  <span className="text-stone-300">
+                    {new Date(activePhoto.uploadedAt).toLocaleDateString()}
+                  </span>
+                </div>
 
-            <div className="mt-4 flex items-center justify-between w-full text-white text-xs px-2 gap-2">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-[#7ABA42]">{activePhoto.uploadedBy}</span>
-                <span className="text-stone-400">•</span>
-                <span className="text-stone-300">
-                  {new Date(activePhoto.uploadedAt).toLocaleDateString()}
-                </span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={activePhoto.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+                    title="Download photo"
+                  >
+                    <Download className="w-4 h-4" />
+                  </a>
+
+                  {/* More Options (...) Button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                      className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                        showOptionsMenu
+                          ? 'bg-white/30 text-white'
+                          : 'bg-white/10 hover:bg-white/20 text-white'
+                      }`}
+                      title="More options"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {/* Options Menu Dropdown */}
+                    {showOptionsMenu && (
+                      <div
+                        className="absolute right-0 bottom-full mb-2 w-44 bg-[#1F1F1F] border border-white/20 rounded-2xl shadow-2xl p-1.5 text-white z-[10010] animate-in fade-in zoom-in-95 duration-150"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {(user && user.uid === activePhoto.userUid) || isAdmin ? (
+                          confirmDeleteId === activePhoto.id ? (
+                            <div className="p-2 space-y-2">
+                              <p className="text-[10px] font-black text-stone-300 text-center uppercase tracking-wider">Confirm Delete?</p>
+                              <div className="flex gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDeleteId(null);
+                                    setShowOptionsMenu(false);
+                                  }}
+                                  className="flex-1 py-1 bg-stone-700 hover:bg-stone-600 rounded-lg text-[10px] font-black text-center transition-colors cursor-pointer text-white"
+                                >
+                                  No
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDeleteId(null);
+                                    setShowOptionsMenu(false);
+                                    handleDeletePhoto(activePhoto, e);
+                                  }}
+                                  className="flex-1 py-1 bg-red-600 hover:bg-red-500 rounded-lg text-[10px] font-black text-center text-white transition-colors cursor-pointer"
+                                >
+                                  Yes
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDeleteId(activePhoto.id);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/20 rounded-xl transition-colors cursor-pointer text-left"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
+                              <span>Delete Photo</span>
+                            </button>
+                          )
+                        ) : (
+                          <div className="px-3 py-2 text-[11px] text-stone-400 font-medium text-center">
+                            Shared by hiker
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <a
-                  href={activePhoto.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download</span>
-                </a>
+              {activePhoto.caption && (
+                <p className="mb-4 text-xs font-bold italic text-stone-100 px-3 py-2 bg-stone-900 border border-stone-800 rounded-xl leading-relaxed">
+                  "{activePhoto.caption}"
+                </p>
+              )}
 
-                {/* More Options (...) Button */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowOptionsMenu(!showOptionsMenu)}
-                    className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
-                      showOptionsMenu
-                        ? 'bg-white/30 text-white'
-                        : 'bg-white/10 hover:bg-white/20 text-white'
-                    }`}
-                    title="More options"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-
-                  {/* Options Menu Dropdown */}
-                  {showOptionsMenu && (
-                    <div
-                      className="absolute right-0 bottom-full mb-2 w-44 bg-[#1F1F1F] border border-white/20 rounded-2xl shadow-2xl p-1.5 text-white z-[10010] animate-in fade-in zoom-in-95 duration-150"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {(user && user.uid === activePhoto.userUid) || isAdmin ? (
-                        confirmDeleteId === activePhoto.id ? (
-                          <div className="p-2 space-y-2">
-                            <p className="text-[10px] font-black text-stone-300 text-center uppercase tracking-wider">Confirm Delete?</p>
-                            <div className="flex gap-1.5">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteId(null);
-                                  setShowOptionsMenu(false);
-                                }}
-                                className="flex-1 py-1 bg-stone-700 hover:bg-stone-600 rounded-lg text-[10px] font-black text-center transition-colors cursor-pointer text-white"
-                              >
-                                No
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteId(null);
-                                  setShowOptionsMenu(false);
-                                  handleDeletePhoto(activePhoto, e);
-                                }}
-                                className="flex-1 py-1 bg-red-600 hover:bg-red-500 rounded-lg text-[10px] font-black text-center text-white transition-colors cursor-pointer"
-                              >
-                                Yes
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setConfirmDeleteId(activePhoto.id);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/20 rounded-xl transition-colors cursor-pointer text-left"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
-                            <span>Delete Photo</span>
-                          </button>
-                        )
-                      ) : (
-                        <div className="px-3 py-2 text-[11px] text-stone-400 font-medium text-center">
-                          Shared by hiker
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+              {/* Photo Comments Section Component */}
+              <div className="flex-1 min-h-0">
+                <PhotoCommentsSection photoId={activePhoto.id} isDarkTheme={true} />
               </div>
             </div>
           </div>

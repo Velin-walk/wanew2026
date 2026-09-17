@@ -31,6 +31,26 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+  },
+  removeItem: (key: string): void => {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,9 +63,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        localStorage.removeItem('wnw_dev_user');
+        safeLocalStorage.removeItem('wnw_dev_user');
       } else {
-        const savedDevUser = localStorage.getItem('wnw_dev_user');
+        const savedDevUser = safeLocalStorage.getItem('wnw_dev_user');
         if (savedDevUser) {
           try {
             const parsed = JSON.parse(savedDevUser);
@@ -73,7 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Load showProfileImage preference when user changes
   useEffect(() => {
     if (user?.uid) {
-      const saved = localStorage.getItem(`wnw_show_profile_img_${user.uid}`);
+      const saved = safeLocalStorage.getItem(`wnw_show_profile_img_${user.uid}`);
       if (saved !== null) {
         setShowProfileImageState(JSON.parse(saved));
       } else {
@@ -85,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const setShowProfileImage = (show: boolean) => {
     setShowProfileImageState(show);
     if (user?.uid) {
-      localStorage.setItem(`wnw_show_profile_img_${user.uid}`, JSON.stringify(show));
+      safeLocalStorage.setItem(`wnw_show_profile_img_${user.uid}`, JSON.stringify(show));
     }
   };
 
@@ -115,12 +135,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } as User;
       });
 
-      const savedDevUser = localStorage.getItem('wnw_dev_user');
+      const savedDevUser = safeLocalStorage.getItem('wnw_dev_user');
       if (savedDevUser) {
         try {
           const parsed = JSON.parse(savedDevUser);
           parsed.displayName = newName;
-          localStorage.setItem('wnw_dev_user', JSON.stringify(parsed));
+          safeLocalStorage.setItem('wnw_dev_user', JSON.stringify(parsed));
         } catch (e) {}
       }
     }
@@ -154,7 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } as unknown as User;
 
     setUser(mockUser);
-    localStorage.setItem(
+    safeLocalStorage.setItem(
       'wnw_dev_user',
       JSON.stringify({
         uid: mockUser.uid,
@@ -172,7 +192,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOutUser = async () => {
-    localStorage.removeItem('wnw_dev_user');
+    safeLocalStorage.removeItem('wnw_dev_user');
     setUser(null);
     try {
       await firebaseSignOut(auth);

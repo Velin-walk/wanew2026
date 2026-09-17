@@ -1,4 +1,4 @@
-import { Trek } from "../types";
+import { Trek, PhotoComment } from "../types";
 
 export const CLOUDFLARE_WORKER_URL = "https://walk-nepal-walk-api.velinrai-vr.workers.dev";
 export const LOCAL_API_URL = "/api";
@@ -392,4 +392,70 @@ export async function fetchLeaderboardData(): Promise<any> {
 
   return null;
 }
+
+/**
+ * Fetch comments for a specific photo from Cloudflare D1.
+ */
+export async function fetchPhotoComments(photoId: string): Promise<PhotoComment[]> {
+  if (!photoId) return [];
+  try {
+    const res = await apiFetch(`photo_comments?photoId=${encodeURIComponent(photoId)}`, { forceFresh: true });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : [];
+  } catch (err) {
+    console.warn(`Failed to fetch photo comments for ${photoId}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Post a new comment to Cloudflare D1.
+ */
+export async function postPhotoComment(
+  photoId: string,
+  userUid: string,
+  userName: string,
+  userAvatar: string,
+  commentText: string
+): Promise<PhotoComment | null> {
+  try {
+    const res = await apiFetch('photo_comments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        photoId,
+        userUid,
+        userName,
+        userAvatar,
+        commentText,
+      }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.success && json.data ? json.data : null;
+  } catch (err) {
+    console.warn('Failed to post photo comment:', err);
+    return null;
+  }
+}
+
+/**
+ * Delete a comment from Cloudflare D1.
+ */
+export async function deletePhotoComment(commentId: string): Promise<boolean> {
+  if (!commentId) return false;
+  try {
+    const res = await apiFetch(`photo_comments/${encodeURIComponent(commentId)}`, {
+      method: 'DELETE',
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn(`Failed to delete comment ${commentId}:`, err);
+    return false;
+  }
+}
+
 

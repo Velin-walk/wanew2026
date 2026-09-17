@@ -28,6 +28,7 @@ import {
 import { Trek } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
+import { PhotoCommentsSection } from '../components/PhotoCommentsSection';
 
 interface GalleryPhoto {
   id: string;
@@ -1165,126 +1166,137 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           )}
 
           <div
-            className="relative max-w-4xl max-h-[85vh] flex flex-col items-center justify-center"
+            className="relative max-w-5xl w-full bg-[#121214] border border-stone-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <img
-              src={activePhoto.url}
-              alt="Community memory"
-              className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl"
-            />
+            {/* Left side: Image Panel */}
+            <div className="flex-1 bg-black/60 flex flex-col items-center justify-center p-4 relative min-h-[250px] md:min-h-0">
+              <img
+                src={activePhoto.url}
+                alt="Community memory"
+                className="max-w-full max-h-[45vh] md:max-h-[70vh] object-contain rounded-xl"
+              />
+            </div>
 
-            {activePhoto.caption && (
-              <p className="mt-3 text-center text-sm font-bold italic text-stone-100 max-w-2xl px-4 py-2 bg-black/40 border border-white/10 rounded-xl">
-                "{activePhoto.caption}"
-              </p>
-            )}
-
-            <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between w-full text-white text-xs px-2 gap-2">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-[#7ABA42]">{activePhoto.uploadedBy}</span>
-                  {activePhoto.hikeNumber && (
-                    <span className="px-2 py-0.5 bg-white/20 text-white text-[10px] font-black rounded-md">
-                      Hike #{activePhoto.hikeNumber}
-                    </span>
-                  )}
-                  <span className="text-stone-400">•</span>
-                  <span className="text-stone-300">
-                    {new Date(activePhoto.uploadedAt).toLocaleDateString()}
-                  </span>
+            {/* Right side: Sidebar with details & Comments */}
+            <div className="w-full md:w-[320px] lg:w-[380px] bg-[#0c0c0e] border-t md:border-t-0 md:border-l border-stone-800 flex flex-col p-4 overflow-y-auto animate-fade-in">
+              <div className="flex items-center justify-between mb-3 text-white text-xs gap-2">
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-[#7ABA42] text-sm truncate">{activePhoto.uploadedBy}</span>
+                    {activePhoto.hikeNumber && (
+                      <span className="px-1.5 py-0.5 bg-white/20 text-white text-[9px] font-black rounded">
+                        Hike #{activePhoto.hikeNumber}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] text-stone-400 mt-0.5">
+                    <span>{new Date(activePhoto.uploadedAt).toLocaleDateString()}</span>
+                    {activePhoto.trekName && (
+                      <>
+                        <span>•</span>
+                        <span className="truncate max-w-[120px]">{activePhoto.trekName}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                {activePhoto.trekName && (
-                  <p className="text-stone-300 font-medium text-[11px]">
-                    {activePhoto.trekName}
-                  </p>
-                )}
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <a
+                    href={activePhoto.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+                    title="Download photo"
+                  >
+                    <Download className="w-4 h-4" />
+                  </a>
+
+                  {/* More Options (...) Button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                      className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                        showOptionsMenu
+                          ? 'bg-white/30 text-white'
+                          : 'bg-white/10 hover:bg-white/20 text-white'
+                      }`}
+                      title="More options"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {/* Options Menu Dropdown */}
+                    {showOptionsMenu && (
+                      <div
+                        className="absolute right-0 bottom-full mb-2 w-44 bg-[#1F1F1F] border border-white/20 rounded-2xl shadow-2xl p-1.5 text-white z-70 animate-in fade-in zoom-in-95 duration-150"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {(!viewerPovMode && ((user && user.uid === activePhoto.userUid) || isAdmin)) ? (
+                          confirmDeleteId === activePhoto.id ? (
+                            <div className="p-2 space-y-2">
+                              <p className="text-[10px] font-black text-stone-300 text-center uppercase tracking-wider">Confirm Delete?</p>
+                              <div className="flex gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDeleteId(null);
+                                    setShowOptionsMenu(false);
+                                  }}
+                                  className="flex-1 py-1 bg-stone-700 hover:bg-stone-600 rounded-lg text-[10px] font-black text-center transition-colors cursor-pointer text-white"
+                                >
+                                  No
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDeleteId(null);
+                                    setShowOptionsMenu(false);
+                                    handleDeletePhoto(activePhoto, e);
+                                  }}
+                                  className="flex-1 py-1 bg-red-600 hover:bg-[#ff4444] rounded-lg text-[10px] font-black text-center text-white transition-colors cursor-pointer"
+                                >
+                                  Yes
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDeleteId(activePhoto.id);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/20 rounded-xl transition-colors cursor-pointer text-left"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
+                              <span>Delete Photo</span>
+                            </button>
+                          )
+                        ) : (
+                          <div className="px-3 py-2 text-[11px] text-stone-400 font-medium text-center">
+                            Shared by hiker
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 self-end sm:self-center">
-                <a
-                  href={activePhoto.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download</span>
-                </a>
+              {activePhoto.caption && (
+                <p className="mb-4 text-xs font-bold italic text-stone-100 px-3 py-2 bg-stone-900 border border-stone-800 rounded-xl leading-relaxed">
+                  "{activePhoto.caption}"
+                </p>
+              )}
 
-                {/* More Options (...) Button */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowOptionsMenu(!showOptionsMenu)}
-                    className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
-                      showOptionsMenu
-                        ? 'bg-white/30 text-white'
-                        : 'bg-white/10 hover:bg-white/20 text-white'
-                    }`}
-                    title="More options"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-
-                  {/* Options Menu Dropdown */}
-                  {showOptionsMenu && (
-                    <div
-                      className="absolute right-0 bottom-full mb-2 w-44 bg-[#1F1F1F] border border-white/20 rounded-2xl shadow-2xl p-1.5 text-white z-70 animate-in fade-in zoom-in-95 duration-150"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {(!viewerPovMode && ((user && user.uid === activePhoto.userUid) || isAdmin)) ? (
-                        confirmDeleteId === activePhoto.id ? (
-                          <div className="p-2 space-y-2">
-                            <p className="text-[10px] font-black text-stone-300 text-center uppercase tracking-wider">Confirm Delete?</p>
-                            <div className="flex gap-1.5">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteId(null);
-                                  setShowOptionsMenu(false);
-                                }}
-                                className="flex-1 py-1 bg-stone-700 hover:bg-stone-600 rounded-lg text-[10px] font-black text-center transition-colors cursor-pointer text-white"
-                              >
-                                No
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteId(null);
-                                  setShowOptionsMenu(false);
-                                  handleDeletePhoto(activePhoto, e);
-                                }}
-                                className="flex-1 py-1 bg-red-600 hover:bg-red-500 rounded-lg text-[10px] font-black text-center text-white transition-colors cursor-pointer"
-                              >
-                                Yes
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setConfirmDeleteId(activePhoto.id);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/20 rounded-xl transition-colors cursor-pointer text-left"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
-                            <span>Delete Photo</span>
-                          </button>
-                        )
-                      ) : (
-                        <div className="px-3 py-2 text-[11px] text-stone-400 font-medium text-center">
-                          Shared by hiker
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+              {/* Photo Comments Section Component */}
+              <div className="flex-1 min-h-0">
+                <PhotoCommentsSection photoId={activePhoto.id} isDarkTheme={true} />
               </div>
             </div>
           </div>
