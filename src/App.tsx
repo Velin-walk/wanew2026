@@ -10,6 +10,8 @@ import { InviteModal } from './components/InviteModal';
 import { ItineraryModal } from './components/ItineraryModal';
 import { TrekFeedbackModal } from './components/TrekFeedbackModal';
 import { InfoPagesModal, SubPageType } from './components/InfoPagesModal';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { FALLBACK_TREKS } from './data/fallbackTreks';
 import { CheckCircle2, AlertCircle, Mountain, Heart, RefreshCw } from 'lucide-react';
 import MapMinersDashboard from './components/mapminers/MapMinersDashboard';
@@ -410,6 +412,10 @@ function MainApp() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* PWA Install and Connectivity Indicators */}
+      <PWAInstallPrompt />
+      <OfflineIndicator />
+
       {/* Mobile Pull-to-Refresh Floating Indicator */}
       {(pullDistance > 0 || isRefreshing) && (
         <div
