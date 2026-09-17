@@ -56,6 +56,23 @@
         "moderatedBy": { "type": "string", "maxLength": 256 }
       },
       "required": ["id", "status"]
+    },
+    "trek_photo": {
+      "title": "Trek Photo",
+      "description": "Community shared photo memories of hikes and treks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "trekId": { "type": "string", "maxLength": 128 },
+        "hikeNumber": { "type": "string", "maxLength": 32 },
+        "trekName": { "type": "string", "maxLength": 256 },
+        "url": { "type": "string", "maxLength": 512 },
+        "publicId": { "type": "string", "maxLength": 256 },
+        "uploadedBy": { "type": "string", "maxLength": 256 },
+        "userUid": { "type": "string", "maxLength": 128 },
+        "uploadedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["trekId", "url", "uploadedBy", "userUid"]
     }
   },
   "firestore": {
@@ -74,6 +91,10 @@
     "/trail_moderation/{trailId}": {
       "schema": { "$ref": "#/entities/trail_moderation" },
       "description": "Moderation status tracking for submissions"
+    },
+    "/trek_photos/{photoId}": {
+      "schema": { "$ref": "#/entities/trek_photo" },
+      "description": "Shared hiker photo gallery and memories"
     }
   }
 }

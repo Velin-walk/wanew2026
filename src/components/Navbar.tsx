@@ -10,7 +10,8 @@ import {
   ShieldCheck,
   Users,
   Mail,
-  ChevronRight
+  ChevronRight,
+  Camera
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { isAdminEmail } from '../adminUtils';
@@ -18,7 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { LogOut, User as UserIcon } from 'lucide-react';
 
 interface NavbarProps {
-  currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'admin';
+  currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin';
   onTabChange: (tab: any) => void;
   bookingCount: number;
   savedCount: number;
@@ -46,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
   const avatarDropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'admin') => {
+  const handleTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin') => {
     if (tab === 'mapminers' && !user) {
       openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers'));
       return;
@@ -235,6 +236,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Compass className="w-4 h-4 text-[#7ABA42] hidden" />
             </div>
             <span>MapMiners</span>
+          </button>
+
+          <button
+            type="button"
+            id="nav-tab-gallery"
+            onClick={() => handleTabClick('gallery')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              currentTab === 'gallery'
+                ? 'bg-white text-[#7ABA42] shadow-xs font-bold'
+                : 'text-[#5A5551] hover:text-[#1F1F1F]'
+            }`}
+          >
+            <Camera className="w-4 h-4 text-[#7ABA42]" />
+            <span>Gallery</span>
           </button>
 
           <div ref={dropdownRef} className="relative">

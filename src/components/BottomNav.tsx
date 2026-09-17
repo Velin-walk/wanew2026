@@ -9,14 +9,15 @@ import {
   ShieldCheck,
   Users,
   Mail,
-  ChevronRight
+  ChevronRight,
+  Camera
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { useAuth } from '../context/AuthContext';
 import { User, LogOut } from 'lucide-react';
 
 interface BottomNavProps {
-  currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'admin';
+  currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin';
   onTabChange: (tab: any) => void;
   userEmail?: string;
   bookingCount: number;
@@ -37,7 +38,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleMobileTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'admin') => {
+  const handleMobileTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin') => {
     if (tab === 'mapminers' && !user) {
       openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers'));
       return;
@@ -181,6 +182,27 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             </div>
           </div>
           <span className="text-[10px] tracking-tight mt-0.5">MapMiners</span>
+        </button>
+
+        {/* Gallery Tab */}
+        <button
+          type="button"
+          id="tab-gallery"
+          onClick={() => handleMobileTabClick('gallery')}
+          className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all relative ${
+            currentTab === 'gallery'
+              ? 'text-[#7ABA42] font-bold'
+              : 'text-[#8B8680] hover:text-[#1F1F1F] font-medium'
+          }`}
+        >
+          <div
+            className={`p-1 rounded-lg transition-transform flex items-center justify-center ${
+              currentTab === 'gallery' ? 'bg-[#7ABA42]/10 scale-105' : ''
+            }`}
+          >
+            <Camera className="w-5 h-5 text-[#7ABA42]" />
+          </div>
+          <span className="text-[10px] tracking-tight mt-0.5">Gallery</span>
         </button>
 
         {/* Resources & Support Tab */}

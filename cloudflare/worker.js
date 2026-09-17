@@ -990,6 +990,116 @@ export default {
         return jsonResponse({ success: true, message: 'Feedback submitted successfully' });
       }
 
+      // ===== TREK PHOTOS ENDPOINTS (Cloudflare D1 Backend) =====
+
+      // GET /trek_photos - List photos for a trek or all photos
+      if (method === 'GET' && path === '/trek_photos') {
+        const trekId = url.searchParams.get('trekId') || url.searchParams.get('trek_id');
+        if (!env.DB) {
+          return jsonResponse({ success: true, data: [] });
+        }
+
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS trek_photos (
+              id TEXT PRIMARY KEY,
+              trek_id TEXT,
+              hike_number TEXT,
+              trek_name TEXT,
+              url TEXT,
+              public_id TEXT,
+              uploaded_by TEXT,
+              user_uid TEXT,
+              uploaded_at DATETIME
+            )
+          `).run();
+
+          let stmt = env.DB.prepare('SELECT * FROM trek_photos ORDER BY uploaded_at DESC');
+          if (trekId) {
+            stmt = env.DB.prepare('SELECT * FROM trek_photos WHERE trek_id = ? ORDER BY uploaded_at DESC').bind(trekId);
+          }
+          const { results } = await stmt.all();
+          const mapped = (results || []).map((r) => ({
+            id: r.id,
+            trekId: r.trek_id,
+            hikeNumber: r.hike_number,
+            trekName: r.trek_name,
+            url: r.url,
+            publicId: r.public_id,
+            uploadedBy: r.uploaded_by,
+            userUid: r.user_uid,
+            uploadedAt: r.uploaded_at,
+          }));
+          return jsonResponse({ success: true, data: mapped });
+        } catch (err) {
+          console.warn('Error querying trek_photos in Cloudflare D1:', err);
+          return jsonResponse({ success: true, data: [] });
+        }
+      }
+
+      // POST /trek_photos - Save photo record to Cloudflare D1
+      if (method === 'POST' && path === '/trek_photos') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const body = await request.json();
+        const photoId = body.id || `photo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const currentTimestamp = body.uploadedAt || new Date().toISOString();
+
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS trek_photos (
+              id TEXT PRIMARY KEY,
+              trek_id TEXT,
+              hike_number TEXT,
+              trek_name TEXT,
+              url TEXT,
+              public_id TEXT,
+              uploaded_by TEXT,
+              user_uid TEXT,
+              uploaded_at DATETIME
+            )
+          `).run();
+
+          await env.DB.prepare(`
+            INSERT INTO trek_photos (
+              id, trek_id, hike_number, trek_name, url, public_id, uploaded_by, user_uid, uploaded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            photoId,
+            body.trekId || body.trek_id || '',
+            body.hikeNumber || body.hike_number || '',
+            body.trekName || body.trek_name || '',
+            body.url || '',
+            body.publicId || body.public_id || '',
+            body.uploadedBy || body.uploaded_by || 'Nepal Hiker',
+            body.userUid || body.user_uid || '',
+            currentTimestamp
+          ).run();
+
+          return jsonResponse({
+            success: true,
+            message: 'Photo index saved to Cloudflare D1 successfully',
+            photo: { id: photoId, ...body },
+          });
+        } catch (err) {
+          console.error('Error saving trek_photo to Cloudflare D1:', err);
+          return errorResponse(`Cloudflare D1 save error: ${err.message}`, 500);
+        }
+      }
+
+      // DELETE /trek_photos/:id - Delete photo record from Cloudflare D1
+      if (method === 'DELETE' && path.startsWith('/trek_photos/')) {
+        const photoId = decodeURIComponent(path.replace('/trek_photos/', ''));
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        try {
+          await env.DB.prepare('DELETE FROM trek_photos WHERE id = ?').bind(photoId).run();
+          return jsonResponse({ success: true, message: 'Photo deleted from Cloudflare D1 successfully' });
+        } catch (err) {
+          return errorResponse(`Cloudflare D1 delete error: ${err.message}`, 500);
+        }
+      }
+
       // ===== MAPMINERS / COMMUNITY TRAILS ENDPOINTS =====
 
       // GET /mapminers/trails or GET /community_trails - List trails

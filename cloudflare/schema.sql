@@ -143,3 +143,17 @@ CREATE TABLE IF NOT EXISTS items (
   name TEXT,
   updated_at DATETIME
 );
+
+-- 8. Trek Photos / Community Gallery Table
+CREATE TABLE IF NOT EXISTS trek_photos (
+  id TEXT PRIMARY KEY,
+  trek_id TEXT,
+  hike_number TEXT,
+  trek_name TEXT,
+  url TEXT,
+  public_id TEXT,
+  uploaded_by TEXT,
+  user_uid TEXT,
+  uploaded_at DATETIME
+);
+

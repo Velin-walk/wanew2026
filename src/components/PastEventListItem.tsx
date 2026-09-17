@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Trek } from '../types';
-import { Calendar, UserCheck, FileText, ExternalLink, CheckCircle, Star, Ban } from 'lucide-react';
+import { Calendar, UserCheck, FileText, ExternalLink, CheckCircle, Star, Ban, Camera } from 'lucide-react';
+import { TrekPhotosModal } from './TrekPhotosModal';
+import { useAuth } from '../context/AuthContext';
 
 interface PastEventListItemProps {
   trek: Trek;
@@ -15,6 +17,9 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
   onViewItinerary,
   onLeaveFeedback,
 }) => {
+  const [photosOpen, setPhotosOpen] = useState(false);
+  const { isAdmin } = useAuth();
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'Past Event';
     if (dateStr.includes('/')) {
@@ -123,8 +128,17 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
       </div>
 
       {/* Right: Actions */}
-      {onLeaveFeedback && (
-        <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-1 sm:pt-0 w-full sm:w-auto justify-end">
+      <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-1 sm:pt-0 w-full sm:w-auto justify-end">
+        <button
+          type="button"
+          onClick={() => setPhotosOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#E08828] hover:text-[#C86B1A] bg-[#FFF8F0] hover:bg-[#FFEEDD] border border-[#E08828]/30 rounded-lg transition-all cursor-pointer"
+        >
+          <Camera className="w-3.5 h-3.5 shrink-0" />
+          <span>Photos</span>
+        </button>
+
+        {onLeaveFeedback && (
           <button
             type="button"
             onClick={() => onLeaveFeedback(trek)}
@@ -133,8 +147,14 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
             <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
             <span>Rate Trek</span>
           </button>
-        </div>
-      )}
+        )}
+      </div>
+
+      <TrekPhotosModal
+        isOpen={photosOpen}
+        onClose={() => setPhotosOpen(false)}
+        trek={trek}
+      />
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { TrekListScreen } from './screens/TrekListScreen';
 import { MyBookingsScreen } from './screens/MyBookingsScreen';
+import { GalleryScreen } from './screens/GalleryScreen';
 import { RegistrationModal } from './components/RegistrationModal';
 import { InviteModal } from './components/InviteModal';
 import { ItineraryModal } from './components/ItineraryModal';
@@ -28,7 +29,7 @@ import { ProfileModal } from './components/ProfileModal';
 
 function MainApp() {
   const { user, userEmail, isAdmin, openAuthModal } = useAuth();
-  const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'admin'>('treks');
+  const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin'>('treks');
   const [treks, setTreks] = useState<Trek[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingTreks, setLoadingTreks] = useState(true);
@@ -558,6 +559,13 @@ function MainApp() {
               isContributionOpen={showMapMinerContribute}
               onOpenContribution={() => setShowMapMinerContribute(true)}
               onCloseContribution={() => setShowMapMinerContribute(false)}
+            />
+          )}
+
+          {currentTab === 'gallery' && (
+            <GalleryScreen
+              treks={treks}
+              onOpenAuthModal={openAuthModal}
             />
           )}
 

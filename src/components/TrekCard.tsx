@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Trek } from '../types';
 import { ParticipantStack } from './ParticipantStack';
+import { useAuth } from '../context/AuthContext';
+import { TrekPhotosModal } from './TrekPhotosModal';
 import {
   Calendar,
   Clock,
@@ -15,6 +17,7 @@ import {
   HelpCircle,
   AlertCircle,
   Ban,
+  Camera,
 } from 'lucide-react';
 
 interface TrekCardProps {
@@ -37,6 +40,49 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   onViewFaq,
 }) => {
   const [showItinerary, setShowItinerary] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
+  const { isAdmin } = useAuth();
+
+  const isEventDayOrOnward = () => {
+    if (!trek.date) return false;
+    
+    // Get current date at 00:00:00 local time
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Parse trek.date
+    let trekDate: Date | null = null;
+
+    if (trek.date.includes('-')) {
+      const parts = trek.date.split('-');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          trekDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          trekDate = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        }
+      }
+    } else if (trek.date.includes('/')) {
+      const parts = trek.date.split('/');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          trekDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          trekDate = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        }
+      }
+    } else {
+      const parsed = Date.parse(trek.date);
+      if (!isNaN(parsed)) {
+        trekDate = new Date(parsed);
+      }
+    }
+
+    if (!trekDate || isNaN(trekDate.getTime())) return false;
+    trekDate.setHours(0, 0, 0, 0);
+
+    return today.getTime() >= trekDate.getTime();
+  };
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
@@ -255,10 +301,22 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 
         {/* Leader Info */}
         {trek.leader && (
-          <div className="flex items-center gap-1.5 text-[11px] text-[#5A5551] pt-1.5 border-t border-[#F0EBE5]">
-            <UserCheck className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
-            <span className="font-medium text-[#8B8680]">Lead Guide:</span>
-            <span className="font-semibold text-[#1F1F1F] truncate">{trek.leader}</span>
+          <div className="flex items-center justify-between gap-1.5 text-[11px] text-[#5A5551] pt-1.5 border-t border-[#F0EBE5]">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <UserCheck className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
+              <span className="font-medium text-[#8B8680]">Lead Guide:</span>
+              <span className="font-semibold text-[#1F1F1F] truncate">{trek.leader}</span>
+            </div>
+            
+            {/* Photos / Gallery Button */}
+            <button
+              type="button"
+              onClick={() => setPhotosOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FFF8F0] hover:bg-[#FFEEDD] border border-[#E08828]/40 hover:border-[#E08828]/70 text-[#E08828] font-bold text-[10px] rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
+            >
+              <Camera className="w-3.5 h-3.5 text-[#E08828]" />
+              <span>Photos</span>
+            </button>
           </div>
         )}
 
@@ -288,6 +346,12 @@ export const TrekCard: React.FC<TrekCardProps> = ({
           </div>
         )}
       </div>
+
+      <TrekPhotosModal
+        isOpen={photosOpen}
+        onClose={() => setPhotosOpen(false)}
+        trek={trek}
+      />
 
       {/* Action Buttons */}
       <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4 pt-1">
