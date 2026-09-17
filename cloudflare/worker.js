@@ -1010,9 +1010,14 @@ export default {
               public_id TEXT,
               uploaded_by TEXT,
               user_uid TEXT,
-              uploaded_at DATETIME
+              uploaded_at DATETIME,
+              caption TEXT
             )
           `).run();
+
+          try {
+            await env.DB.prepare(`ALTER TABLE trek_photos ADD COLUMN caption TEXT`).run();
+          } catch (_) {}
 
           let stmt = env.DB.prepare('SELECT * FROM trek_photos ORDER BY uploaded_at DESC');
           if (trekId) {
@@ -1029,6 +1034,7 @@ export default {
             uploadedBy: r.uploaded_by,
             userUid: r.user_uid,
             uploadedAt: r.uploaded_at,
+            caption: r.caption || '',
           }));
           return jsonResponse({ success: true, data: mapped });
         } catch (err) {
@@ -1056,14 +1062,19 @@ export default {
               public_id TEXT,
               uploaded_by TEXT,
               user_uid TEXT,
-              uploaded_at DATETIME
+              uploaded_at DATETIME,
+              caption TEXT
             )
           `).run();
 
+          try {
+            await env.DB.prepare(`ALTER TABLE trek_photos ADD COLUMN caption TEXT`).run();
+          } catch (_) {}
+
           await env.DB.prepare(`
             INSERT INTO trek_photos (
-              id, trek_id, hike_number, trek_name, url, public_id, uploaded_by, user_uid, uploaded_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              id, trek_id, hike_number, trek_name, url, public_id, uploaded_by, user_uid, uploaded_at, caption
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             photoId,
             body.trekId || body.trek_id || '',
@@ -1073,7 +1084,8 @@ export default {
             body.publicId || body.public_id || '',
             body.uploadedBy || body.uploaded_by || 'Nepal Hiker',
             body.userUid || body.user_uid || '',
-            currentTimestamp
+            currentTimestamp,
+            body.caption || ''
           ).run();
 
           return jsonResponse({

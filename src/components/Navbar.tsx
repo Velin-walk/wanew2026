@@ -40,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenInfoPage,
   onOpenProfile,
 }) => {
-  const { user, userEmail, isAdmin, openAuthModal, signOutUser } = useAuth();
+  const { user, userEmail, isAdmin, showProfileImage, openAuthModal, signOutUser } = useAuth();
   const isMapMiners = currentTab === 'mapminers';
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -383,7 +383,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#7ABA42]/15 text-[#7ABA42] border border-[#7ABA42]/30 flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 select-none shadow-xs cursor-pointer active:scale-95 transition-transform overflow-hidden"
                 title={`Signed in as ${userEmail}`}
               >
-                {user.photoURL ? (
+                {user.photoURL && showProfileImage ? (
                   <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
                   (user.displayName?.[0] || userEmail?.[0] || 'H').toUpperCase()

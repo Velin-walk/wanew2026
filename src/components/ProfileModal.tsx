@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   User,
@@ -12,7 +12,12 @@ import {
   Heart,
   Mountain,
   Trash2,
-  Clock
+  Settings,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  Edit3,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Trek } from '../types';
@@ -36,14 +41,44 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onToggleFavorite,
   onOpenTrek,
 }) => {
-  const { user, isAdmin, signOutUser } = useAuth();
-  const [activeProfileTab, setActiveProfileTab] = useState<'bookings' | 'saved'>('bookings');
+  const { user, isAdmin, signOutUser, showProfileImage, updateUserProfile } = useAuth();
+  const [activeProfileTab, setActiveProfileTab] = useState<'bookings' | 'saved' | 'settings'>('bookings');
+
+  const [editName, setEditName] = useState(user?.displayName || '');
+  const [editShowImage, setEditShowImage] = useState(showProfileImage);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      setEditName(user.displayName || '');
+      setEditShowImage(showProfileImage);
+    }
+  }, [user, showProfileImage, isOpen]);
 
   if (!isOpen || !user) return null;
 
   const handleSignOut = async () => {
     await signOutUser();
     onClose();
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      await updateUserProfile({
+        displayName: editName,
+        showProfileImage: editShowImage,
+      });
+      setSaveMsg('Profile updated successfully!');
+      setTimeout(() => setSaveMsg(null), 3000);
+    } catch (err) {
+      console.error('Error saving profile:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const savedTreksList = allTreks.filter((t) => favorites.includes(t.id));
@@ -55,7 +90,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         <div className="bg-gradient-to-r from-[#FAF6F0] via-white to-[#FAF6F0] p-6 border-b border-[#EFEAE4] relative flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-[#7ABA42]/15 border border-[#7ABA42]/30 flex items-center justify-center text-[#7ABA42] font-bold text-lg overflow-hidden shrink-0 shadow-xs">
-              {user.photoURL ? (
+              {user.photoURL && showProfileImage ? (
                 <img src={user.photoURL} alt={user.displayName || 'User Avatar'} className="w-full h-full object-cover" />
               ) : (
                 (user.displayName?.[0] || user.email?.[0] || 'H').toUpperCase()
@@ -85,38 +120,150 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         </div>
 
-        {/* Profile Tabs: Bookings vs Saved */}
-        <div className="flex border-b border-[#EFEAE4] bg-[#FAF8F5] p-1.5 gap-1.5 px-6">
+        {/* Profile Tabs: Bookings vs Saved vs Edit Profile */}
+        <div className="flex border-b border-[#EFEAE4] bg-[#FAF8F5] p-1.5 gap-1.5 px-4 sm:px-6 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveProfileTab('bookings')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeProfileTab === 'bookings'
                 ? 'bg-white text-[#E08828] shadow-xs ring-1 ring-black/5 font-black'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
             }`}
           >
-            <BookmarkCheck className="w-4 h-4 text-[#E08828]" />
+            <BookmarkCheck className="w-3.5 h-3.5 text-[#E08828]" />
             <span>My Bookings ({userBookings.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveProfileTab('saved')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeProfileTab === 'saved'
                 ? 'bg-white text-rose-600 shadow-xs ring-1 ring-black/5 font-black'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
             }`}
           >
-            <Heart className={`w-4 h-4 ${activeProfileTab === 'saved' ? 'fill-rose-500 text-rose-500' : 'text-rose-400'}`} />
-            <span>Saved Hikes ({savedTreksList.length})</span>
+            <Heart className={`w-3.5 h-3.5 ${activeProfileTab === 'saved' ? 'fill-rose-500 text-rose-500' : 'text-rose-400'}`} />
+            <span>Saved ({savedTreksList.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveProfileTab('settings')}
+            className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeProfileTab === 'settings'
+                ? 'bg-white text-[#7ABA42] shadow-xs ring-1 ring-black/5 font-black'
+                : 'text-[#6A645D] hover:text-[#1F1F1F]'
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5 text-[#7ABA42]" />
+            <span>Edit Profile</span>
           </button>
         </div>
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5">
-          {activeProfileTab === 'bookings' ? (
+          {activeProfileTab === 'settings' ? (
+            <form onSubmit={handleSaveProfile} className="space-y-5">
+              {saveMsg && (
+                <div className="p-3 bg-[#7ABA42]/10 border border-[#7ABA42]/30 rounded-2xl flex items-center gap-2 text-xs text-[#5F9632] font-bold animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-[#7ABA42] shrink-0" />
+                  <span>{saveMsg}</span>
+                </div>
+              )}
+
+              {/* Display Name Field */}
+              <div className="space-y-2">
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#5A5551] flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-[#E08828]" />
+                  <span>Full Display Name</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Enter your name"
+                    className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-sm font-semibold text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#E08828]/30 focus:border-[#E08828] transition-all"
+                    required
+                  />
+                  <Edit3 className="w-4 h-4 text-[#8B8680] absolute right-3.5 top-3.5 pointer-events-none" />
+                </div>
+                <p className="text-[11px] text-[#8B8680]">
+                  This is the name displayed across Walk Nepal Walk when you register for hikes or upload gallery photos.
+                </p>
+              </div>
+
+              {/* Profile Image Visibility Toggle */}
+              <div className="p-4 bg-[#FAF8F5] border border-[#E5E1DB] rounded-2xl space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-white border border-[#E5E1DB] flex items-center justify-center text-[#7ABA42]">
+                      {editShowImage ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4 text-stone-400" />}
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-bold text-[#1F1F1F]">Show Profile Picture</h5>
+                      <p className="text-[11px] text-[#8B8680]">
+                        {editShowImage ? 'Your Google avatar photo is visible' : 'Your avatar photo is hidden'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Switch */}
+                  <button
+                    type="button"
+                    onClick={() => setEditShowImage(!editShowImage)}
+                    className={`relative w-12 h-6 rounded-full transition-colors p-0.5 cursor-pointer ${
+                      editShowImage ? 'bg-[#7ABA42]' : 'bg-stone-300'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
+                        editShowImage ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Avatar Preview Box */}
+                <div className="pt-2 border-t border-[#E5E1DB]/60 flex items-center justify-between text-xs">
+                  <span className="text-[#8B8680] font-medium">Preview how you appear:</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-[#7ABA42]/15 border border-[#7ABA42]/30 flex items-center justify-center text-[#7ABA42] font-bold text-xs overflow-hidden">
+                      {user.photoURL && editShowImage ? (
+                        <img src={user.photoURL} alt="Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        ((editName || user.email || 'H')[0]).toUpperCase()
+                      )}
+                    </div>
+                    <span className="font-bold text-[#1F1F1F] text-xs">
+                      {editName || user.email?.split('@')[0]}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Submit Button */}
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full py-3 bg-[#E08828] hover:bg-[#D07818] text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Save Profile Settings</span>
+                  </>
+                )}
+              </button>
+            </form>
+          ) : activeProfileTab === 'bookings' ? (
             <>
               {/* Account Overview Box */}
               <div className="bg-[#F9F7F5] border border-[#EFEAE4] rounded-2xl p-4 flex items-center justify-between">

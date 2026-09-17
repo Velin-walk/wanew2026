@@ -5,7 +5,8 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import { isAdminEmail } from '../adminUtils';
@@ -15,6 +16,9 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   userEmail: string;
+  showProfileImage: boolean;
+  setShowProfileImage: (show: boolean) => void;
+  updateUserProfile: (data: { displayName?: string; showProfileImage?: boolean }) => Promise<void>;
   signInWithGoogle: () => Promise<User | null>;
   signInWithDevAccount: (email: string, displayName?: string) => User;
   signOutUser: () => Promise<void>;
@@ -30,6 +34,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showProfileImage, setShowProfileImageState] = useState<boolean>(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalReason, setAuthModalReason] = useState('');
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
@@ -64,6 +69,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     return () => unsubscribe();
   }, []);
+
+  // Load showProfileImage preference when user changes
+  useEffect(() => {
+    if (user?.uid) {
+      const saved = localStorage.getItem(`wnw_show_profile_img_${user.uid}`);
+      if (saved !== null) {
+        setShowProfileImageState(JSON.parse(saved));
+      } else {
+        setShowProfileImageState(true);
+      }
+    }
+  }, [user?.uid]);
+
+  const setShowProfileImage = (show: boolean) => {
+    setShowProfileImageState(show);
+    if (user?.uid) {
+      localStorage.setItem(`wnw_show_profile_img_${user.uid}`, JSON.stringify(show));
+    }
+  };
+
+  const updateUserProfile = async (data: { displayName?: string; showProfileImage?: boolean }) => {
+    if (!user) return;
+
+    if (data.showProfileImage !== undefined) {
+      setShowProfileImage(data.showProfileImage);
+    }
+
+    if (data.displayName !== undefined && data.displayName.trim() !== '') {
+      const newName = data.displayName.trim();
+
+      if (auth.currentUser) {
+        try {
+          await updateProfile(auth.currentUser, { displayName: newName });
+        } catch (e) {
+          console.error('Failed to update Firebase user profile:', e);
+        }
+      }
+
+      setUser((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          displayName: newName,
+        } as User;
+      });
+
+      const savedDevUser = localStorage.getItem('wnw_dev_user');
+      if (savedDevUser) {
+        try {
+          const parsed = JSON.parse(savedDevUser);
+          parsed.displayName = newName;
+          localStorage.setItem('wnw_dev_user', JSON.stringify(parsed));
+        } catch (e) {}
+      }
+    }
+  };
 
   const isAdmin = user?.email ? isAdminEmail(user.email) : false;
   const userEmail = user?.email || '';
@@ -149,6 +210,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         isAdmin,
         userEmail,
+        showProfileImage,
+        setShowProfileImage,
+        updateUserProfile,
         signInWithGoogle,
         signInWithDevAccount,
         signOutUser,
