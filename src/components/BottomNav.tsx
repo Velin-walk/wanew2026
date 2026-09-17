@@ -171,7 +171,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               <img
                 src="/mapminers-logo.png"
                 alt="MapMiners"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover rounded-md"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   const sibling = e.currentTarget.nextElementSibling;

@@ -315,7 +315,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
               className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FFF8F0] hover:bg-[#FFEEDD] border border-[#E08828]/40 hover:border-[#E08828]/70 text-[#E08828] font-bold text-[10px] rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
             >
               <Camera className="w-3.5 h-3.5 text-[#E08828]" />
-              <span>Photos</span>
+              <span>Gallery</span>
             </button>
           </div>
         )}

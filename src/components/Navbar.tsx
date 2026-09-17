@@ -93,11 +93,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Brand / Screen Title */}
         {isMapMiners ? (
           <div className="flex items-center gap-2.5 select-none">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#F9F7F5] border border-[#E5E1DB] p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-transparent border border-[#E5E1DB] flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
               <img
                 src="/mapminers-logo.png"
                 alt="Map Miners Logo"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover rounded-xl"
                 onError={(e) => {
                   // Fallback to compass icon if custom image is not yet placed
                   e.currentTarget.style.display = 'none';
@@ -128,11 +128,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-2.5 cursor-pointer select-none group"
             aria-label="Walk Nepal Walk - Go to Treks"
           >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#F9F7F5] border border-[#E5E1DB] p-1 flex items-center justify-center shrink-0 group-hover:border-[#7ABA42]/40 transition-colors shadow-xs">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-transparent border border-[#E5E1DB] flex items-center justify-center shrink-0 overflow-hidden group-hover:border-[#7ABA42]/40 transition-colors shadow-xs">
               <img
                 src="/logo.png"
                 alt="Walk Nepal Walk Logo"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover rounded-xl"
                 onError={(e) => {
                   // Fallback to vector mountain if logo image fails
                   e.currentTarget.style.display = 'none';
@@ -226,7 +226,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <img
                 src="/mapminers-logo.png"
                 alt="MapMiners"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover rounded-sm"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   const sibling = e.currentTarget.nextElementSibling;

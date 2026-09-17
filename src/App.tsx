@@ -579,7 +579,7 @@ function MainApp() {
           {currentTab !== 'mapminers' && (
             <div className="mt-8 pt-6 border-t border-[#EFEAE4] text-center text-[11px] text-[#8B8680] space-y-1">
               <div className="flex items-center justify-center gap-1.5 font-bold text-[#1F1F1F]">
-                <img src="/logo.png" className="w-4 h-4 object-contain" alt="WNW Logo" referrerPolicy="no-referrer" />
+                <img src="/logo.png" className="w-5 h-5 object-cover rounded-md" alt="WNW Logo" referrerPolicy="no-referrer" />
                 <span>Walk Nepal Walk Mobile App</span>
               </div>
               <p className="text-[10px] text-[#8B8680] flex items-center justify-center gap-1">

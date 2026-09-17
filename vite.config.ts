@@ -85,6 +85,29 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom')) {
+              return 'vendor-react';
+            }
+            if (id.includes('leaflet') || id.includes('react-leaflet')) {
+              return 'vendor-leaflet';
+            }
+            if (id.includes('recharts') || id.includes('d3')) {
+              return 'vendor-recharts';
+            }
+            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('purify')) {
+              return 'vendor-pdf';
+            }
+            if (id.includes('@turf')) {
+              return 'vendor-turf';
+            }
+          }
+        },
+      },
+    },
   },
   server: {
     host: '0.0.0.0',

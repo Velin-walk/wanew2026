@@ -413,6 +413,29 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
     }
   };
 
+  // Touch Swipe Handlers for Lightbox Modal
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diffX = touchStartX - touchEndX;
+    const minSwipeDistance = 50; // threshold in pixels
+
+    if (diffX > minSwipeDistance) {
+      // Swiped left -> Next photo
+      handleNextPhoto();
+    } else if (diffX < -minSwipeDistance) {
+      // Swiped right -> Prev photo
+      handlePrevPhoto();
+    }
+    setTouchStartX(null);
+  };
+
   const todayStr = new Date().toISOString().split('T')[0];
   const uploadCountKey = user ? `wnw_uploads_${user.uid}_${todayStr}` : null;
   const currentCount = uploadCountKey ? parseInt(localStorage.getItem(uploadCountKey) || '0', 10) : 0;
@@ -762,6 +785,8 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
               handleCloseLightbox();
             }
           }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
           <button
             onClick={handleCloseLightbox}

@@ -534,6 +534,29 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     }
   };
 
+  // Touch Swipe Handlers for Lightbox Modal
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diffX = touchStartX - touchEndX;
+    const minSwipeDistance = 50; // threshold in pixels
+
+    if (diffX > minSwipeDistance) {
+      // Swiped left -> Next photo
+      handleNextPhoto();
+    } else if (diffX < -minSwipeDistance) {
+      // Swiped right -> Prev photo
+      handlePrevPhoto();
+    }
+    setTouchStartX(null);
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Hero Header */}
@@ -632,40 +655,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             </select>
           </div>
 
-          {/* Filter Dropdown */}
-          <div className="flex items-center gap-1 bg-[#FAF8F5] border border-[#EFEAE4] px-2.5 py-1.5 rounded-xl flex-1 sm:flex-initial">
-            <Filter className="w-3.5 h-3.5 text-[#8B8680] shrink-0" />
-            <select
-              value={selectedTrekFilter}
-              onChange={(e) => setSelectedTrekFilter(e.target.value)}
-              className="bg-transparent text-xs font-bold text-[#1F1F1F] focus:outline-hidden cursor-pointer w-full"
-            >
-              <option value="ALL">All Hikes ({photos.length} Photos)</option>
-              {treks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.hike_number ? `Hike #${t.hike_number} - ` : ''}
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          {/* Viewer POV switch */}
-          {photos.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setViewerPovMode(!viewerPovMode)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                viewerPovMode
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                  : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
-              }`}
-              title="Toggle public community viewer perspective"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{viewerPovMode ? 'Viewer POV Active' : 'Viewer POV'}</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -1144,6 +1134,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         <div
           className="fixed inset-0 z-60 bg-black/95 flex items-center justify-center p-4"
           onClick={() => setActivePhoto(null)}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
           <button
             onClick={() => setActivePhoto(null)}
