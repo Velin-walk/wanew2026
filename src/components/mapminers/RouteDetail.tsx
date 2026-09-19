@@ -1,12 +1,25 @@
 import { useState, useEffect } from 'react';
-import { X, TrendingUp, TrendingDown, Download, MapPin, Flag, Share2, Check, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Download, MapPin, Flag, Share2, Check, ChevronUp, ChevronDown, MessageSquare, Trash2, Send } from 'lucide-react';
 import ElevationChart from './ElevationChart';
 import { routeToGPX } from './kmlParser';
+import { db } from '../../lib/firebase';
+import { collection, addDoc, query, where, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 
 interface RouteDetailProps {
   route: any;
   onClose: () => void;
   isMobile: boolean;
+  currentUserEmail?: string;
+}
+
+interface TrailComment {
+  id: string;
+  trailId: string;
+  text: string;
+  authorName: string;
+  authorEmail: string;
+  guestSessionId?: string | null;
+  timestamp: number;
 }
 
 function formatEstimatedTime(hours: number): string {
@@ -57,10 +70,25 @@ function maskEmail(email: string): string {
   return `${visibleChars}${maskedChars}@${domainPart}`;
 }
 
-export default function RouteDetail({ route, onClose, isMobile }: RouteDetailProps) {
-  const [activeTab, setActiveTab] = useState<'SUMMARY' | 'PROFILE' | 'MORE'>('SUMMARY');
+export default function RouteDetail({ route, onClose, isMobile, currentUserEmail }: RouteDetailProps) {
+  const [activeTab, setActiveTab] = useState<'SUMMARY' | 'PROFILE' | 'MORE' | 'COMMENTS'>('SUMMARY');
   const [shareCopied, setShareCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Comments state
+  const [comments, setComments] = useState<TrailComment[]>([]);
+  const [commentInput, setCommentInput] = useState('');
+  const [loadingComments, setLoadingComments] = useState(false);
+
+  // Persist unique guest session ID for comment deletion validations
+  const [currentSessionId] = useState(() => {
+    let id = localStorage.getItem('chat_guest_session_id');
+    if (!id) {
+      id = 'gs_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+      localStorage.setItem('chat_guest_session_id', id);
+    }
+    return id;
+  });
 
   const highlightChips = getHighlights(route);
   const aboutParagraphs = buildAboutParagraphs(route?.description || '');
@@ -68,6 +96,42 @@ export default function RouteDetail({ route, onClose, isMobile }: RouteDetailPro
   // Keep expanded state synchronized with route switches
   useEffect(() => {
     setIsExpanded(false);
+  }, [route.id]);
+
+  // Real-time comments listener
+  useEffect(() => {
+    if (!route?.id) return;
+    setLoadingComments(true);
+
+    const q = query(
+      collection(db, 'trail_comments'),
+      where('trailId', '==', String(route.id))
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: TrailComment[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        list.push({
+          id: doc.id,
+          trailId: data.trailId || '',
+          text: data.text || '',
+          authorName: data.authorName || 'Anonymous',
+          authorEmail: data.authorEmail || '',
+          guestSessionId: data.guestSessionId || null,
+          timestamp: data.timestamp || Date.now()
+        });
+      });
+      // Sort in-memory to prevent missing index errors
+      list.sort((a, b) => a.timestamp - b.timestamp);
+      setComments(list);
+      setLoadingComments(false);
+    }, (err) => {
+      console.error("Firestore trail comments listener error:", err);
+      setLoadingComments(false);
+    });
+
+    return () => unsubscribe();
   }, [route.id]);
 
   const handleDownloadGPX = (e: React.MouseEvent) => {
@@ -92,13 +156,55 @@ export default function RouteDetail({ route, onClose, isMobile }: RouteDetailPro
     setTimeout(() => setShareCopied(false), 2000);
   };
 
-  const handleTabClick = (tab: 'SUMMARY' | 'PROFILE' | 'MORE') => {
+  const handleTabClick = (tab: 'SUMMARY' | 'PROFILE' | 'MORE' | 'COMMENTS') => {
     setActiveTab(tab);
     setIsExpanded(true); // Auto expand when user clicks any tab
   };
 
   const toggleExpand = () => {
     setIsExpanded(!isExpanded);
+  };
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentInput.trim() || !route?.id) return;
+
+    let authorName = 'Guest Hiker';
+    if (currentUserEmail) {
+      authorName = currentUserEmail.split('@')[0];
+    } else {
+      const localGuest = localStorage.getItem('chat_guest_name');
+      if (localGuest && localGuest.trim()) {
+        authorName = localGuest.trim();
+      }
+    }
+
+    const payload = {
+      trailId: String(route.id),
+      text: commentInput.trim(),
+      authorName,
+      authorEmail: currentUserEmail || 'guest@walknepal.com',
+      guestSessionId: currentUserEmail ? null : currentSessionId,
+      timestamp: Date.now()
+    };
+
+    const textToSubmit = commentInput;
+    setCommentInput('');
+
+    try {
+      await addDoc(collection(db, 'trail_comments'), payload);
+    } catch (err) {
+      console.error("Failed to post comment:", err);
+      setCommentInput(textToSubmit); // Restore text on failure
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await deleteDoc(doc(db, 'trail_comments', commentId));
+    } catch (err) {
+      console.error("Failed to delete comment:", err);
+    }
   };
 
   // Fallback scenic nature banner image
@@ -118,45 +224,31 @@ export default function RouteDetail({ route, onClose, isMobile }: RouteDetailPro
           {isExpanded ? (
             <>
               <span>COLLAPSE</span>
-              <ChevronDown className="w-2.5 h-2.5" />
+              <ChevronDown className="w-2.5 h-2.5 text-[#7ABA42]" />
             </>
           ) : (
             <>
-              <span>TAP TO EXPAND DETAILS</span>
-              <ChevronUp className="w-2.5 h-2.5 animate-bounce" />
+              <span>EXPAND TRAIL INFORMATION</span>
+              <ChevronUp className="w-2.5 h-2.5 text-[#7ABA42]" />
             </>
           )}
         </div>
       </div>
 
-      {/* Header section with cover image */}
+      {/* Hero Header Area */}
       <div 
-        onClick={toggleExpand}
-        className="relative mx-2 rounded-lg overflow-hidden shrink-0 bg-neutral-900 cursor-pointer group"
+        className="h-[75px] bg-cover bg-center relative shrink-0"
+        style={{ backgroundImage: `url(${headerBgImage})` }}
       >
-        <div 
-          className="absolute inset-0 transition-transform duration-500 group-hover:scale-105"
-          style={{
-            backgroundImage: `url('${headerBgImage}')`,
-            backgroundPosition: 'center',
-            backgroundSize: 'cover',
-            backgroundRepeat: 'no-repeat'
-          }}
-        />
-        {/* Dark linear gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/85" />
-
-        <div className="relative p-2.5 flex justify-between items-start gap-3">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/30" />
+        
+        <div className="absolute bottom-2.5 left-3.5 right-3.5 flex justify-between items-end gap-3 z-10">
           <div className="flex-1 min-w-0">
-            <span className="text-[8px] uppercase font-bold tracking-wider text-amber-500">
-              ACTIVE ROUTE
-            </span>
-            <h3 className="text-xs font-bold text-white break-words [overflow-wrap:anywhere] leading-snug mt-0.5" title={route.name}>
+            <h2 className="text-xs font-black text-white leading-tight tracking-tight drop-shadow-sm truncate">
               {route.name}
-            </h3>
-            
-            <div className="flex flex-wrap items-center gap-1 mt-1">
-              <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold text-white border border-white/10 shadow-xs ${
+            </h2>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className={`text-[8px] font-black uppercase text-white px-1.5 py-0.2 rounded ${
                 route.difficulty === 'Easy' ? 'bg-emerald-500' :
                 route.difficulty === 'Moderate' ? 'bg-amber-500' :
                 route.difficulty === 'Hard' ? 'bg-red-500' : 'bg-rose-700'
@@ -211,8 +303,8 @@ export default function RouteDetail({ route, onClose, isMobile }: RouteDetailPro
       </div>
 
       {/* Tabs Menu */}
-      <div className="flex justify-center items-center gap-6 border-b border-neutral-100 bg-white px-3 pt-2 shrink-0">
-        {(['SUMMARY', 'PROFILE', 'MORE'] as const).map((tab) => (
+      <div className="flex justify-center items-center gap-5 border-b border-neutral-100 bg-white px-3 pt-2 shrink-0">
+        {(['SUMMARY', 'PROFILE', 'MORE', 'COMMENTS'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => handleTabClick(tab)}
@@ -222,7 +314,7 @@ export default function RouteDetail({ route, onClose, isMobile }: RouteDetailPro
                 : 'border-transparent text-neutral-400 hover:text-neutral-700'
             }`}
           >
-            {tab}
+            {tab === 'COMMENTS' ? `Comments (${comments.length})` : tab}
           </button>
         ))}
       </div>
@@ -230,10 +322,10 @@ export default function RouteDetail({ route, onClose, isMobile }: RouteDetailPro
       {/* Smooth Expandable Content Box */}
       <div 
         className={`transition-all duration-300 ease-in-out bg-white overflow-hidden ${
-          isExpanded ? 'max-h-[190px] opacity-100 border-t border-neutral-50' : 'max-h-0 opacity-0 pointer-events-none'
+          isExpanded ? 'max-h-[250px] opacity-100 border-t border-neutral-50' : 'max-h-0 opacity-0 pointer-events-none'
         }`}
       >
-        <div className="p-2 overflow-y-auto no-scrollbar max-h-[190px]">
+        <div className="p-2 overflow-y-auto no-scrollbar max-h-[250px] flex flex-col h-full">
           
           {activeTab === 'SUMMARY' && (
             <div className="space-y-2">
@@ -400,8 +492,80 @@ export default function RouteDetail({ route, onClose, isMobile }: RouteDetailPro
               )}
             </div>
           )}
+
+          {activeTab === 'COMMENTS' && (
+            <div className="flex flex-col h-full space-y-2 text-[10px]">
+              {/* Comments Stream Viewport */}
+              <div className="flex-1 overflow-y-auto space-y-2 p-1 max-h-[145px] scrollbar-thin">
+                {loadingComments ? (
+                  <div className="text-center py-4 text-neutral-400 text-[9px] font-bold">
+                    Syncing trail comments...
+                  </div>
+                ) : comments.length === 0 ? (
+                  <div className="text-center py-6 text-neutral-400 text-[9px] font-bold flex flex-col items-center justify-center gap-1">
+                    <MessageSquare className="w-5 h-5 text-neutral-300" />
+                    <span>No Comments Yet</span>
+                    <span className="text-[8px] text-neutral-400">Be the first to share your notes!</span>
+                  </div>
+                ) : (
+                  comments.map((comm) => {
+                    const isMyComment = (currentUserEmail && comm.authorEmail === currentUserEmail) ||
+                                        (!currentUserEmail && comm.guestSessionId === currentSessionId);
+                    const isAdmin = currentUserEmail === 'walknepalwalk@gmail.com';
+                    return (
+                      <div key={comm.id} className="p-2 bg-neutral-50 border border-neutral-150 rounded-xl flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1 text-[8.5px]">
+                            <span className="font-extrabold text-neutral-700 truncate max-w-[100px]">
+                              {comm.authorName}
+                            </span>
+                            <span className="text-neutral-400">
+                              {new Date(comm.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                            </span>
+                          </div>
+                          <p className="text-[9.5px] text-neutral-600 leading-relaxed break-words">
+                            {comm.text}
+                          </p>
+                        </div>
+                        {(isMyComment || isAdmin) && (
+                          <button
+                            onClick={() => handleDeleteComment(comm.id)}
+                            className="p-1 text-neutral-400 hover:text-red-600 rounded hover:bg-red-50 cursor-pointer transition-colors shrink-0 self-start"
+                            title="Delete comment"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Post Comment Input */}
+              <form onSubmit={handlePostComment} className="flex gap-1.5 pt-1.5 border-t border-neutral-100 shrink-0">
+                <input
+                  type="text"
+                  placeholder="Share notes, tips, coordinates..."
+                  value={commentInput}
+                  onChange={(e) => setCommentInput(e.target.value)}
+                  className="flex-1 p-2 bg-neutral-50 border border-neutral-200 rounded-lg text-[9px] font-semibold focus:bg-white focus:outline-none focus:border-[#7ABA42] text-neutral-800"
+                  maxLength={250}
+                  required
+                />
+                <button
+                  type="submit"
+                  className="p-2 bg-[#7ABA42] hover:bg-[#6CA838] text-white rounded-lg transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center min-h-[28px]"
+                >
+                  <Send className="w-3 h-3" />
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+

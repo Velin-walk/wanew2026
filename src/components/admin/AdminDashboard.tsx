@@ -82,8 +82,15 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const treksData = await treksRes.json();
       const treksCount = Array.isArray(treksData) ? treksData.length : 0;
 
-      const regsRes = await apiFetch('registrations', { forceFresh: true });
-      if (!regsRes.ok) throw new Error(`Registrations D1 endpoint returned status ${regsRes.status}`);
+      const regsRes = await apiFetch('registrations');
+      if (!regsRes.ok) {
+        const errData = await regsRes.json().catch(() => null);
+        const errMsg = errData?.error || `Status ${regsRes.status}`;
+        if (errMsg.includes('limit')) {
+          throw new Error('D1 daily 5M read limit reached (resets midnight UTC). Upgrading to Worker Paid ($5/mo) unlocks 25B reads/mo.');
+        }
+        throw new Error(`Registrations D1 endpoint error: ${errMsg}`);
+      }
       const regsData = await regsRes.json();
       const regsCount = Array.isArray(regsData) ? regsData.length : 0;
 
@@ -125,8 +132,40 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         const json = await res.json();
         const items = Array.isArray(json) ? json : json?.data;
         if (Array.isArray(items) && items.length > 0) {
-          setRawRegistrations(items);
-          loaded = items.map((r: any) => ({
+          const now = new Date();
+          const twoMonthsAgo = new Date();
+          twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+
+          const filteredItems = items.filter((r: any) => {
+            let compareDate = null;
+
+            const tDate = r.trek_date || r.date;
+            if (tDate) {
+              const parsed = new Date(tDate.replace(' ', 'T'));
+              if (!isNaN(parsed.getTime())) {
+                compareDate = parsed;
+              }
+            }
+
+            if (!compareDate) {
+              const cDate = r.created_at || r.registeredAt || r.timestamp;
+              if (cDate) {
+                const parsed = new Date(cDate.replace(' ', 'T'));
+                if (!isNaN(parsed.getTime())) {
+                  compareDate = parsed;
+                }
+              }
+            }
+
+            if (!compareDate) return true;
+
+            if (compareDate >= now) return true;
+
+            return compareDate >= twoMonthsAgo;
+          });
+
+          setRawRegistrations(filteredItems);
+          loaded = filteredItems.map((r: any) => ({
             id: String(r.id || r.registration_id || Math.random()),
             trek_id: r.trek_id || r.hike_number || '',
             hike_number: r.hike_number || r.trek_id || '',
@@ -166,6 +205,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           }));
           setD1ErrorMsg(null);
         }
+      } else {
+        const errJson = await res.json().catch(() => null);
+        const errText = errJson?.error || '';
+        if (errText.includes('limit')) {
+          setD1Status('error');
+          setD1ErrorMsg('D1 daily 5M read limit reached (resets midnight UTC). Firestore fallback active.');
+        }
       }
     } catch (err) {
       console.warn('API fetch registrations error:', err);
@@ -197,9 +243,37 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             created_at: data.registeredAt || new Date().toISOString(),
           });
         });
-        if (fsRegs.length > 0) {
-          loaded = fsRegs;
-          setRawRegistrations(fsRegs);
+        const now = new Date();
+        const twoMonthsAgo = new Date();
+        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+
+        const filteredFs = fsRegs.filter((r) => {
+          let compareDate = null;
+
+          if (r.trek_date) {
+            const parsed = new Date(r.trek_date.replace(' ', 'T'));
+            if (!isNaN(parsed.getTime())) {
+              compareDate = parsed;
+            }
+          }
+
+          if (!compareDate && r.created_at) {
+            const parsed = new Date(r.created_at.replace(' ', 'T'));
+            if (!isNaN(parsed.getTime())) {
+              compareDate = parsed;
+            }
+          }
+
+          if (!compareDate) return true;
+
+          if (compareDate >= now) return true;
+
+          return compareDate >= twoMonthsAgo;
+        });
+
+        if (filteredFs.length > 0) {
+          loaded = filteredFs;
+          setRawRegistrations(filteredFs);
         }
       } catch (e) {
         console.warn('Firestore fetch registrations fallback error:', e);
@@ -551,6 +625,39 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             }
           }
         }
+
+        // Also dual-write to Firestore treks
+        try {
+          const priceTiers = unsynced.data?.priceTiers || [];
+          const minPrice = priceTiers.length > 0 ? Math.min(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
+          const maxPrice = priceTiers.length > 0 ? Math.max(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
+          
+          await setDoc(doc(db, 'treks', unsynced.id), {
+            id: unsynced.id,
+            hike_number: (unsynced.hikeNumber || '').trim() || 'TBD',
+            title: unsynced.title || 'Walk Nepal Walk Hike',
+            category: unsynced.category || 'Overnight Bus Hikes',
+            status: unsynced.status,
+            cover_image_url: unsynced.data?.coverImageUrl || '',
+            hike_date: unsynced.data?.hikeDate || '',
+            min_price: minPrice,
+            max_price: maxPrice,
+            currency: unsynced.data?.currency || 'NPR',
+            meeting_point: unsynced.data?.overview?.meetingPoint || '',
+            meeting_time: unsynced.data?.overview?.meetingTime || '',
+            expected_duration: unsynced.data?.overview?.expectedDuration || '',
+            difficulty: unsynced.data?.overview?.difficulty || 'Moderate',
+            approx_distance: unsynced.data?.overview?.approxDistance || '',
+            elevation_range: unsynced.data?.overview?.elevationRange || '',
+            max_capacity: unsynced.data?.maxCapacity || 25,
+            data: unsynced.data,
+            author_email: unsynced.authorEmail || 'walknepalwalk@gmail.com',
+            updatedAt: new Date().toISOString()
+          });
+          console.log('[Upload Engine] Saved to Firestore:', unsynced.id);
+        } catch (fsErr) {
+          console.warn('[Upload Engine] Firestore dual-write failed:', fsErr);
+        }
       } catch (err) {
         console.error('[Upload Engine] Failed to upload local itinerary:', rawUnsynced.title, err);
       }
@@ -754,6 +861,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     } catch (e) {
       console.warn('Network delete error:', e);
     }
+    // Dual-delete from Firestore
+    try {
+      await deleteDoc(doc(db, 'treks', hikeId));
+      console.log('Deleted trek from Firestore:', hikeId);
+    } catch (fsErr) {
+      console.warn('Failed to delete trek from Firestore:', fsErr);
+    }
     const next = hikes.filter((h) => h.id !== hikeId);
     setHikes(next);
     localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
@@ -771,6 +885,16 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       });
     } catch (e) {
       console.warn('Network status update error:', e);
+    }
+    // Dual-update status in Firestore
+    try {
+      await updateDoc(doc(db, 'treks', hikeId), {
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+      });
+      console.log('Updated status in Firestore for trek:', hikeId);
+    } catch (fsErr) {
+      console.warn('Failed to update status in Firestore:', fsErr);
     }
     const next = hikes.map((h) =>
       h.id === hikeId ? { ...h, status: newStatus, updatedAt: new Date().toISOString() } : h

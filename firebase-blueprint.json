@@ -73,6 +73,58 @@
         "uploadedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["trekId", "url", "uploadedBy", "userUid"]
+    },
+    "trek": {
+      "title": "Trek Itinerary",
+      "description": "Trek itinerary details and metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "hike_number": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "maxLength": 256 },
+        "category": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 32 },
+        "cover_image_url": { "type": "string", "maxLength": 512 },
+        "hike_date": { "type": "string", "maxLength": 64 },
+        "min_price": { "type": "number" },
+        "max_price": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 16 },
+        "meeting_point": { "type": "string", "maxLength": 256 },
+        "meeting_time": { "type": "string", "maxLength": 64 },
+        "expected_duration": { "type": "string", "maxLength": 64 },
+        "difficulty": { "type": "string", "maxLength": 64 },
+        "approx_distance": { "type": "string", "maxLength": 64 },
+        "elevation_range": { "type": "string", "maxLength": 64 },
+        "max_capacity": { "type": "number" },
+        "author_email": { "type": "string", "maxLength": 256 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "hike_number", "title"]
+    },
+    "map_chat": {
+      "title": "Live Map Chat Message",
+      "description": "Live trail radio update/chat message",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "maxLength": 1000 },
+        "senderEmail": { "type": "string", "maxLength": 256 },
+        "senderName": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["text", "senderEmail", "senderName", "timestamp"]
+    },
+    "trail_comment": {
+      "title": "Trail Review/Comment",
+      "description": "Reviews, notes, and tips posted on individual trails",
+      "type": "object",
+      "properties": {
+        "trailId": { "type": "string", "maxLength": 128 },
+        "text": { "type": "string", "maxLength": 1000 },
+        "authorName": { "type": "string", "maxLength": 128 },
+        "authorEmail": { "type": "string", "maxLength": 256 },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["trailId", "text", "authorName", "authorEmail", "timestamp"]
     }
   },
   "firestore": {
@@ -95,6 +147,18 @@
     "/trek_photos/{photoId}": {
       "schema": { "$ref": "#/entities/trek_photo" },
       "description": "Shared hiker photo gallery and memories"
+    },
+    "/treks/{trekId}": {
+      "schema": { "$ref": "#/entities/trek" },
+      "description": "Dual-written trek itineraries"
+    },
+    "/map_chats/{chatId}": {
+      "schema": { "$ref": "#/entities/map_chat" },
+      "description": "Live community trail chats"
+    },
+    "/trail_comments/{commentId}": {
+      "schema": { "$ref": "#/entities/trail_comment" },
+      "description": "Trail/route reviews and notes comments"
     }
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Users,
   Search,
@@ -85,6 +85,42 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(null);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
 
+  // Filter for upcoming events + last 2 months hikes in Bookings & Roster
+  const upcomingTreks = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    twoMonthsAgo.setHours(0, 0, 0, 0);
+
+    const parseTrekDate = (dateStr?: string): Date | null => {
+      if (!dateStr) return null;
+      const trimmed = dateStr.trim();
+      if (trimmed.includes('/')) {
+        const parts = trimmed.split('/');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+      const d = new Date(trimmed);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    return treks.filter((t) => {
+      const dt = parseTrekDate(t.date);
+      return !dt || dt.getTime() >= twoMonthsAgo.getTime();
+    }).sort((a, b) => {
+      const da = parseTrekDate(a.date)?.getTime() || 0;
+      const db = parseTrekDate(b.date)?.getTime() || 0;
+      return da - db; // nearest first
+    });
+  }, [treks]);
+
   // Local draft state for inline row edits
   const [rowDrafts, setRowDrafts] = useState<Record<string, Partial<AdminRegistration>>>({});
   const [savingRowIds, setSavingRowIds] = useState<Record<string, boolean>>({});
@@ -92,6 +128,38 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
   // Delete Confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Batch deletion states
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isPurging, setIsPurging] = useState(false);
+  const [purgeProgress, setPurgeProgress] = useState(0);
+
+  const handleBatchDelete = async () => {
+    const total = selectedIds.length;
+    if (total === 0) return;
+    
+    if (!window.confirm(`⚠️ CRITICAL WARNING!\n\nYou are about to PERMANENTLY DELETE ${total} registrations from both Cloudflare D1 and your active Firestore database.\n\nThis operation is IRREVERSIBLE. Are you absolutely sure you want to proceed?`)) {
+      return;
+    }
+
+    setIsPurging(true);
+    setPurgeProgress(0);
+
+    for (let i = 0; i < total; i++) {
+      const id = selectedIds[i];
+      try {
+        await onDeleteRegistration(id);
+      } catch (err) {
+        console.error(`Failed to delete registration ${id} in batch:`, err);
+      }
+      setPurgeProgress(i + 1);
+    }
+
+    setIsPurging(false);
+    setSelectedIds([]);
+    onRefresh();
+    alert(`🎉 Successfully purged ${total} registrations from both Cloudflare D1 and Firestore!`);
+  };
 
   // Private vs Public counts
   const privateCount = registrations.filter(
@@ -260,6 +328,97 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         </div>
       </div>
 
+      {/* ── TOP EVENT CARDS STRIP (UPCOMING + LAST 2 MONTHS HIKES) ── */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            Active &amp; Recent Expeditions (Upcoming + Last 2 Months)
+          </h3>
+          {selectedTrekFilter !== 'all' && (
+            <button
+              onClick={() => setSelectedTrekFilter('all')}
+              className="text-xs font-bold text-amber-700 hover:underline cursor-pointer"
+            >
+              Clear Filter
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200">
+          {/* "All Bookings" Card */}
+          <div
+            onClick={() => setSelectedTrekFilter('all')}
+            className={`p-4 rounded-2xl min-w-[210px] max-w-[230px] shrink-0 cursor-pointer transition-all border ${
+              selectedTrekFilter === 'all'
+                ? 'border-2 border-amber-600 bg-amber-50/10 shadow-md ring-2 ring-amber-600/10'
+                : 'border-stone-200 bg-white hover:border-stone-300 shadow-2xs'
+            }`}
+          >
+            <div className="flex items-center justify-between text-[11px] font-bold text-stone-400 mb-1">
+              <span>ALL TIME</span>
+              <Compass className="w-3.5 h-3.5 text-stone-400" />
+            </div>
+            <h3 className="text-sm font-extrabold text-[#1F2937] truncate mb-2">
+              All Public Expeditions
+            </h3>
+            <div className="flex items-center gap-1.5 mb-3">
+              <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[10px] font-bold">
+                Main Ledger
+              </span>
+            </div>
+            <div className="text-xl font-black text-[#1F2937]">{registrations.length}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+              TOTAL BOOKINGS
+            </div>
+          </div>
+
+          {/* Individual Trek Cards */}
+          {upcomingTreks.map((t) => {
+            const isSelected = (selectedTrekFilter === t.id) || (selectedTrekFilter === t.hike_number);
+            const tRegsCount = registrations.filter((r) => {
+              const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase();
+              const queryId = (t.hike_number || t.id).toLowerCase();
+              return regTrekId && queryId && (regTrekId.includes(queryId) || queryId.includes(regTrekId));
+            }).length;
+
+            return (
+              <div
+                key={t.id}
+                onClick={() => setSelectedTrekFilter(isSelected ? 'all' : (t.hike_number || t.id))}
+                className={`p-4 rounded-2xl min-w-[210px] max-w-[230px] shrink-0 cursor-pointer transition-all border ${
+                  isSelected
+                    ? 'border-2 border-[#16A34A] bg-white shadow-md ring-2 ring-[#16A34A]/10'
+                    : 'border-stone-200 bg-white hover:border-stone-300 shadow-2xs'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[11px] font-bold text-stone-400 mb-1">
+                  <span>{t.date || 'Flexible'} • {t.days}D</span>
+                  {t.is_cancelled && (
+                    <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 text-[9px] font-extrabold border border-rose-200">
+                      CANCELLED
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-sm font-extrabold text-[#1F2937] truncate mb-2">
+                  {t.name}
+                </h3>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[#2563EB] text-[10px] font-bold border border-blue-100">
+                    🥾 Hike #{t.hike_number || 'N/A'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[10px] font-bold">
+                    {t.difficulty || 'Moderate'}
+                  </span>
+                </div>
+                <div className="text-xl font-black text-[#1F2937]">{tRegsCount || 0}</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                  REGISTERED
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Control Panel: Category Tabs, Search, Trek Filter, Status Filter & WhatsApp Action */}
       <div className="bg-white p-4 rounded-2xl border border-[#E5E1DB] shadow-2xs space-y-3">
         {/* Category Tabs Switcher */}
@@ -400,6 +559,34 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           </div>
         </div>
 
+        {selectedIds.length > 0 && (
+          <div className="bg-[#FAF2EB] border-b border-[#EFEAE4] p-3 px-4 flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#E08828]">
+              <AlertCircle className="w-4 h-4 text-[#E08828]" />
+              <span>{selectedIds.length} registration(s) selected for batch operations</span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds([])}
+                className="px-3 py-1.5 border border-[#E5E1DB] hover:bg-[#EFEAE4] rounded-lg text-xs font-bold text-[#5A5551] transition-all cursor-pointer"
+                disabled={isPurging}
+              >
+                Clear Selection
+              </button>
+              
+              <button
+                onClick={handleBatchDelete}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer"
+                disabled={isPurging}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isPurging ? `Purging (${purgeProgress}/${selectedIds.length})...` : 'Purge Selected Entirely'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center items-center py-16">
             <RefreshCw className="w-6 h-6 animate-spin text-[#E08828]" />
@@ -415,6 +602,20 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#FAF8F5] border-b border-[#F0EBE5] text-[10px] font-extrabold uppercase text-[#5A5551] tracking-wider">
+                  <th className="py-3 px-4 w-[40px] text-center">
+                    <input
+                      type="checkbox"
+                      checked={filteredRegistrations.length > 0 && selectedIds.length === filteredRegistrations.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds(filteredRegistrations.map(r => r.id));
+                        } else {
+                          setSelectedIds([]);
+                        }
+                      }}
+                      className="rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer"
+                    />
+                  </th>
                   <th className="py-3 px-4 min-w-[260px]">Participant &amp; Trek</th>
                   <th className="py-3 px-3 w-[140px]">Reg Status</th>
                   <th className="py-3 px-3 w-[140px]">Payment Status</th>
@@ -446,6 +647,21 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   return (
                     <React.Fragment key={reg.id}>
                       <tr className={`transition-colors ${isPrivate ? 'bg-purple-50/25 hover:bg-purple-50/50' : 'hover:bg-[#FAF8F5]'}`}>
+                        {/* Batch Selection Checkbox */}
+                        <td className="py-3 px-4 text-center align-middle w-[40px]">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(reg.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedIds(prev => [...prev, reg.id]);
+                              } else {
+                                setSelectedIds(prev => prev.filter(id => id !== reg.id));
+                              }
+                            }}
+                            className="rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer animate-none"
+                          />
+                        </td>
                         {/* Participant & Trek Info */}
                         <td className="py-3 px-4 align-middle">
                           <div className="space-y-1">
@@ -685,7 +901,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                       {/* Expandable Specifications and Notes Drawer */}
                       {isExpanded && (
                         <tr className="bg-purple-50/50 border-b border-purple-200">
-                          <td colSpan={8} className="p-4">
+                          <td colSpan={9} className="p-4">
                             <div className="bg-white rounded-xl border border-purple-200 p-4 shadow-xs space-y-3">
                               <div className="flex items-center justify-between border-b border-purple-100 pb-2">
                                 <div className="flex items-center gap-2">

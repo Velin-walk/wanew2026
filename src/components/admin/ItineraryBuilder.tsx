@@ -13,6 +13,8 @@ import {
 import { ItineraryPreview } from './ItineraryPreview';
 import { ShareHikeModal } from './ShareHikeModal';
 import { apiFetch } from '../../services/api';
+import { db } from '../../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import {
   Eye,
   Plus,
@@ -432,6 +434,17 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         });
       } catch (cfErr) {
         console.warn('[ItineraryBuilder] Failed direct Cloudflare save:', cfErr);
+      }
+
+      // Dual-write to Firebase Firestore
+      try {
+        await setDoc(doc(db, 'treks', syncPayload.id), {
+          ...syncPayload,
+          updatedAt: new Date().toISOString()
+        });
+        console.log('[ItineraryBuilder] Dual-write saved to Firestore successfully:', syncPayload.id);
+      } catch (fsErr) {
+        console.warn('[ItineraryBuilder] Dual-write to Firestore failed (non-blocking):', fsErr);
       }
 
       // 2. Also save to local Express fallback

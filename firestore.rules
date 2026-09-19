@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     match /trek_photos/{photoId} {
       allow read, write: if true;
     }
@@ -21,8 +22,30 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /treks/{trekId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /applications_sync/{syncId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /test/{docId} {
       allow read, write: if true;
+    }
+
+    match /map_chats/{chatId} {
+      allow read: if true;
+      allow create: if request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 400;
+      allow update, delete: if false;
+    }
+
+    match /trail_comments/{commentId} {
+      allow read: if true;
+      allow create: if request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 250;
+      allow delete: if true;
     }
 
     match /{document=**} {

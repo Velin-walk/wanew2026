@@ -98,8 +98,38 @@ async function processBase64Images(obj, env, urlOrigin, prefix = 'img') {
   return obj;
 }
 
+// Performance & Rate-Limit Optimization: In-memory cache for aggregate trek counts
+let cachedTrekAggMap = null;
+let lastTrekAggTime = 0;
+const TREK_AGG_TTL = 5 * 60 * 1000; // 5 minutes in ms
+
+let indexesEnsured = false;
+async function ensurePerformanceIndexes(env) {
+  if (indexesEnsured || !env || !env.DB) return;
+  try {
+    await env.DB.batch([
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_hike_number ON registrations (hike_number)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_email ON registrations (email_address)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_timestamp ON registrations (timestamp DESC)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_reg_id ON bookings_roster (registration_id)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_hike_number ON bookings_roster (hike_number)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_created_at ON treks (created_at DESC)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_hike_number ON treks (hike_number)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_number)')
+    ]);
+    indexesEnsured = true;
+  } catch (e) {
+    // Non-blocking: will retry next time if D1 is temporarily rate-limited
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
+    if (ctx && ctx.waitUntil) {
+      ctx.waitUntil(ensurePerformanceIndexes(env));
+    } else {
+      ensurePerformanceIndexes(env).catch(() => {});
+    }
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -152,54 +182,60 @@ export default {
         // Server-Side Anonymous Aggregate:
         // Calculates participant counts, gender ratio, and initialed avatars on the server.
         // Public visitors never download private registrant emails, phones, or notes.
-        const aggMap = new Map();
-        try {
-          const { results: aggRows } = await env.DB.prepare(`
-            SELECT 
-              hike_number,
-              full_name,
-              gender,
-              COALESCE(CAST(pax AS INTEGER), 1) as pax_count
-            FROM registrations
-            WHERE hike_number IS NOT NULL AND hike_number != ''
-            ORDER BY timestamp DESC
-          `).all();
+        let aggMap = cachedTrekAggMap;
+        const isFresh = url.searchParams.has('fresh') || url.searchParams.has('forceFresh');
+        if (!aggMap || isFresh || (Date.now() - lastTrekAggTime > TREK_AGG_TTL)) {
+          aggMap = new Map();
+          try {
+            const { results: aggRows } = await env.DB.prepare(`
+              SELECT 
+                hike_number,
+                full_name,
+                gender,
+                COALESCE(CAST(pax AS INTEGER), 1) as pax_count
+              FROM registrations
+              WHERE hike_number IS NOT NULL AND hike_number != ''
+              ORDER BY timestamp DESC
+            `).all();
 
-          for (const r of (aggRows || [])) {
-            const hn = String(r.hike_number || '').trim();
-            if (!hn) continue;
-            if (!aggMap.has(hn)) {
-              aggMap.set(hn, {
-                total: 0,
-                male: 0,
-                female: 0,
-                recent: [],
-                seenNames: new Set(),
-              });
-            }
-            const stat = aggMap.get(hn);
-            const pCount = Number(r.pax_count) || 1;
-            const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
-            stat.total += pCount;
-            if (isFemale) stat.female += pCount;
-            else stat.male += pCount;
+            for (const r of (aggRows || [])) {
+              const hn = String(r.hike_number || '').trim();
+              if (!hn) continue;
+              if (!aggMap.has(hn)) {
+                aggMap.set(hn, {
+                  total: 0,
+                  male: 0,
+                  female: 0,
+                  recent: [],
+                  seenNames: new Set(),
+                });
+              }
+              const stat = aggMap.get(hn);
+              const pCount = Number(r.pax_count) || 1;
+              const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
+              stat.total += pCount;
+              if (isFemale) stat.female += pCount;
+              else stat.male += pCount;
 
-            const rawName = (r.full_name || '').trim();
-            const lowerName = rawName.toLowerCase();
-            if (rawName && !stat.seenNames.has(lowerName) && stat.recent.length < 6) {
-              stat.seenNames.add(lowerName);
-              const parts = rawName.split(/\s+/).filter(Boolean);
-              const anonymized = parts.length > 1
-                ? `${parts[0]} ${parts[1].charAt(0)}.`
-                : (parts[0] || 'Hiker');
-              stat.recent.push({
-                name: anonymized,
-                gender: isFemale ? 'f' : 'm',
-              });
+              const rawName = (r.full_name || '').trim();
+              const lowerName = rawName.toLowerCase();
+              if (rawName && !stat.seenNames.has(lowerName) && stat.recent.length < 6) {
+                stat.seenNames.add(lowerName);
+                const parts = rawName.split(/\s+/).filter(Boolean);
+                const anonymized = parts.length > 1
+                  ? `${parts[0]} ${parts[1].charAt(0)}.`
+                  : (parts[0] || 'Hiker');
+                stat.recent.push({
+                  name: anonymized,
+                  gender: isFemale ? 'f' : 'm',
+                });
+              }
             }
+            cachedTrekAggMap = aggMap;
+            lastTrekAggTime = Date.now();
+          } catch (aggErr) {
+            console.warn('Could not compute registration aggregates in D1:', aggErr);
           }
-        } catch (aggErr) {
-          console.warn('Could not compute registration aggregates in D1:', aggErr);
         }
 
         const data = (results || []).map((row) => {
@@ -551,6 +587,117 @@ export default {
         });
       }
 
+      // POST /treks/batch - Bulk upsert historical and sheet treks in a single atomic D1 transaction
+      if (method === 'POST' && path === '/treks/batch') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const body = await request.json();
+        const records = Array.isArray(body) ? body : (body.records || body.treks || []);
+        if (!Array.isArray(records) || records.length === 0) {
+          return errorResponse('records array required', 400);
+        }
+
+        // Optional: Save copy of imported dataset to R2 as historical backup in 1 PUT request
+        const bucket = env.TRAILS_BUCKET || env.BUCKET;
+        if (bucket && body.backupToR2) {
+          try {
+            const backupKey = `backups/historical_treks_${Date.now()}.json`;
+            await bucket.put(backupKey, JSON.stringify(records, null, 2), {
+              httpMetadata: { contentType: 'application/json' }
+            });
+          } catch (r2Err) {
+            console.warn('Backup to R2 failed (non-blocking):', r2Err);
+          }
+        }
+
+        const stmts = [];
+        for (const t of records) {
+          const hikeNum = String(t.hike_number || t.hikeNumber || '').trim();
+          if (!hikeNum) continue;
+
+          const title = String(t.title || t.name || t.trek_name || `Hike #${hikeNum}`).trim();
+          const category = String(t.category || 'Day Hike').trim();
+          const approxDistance = String(t.approx_distance || (t.distance ? `${t.distance} km` : '') || '').trim();
+          const hikeDate = String(t.hike_date || t.date || '').trim();
+          const expectedDuration = String(t.expected_duration || t.days || '1 Day').trim();
+          const difficulty = String(t.difficulty || 'Moderate').trim();
+          const teamLeader = String(t.team_leader || t.leader || '').trim();
+          const status = String(t.status || 'published').trim();
+          const trekId = String(t.id || `hike-${hikeNum.toLowerCase().replace(/\s+/g, '-')}`).trim();
+
+          const dataJson = typeof t.data_json === 'string'
+            ? t.data_json
+            : JSON.stringify(t.data || {
+                hikeNumber: hikeNum,
+                title,
+                category,
+                hikeDate,
+                teamLeader,
+                overview: {
+                  approxDistance,
+                  expectedDuration,
+                  difficulty
+                }
+              });
+
+          stmts.push(
+            env.DB.prepare(`
+              INSERT INTO treks (
+                id, hike_number, title, category, status, cover_image_url, hike_date,
+                min_price, max_price, currency, expected_duration,
+                difficulty, approx_distance, team_leader, data_json, author_email, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              ON CONFLICT(hike_number) DO UPDATE SET
+                title = CASE WHEN treks.title IS NULL OR treks.title = '' OR treks.title LIKE 'Hike #%' THEN EXCLUDED.title ELSE treks.title END,
+                approx_distance = CASE WHEN treks.approx_distance IS NULL OR treks.approx_distance = '' THEN EXCLUDED.approx_distance ELSE treks.approx_distance END,
+                team_leader = CASE WHEN treks.team_leader IS NULL OR treks.team_leader = '' THEN EXCLUDED.team_leader ELSE treks.team_leader END,
+                difficulty = CASE WHEN treks.difficulty IS NULL OR treks.difficulty = '' THEN EXCLUDED.difficulty ELSE treks.difficulty END,
+                expected_duration = CASE WHEN treks.expected_duration IS NULL OR treks.expected_duration = '' THEN EXCLUDED.expected_duration ELSE treks.expected_duration END,
+                hike_date = CASE WHEN treks.hike_date IS NULL OR treks.hike_date = '' THEN EXCLUDED.hike_date ELSE treks.hike_date END,
+                category = CASE WHEN treks.category IS NULL OR treks.category = '' THEN EXCLUDED.category ELSE treks.category END,
+                updated_at = CURRENT_TIMESTAMP
+            `).bind(
+              trekId,
+              hikeNum,
+              title,
+              category,
+              status,
+              t.cover_image_url || '',
+              hikeDate,
+              Number(t.min_price) || 0,
+              Number(t.max_price) || 0,
+              t.currency || 'NPR',
+              expectedDuration,
+              difficulty,
+              approxDistance,
+              teamLeader,
+              dataJson,
+              'walknepalwalk@gmail.com'
+            )
+          );
+        }
+
+        if (stmts.length === 0) {
+          return errorResponse('No valid trek records found to insert', 400);
+        }
+
+        // Execute batch in chunks of 50 to stay well under D1 batch limits
+        const chunkSize = 50;
+        let totalInserted = 0;
+        for (let i = 0; i < stmts.length; i += chunkSize) {
+          const chunk = stmts.slice(i, i + chunkSize);
+          await env.DB.batch(chunk);
+          totalInserted += chunk.length;
+        }
+
+        cachedTrekAggMap = null; // Invalidate cache so new treks appear instantly
+        return jsonResponse({
+          success: true,
+          message: `Successfully processed ${totalInserted} treks into Cloudflare D1`,
+          processedCount: totalInserted
+        });
+      }
+
       // POST /treks/sync, POST /treks, POST /admin/itineraries, PUT /admin/itineraries/:id - Upsert trek
       if (
         (method === 'POST' || method === 'PUT') &&
@@ -708,6 +855,10 @@ export default {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
         const email = url.searchParams.get('email');
         const hikeNum = url.searchParams.get('hike_number');
+        const limitParam = url.searchParams.get('limit');
+        const offsetParam = url.searchParams.get('offset');
+        const limit = limitParam ? parseInt(limitParam, 10) : 0;
+        const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
 
         let query = 'SELECT * FROM registrations ORDER BY timestamp DESC';
         let stmt = env.DB.prepare(query);
@@ -728,9 +879,10 @@ export default {
             b.paid_amount as roster_paid_amount,
             b.due_amount as roster_due_amount,
             b.admin_notes as roster_admin_notes,
-            b.pickup_point as roster_pickup_point
+            b.pickup_point as roster_pickup_point,
+            b.trek_date as roster_trek_date
           FROM registrations r
-          LEFT JOIN bookings_roster b ON CAST(r.id AS TEXT) = CAST(b.registration_id AS TEXT)
+          LEFT JOIN bookings_roster b ON r.id = b.registration_id
         `;
         let joinParams = [];
         if (email) {
@@ -741,6 +893,11 @@ export default {
           joinParams.push(hikeNum.trim());
         }
         baseJoinQuery += ' ORDER BY r.timestamp DESC';
+
+        if (limit > 0) {
+          baseJoinQuery += ' LIMIT ? OFFSET ?';
+          joinParams.push(limit, offset);
+        }
 
         let results = [];
         try {
@@ -764,7 +921,46 @@ export default {
           pickup_point: r.roster_pickup_point || r.pickup_point || '',
         }));
 
-        return jsonResponse({ success: true, data: mapped });
+        // Apply 2-month view limit on past registrations, while keeping any upcoming ones fully visible.
+        const now = new Date();
+        const twoMonthsAgo = new Date();
+        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+
+        const filtered = mapped.filter((r) => {
+          let compareDate = null;
+
+          // Parse trek_date if available
+          if (r.roster_trek_date) {
+            const parsed = new Date(r.roster_trek_date.replace(' ', 'T'));
+            if (!isNaN(parsed.getTime())) {
+              compareDate = parsed;
+            }
+          }
+
+          // Fallback to registration timestamp
+          if (!compareDate && r.timestamp) {
+            const parsed = new Date(r.timestamp.replace(' ', 'T'));
+            if (!isNaN(parsed.getTime())) {
+              compareDate = parsed;
+            }
+          }
+
+          // If no parseable date is found, keep for safety
+          if (!compareDate) return true;
+
+          // Upcoming is always accessible
+          if (compareDate >= now) return true;
+
+          // Past events must be within the last 2 months
+          return compareDate >= twoMonthsAgo;
+        });
+
+        const responseHeaders = {};
+        if (hikeNum) {
+          responseHeaders['Cache-Control'] = 'public, max-age=30, s-maxage=60';
+        }
+
+        return jsonResponse({ success: true, data: filtered }, 200, responseHeaders);
       }
 
       // PATCH /registrations/:id - Update Bookings & Roster details in Cloudflare D1
@@ -859,11 +1055,13 @@ export default {
 
         try {
           await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(id).run();
+          cachedTrekAggMap = null;
           return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully' });
         } catch (dbErr) {
           console.error('Failed to delete registration from D1:', dbErr);
           try {
             await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(Number(id) || id).run();
+            cachedTrekAggMap = null;
             return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully (fallback ID type)' });
           } catch (fallbackErr) {
             return errorResponse(`D1 delete error: ${fallbackErr.message}`, 500);
@@ -910,12 +1108,22 @@ export default {
           body.guide_mode || 'Guided',
           body.transport_mode || 'Bus',
           finalListName,
-          currentTimestamp
+          body.timestamp || currentTimestamp
         ).run();
 
         const insertedId = regResult?.meta?.last_row_id || regResult?.lastRowId;
         if (insertedId) {
           try {
+            const paid = Number(body.paid_amount) || 0;
+            const due = Number(body.due_amount) || 0;
+            let payStatus = body.payment_status;
+            if (!payStatus) {
+              if (paid > 0 && due === 0) payStatus = 'Paid';
+              else if (paid > 0 && due > 0) payStatus = 'Partial';
+              else if (due > 0 && paid === 0) payStatus = 'Due';
+              else payStatus = 'Unpaid';
+            }
+
             await env.DB.prepare(`
               INSERT INTO bookings_roster (
                 registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
@@ -930,11 +1138,11 @@ export default {
               body.phone || '',
               body.email_address || '',
               whatsappVal,
-              'Confirmed',
-              'Unpaid',
-              0,
-              0,
-              '',
+              body.registration_status || 'Confirmed',
+              payStatus,
+              paid,
+              due,
+              body.admin_notes || '',
               body.pickup_point || body.pickupPoint || body.pickup || ''
             ).run();
           } catch (rErr) {
@@ -942,7 +1150,8 @@ export default {
           }
         }
 
-        return jsonResponse({ success: true, message: 'Registration saved successfully' });
+        cachedTrekAggMap = null;
+        return jsonResponse({ success: true, message: 'Registration saved successfully', id: insertedId });
       }
 
       // ===== FEEDBACK ENDPOINTS =====

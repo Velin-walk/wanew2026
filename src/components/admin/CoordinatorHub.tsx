@@ -46,9 +46,52 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   loading,
   onRefresh,
 }) => {
-  const [selectedTrekId, setSelectedTrekId] = useState<string>(
-    treks[0]?.id || treks[0]?.hike_number || ''
-  );
+  // Filter for upcoming events + last 2 months hikes in Bookings & Roster / Coordinator View
+  const upcomingTreks = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    twoMonthsAgo.setHours(0, 0, 0, 0);
+
+    const parseTrekDate = (dateStr?: string): Date | null => {
+      if (!dateStr) return null;
+      const trimmed = dateStr.trim();
+      if (trimmed.includes('/')) {
+        const parts = trimmed.split('/');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+      const d = new Date(trimmed);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    return treks.filter((t) => {
+      const dt = parseTrekDate(t.date);
+      // Keep if no date found for safety, otherwise keep if upcoming OR within the last 2 months
+      return !dt || dt.getTime() >= twoMonthsAgo.getTime();
+    }).sort((a, b) => {
+      const da = parseTrekDate(a.date)?.getTime() || 0;
+      const db = parseTrekDate(b.date)?.getTime() || 0;
+      return da - db; // nearest/oldest first
+    });
+  }, [treks]);
+
+  const [selectedTrekId, setSelectedTrekId] = useState<string>('');
+
+  // Auto-select first upcoming trek once loaded
+  React.useEffect(() => {
+    if (upcomingTreks.length > 0 && !selectedTrekId) {
+      setSelectedTrekId(upcomingTreks[0].id || upcomingTreks[0].hike_number || '');
+    }
+  }, [upcomingTreks, selectedTrekId]);
+
   const [tableFilter, setTableFilter] = useState<FilterType>('all');
   const [sortCol, setSortCol] = useState<SortCol>('name');
   const [sortAsc, setSortAsc] = useState<boolean>(true);
@@ -58,11 +101,11 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   // Selected Active Trek
   const currentTrek = useMemo(() => {
     return (
-      treks.find((t) => t.id === selectedTrekId || t.hike_number === selectedTrekId) ||
-      treks[0] ||
+      upcomingTreks.find((t) => t.id === selectedTrekId || t.hike_number === selectedTrekId) ||
+      upcomingTreks[0] ||
       null
     );
-  }, [treks, selectedTrekId]);
+  }, [upcomingTreks, selectedTrekId]);
 
   // Registrations matching active trek
   const trekRegistrations = useMemo(() => {
@@ -334,7 +377,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
       {/* ── TOP EVENT CARDS STRIP ── */}
       <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200 print:hidden">
-        {treks.map((t) => {
+        {upcomingTreks.map((t) => {
           const isSelected = (currentTrek?.id === t.id) || (currentTrek?.hike_number === t.hike_number);
           const tRegsCount = registrations.filter((r) => {
             const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase();

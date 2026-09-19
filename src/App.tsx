@@ -28,6 +28,8 @@ import AdminDashboard from './components/admin/AdminDashboard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
+import { db } from './lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 function MainApp() {
   const { user, userEmail, isAdmin, openAuthModal } = useAuth();
@@ -108,7 +110,25 @@ function MainApp() {
           }
         }
       } catch (err) {
-        console.warn('Network issue fetching treks:', err);
+        console.warn('Network issue fetching treks, attempting Firestore fallback...', err);
+      }
+
+      // Secondary Failover: Load itineraries from Firestore if Cloudflare returned empty or errored
+      if (baseTreks.length === 0) {
+        try {
+          const { collection, getDocs } = await import('firebase/firestore');
+          const querySnapshot = await getDocs(collection(db, 'treks'));
+          const fsTreks: Trek[] = [];
+          querySnapshot.forEach((docSnap) => {
+            fsTreks.push(normalizeTrek(docSnap.data()));
+          });
+          if (fsTreks.length > 0) {
+            baseTreks = fsTreks;
+            console.log('Successfully fetched fallback itineraries from Firestore:', fsTreks.length);
+          }
+        } catch (fsErr) {
+          console.warn('Could not load fallback treks from Firestore:', fsErr);
+        }
       }
 
       if (baseTreks.length === 0) {
@@ -138,7 +158,55 @@ function MainApp() {
           });
           setBookings(enrichedBookings);
         } catch (err) {
-          console.warn('Could not fetch user personal bookings:', err);
+          console.warn('Could not fetch user personal bookings from Cloudflare, attempting Firestore fallback...', err);
+          // Secondary Failover: Load user bookings from Firestore registrations
+          try {
+            const { collection, query, where, getDocs } = await import('firebase/firestore');
+            const q = query(
+              collection(db, 'registrations'),
+              where('email_address', '==', activeUserEmail)
+            );
+            const querySnapshot = await getDocs(q);
+            const fsBookings: any[] = [];
+            querySnapshot.forEach((docSnap) => {
+              fsBookings.push(docSnap.data());
+            });
+
+            const now = new Date();
+            const twoMonthsAgo = new Date();
+            twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+
+            const filteredFs = fsBookings.filter((b: any) => {
+              let compareDate = null;
+
+              if (b.trek_date) {
+                const parsed = new Date(b.trek_date.replace(' ', 'T'));
+                if (!isNaN(parsed.getTime())) {
+                  compareDate = parsed;
+                }
+              }
+
+              if (!compareDate && b.timestamp) {
+                const parsed = new Date(b.timestamp.replace(' ', 'T'));
+                if (!isNaN(parsed.getTime())) {
+                  compareDate = parsed;
+                }
+              }
+
+              if (!compareDate) return true;
+
+              if (compareDate >= now) return true;
+
+              return compareDate >= twoMonthsAgo;
+            });
+
+            if (filteredFs.length > 0) {
+              setBookings(filteredFs);
+              console.log('Successfully fetched user bookings fallback from Firestore:', filteredFs.length);
+            }
+          } catch (fsErr) {
+            console.warn('Failed to fetch user bookings fallback from Firestore:', fsErr);
+          }
         }
       } else {
         setBookings([]);
@@ -325,61 +393,139 @@ function MainApp() {
       type_of_trail: trek.type_of_trail || ''
     };
 
-    const res = await apiFetch('/registrations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(primaryPayload),
-    });
+    let primaryId = `reg-${Date.now()}`;
+    let isCloudflareDown = false;
 
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to submit booking');
+    try {
+      const res = await apiFetch('/registrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(primaryPayload),
+      });
+
+      if (!res.ok) {
+        throw new Error('Cloudflare primary registration rejected');
+      }
+      const data = await res.json();
+      if (data.id) {
+        primaryId = String(data.id);
+      }
+    } catch (err) {
+      console.warn('[Registration Engine] Cloudflare down/failed, writing directly to Firestore:', err);
+      isCloudflareDown = true;
     }
 
-    // Submit team members separately to D1 just like server.ts did
+    // Always write primary registration to Firestore
+    try {
+      await setDoc(doc(db, 'registrations', primaryId), {
+        id: primaryId,
+        userId: user?.uid || 'anonymous',
+        trekId: String(trek.id || trek.hike_number || ''),
+        trekTitle: trek.name,
+        hikerName: primaryPayload.full_name,
+        phone: primaryPayload.phone,
+        email: primaryPayload.email_address,
+        pickupPoint: primaryPayload.pickup_point || '',
+        paxCount: primaryPayload.pax,
+        registeredAt: new Date().toISOString(),
+        backupStatus: isCloudflareDown ? 'Pending Sync' : 'Synced',
+        ...primaryPayload
+      });
+      console.log('Dual-wrote primary registration to Firestore:', primaryId);
+    } catch (fsErr) {
+      console.warn('Dual-write primary registration to Firestore failed:', fsErr);
+      // If BOTH main server and backup Firestore fail, only then bubble the exception
+      if (isCloudflareDown) {
+        throw new Error('Registration failed: Both main database and backup storage are currently offline. Please try again shortly.');
+      }
+    }
+
+    // Submit team members separately to D1 / Firestore
     if (formData.team_members && formData.team_members.length > 0) {
       for (const tm of formData.team_members) {
         if (tm.full_name) {
-          await apiFetch('/registrations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              hike_number: trek.hike_number || trek.id,
-              trek_name: trek.name,
-              full_name: tm.full_name,
-              pax: 1,
+          const companionPayload = {
+            hike_number: trek.hike_number || trek.id,
+            trek_name: trek.name,
+            full_name: tm.full_name,
+            pax: 1,
+            phone: tm.phone || '',
+            whatsapp: tm.phone || '',
+            email_address: formData.email || activeUserEmail,
+            emergency_backup_contact: formData.phone,
+            profession: '',
+            part_of_group: 'Group',
+            age_group: tm.age_group || '20-30',
+            gender: tm.gender || 'Female',
+            guide_mode: formData.guide_preference || 'Guided',
+            transport_mode: formData.transport_preference || 'Bus',
+            due: '',
+            paid: '',
+            agreement: 'Yes',
+            suggestions: '',
+            person_remarks: `Companion of ${formData.full_name}`,
+            updates: '',
+            pickup_point: '',
+            list_name: `${trek.name} (${trek.date})`,
+            fitness: trek.fitness_level || '',
+            medical_condition: 'No',
+            recent_hikes: '',
+            distance: trek.distance || '',
+            difficulty: trek.difficulty || '',
+            season: trek.season || '',
+            type_of_trail: trek.type_of_trail || ''
+          };
+
+          let companionId = `reg-companion-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          let isCompCloudflareDown = isCloudflareDown;
+
+          if (!isCloudflareDown) {
+            try {
+              const compRes = await apiFetch('/registrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(companionPayload)
+              });
+              if (compRes.ok) {
+                const compData = await compRes.json().catch(() => ({}));
+                if (compData.id) {
+                  companionId = String(compData.id);
+                }
+              } else {
+                isCompCloudflareDown = true;
+              }
+            } catch (cErr) {
+              isCompCloudflareDown = true;
+            }
+          }
+
+          // Dual-write companion registration to Firestore
+          try {
+            await setDoc(doc(db, 'registrations', companionId), {
+              id: companionId,
+              userId: user?.uid || 'anonymous',
+              trekId: String(trek.id || trek.hike_number || ''),
+              trekTitle: trek.name,
+              hikerName: tm.full_name,
               phone: tm.phone || '',
-              whatsapp: tm.phone || '',
-              email_address: formData.email || activeUserEmail,
-              emergency_backup_contact: formData.phone,
-              profession: '',
-              part_of_group: 'Group',
-              age_group: tm.age_group || '20-30',
-              gender: tm.gender || 'Female',
-              guide_mode: formData.guide_preference || 'Guided',
-              transport_mode: formData.transport_preference || 'Bus',
-              due: '',
-              paid: '',
-              agreement: 'Yes',
-              suggestions: '',
-              person_remarks: `Companion of ${formData.full_name}`,
-              updates: '',
-              pickup_point: '',
-              list_name: `${trek.name} (${trek.date})`,
-              fitness: trek.fitness_level || '',
-              medical_condition: 'No',
-              recent_hikes: '',
-              distance: trek.distance || '',
-              difficulty: trek.difficulty || '',
-              season: trek.season || '',
-              type_of_trail: trek.type_of_trail || ''
-            })
-          });
+              email: formData.email || activeUserEmail,
+              pickupPoint: '',
+              paxCount: 1,
+              registeredAt: new Date().toISOString(),
+              backupStatus: isCompCloudflareDown ? 'Pending Sync' : 'Synced',
+              ...companionPayload
+            });
+            console.log('Dual-wrote companion registration to Firestore:', companionId);
+          } catch (fsErr) {
+            console.warn('Dual-write companion registration to Firestore failed (non-blocking):', fsErr);
+          }
         }
       }
     }
 
-    const toastMsg = data.message || 'Successfully registered & saved to Cloudflare D1!';
+    const toastMsg = isCloudflareDown
+      ? '✓ Booking recorded securely in backup storage! (Cloudflare offline)'
+      : '✓ Successfully registered and saved!';
     showToast(toastMsg, 'success');
     await refreshData({ force: true });
     setCurrentTab('bookings');

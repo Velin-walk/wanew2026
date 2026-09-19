@@ -14,11 +14,10 @@ export const googleProvider = new GoogleAuthProvider();
 // Test Firestore Connection as per Firebase skill mandates
 async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    const snap = await getDocFromServer(doc(db, 'test', 'connection'));
+    console.log('Firebase connection check: Succeeded. Document exists =', snap.exists());
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase connection offline check:', error.message);
-    }
+    console.error('Firebase connection check: Failed with error:', error);
   }
 }
 
