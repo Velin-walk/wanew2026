@@ -103,6 +103,46 @@ let cachedTrekAggMap = null;
 let lastTrekAggTime = 0;
 const TREK_AGG_TTL = 5 * 60 * 1000; // 5 minutes in ms
 
+// Native Cloudflare Edge Cache API Helpers (Zero-Cost RAM Caching at the Edge)
+async function matchEdgeCache(request) {
+  try {
+    if (typeof caches !== 'undefined' && caches.default) {
+      return await caches.default.match(request);
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function putEdgeCache(request, response, ctx, ttlSeconds = 300) {
+  try {
+    if (typeof caches !== 'undefined' && caches.default && response && response.ok) {
+      const cloned = new Response(response.body, response);
+      cloned.headers.set('Cache-Control', `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}`);
+      cloned.headers.set('X-Edge-Cache', 'HIT');
+      if (ctx && ctx.waitUntil) {
+        ctx.waitUntil(caches.default.put(request, cloned));
+      } else {
+        await caches.default.put(request, cloned);
+      }
+    }
+  } catch (_) {}
+}
+
+async function purgeEdgeCache(urlList, ctx) {
+  try {
+    if (typeof caches !== 'undefined' && caches.default && Array.isArray(urlList)) {
+      for (const u of urlList) {
+        const req = new Request(u);
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(caches.default.delete(req));
+        } else {
+          await caches.default.delete(req);
+        }
+      }
+    }
+  } catch (_) {}
+}
+
 let indexesEnsured = false;
 async function ensurePerformanceIndexes(env) {
   if (indexesEnsured || !env || !env.DB) return;
@@ -115,21 +155,18 @@ async function ensurePerformanceIndexes(env) {
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_hike_number ON bookings_roster (hike_number)'),
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_created_at ON treks (created_at DESC)'),
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_hike_number ON treks (hike_number)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_number)')
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_number)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_community_trails_status ON community_trails (status)')
     ]);
     indexesEnsured = true;
   } catch (e) {
-    // Non-blocking: will retry next time if D1 is temporarily rate-limited
+    // Non-blocking
   }
 }
 
 export default {
   async fetch(request, env, ctx) {
-    if (ctx && ctx.waitUntil) {
-      ctx.waitUntil(ensurePerformanceIndexes(env));
-    } else {
-      ensurePerformanceIndexes(env).catch(() => {});
-    }
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -155,6 +192,16 @@ export default {
       // GET /treks or GET /admin/itineraries - List all treks with server-side anonymous participant aggregation
       if (method === 'GET' && (path === '/treks' || path === '/admin/itineraries')) {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
+
+        const isFresh = url.searchParams.has('fresh') || url.searchParams.has('forceFresh');
+        
+        // 1. Check Cloudflare Global Edge Cache first (0 D1 row reads)
+        if (!isFresh) {
+          const cached = await matchEdgeCache(request);
+          if (cached) {
+            return cached;
+          }
+        }
         
         let results = [];
         try {
@@ -180,57 +227,63 @@ export default {
         }
 
         // Server-Side Anonymous Aggregate:
-        // Calculates participant counts, gender ratio, and initialed avatars on the server.
-        // Public visitors never download private registrant emails, phones, or notes.
+        // Uses GROUP BY on indexed hike_number to avoid scanning all raw registrations
         let aggMap = cachedTrekAggMap;
-        const isFresh = url.searchParams.has('fresh') || url.searchParams.has('forceFresh');
         if (!aggMap || isFresh || (Date.now() - lastTrekAggTime > TREK_AGG_TTL)) {
           aggMap = new Map();
           try {
             const { results: aggRows } = await env.DB.prepare(`
               SELECT 
                 hike_number,
-                full_name,
-                gender,
-                COALESCE(CAST(pax AS INTEGER), 1) as pax_count
+                COUNT(*) as total_bookings,
+                SUM(COALESCE(CAST(pax AS INTEGER), 1)) as total_pax,
+                SUM(CASE WHEN LOWER(gender) LIKE 'f%' THEN COALESCE(CAST(pax AS INTEGER), 1) ELSE 0 END) as female_pax,
+                SUM(CASE WHEN LOWER(gender) NOT LIKE 'f%' THEN COALESCE(CAST(pax AS INTEGER), 1) ELSE 0 END) as male_pax
               FROM registrations
               WHERE hike_number IS NOT NULL AND hike_number != ''
-              ORDER BY timestamp DESC
+              GROUP BY hike_number
             `).all();
 
             for (const r of (aggRows || [])) {
               const hn = String(r.hike_number || '').trim();
               if (!hn) continue;
-              if (!aggMap.has(hn)) {
-                aggMap.set(hn, {
-                  total: 0,
-                  male: 0,
-                  female: 0,
-                  recent: [],
-                  seenNames: new Set(),
-                });
-              }
-              const stat = aggMap.get(hn);
-              const pCount = Number(r.pax_count) || 1;
-              const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
-              stat.total += pCount;
-              if (isFemale) stat.female += pCount;
-              else stat.male += pCount;
-
-              const rawName = (r.full_name || '').trim();
-              const lowerName = rawName.toLowerCase();
-              if (rawName && !stat.seenNames.has(lowerName) && stat.recent.length < 6) {
-                stat.seenNames.add(lowerName);
-                const parts = rawName.split(/\s+/).filter(Boolean);
-                const anonymized = parts.length > 1
-                  ? `${parts[0]} ${parts[1].charAt(0)}.`
-                  : (parts[0] || 'Hiker');
-                stat.recent.push({
-                  name: anonymized,
-                  gender: isFemale ? 'f' : 'm',
-                });
-              }
+              aggMap.set(hn, {
+                total: Number(r.total_pax) || 0,
+                male: Number(r.male_pax) || 0,
+                female: Number(r.female_pax) || 0,
+                recent: [],
+              });
             }
+
+            // Fetch top recent attendees with strict LIMIT 40 to avoid scanning large historical datasets
+            try {
+              const { results: recentRows } = await env.DB.prepare(`
+                SELECT hike_number, full_name, gender
+                FROM registrations
+                WHERE hike_number IS NOT NULL AND hike_number != '' AND full_name IS NOT NULL AND full_name != ''
+                ORDER BY timestamp DESC
+                LIMIT 40
+              `).all();
+
+              for (const r of (recentRows || [])) {
+                const hn = String(r.hike_number || '').trim();
+                if (!hn || !aggMap.has(hn)) continue;
+                const stat = aggMap.get(hn);
+                if (stat.recent.length < 5) {
+                  const rawName = (r.full_name || '').trim();
+                  const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
+                  const parts = rawName.split(/\s+/).filter(Boolean);
+                  const anonymized = parts.length > 1
+                    ? `${parts[0]} ${parts[1].charAt(0)}.`
+                    : (parts[0] || 'Hiker');
+                  stat.recent.push({
+                    name: anonymized,
+                    gender: isFemale ? 'f' : 'm',
+                  });
+                }
+              }
+            } catch (_) {}
+
             cachedTrekAggMap = aggMap;
             lastTrekAggTime = Date.now();
           } catch (aggErr) {
@@ -285,15 +338,27 @@ export default {
           };
         });
 
-        return jsonResponse({ success: true, data }, 200, {
-          'Cache-Control': 'public, max-age=120, stale-while-revalidate=300'
+        const resp = jsonResponse({ success: true, data }, 200, {
+          'Cache-Control': 'public, max-age=300, s-maxage=300',
+          'X-Edge-Cache': 'MISS'
         });
+
+        // Store in Cloudflare Edge Cache asynchronously
+        await putEdgeCache(request, resp, ctx, 300);
+
+        return resp;
       }
 
       // GET /treks/:id or GET /admin/itineraries/:id - Get single trek
       if (method === 'GET' && (path.startsWith('/treks/') || path.startsWith('/admin/itineraries/'))) {
         const idOrNum = decodeURIComponent(path.replace(/^\/(treks|admin\/itineraries)\//, ''));
         if (!env.DB) return errorResponse('Database not bound', 500);
+
+        const isFresh = url.searchParams.has('fresh') || url.searchParams.has('forceFresh');
+        if (!isFresh) {
+          const cached = await matchEdgeCache(request);
+          if (cached) return cached;
+        }
 
         const row = await env.DB.prepare(
           'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
@@ -372,15 +437,19 @@ export default {
           data: parsedData,
         };
 
-        return jsonResponse({
+        const resp = jsonResponse({
           success: true,
           data: trekObj,
           trek: trekObj,
           roster: sanitizedRoster,
           total_pax,
         }, 200, {
-          'Cache-Control': 'public, max-age=180, stale-while-revalidate=300'
+          'Cache-Control': 'public, max-age=300, s-maxage=300',
+          'X-Edge-Cache': 'MISS'
         });
+
+        await putEdgeCache(request, resp, ctx, 300);
+        return resp;
       }
 
       // POST /admin/sync-all - Bulk sync trigger
@@ -894,10 +963,9 @@ export default {
         }
         baseJoinQuery += ' ORDER BY r.timestamp DESC';
 
-        if (limit > 0) {
-          baseJoinQuery += ' LIMIT ? OFFSET ?';
-          joinParams.push(limit, offset);
-        }
+        const effectiveLimit = limit > 0 ? limit : (email || hikeNum ? 500 : 120);
+        baseJoinQuery += ' LIMIT ? OFFSET ?';
+        joinParams.push(effectiveLimit, offset);
 
         let results = [];
         try {
@@ -1208,29 +1276,16 @@ export default {
           return jsonResponse({ success: true, data: [] });
         }
 
+        const isFresh = url.searchParams.has('fresh');
+        if (!isFresh) {
+          const cached = await matchEdgeCache(request);
+          if (cached) return cached;
+        }
+
         try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS trek_photos (
-              id TEXT PRIMARY KEY,
-              trek_id TEXT,
-              hike_number TEXT,
-              trek_name TEXT,
-              url TEXT,
-              public_id TEXT,
-              uploaded_by TEXT,
-              user_uid TEXT,
-              uploaded_at DATETIME,
-              caption TEXT
-            )
-          `).run();
-
-          try {
-            await env.DB.prepare(`ALTER TABLE trek_photos ADD COLUMN caption TEXT`).run();
-          } catch (_) {}
-
-          let stmt = env.DB.prepare('SELECT * FROM trek_photos ORDER BY uploaded_at DESC');
+          let stmt = env.DB.prepare('SELECT * FROM trek_photos ORDER BY uploaded_at DESC LIMIT 100');
           if (trekId) {
-            stmt = env.DB.prepare('SELECT * FROM trek_photos WHERE trek_id = ? ORDER BY uploaded_at DESC').bind(trekId);
+            stmt = env.DB.prepare('SELECT * FROM trek_photos WHERE trek_id = ? ORDER BY uploaded_at DESC LIMIT 100').bind(trekId);
           }
           const { results } = await stmt.all();
           const mapped = (results || []).map((r) => ({
@@ -1245,7 +1300,13 @@ export default {
             uploadedAt: r.uploaded_at,
             caption: r.caption || '',
           }));
-          return jsonResponse({ success: true, data: mapped });
+
+          const resp = jsonResponse({ success: true, data: mapped }, 200, {
+            'Cache-Control': 'public, max-age=300, s-maxage=300',
+            'X-Edge-Cache': 'MISS'
+          });
+          await putEdgeCache(request, resp, ctx, 300);
+          return resp;
         } catch (err) {
           console.warn('Error querying trek_photos in Cloudflare D1:', err);
           return jsonResponse({ success: true, data: [] });
@@ -1261,25 +1322,6 @@ export default {
         const currentTimestamp = body.uploadedAt || new Date().toISOString();
 
         try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS trek_photos (
-              id TEXT PRIMARY KEY,
-              trek_id TEXT,
-              hike_number TEXT,
-              trek_name TEXT,
-              url TEXT,
-              public_id TEXT,
-              uploaded_by TEXT,
-              user_uid TEXT,
-              uploaded_at DATETIME,
-              caption TEXT
-            )
-          `).run();
-
-          try {
-            await env.DB.prepare(`ALTER TABLE trek_photos ADD COLUMN caption TEXT`).run();
-          } catch (_) {}
-
           await env.DB.prepare(`
             INSERT INTO trek_photos (
               id, trek_id, hike_number, trek_name, url, public_id, uploaded_by, user_uid, uploaded_at, caption
@@ -1331,22 +1373,6 @@ export default {
         }
 
         try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS photo_comments (
-              id TEXT PRIMARY KEY,
-              photo_id TEXT,
-              user_uid TEXT,
-              user_name TEXT,
-              user_avatar TEXT,
-              comment_text TEXT,
-              created_at DATETIME
-            )
-          `).run();
-
-          try {
-            await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_photo_comments_photo_id ON photo_comments (photo_id)`).run();
-          } catch (_) {}
-
           let results = [];
           if (photoId) {
             const res = await env.DB.prepare(
@@ -1355,7 +1381,7 @@ export default {
             results = res.results || [];
           } else {
             const res = await env.DB.prepare(
-              'SELECT * FROM photo_comments ORDER BY created_at ASC'
+              'SELECT * FROM photo_comments ORDER BY created_at ASC LIMIT 100'
             ).all();
             results = res.results || [];
           }
@@ -1386,18 +1412,6 @@ export default {
         const currentTimestamp = body.createdAt || new Date().toISOString();
 
         try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS photo_comments (
-              id TEXT PRIMARY KEY,
-              photo_id TEXT,
-              user_uid TEXT,
-              user_name TEXT,
-              user_avatar TEXT,
-              comment_text TEXT,
-              created_at DATETIME
-            )
-          `).run();
-
           await env.DB.prepare(`
             INSERT INTO photo_comments (
               id, photo_id, user_uid, user_name, user_avatar, comment_text, created_at
@@ -1449,13 +1463,15 @@ export default {
       // GET /mapminers/trails or GET /community_trails - List trails
       if (method === 'GET' && (path === '/mapminers/trails' || path === '/community_trails')) {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
+
+        const isFresh = url.searchParams.has('fresh');
+        if (!isFresh) {
+          const cached = await matchEdgeCache(request);
+          if (cached) return cached;
+        }
+
         let results = [];
         try {
-          // Auto-migrate: ensure status column exists in community_trails
-          try {
-            await env.DB.prepare("ALTER TABLE community_trails ADD COLUMN status TEXT DEFAULT 'approved'").run();
-          } catch (_) {}
-
           const res = await env.DB.prepare('SELECT * FROM community_trails ORDER BY uploaded_at DESC').all();
           results = res.results || [];
         } catch (e) {
@@ -1473,7 +1489,12 @@ export default {
           status: r.status || 'approved',
         }));
 
-        return jsonResponse({ success: true, data });
+        const resp = jsonResponse({ success: true, data }, 200, {
+          'Cache-Control': 'public, max-age=300, s-maxage=300',
+          'X-Edge-Cache': 'MISS'
+        });
+        await putEdgeCache(request, resp, ctx, 300);
+        return resp;
       }
 
       // PATCH /mapminers/trails/:id or PATCH /community_trails/:id - Update trail status (Approve / Reject)
@@ -1487,10 +1508,6 @@ export default {
         if (!status || !['approved', 'rejected', 'pending'].includes(status)) {
           return errorResponse('Invalid status. Must be approved, rejected, or pending.', 400);
         }
-
-        try {
-          await env.DB.prepare("ALTER TABLE community_trails ADD COLUMN status TEXT DEFAULT 'approved'").run();
-        } catch (_) {}
 
         await env.DB.prepare('UPDATE community_trails SET status = ? WHERE id = ? OR file_name = ?')
           .bind(status, trailId, trailId)

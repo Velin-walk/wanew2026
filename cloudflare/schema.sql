@@ -119,7 +119,8 @@ CREATE TABLE IF NOT EXISTS community_trails (
   fileName TEXT,
   fileSize INTEGER,
   contributorEmail TEXT,
-  file_size INTEGER
+  file_size INTEGER,
+  status TEXT DEFAULT 'approved'
 );
 
 -- 6. Feedback Table
@@ -154,7 +155,8 @@ CREATE TABLE IF NOT EXISTS trek_photos (
   public_id TEXT,
   uploaded_by TEXT,
   user_uid TEXT,
-  uploaded_at DATETIME
+  uploaded_at DATETIME,
+  caption TEXT
 );
 
 -- 9. Photo Comments Table
@@ -168,6 +170,7 @@ CREATE TABLE IF NOT EXISTS photo_comments (
   created_at DATETIME
 );
 
+-- Indexes for Ultra-Low Row Reads & High-Speed Querying
 CREATE INDEX IF NOT EXISTS idx_photo_comments_photo_id ON photo_comments (photo_id);
 CREATE INDEX IF NOT EXISTS idx_regs_hike_number ON registrations (hike_number);
 CREATE INDEX IF NOT EXISTS idx_regs_email ON registrations (email_address);
@@ -177,5 +180,7 @@ CREATE INDEX IF NOT EXISTS idx_roster_hike_number ON bookings_roster (hike_numbe
 CREATE INDEX IF NOT EXISTS idx_treks_created_at ON treks (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_treks_hike_number ON treks (hike_number);
 CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_number);
+CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id);
+CREATE INDEX IF NOT EXISTS idx_community_trails_status ON community_trails (status);
 
 
