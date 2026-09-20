@@ -18,7 +18,9 @@ interface CacheItem {
 
 // In-memory cache + persistent sessionStorage cache to minimize Cloudflare Worker and D1 queries
 const memoryCache = new Map<string, CacheItem>();
+const errorThrottleMap = new Map<string, number>(); // Circuit breaker: directUrl -> throttleUntil timestamp
 export const DEFAULT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes in ms
+export const ERROR_THROTTLE_TTL = 60 * 1000; // 1 minute throttle on server errors (1101 / 500)
 
 function getSessionCache(key: string): CacheItem | null {
   try {
@@ -94,6 +96,17 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
 
   const ttl = options?.cacheTtl ?? DEFAULT_CACHE_TTL;
 
+  // Circuit Breaker: If this endpoint recently failed with a 500/1101 error, protect D1 from repeated scans
+  if (!options?.forceFresh) {
+    const throttledUntil = errorThrottleMap.get(directUrl);
+    if (throttledUntil && Date.now() < throttledUntil) {
+      return new Response(JSON.stringify({ error: "Endpoint temporarily throttled due to server error" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json", "X-WNW-Circuit-Breaker": "OPEN" },
+      });
+    }
+  }
+
   // Handle GET caching if forceFresh is not set
   if (!options?.forceFresh) {
     // 1. Check ultra-fast memory cache
@@ -123,7 +136,23 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
   }
 
   // Perform live network fetch to Cloudflare Worker
-  const res = await fetch(directUrl, options);
+  let res: Response;
+  try {
+    res = await fetch(directUrl, options);
+  } catch (netErr) {
+    // If network connection failed completely, throttle for 30s to avoid hammering
+    errorThrottleMap.set(directUrl, Date.now() + 30000);
+    throw netErr;
+  }
+
+  // If server returned an error (e.g. 500, 1101), activate circuit breaker to protect D1 from being queried in loops
+  if (res.status >= 500) {
+    errorThrottleMap.set(directUrl, Date.now() + ERROR_THROTTLE_TTL);
+    return res;
+  }
+
+  // If request succeeded, clear any existing circuit breaker throttle
+  errorThrottleMap.delete(directUrl);
 
   // Cache successful JSON responses
   if (res.ok) {

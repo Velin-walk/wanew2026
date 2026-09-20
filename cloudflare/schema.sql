@@ -227,14 +227,18 @@ CREATE TABLE IF NOT EXISTS system_snapshots (
 CREATE INDEX IF NOT EXISTS idx_photo_comments_photo_id ON photo_comments (photo_id);
 CREATE INDEX IF NOT EXISTS idx_regs_hike_number ON registrations (hike_number);
 CREATE INDEX IF NOT EXISTS idx_regs_email ON registrations (email_address);
+CREATE INDEX IF NOT EXISTS idx_regs_email_lower ON registrations (LOWER(email_address));
+CREATE INDEX IF NOT EXISTS idx_regs_user_email_lower ON registrations (LOWER(user_email));
 CREATE INDEX IF NOT EXISTS idx_regs_timestamp ON registrations (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_roster_reg_id ON bookings_roster (registration_id);
 CREATE INDEX IF NOT EXISTS idx_roster_hike_number ON bookings_roster (hike_number);
+CREATE INDEX IF NOT EXISTS idx_roster_email_lower ON bookings_roster (LOWER(email));
 CREATE INDEX IF NOT EXISTS idx_treks_created_at ON treks (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_treks_hike_number ON treks (hike_number);
 CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_number);
 CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id);
 CREATE INDEX IF NOT EXISTS idx_community_trails_status ON community_trails (status);
+CREATE INDEX IF NOT EXISTS idx_hiker_email_lower ON hiker_profiles (LOWER(email));
 CREATE INDEX IF NOT EXISTS idx_hiker_total_hikes ON hiker_profiles (total_hikes DESC);
 CREATE INDEX IF NOT EXISTS idx_hiker_uid ON hiker_profiles (user_uid);
 

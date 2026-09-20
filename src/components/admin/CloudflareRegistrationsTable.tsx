@@ -14,8 +14,12 @@ import {
   ChevronRight,
   X,
   FileSpreadsheet,
-  Layers
+  Layers,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
+import { apiFetch } from '../../services/api';
 
 interface CloudflareRegistrationsTableProps {
   registrations: any[];
@@ -73,6 +77,42 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
   const [pageSize, setPageSize] = useState(25);
   const [sortKey, setSortKey] = useState<string>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isSyncingProfiles, setIsSyncingProfiles] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<{ text: string; success: boolean } | null>(null);
+
+  const handleForwardToProfiles = async () => {
+    setIsSyncingProfiles(true);
+    setSyncFeedback(null);
+    try {
+      const res = await apiFetch('admin/migrate-profiles', {
+        method: 'POST',
+        body: JSON.stringify({ backfillFromTables: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Also trigger leaderboard recompute
+        await apiFetch('admin/recompute-leaderboard', { method: 'POST' }).catch(() => {});
+        setSyncFeedback({
+          text: `🎉 Forwarded ${data.migratedCount || 0} hikers into Hiker Profiles & refreshed Leaderboard!`,
+          success: true,
+        });
+        if (onRefresh) onRefresh();
+      } else {
+        setSyncFeedback({
+          text: 'Profile forward request returned an error. Please try again.',
+          success: false,
+        });
+      }
+    } catch (err: any) {
+      setSyncFeedback({
+        text: 'Error forwarding to profiles: ' + (err.message || 'Connection error'),
+        success: false,
+      });
+    } finally {
+      setIsSyncingProfiles(false);
+      setTimeout(() => setSyncFeedback(null), 8000);
+    }
+  };
 
   // Distinct hike list for filter dropdown
   const uniqueHikes = useMemo(() => {
@@ -300,6 +340,17 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
 
           <button
             type="button"
+            onClick={handleForwardToProfiles}
+            disabled={isSyncingProfiles || loading}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            title="Forward registrations & roster data into Hiker Profiles & Leaderboard"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${isSyncingProfiles ? 'animate-spin' : ''}`} />
+            <span>{isSyncingProfiles ? 'Syncing Profiles...' : 'Sync to Hiker Profiles'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleExportCSV}
             disabled={filteredRecords.length === 0}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F38020] hover:bg-[#E07218] active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
@@ -310,6 +361,32 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
           </button>
         </div>
       </div>
+
+      {syncFeedback && (
+        <div
+          className={`px-4 py-3 rounded-xl border flex items-center justify-between text-xs font-semibold animate-in fade-in duration-200 ${
+            syncFeedback.success
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : 'bg-rose-50 border-rose-200 text-rose-900'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {syncFeedback.success ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{syncFeedback.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSyncFeedback(null)}
+            className="text-stone-400 hover:text-stone-700 cursor-pointer p-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Control / Filter Toolbar */}
       <div className="bg-white p-3 rounded-2xl border border-[#E5E1DB] shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
