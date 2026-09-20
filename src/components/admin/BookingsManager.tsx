@@ -9,6 +9,8 @@ import {
   Mail,
   XCircle,
   CheckCircle,
+  CheckCircle2,
+  X,
   AlertCircle,
   UserX,
   RefreshCw,
@@ -129,19 +131,26 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   // Delete Confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Safe In-App Confirmation & Notification States
+  const [pendingDeleteReg, setPendingDeleteReg] = useState<AdminRegistration | null>(null);
+  const [showBulkPurgeModal, setShowBulkPurgeModal] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   // Batch deletion states
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isPurging, setIsPurging] = useState(false);
   const [purgeProgress, setPurgeProgress] = useState(0);
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = () => {
+    if (selectedIds.length === 0) return;
+    setShowBulkPurgeModal(true);
+  };
+
+  const executeBatchDelete = async () => {
     const total = selectedIds.length;
     if (total === 0) return;
-    
-    if (!window.confirm(`⚠️ CRITICAL WARNING!\n\nYou are about to PERMANENTLY DELETE ${total} registrations from both Cloudflare D1 and your active Firestore database.\n\nThis operation is IRREVERSIBLE. Are you absolutely sure you want to proceed?`)) {
-      return;
-    }
 
+    setShowBulkPurgeModal(false);
     setIsPurging(true);
     setPurgeProgress(0);
 
@@ -158,7 +167,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     setIsPurging(false);
     setSelectedIds([]);
     onRefresh();
-    alert(`🎉 Successfully purged ${total} registrations from both Cloudflare D1 and Firestore!`);
+    setToastMessage(`Successfully purged ${total} registrations from both Cloudflare D1 and Firestore.`);
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
   // Private vs Public counts
@@ -879,11 +889,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
                             <button
                               type="button"
-                              onClick={() => {
-                                if (window.confirm(`Are you sure you want to delete ${reg.full_name}'s application?`)) {
-                                  handleDeleteConfirm(reg.id);
-                                }
-                              }}
+                              onClick={() => setPendingDeleteReg(reg)}
                               disabled={isDeleting}
                               className="p-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
                               title="Delete Application"
@@ -977,6 +983,92 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-[#1F1F1F] text-white text-xs font-semibold rounded-2xl shadow-2xl border border-stone-700 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="ml-2 text-stone-400 hover:text-white"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Delete Single Registration Confirmation Modal */}
+      {pendingDeleteReg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-[#E5E1DB]">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-[#1F1F1F]">Delete Registration?</h3>
+            <p className="text-xs text-[#5A5551] mt-2">
+              Are you sure you want to delete the registration for{' '}
+              <strong className="text-[#1F1F1F]">{pendingDeleteReg.full_name}</strong> ({pendingDeleteReg.email})?
+              This will remove the record from both Cloudflare D1 and Firestore.
+            </p>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteReg(null)}
+                className="px-4 py-2 text-xs font-bold text-[#5A5551] hover:text-[#1F1F1F] rounded-xl hover:bg-[#F9F7F5] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = pendingDeleteReg.id;
+                  setPendingDeleteReg(null);
+                  handleDeleteConfirm(id);
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+              >
+                Delete Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Purge Confirmation Modal */}
+      {showBulkPurgeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-[#E5E1DB]">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mb-4">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-[#1F1F1F]">Confirm Bulk Deletion</h3>
+            <p className="text-xs text-[#5A5551] mt-2">
+              You are about to permanently delete <strong className="text-rose-600">{selectedIds.length}</strong> registrations from both Cloudflare D1 and Firestore.
+            </p>
+            <p className="text-xs text-rose-600 font-semibold mt-2">
+              ⚠️ This operation is irreversible.
+            </p>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowBulkPurgeModal(false)}
+                className="px-4 py-2 text-xs font-bold text-[#5A5551] hover:text-[#1F1F1F] rounded-xl hover:bg-[#F9F7F5] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeBatchDelete}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+              >
+                Permanently Delete ({selectedIds.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

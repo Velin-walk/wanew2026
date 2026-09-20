@@ -5,6 +5,7 @@ import { BottomNav } from './components/BottomNav';
 import { TrekListScreen } from './screens/TrekListScreen';
 import { MyBookingsScreen } from './screens/MyBookingsScreen';
 import { GalleryScreen } from './screens/GalleryScreen';
+import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { RegistrationModal } from './components/RegistrationModal';
 import { InviteModal } from './components/InviteModal';
 import { ItineraryModal } from './components/ItineraryModal';
@@ -29,11 +30,11 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
 import { db } from './lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
 
 function MainApp() {
   const { user, userEmail, isAdmin, openAuthModal } = useAuth();
-  const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin'>('treks');
+  const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>('treks');
   const [treks, setTreks] = useState<Trek[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingTreks, setLoadingTreks] = useState(true);
@@ -116,7 +117,6 @@ function MainApp() {
       // Secondary Failover: Load itineraries from Firestore if Cloudflare returned empty or errored
       if (baseTreks.length === 0) {
         try {
-          const { collection, getDocs } = await import('firebase/firestore');
           const querySnapshot = await getDocs(collection(db, 'treks'));
           const fsTreks: Trek[] = [];
           querySnapshot.forEach((docSnap) => {
@@ -161,7 +161,6 @@ function MainApp() {
           console.warn('Could not fetch user personal bookings from Cloudflare, attempting Firestore fallback...', err);
           // Secondary Failover: Load user bookings from Firestore registrations
           try {
-            const { collection, query, where, getDocs } = await import('firebase/firestore');
             const q = query(
               collection(db, 'registrations'),
               where('email_address', '==', activeUserEmail)
@@ -719,6 +718,10 @@ function MainApp() {
               treks={treks}
               onOpenAuthModal={openAuthModal}
             />
+          )}
+
+          {currentTab === 'leaderboard' && (
+            <LeaderboardScreen />
           )}
 
           {/* Micro App Footer inside shell */}

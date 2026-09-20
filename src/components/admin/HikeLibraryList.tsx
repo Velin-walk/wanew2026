@@ -25,7 +25,8 @@ import {
   RefreshCw,
   CloudUpload,
   LayoutGrid,
-  List
+  List,
+  ArrowUpDown
 } from 'lucide-react';
 import { ShareHikeModal } from './ShareHikeModal';
 import { apiFetch } from '../../services/api';
@@ -63,6 +64,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [sharingHike, setSharingHike] = useState<SavedHikeRecord | null>(null);
   const [deletingHike, setDeletingHike] = useState<SavedHikeRecord | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -72,25 +74,46 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
     setTimeout(() => setActionFeedback(null), 3000);
   };
 
-  // Filter hikes
-  const filteredHikes = hikes.filter((h) => {
-    const q = searchQuery.toLowerCase().trim();
-    const matchQuery =
-      !q ||
-      h.title?.toLowerCase().includes(q) ||
-      h.hikeNumber?.toLowerCase().includes(q) ||
-      h.data?.hikeNumber?.toLowerCase().includes(q) ||
-      h.data?.overview?.meetingPoint?.toLowerCase().includes(q) ||
-      h.data?.overview?.endingPoint?.toLowerCase().includes(q);
+  // Helper to extract numeric hike number from string (e.g., "253", "Hike 192", "#108")
+  const parseHikeNum = (h: SavedHikeRecord): number => {
+    const raw = String(h.hikeNumber || h.data?.hikeNumber || '').trim();
+    const match = raw.match(/\d+/);
+    return match ? parseInt(match[0], 10) : -1;
+  };
 
-    const matchCategory =
-      selectedCategory === 'all' || h.category === selectedCategory;
+  // Filter and sort hikes: highest hike number at top, lowest at bottom by default
+  const filteredHikes = hikes
+    .filter((h) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchQuery =
+        !q ||
+        h.title?.toLowerCase().includes(q) ||
+        h.hikeNumber?.toLowerCase().includes(q) ||
+        h.data?.hikeNumber?.toLowerCase().includes(q) ||
+        h.data?.overview?.meetingPoint?.toLowerCase().includes(q) ||
+        h.data?.overview?.endingPoint?.toLowerCase().includes(q);
 
-    const matchStatus =
-      selectedStatus === 'all' || h.status === selectedStatus;
+      const matchCategory =
+        selectedCategory === 'all' || h.category === selectedCategory;
 
-    return matchQuery && matchCategory && matchStatus;
-  });
+      const matchStatus =
+        selectedStatus === 'all' || h.status === selectedStatus;
+
+      return matchQuery && matchCategory && matchStatus;
+    })
+    .sort((a, b) => {
+      const numA = parseHikeNum(a);
+      const numB = parseHikeNum(b);
+
+      if (numA !== numB) {
+        return sortOrder === 'desc' ? numB - numA : numA - numB;
+      }
+
+      // Secondary sort: recent dates first
+      const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    });
 
   const publishedCount = hikes.filter((h) => h.status === 'published').length;
   const draftCount = hikes.filter((h) => h.status === 'draft').length;
@@ -268,34 +291,48 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
             ))}
           </div>
 
-          {/* View Mode Switcher: Table vs Cards Grid */}
-          <div className="flex items-center gap-1 border border-[#E5E1DB] bg-[#FAF8F5] p-1 rounded-xl shrink-0">
+          {/* Sort & View Mode Switcher: Table vs Cards Grid */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Hike # Sort Order Indicator / Toggle */}
             <button
               type="button"
-              onClick={() => setViewMode('table')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'table'
-                  ? 'bg-white text-[#1F1F1F] shadow-2xs border border-[#E5E1DB]'
-                  : 'text-[#8B8680] hover:text-[#1F1F1F]'
-              }`}
-              title="Quick Tabular Roster View"
+              onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+              className="px-3 py-1.5 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] hover:bg-[#F0EBE5] text-xs font-bold text-[#1F1F1F] flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="Toggle sorting between highest and lowest hike numbers"
             >
-              <List className="w-3.5 h-3.5 text-[#E08828]" />
-              <span>Table View</span>
+              <ArrowUpDown className="w-3.5 h-3.5 text-[#E08828]" />
+              <span>Hike # {sortOrder === 'desc' ? '(Highest First)' : '(Lowest First)'}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'grid'
-                  ? 'bg-white text-[#1F1F1F] shadow-2xs border border-[#E5E1DB]'
-                  : 'text-[#8B8680] hover:text-[#1F1F1F]'
-              }`}
-              title="Grid Cards View"
-            >
-              <LayoutGrid className="w-3.5 h-3.5 text-[#E08828]" />
-              <span>Grid View</span>
-            </button>
+
+            {/* View Mode Switcher: Table vs Cards Grid */}
+            <div className="flex items-center gap-1 border border-[#E5E1DB] bg-[#FAF8F5] p-1 rounded-xl shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-[#1F1F1F] shadow-2xs border border-[#E5E1DB]'
+                    : 'text-[#8B8680] hover:text-[#1F1F1F]'
+                }`}
+                title="Quick Tabular Roster View"
+              >
+                <List className="w-3.5 h-3.5 text-[#E08828]" />
+                <span>Table View</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-[#1F1F1F] shadow-2xs border border-[#E5E1DB]'
+                    : 'text-[#8B8680] hover:text-[#1F1F1F]'
+                }`}
+                title="Grid Cards View"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 text-[#E08828]" />
+                <span>Grid View</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -331,7 +368,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
             <div>
               <h3 className="text-sm font-black text-[#1F1F1F] tracking-tight">Itinerary Catalog Table</h3>
               <p className="text-[11px] text-[#8B8680] mt-0.5">
-                Showing {filteredHikes.length} itinerary record(s) • Quick actions &amp; status management
+                Showing {filteredHikes.length} itinerary record(s) • Sorted by Hike # ({sortOrder === 'desc' ? 'Highest at Top' : 'Lowest at Top'})
               </p>
             </div>
           </div>
@@ -339,7 +376,18 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#FAF8F5] border-b border-[#F0EBE5] text-[10px] font-extrabold uppercase text-[#5A5551] tracking-wider">
-                  <th className="py-3 px-4 min-w-[240px]">Hike # &amp; Title</th>
+                  <th
+                    onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                    className="py-3 px-4 min-w-[240px] cursor-pointer hover:bg-[#F5EFE6] transition-colors select-none"
+                    title="Click to toggle sorting (highest/lowest hike #)"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Hike # &amp; Title</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#E08828]/15 text-[#E08828] font-black normal-case tracking-normal">
+                        {sortOrder === 'desc' ? '↓ Highest First' : '↑ Lowest First'}
+                      </span>
+                    </div>
+                  </th>
                   <th className="py-3 px-3 w-[140px]">Category</th>
                   <th className="py-3 px-3 min-w-[170px]">Date &amp; Meeting</th>
                   <th className="py-3 px-3 min-w-[150px]">Stats &amp; Leader</th>

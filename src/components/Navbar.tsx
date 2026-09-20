@@ -11,7 +11,8 @@ import {
   Users,
   Mail,
   ChevronRight,
-  Camera
+  Camera,
+  Trophy
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { isAdminEmail } from '../adminUtils';
@@ -19,7 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { LogOut, User as UserIcon } from 'lucide-react';
 
 interface NavbarProps {
-  currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin';
+  currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin';
   onTabChange: (tab: any) => void;
   bookingCount: number;
   savedCount: number;
@@ -47,7 +48,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
   const avatarDropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin') => {
+  const handleTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin') => {
     if (tab === 'mapminers' && !user) {
       openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers'));
       return;
@@ -252,6 +253,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Gallery</span>
           </button>
 
+          <button
+            type="button"
+            id="nav-tab-leaderboard"
+            onClick={() => handleTabClick('leaderboard')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              currentTab === 'leaderboard'
+                ? 'bg-white text-[#E08828] shadow-xs font-bold'
+                : 'text-[#5A5551] hover:text-[#1F1F1F]'
+            }`}
+          >
+            <Trophy className="w-4 h-4 text-[#E08828]" />
+            <span>Leaderboard</span>
+          </button>
+
           <div ref={dropdownRef} className="relative">
             <button
               type="button"
@@ -279,6 +294,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="px-3 py-1.5 border-b border-[#F9F7F5] mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#8B8680]">Guides & Support</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onTabChange('leaderboard');
+                  }}
+                  className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Trophy className="w-4 h-4 text-[#E08828] group-hover:scale-110 transition-transform" />
+                    <span>Hiker Leaderboard</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
+                </button>
 
                 <button
                   type="button"

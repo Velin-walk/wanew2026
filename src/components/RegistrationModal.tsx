@@ -39,7 +39,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
-  userEmail = 'velinrai.VR@gmail.com',
+  userEmail = '',
   latestBooking,
 }) => {
   // Helper to accurately parse trek date

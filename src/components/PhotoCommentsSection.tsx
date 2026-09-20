@@ -20,6 +20,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [charError, setCharError] = useState<string | null>(null);
 
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
@@ -60,9 +61,10 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
     if (!trimmed) return;
 
     if (trimmed.length > 300) {
-      alert('Comments are limited to 300 characters.');
+      setCharError('Comments are limited to 300 characters.');
       return;
     }
+    setCharError(null);
 
     setSubmitting(true);
     try {
@@ -241,6 +243,11 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
 
       {/* Input / Auth Prompt Section */}
       <div className={`mt-3 pt-3 border-t ${isDarkTheme ? 'border-stone-800' : 'border-stone-100'}`}>
+        {charError && (
+          <div className="mb-2 px-2.5 py-1 text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-lg">
+            {charError}
+          </div>
+        )}
         {user ? (
           <form onSubmit={handleSubmit} className="flex gap-2 items-end">
             <div className="flex-1 relative">

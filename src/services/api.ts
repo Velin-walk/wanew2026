@@ -1,6 +1,8 @@
 import { Trek, PhotoComment } from "../types";
 
-export const CLOUDFLARE_WORKER_URL = "https://walk-nepal-walk-api.velinrai-vr.workers.dev";
+export const CLOUDFLARE_WORKER_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+  "https://walk-nepal-walk-api.velinrai-vr.workers.dev";
 export const LOCAL_API_URL = "/api";
 
 export interface ApiFetchOptions extends RequestInit {
@@ -369,8 +371,13 @@ export async function fetchLeaderboardData(): Promise<any> {
     const cfRes = await apiFetch('leaderboard', { cacheTtl: 5 * 60 * 1000 });
     if (cfRes.ok) {
       const data = await cfRes.json();
-      if (data && data.hikers && Array.isArray(data.hikers) && data.hikers.length > 0) {
-        return data;
+      if (data && (data.hikers || data.stats || data.ok || Array.isArray(data.data))) {
+        const hikers = data.hikers || (Array.isArray(data.data) ? data.data : []);
+        return {
+          ...data,
+          hikers,
+          stats: data.stats || {},
+        };
       }
     }
   } catch (err) {
@@ -382,8 +389,13 @@ export async function fetchLeaderboardData(): Promise<any> {
     const gasRes = await fetch(GAS_URL);
     if (gasRes.ok) {
       const data = await gasRes.json();
-      if (data && (data.ok || data.hikers)) {
-        return data;
+      if (data && (data.ok || data.hikers || Array.isArray(data.data))) {
+        const hikers = data.hikers || (Array.isArray(data.data) ? data.data : []);
+        return {
+          ...data,
+          hikers,
+          stats: data.stats || {},
+        };
       }
     }
   } catch (gasErr) {
@@ -455,6 +467,84 @@ export async function deletePhotoComment(commentId: string): Promise<boolean> {
   } catch (err) {
     console.warn(`Failed to delete comment ${commentId}:`, err);
     return false;
+  }
+}
+
+/**
+ * Fetch individual hiker profile (1-row O(1) read).
+ */
+export async function fetchHikerProfile(params: { email?: string; uid?: string }, forceFresh = false) {
+  try {
+    const query = new URLSearchParams();
+    if (params.email) query.set('email', params.email);
+    if (params.uid) query.set('uid', params.uid);
+    if (forceFresh) query.set('fresh', '1');
+
+    const res = await apiFetch(`hiker/profile?${query.toString()}`, {
+      forceFresh,
+      cacheTtl: 2 * 60 * 1000 // 2 minutes local cache
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.success ? json.data : null;
+  } catch (err) {
+    console.warn('Failed to fetch hiker profile:', err);
+    return null;
+  }
+}
+
+/**
+ * Create or update individual hiker profile.
+ */
+export async function saveHikerProfile(profileData: any) {
+  try {
+    const res = await apiFetch('hiker/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData),
+    });
+    if (!res.ok) return false;
+    const json = await res.json();
+    return json.success;
+  } catch (err) {
+    console.warn('Failed to save hiker profile:', err);
+    return false;
+  }
+}
+
+/**
+ * Fetch full hike history for a hiker.
+ */
+export async function fetchHikerHistory(email: string) {
+  if (!email) return [];
+  try {
+    const res = await apiFetch(`hiker/history?email=${encodeURIComponent(email)}`, {
+      cacheTtl: 5 * 60 * 1000
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch hiker history:', err);
+    return [];
+  }
+}
+
+/**
+ * Fetch community leaderboard with 5-minute Cloudflare Edge Caching.
+ */
+export async function fetchLeaderboard(forceFresh = false) {
+  try {
+    const res = await apiFetch(`leaderboard${forceFresh ? '?fresh=1' : ''}`, {
+      forceFresh,
+      cacheTtl: 5 * 60 * 1000
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch leaderboard:', err);
+    return [];
   }
 }
 

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { HikerStats, LeaderboardResponse } from '../types/leaderboard';
 import { fetchLeaderboardData } from '../services/api';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
 type TimePeriod = 't30' | 't60' | 't90' | 't365' | 'overall';
 type SortMetric = 'dist' | 'count';
@@ -35,6 +36,7 @@ export const LeaderboardScreen: React.FC = () => {
   const [period, setPeriod] = useState<TimePeriod>('t30');
   const [metric, setMetric] = useState<SortMetric>('dist');
   const [category, setCategory] = useState<BoardCategory>('all');
+  const [journeyPeriod, setJourneyPeriod] = useState<TimePeriod>('overall');
   const [searchQuery, setSearchQuery] = useState('');
   const [limit, setLimit] = useState(20);
   const [selectedHiker, setSelectedHiker] = useState<HikerStats | null>(null);
@@ -119,6 +121,18 @@ export const LeaderboardScreen: React.FC = () => {
 
   const currentStats = data?.stats;
 
+  const filteredGrowthCurve = useMemo(() => {
+    if (!data?.growth_curve || data.growth_curve.length === 0) return [];
+    if (journeyPeriod === 'overall') return data.growth_curve;
+
+    const days = journeyPeriod === 't30' ? 30 : journeyPeriod === 't60' ? 60 : journeyPeriod === 't90' ? 90 : 365;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    return data.growth_curve.filter((pt) => {
+      if (!pt.date) return true;
+      return new Date(pt.date) >= cutoff;
+    });
+  }, [data?.growth_curve, journeyPeriod]);
+
   return (
     <div className="space-y-4 sm:space-y-6 w-full pb-10">
       {/* Header Banner */}
@@ -201,6 +215,141 @@ export const LeaderboardScreen: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Community KM Journey (Pre-computed Curve & Milestones) */}
+      {data && (
+        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#E5E1DB] shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F0EBE5]">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-[#1B361D] text-[#A8E063]">
+                <Mountain className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-[#1F1F1F]">Community KM Journey</h2>
+                <p className="text-[11px] text-[#6A645D] font-bold">Cumulative walking trajectory across all organized treks</p>
+              </div>
+            </div>
+
+            {/* Time Filter Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+              {(
+                [
+                  { id: 'overall', label: 'All Time' },
+                  { id: 't365', label: '1 Year' },
+                  { id: 't90', label: '90 Days' },
+                  { id: 't60', label: '60 Days' },
+                  { id: 't30', label: '30 Days' },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setJourneyPeriod(t.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 active:scale-95 cursor-pointer ${
+                    journeyPeriod === t.id
+                      ? 'bg-[#1B361D] text-white shadow-xs font-black'
+                      : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:bg-white'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          {currentStats && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="p-3 bg-[#FAF8F5] rounded-2xl border border-[#EFEAE4]">
+                <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">Total KM</span>
+                <span className="text-base sm:text-lg font-black text-[#1B5E20] block mt-0.5">
+                  {currentStats.totalDistance?.toLocaleString() || '0'} km
+                </span>
+              </div>
+              <div className="p-3 bg-[#FAF8F5] rounded-2xl border border-[#EFEAE4]">
+                <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">Events</span>
+                <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
+                  {currentStats.totalEvents || 0} conducted
+                </span>
+              </div>
+              <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200/60">
+                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Day Hike KM</span>
+                <span className="text-base sm:text-lg font-black text-emerald-900 block mt-0.5">
+                  {currentStats.totalHikeDist?.toLocaleString() || '0'} km
+                </span>
+              </div>
+              <div className="p-3 bg-purple-50/60 rounded-2xl border border-purple-200/60">
+                <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block">Trek KM</span>
+                <span className="text-base sm:text-lg font-black text-purple-900 block mt-0.5">
+                  {currentStats.totalTrekDist?.toLocaleString() || '0'} km
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Chart Area */}
+          <div className="h-48 sm:h-56 w-full pt-2">
+            {filteredGrowthCurve.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={filteredGrowthCurve} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#7ABA42" stopOpacity={0.5}/>
+                      <stop offset="95%" stopColor="#7ABA42" stopOpacity={0.03}/>
+                    </linearGradient>
+                    <linearGradient id="colorTrek" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#4527A0" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#4527A0" stopOpacity={0.02}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="event_no" tick={{ fontSize: 10, fill: '#8B8680' }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#8B8680' }} tickLine={false} tickFormatter={(val) => `${Math.round(val / 1000)}k`} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const pt = payload[0].payload;
+                        return (
+                          <div className="bg-white/95 backdrop-blur-xs p-2.5 rounded-xl shadow-lg border border-[#E5E1DB] text-[11px] space-y-1">
+                            <strong className="block text-[#1F1F1F] font-black">{pt.title || `Event #${pt.event_no}`}</strong>
+                            <span className="text-[10px] text-[#8B8680] block">{pt.date}</span>
+                            <div className="text-emerald-700 font-bold">Total: {pt.total_km?.toLocaleString()} km</div>
+                            <div className="text-stone-500 text-[10px]">Hike: {pt.hike_km?.toLocaleString()} km • Trek: {pt.trek_km?.toLocaleString()} km</div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Area type="monotone" dataKey="total_km" stroke="#1B5E20" strokeWidth={2.5} fillOpacity={1} fill="url(#colorTotal)" />
+                  <Area type="monotone" dataKey="trek_km" stroke="#4527A0" strokeWidth={1.5} fillOpacity={1} fill="url(#colorTrek)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-[#8B8680]">
+                Growth curve updates with completed treks
+              </div>
+            )}
+          </div>
+
+          {/* Milestones Ribbon */}
+          {data.milestones && data.milestones.length > 0 && (
+            <div className="pt-3 border-t border-[#F0EBE5]">
+              <span className="text-[10px] font-black uppercase text-[#8B8680] tracking-wider block mb-2">
+                Milestones Unlocked Along The Journey
+              </span>
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                {data.milestones.map((m, idx) => (
+                  <div key={idx} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
+                    <span>🏆</span>
+                    <span>{m.km.toLocaleString()} km</span>
+                    <span className="text-[10px] text-amber-700/80 font-medium">({m.trek})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Control Panel: Filters & Sorting */}
       <div className="bg-white rounded-2xl p-4 border border-[#E5E1DB] shadow-xs space-y-3.5">

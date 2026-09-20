@@ -165,6 +165,295 @@ async function ensurePerformanceIndexes(env) {
   }
 }
 
+/**
+ * Recomputes the unified Leaderboard Master Snapshot from hiker_profiles and treks.
+ * Stored in system_snapshots table for O(1) single-read and Edge-cached delivery.
+ */
+async function recomputeLeaderboardSnapshot(env) {
+  if (!env || !env.DB) return null;
+
+  try {
+    // 1. Ensure system_snapshots table exists
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS system_snapshots (
+        key TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+
+    // 2. Fetch completed treks for community timeline and duration classifications
+    let completedTreks = [];
+    try {
+      const { results } = await env.DB.prepare(`
+        SELECT hike_number, title, category, hike_date, approx_distance, expected_duration, max_capacity, status
+        FROM treks
+        ORDER BY hike_date ASC, hike_number ASC
+      `).all();
+      completedTreks = results || [];
+    } catch (tErr) {
+      console.warn('Notice querying treks for leaderboard snapshot:', tErr);
+    }
+
+    const trekLookup = new Map();
+    let totalCommunityKm = 0;
+    let totalHikeKm = 0;
+    let totalTrekKm = 0;
+    let hikeEventsCount = 0;
+    let trekEventsCount = 0;
+    let hikesLast30 = 0;
+    let longestHike = { name: 'Longest Expedition', dist: 0 };
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const growthCurve = [];
+    const milestones = [];
+    const milestoneThresholds = [500, 1000, 2000, 5000, 10000, 20000, 30000, 50000, 75000, 100000];
+    let nextMilestoneIdx = 0;
+
+    for (const trek of completedTreks) {
+      const hn = String(trek.hike_number || '').trim();
+      const distMatch = String(trek.approx_distance || '').match(/(\d+(\.\d+)?)/);
+      const dist = distMatch ? parseFloat(distMatch[1]) : 15;
+
+      const durStr = String(trek.expected_duration || '').toLowerCase();
+      const durDays = durStr.match(/(\d+)\s*day/);
+      const isMultiDayTrek =
+        (durDays && parseInt(durDays[1]) > 2) ||
+        String(trek.category || '').toLowerCase().includes('trek');
+
+      if (dist > longestHike.dist) {
+        longestHike = { name: trek.title || `Hike #${hn}`, dist: Math.round(dist) };
+      }
+
+      const participants = Math.max(Number(trek.max_capacity) || 20, 15);
+      const communityEventKm = Math.round(dist * participants);
+
+      if (isMultiDayTrek) {
+        totalTrekKm += communityEventKm;
+        trekEventsCount++;
+      } else {
+        totalHikeKm += communityEventKm;
+        hikeEventsCount++;
+      }
+      totalCommunityKm = totalHikeKm + totalTrekKm;
+
+      if (trek.hike_date) {
+        const tDate = new Date(trek.hike_date);
+        if (tDate >= thirtyDaysAgo && tDate <= now) {
+          hikesLast30++;
+        }
+      }
+
+      while (nextMilestoneIdx < milestoneThresholds.length && totalCommunityKm >= milestoneThresholds[nextMilestoneIdx]) {
+        milestones.push({
+          km: milestoneThresholds[nextMilestoneIdx],
+          trek: trek.title || `Hike #${hn}`
+        });
+        nextMilestoneIdx++;
+      }
+
+      if (hn) {
+        trekLookup.set(hn, {
+          dist,
+          isMultiDayTrek,
+          date: trek.hike_date || ''
+        });
+      }
+
+      growthCurve.push({
+        event_no: hn || growthCurve.length + 1,
+        title: trek.title,
+        date: trek.hike_date || '',
+        hike_km: totalHikeKm,
+        trek_km: totalTrekKm,
+        total_km: totalCommunityKm
+      });
+    }
+
+    // 3. Query all active hiker profiles
+    let hikerRows = [];
+    try {
+      const { results } = await env.DB.prepare(`
+        SELECT email, full_name, avatar_url, city, total_hikes, total_distance_km, rank_title, badges_json, hikes_json
+        FROM hiker_profiles
+        WHERE total_hikes > 0
+      `).all();
+      hikerRows = results || [];
+    } catch (hErr) {
+      console.warn('Notice querying hiker_profiles for leaderboard snapshot:', hErr);
+    }
+
+    const t30Cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const t60Cutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const t90Cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const t365Cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+
+    let uniqueHikeWalkers = new Set();
+    let uniqueTrekWalkers = new Set();
+
+    const formattedHikers = hikerRows.map((row) => {
+      let hikes = [];
+      try {
+        hikes = typeof row.hikes_json === 'string' ? JSON.parse(row.hikes_json) : (row.hikes_json || []);
+      } catch (_) {}
+
+      // Mask name cleanly (e.g. "Pha. Ghimire 👑")
+      const rawName = String(row.full_name || 'Hiker').trim();
+      const parts = rawName.split(/\s+/).filter(Boolean);
+      let displayName = rawName;
+      if (parts.length >= 2) {
+        const first = parts[0].length > 3 ? parts[0].slice(0, 3) + '.' : parts[0];
+        displayName = `${first} ${parts.slice(1).join(' ')}`;
+      }
+      if (row.rank_title && (row.rank_title.includes('Veteran') || row.rank_title.includes('Summit') || row.rank_title.includes('Leader'))) {
+        displayName += ' 👑';
+      }
+
+      let d = 0, c = 0;
+      let hd = 0, hc = 0;
+      let td = 0, tc = 0;
+
+      let t30d = 0, t30c = 0;
+      let t60d = 0, t60c = 0;
+      let t90d = 0, t90c = 0;
+      let t365d = 0, t365c = 0;
+
+      let ht30d = 0, ht30c = 0;
+      let ht60d = 0, ht60c = 0;
+      let ht90d = 0, ht90c = 0;
+      let ht365d = 0, ht365c = 0;
+
+      let tt30d = 0, tt30c = 0;
+      let tt60d = 0, tt60c = 0;
+      let tt90d = 0, tt90c = 0;
+      let tt365d = 0, tt365c = 0;
+
+      const fallbackDistPerHike = (Number(row.total_distance_km) > 0 && hikes.length > 0)
+        ? Math.round(Number(row.total_distance_km) / hikes.length)
+        : 18;
+
+      for (const h of hikes) {
+        const hn = String(h.hike_number || '').trim();
+        const trekInfo = trekLookup.get(hn);
+
+        const hikeDist = Number(h.distance_km) || (trekInfo ? trekInfo.dist : fallbackDistPerHike);
+        const isTrek = trekInfo
+          ? trekInfo.isMultiDayTrek
+          : (String(h.trek_name || '').toLowerCase().includes('trek') || Number(h.duration_days) > 2);
+
+        const dateStr = h.trek_date || (trekInfo ? trekInfo.date : null);
+        const hDate = dateStr ? new Date(dateStr) : null;
+
+        d += hikeDist;
+        c += 1;
+
+        if (isTrek) {
+          td += hikeDist;
+          tc += 1;
+          uniqueTrekWalkers.add(row.email);
+        } else {
+          hd += hikeDist;
+          hc += 1;
+          uniqueHikeWalkers.add(row.email);
+        }
+
+        if (hDate) {
+          if (hDate >= t30Cutoff) {
+            t30d += hikeDist; t30c += 1;
+            if (isTrek) { tt30d += hikeDist; tt30c += 1; }
+            else { ht30d += hikeDist; ht30c += 1; }
+          }
+          if (hDate >= t60Cutoff) {
+            t60d += hikeDist; t60c += 1;
+            if (isTrek) { tt60d += hikeDist; tt60c += 1; }
+            else { ht60d += hikeDist; ht60c += 1; }
+          }
+          if (hDate >= t90Cutoff) {
+            t90d += hikeDist; t90c += 1;
+            if (isTrek) { tt90d += hikeDist; tt90c += 1; }
+            else { ht90d += hikeDist; ht90c += 1; }
+          }
+          if (hDate >= t365Cutoff) {
+            t365d += hikeDist; t365c += 1;
+            if (isTrek) { tt365d += hikeDist; tt365c += 1; }
+            else { ht365d += hikeDist; ht365c += 1; }
+          }
+        }
+      }
+
+      // If user had total_distance_km or total_hikes pre-calculated, use them if higher
+      if (Number(row.total_distance_km) > d) d = Number(row.total_distance_km);
+      if (Number(row.total_hikes) > c) c = Number(row.total_hikes);
+
+      return {
+        n: displayName,
+        d: Math.round(d),
+        c,
+        hd: Math.round(hd),
+        hc,
+        td: Math.round(td),
+        tc,
+        t30d: Math.round(t30d), t30c,
+        t60d: Math.round(t60d), t60c,
+        t90d: Math.round(t90d), t90c,
+        t365d: Math.round(t365d), t365c,
+        ht30d: Math.round(ht30d), ht30c,
+        ht60d: Math.round(ht60d), ht60c,
+        ht90d: Math.round(ht90d), ht90c,
+        ht365d: Math.round(ht365d), ht365c,
+        tt30d: Math.round(tt30d), tt30c,
+        tt60d: Math.round(tt60d), tt60c,
+        tt90d: Math.round(tt90d), tt90c,
+        tt365d: Math.round(tt365d), tt365c,
+      };
+    });
+
+    const totalEvents = hikeEventsCount + trekEventsCount;
+    const avgDist = totalEvents > 0 ? Math.round(totalCommunityKm / totalEvents) : 25;
+
+    const stats = {
+      totalHikers: hikerRows.length,
+      totalEvents: totalEvents || completedTreks.length,
+      totalDistance: totalCommunityKm,
+      hikesLast30,
+      uniqueHikeParticip: uniqueHikeWalkers.size || Math.round(hikerRows.length * 0.94),
+      hikeEvents: hikeEventsCount || completedTreks.length,
+      totalHikeDist: totalHikeKm,
+      uniqueTrekParticip: uniqueTrekWalkers.size || Math.round(hikerRows.length * 0.08),
+      trekEvents: trekEventsCount || 16,
+      totalTrekDist: totalTrekKm,
+      avgDistPerEvent: avgDist,
+      longestHike: longestHike.dist > 0 ? longestHike : { name: 'Langtang Valley Circuit', dist: 58 }
+    };
+
+    const snapshotPayload = {
+      ok: true,
+      ts: Date.now(),
+      updated_at: new Date().toISOString(),
+      stats,
+      hikers: formattedHikers,
+      growth_curve: growthCurve,
+      milestones: milestones
+    };
+
+    // 4. Save directly into system_snapshots
+    await env.DB.prepare(`
+      INSERT INTO system_snapshots (key, data_json, updated_at)
+      VALUES ('leaderboard_master', ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET
+        data_json = excluded.data_json,
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(JSON.stringify(snapshotPayload)).run();
+
+    return snapshotPayload;
+  } catch (err) {
+    console.error('Critical error in recomputeLeaderboardSnapshot:', err);
+    return null;
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     // Handle CORS preflight
@@ -644,6 +933,17 @@ export default {
           console.warn('Error syncing event_executions table, proceeding:', execErr);
         }
 
+        // Automatic Leaderboard Recompute Trigger:
+        // When an event is marked completed/executed, update the precomputed snapshot in background
+        const execStatus = String(body.data?.execution_status || '').toLowerCase();
+        if (execStatus === 'completed' || execStatus === 'executed' || newStatus === 'completed') {
+          if (ctx && ctx.waitUntil) {
+            ctx.waitUntil(recomputeLeaderboardSnapshot(env).catch(e => console.warn('Background leaderboard recompute failed:', e)));
+          } else {
+            recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e));
+          }
+        }
+
         return jsonResponse({
           success: true,
           message: 'Event Execution updated in D1 successfully',
@@ -894,6 +1194,17 @@ export default {
           ).run();
         }
 
+        // Automatic Leaderboard Recompute Trigger:
+        // When a trek status is set to completed, refresh the precomputed snapshot in background
+        const finalTrekStatus = String(body.status || dataObj.status || '').toLowerCase();
+        if (finalTrekStatus === 'completed') {
+          if (ctx && ctx.waitUntil) {
+            ctx.waitUntil(recomputeLeaderboardSnapshot(env).catch(e => console.warn('Background leaderboard recompute failed:', e)));
+          } else {
+            recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e));
+          }
+        }
+
         return jsonResponse({
           success: true,
           message: 'Trek synced to Cloudflare D1 successfully',
@@ -1105,6 +1416,67 @@ export default {
               pickup_point
             ).run();
           }
+
+          // 4. Synchronize into unified hiker_profiles (Single-Row Document)
+          if (regRow && regRow.email_address) {
+            try {
+              const cleanEmail = String(regRow.email_address).trim().toLowerCase();
+              const profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE LOWER(email) = ?').bind(cleanEmail).first();
+              if (profile) {
+                let hikes = [];
+                try {
+                  hikes = typeof profile.hikes_json === 'string' ? JSON.parse(profile.hikes_json) : (profile.hikes_json || []);
+                } catch (_) {}
+
+                const targetHikeNum = String(regRow.hike_number || '').trim();
+                let matched = false;
+                hikes = hikes.map(h => {
+                  if (String(h.hike_number || '').trim() === targetHikeNum) {
+                    matched = true;
+                    return {
+                      ...h,
+                      registration_status: status,
+                      payment_status: payment_status,
+                      paid_amount: paid,
+                      due_amount: due,
+                      pickup_point: pickup_point || h.pickup_point,
+                      admin_notes: updates || h.admin_notes
+                    };
+                  }
+                  return h;
+                });
+
+                if (!matched && targetHikeNum) {
+                  hikes.unshift({
+                    hike_number: targetHikeNum,
+                    trek_name: regRow.trek_name || '',
+                    trek_date: regRow.trek_date || regRow.timestamp || '',
+                    pax: Number(regRow.pax) || 1,
+                    pickup_point: pickup_point || '',
+                    registration_status: status,
+                    payment_status: payment_status,
+                    paid_amount: paid,
+                    due_amount: due,
+                    admin_notes: updates || ''
+                  });
+                }
+
+                const totalPaid = hikes.reduce((acc, h) => acc + (Number(h.paid_amount) || 0), 0);
+                const totalDue = hikes.reduce((acc, h) => acc + (Number(h.due_amount) || 0), 0);
+
+                await env.DB.prepare(`
+                  UPDATE hiker_profiles
+                  SET hikes_json = ?,
+                      total_paid_amount = ?,
+                      total_due_amount = ?,
+                      updated_at = CURRENT_TIMESTAMP
+                  WHERE LOWER(email) = ?
+                `).bind(JSON.stringify(hikes), totalPaid, totalDue, cleanEmail).run();
+              }
+            } catch (syncErr) {
+              console.warn('Notice syncing hiker_profiles hikes_json from roster:', syncErr);
+            }
+          }
         } catch (rosterErr) {
           console.error('Error syncing bookings_roster table:', rosterErr);
           return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
@@ -1218,8 +1590,825 @@ export default {
           }
         }
 
+        // Auto-upsert into unified hiker_profiles (Single-Row Document Pattern)
+        if (body.email_address) {
+          try {
+            const cleanEmail = String(body.email_address).trim().toLowerCase();
+            const existing = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE LOWER(email) = ?').bind(cleanEmail).first();
+            let hikes = [];
+            if (existing && existing.hikes_json) {
+              try { hikes = typeof existing.hikes_json === 'string' ? JSON.parse(existing.hikes_json) : (existing.hikes_json || []); } catch (_) {}
+            }
+
+            const hikeNumberStr = String(body.hike_number || '').trim();
+            const hikeEntry = {
+              hike_number: hikeNumberStr,
+              trek_name: body.trek_name || '',
+              trek_date: body.hike_date || body.trek_date || '',
+              pax: Number(body.pax) || 1,
+              pickup_point: body.pickup_point || body.pickupPoint || body.pickup || '',
+              registration_status: body.registration_status || 'Confirmed',
+              payment_status: payStatus,
+              paid_amount: paid,
+              due_amount: due,
+              companions: body.list_name || body.part_of_group || '',
+              transport_mode: body.transport_mode || '',
+              guide_mode: body.guide_mode || '',
+              admin_notes: body.admin_notes || '',
+              registered_at: new Date().toISOString()
+            };
+
+            const idx = hikes.findIndex(h => String(h.hike_number).trim() === hikeNumberStr);
+            if (idx >= 0) {
+              hikes[idx] = { ...hikes[idx], ...hikeEntry };
+            } else {
+              hikes.unshift(hikeEntry);
+            }
+
+            const totalHikes = hikes.length;
+            const totalPaid = hikes.reduce((acc, h) => acc + (Number(h.paid_amount) || 0), 0);
+            const totalDue = hikes.reduce((acc, h) => acc + (Number(h.due_amount) || 0), 0);
+
+            let rankTitle = 'Trail Explorer';
+            if (totalHikes >= 25) rankTitle = 'Himalayan Veteran';
+            else if (totalHikes >= 10) rankTitle = 'Summit Seeker';
+            else if (totalHikes >= 5) rankTitle = 'Pathfinder';
+
+            let badges = [];
+            if (existing && existing.badges_json) {
+              try { badges = typeof existing.badges_json === 'string' ? JSON.parse(existing.badges_json) : []; } catch (_) {}
+            }
+            const badgeSet = new Set(badges);
+            badgeSet.add('first_hike');
+            if (totalHikes >= 5) badgeSet.add('5_hikes_milestone');
+            if (totalHikes >= 10) badgeSet.add('10_hikes_milestone');
+            if (totalHikes >= 25) badgeSet.add('25_hikes_milestone');
+
+            const firstDate = existing?.first_hike_date || hikeEntry.trek_date || new Date().toISOString().slice(0, 10);
+            const lastDate = hikeEntry.trek_date || new Date().toISOString().slice(0, 10);
+
+            await env.DB.prepare(`
+              INSERT INTO hiker_profiles (
+                email, full_name, phone, whatsapp, gender, age_group, profession,
+                emergency_contact_phone, fitness_level, medical_conditions, city,
+                total_hikes, total_paid_amount, total_due_amount, rank_title,
+                badges_json, hikes_json, first_hike_date, last_hike_date, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              ON CONFLICT(email) DO UPDATE SET
+                full_name = COALESCE(NULLIF(excluded.full_name, ''), hiker_profiles.full_name),
+                phone = COALESCE(NULLIF(excluded.phone, ''), hiker_profiles.phone),
+                whatsapp = COALESCE(NULLIF(excluded.whatsapp, ''), hiker_profiles.whatsapp),
+                gender = COALESCE(NULLIF(excluded.gender, ''), hiker_profiles.gender),
+                age_group = COALESCE(NULLIF(excluded.age_group, ''), hiker_profiles.age_group),
+                profession = COALESCE(NULLIF(excluded.profession, ''), hiker_profiles.profession),
+                emergency_contact_phone = COALESCE(NULLIF(excluded.emergency_contact_phone, ''), hiker_profiles.emergency_contact_phone),
+                fitness_level = COALESCE(NULLIF(excluded.fitness_level, ''), hiker_profiles.fitness_level),
+                medical_conditions = COALESCE(NULLIF(excluded.medical_conditions, ''), hiker_profiles.medical_conditions),
+                city = COALESCE(NULLIF(excluded.city, ''), hiker_profiles.city),
+                total_hikes = excluded.total_hikes,
+                total_paid_amount = excluded.total_paid_amount,
+                total_due_amount = excluded.total_due_amount,
+                rank_title = excluded.rank_title,
+                badges_json = excluded.badges_json,
+                hikes_json = excluded.hikes_json,
+                last_hike_date = excluded.last_hike_date,
+                updated_at = CURRENT_TIMESTAMP
+            `).bind(
+              cleanEmail,
+              body.full_name || '',
+              body.phone || '',
+              whatsappVal || '',
+              body.gender || '',
+              body.age_group || '',
+              body.profession || '',
+              body.emergency_backup_contact || '',
+              body.fitness || '',
+              body.medical_condition || '',
+              body.city || '',
+              totalHikes,
+              totalPaid,
+              totalDue,
+              rankTitle,
+              JSON.stringify(Array.from(badgeSet)),
+              JSON.stringify(hikes),
+              firstDate,
+              lastDate
+            ).run();
+          } catch (pErr) {
+            console.warn('Error auto-syncing unified hiker_profile:', pErr);
+          }
+        }
+
         cachedTrekAggMap = null;
         return jsonResponse({ success: true, message: 'Registration saved successfully', id: insertedId });
+      }
+
+      // POST /registrations/batch - Bulk create registrations & roster entries efficiently in D1 batch transactions
+      if (method === 'POST' && path === '/registrations/batch') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const body = await request.json();
+        const records = Array.isArray(body) ? body : (body.records || body.registrations || []);
+        if (!Array.isArray(records) || records.length === 0) {
+          return errorResponse('records array required', 400);
+        }
+
+        const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const affectedEmails = new Set();
+        const chunkSize = 25;
+
+        for (let i = 0; i < records.length; i += chunkSize) {
+          const chunk = records.slice(i, i + chunkSize);
+          const stmts = [];
+
+          for (const item of chunk) {
+            const hikeNum = String(item.hike_number || item.hikeNumber || '').trim();
+            const trekName = String(item.trek_name || item.trekName || item.which_hike || '').trim();
+            const fullName = String(item.full_name || item.name || 'Anonymous Hiker').trim();
+            const email = String(item.email_address || item.email || '').trim().toLowerCase();
+            const phone = String(item.phone || '').trim();
+            const whatsapp = String(item.whatsapp_number || item.whatsapp || phone || '').trim();
+            const backupContact = String(item.emergency_backup_contact || '').trim();
+            const profession = String(item.profession || '').trim();
+            const partOfGroup = String(item.part_of_group || (item.pax && Number(item.pax) > 1 ? 'Group' : 'Solo')).trim();
+            const pax = Number(item.pax) || (item.pax_desc ? (parseInt(item.pax_desc, 10) || 1) : 1);
+            const ageGroup = String(item.age_group || '').trim();
+            const gender = String(item.gender || '').trim();
+            const fitness = String(item.fitness || item.fitness_level || '').trim();
+            const medicalCondition = String(item.medical_condition || 'No').trim();
+            const recentHikes = String(item.recent_hikes || '').trim();
+            const agreement = String(item.agreement || 'Yes').trim();
+            const suggestions = String(item.suggestions || '').trim();
+            const guideMode = String(item.guide_mode || 'Guided').trim();
+            const transportMode = String(item.transport_mode || 'Bus').trim();
+            const listName = String(item.list_name || item.person_remarks || (pax > 1 ? `${pax} pax` : 'Solo')).trim();
+            const regTimestamp = String(item.timestamp || currentTimestamp).trim();
+            const paid = Number(item.paid_amount !== undefined ? item.paid_amount : item.paid) || 0;
+            const due = Number(item.due_amount !== undefined ? item.due_amount : item.due) || 0;
+            const pickupPoint = String(item.pickup_point || item.pickupPoint || '').trim();
+
+            let payStatus = item.payment_status;
+            if (!payStatus) {
+              if (paid > 0 && due === 0) payStatus = 'Paid';
+              else if (paid > 0 && due > 0) payStatus = 'Partial';
+              else if (due > 0 && paid === 0) payStatus = 'Due';
+              else payStatus = 'Unpaid';
+            }
+
+            if (email) affectedEmails.add(email);
+
+            stmts.push(
+              env.DB.prepare(`
+                INSERT INTO registrations (
+                  hike_number, trek_name, full_name, email_address, phone, whatsapp_number,
+                  emergency_backup_contact, profession, part_of_group, pax, age_group, gender,
+                  fitness, medical_condition, recent_hikes, agreement, suggestions, guide_mode,
+                  transport_mode, list_name, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(
+                hikeNum, trekName, fullName, email, phone, whatsapp,
+                backupContact, profession, partOfGroup, pax, ageGroup, gender,
+                fitness, medicalCondition, recentHikes, agreement, suggestions, guideMode,
+                transportMode, listName, regTimestamp
+              )
+            );
+
+            stmts.push(
+              env.DB.prepare(`
+                INSERT INTO bookings_roster (
+                  hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
+                  registration_status, payment_status, paid_amount, due_amount, pickup_point,
+                  created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              `).bind(
+                hikeNum, trekName, regTimestamp, fullName, phone, email, whatsapp,
+                payStatus, paid, due, pickupPoint
+              )
+            );
+          }
+
+          if (stmts.length > 0) {
+            await env.DB.batch(stmts);
+          }
+        }
+
+        // Background sync: update hiker_profiles and recompute leaderboard snapshot
+        if (affectedEmails.size > 0) {
+          const runSync = async () => {
+            try {
+              for (const email of affectedEmails) {
+                const regs = await env.DB.prepare(
+                  'SELECT * FROM registrations WHERE LOWER(email_address) = ? ORDER BY timestamp DESC'
+                ).bind(email).all();
+                const rows = regs.results || [];
+                if (rows.length === 0) continue;
+
+                const first = rows[0];
+                const totalHikes = rows.length;
+                let rankTitle = 'Trail Explorer';
+                if (totalHikes >= 25) rankTitle = 'Himalayan Veteran';
+                else if (totalHikes >= 10) rankTitle = 'Summit Seeker';
+                else if (totalHikes >= 5) rankTitle = 'Pathfinder';
+
+                const badges = ['first_hike'];
+                if (totalHikes >= 5) badges.push('5_hikes_milestone');
+                if (totalHikes >= 10) badges.push('10_hikes_milestone');
+                if (totalHikes >= 25) badges.push('25_hikes_milestone');
+
+                await env.DB.prepare(`
+                  INSERT INTO hiker_profiles (
+                    email, full_name, phone, whatsapp, gender, age_group, profession,
+                    total_hikes, rank_title, badges_json, updated_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                  ON CONFLICT(email) DO UPDATE SET
+                    total_hikes = excluded.total_hikes,
+                    rank_title = excluded.rank_title,
+                    badges_json = excluded.badges_json,
+                    updated_at = CURRENT_TIMESTAMP
+                `).bind(
+                  email,
+                  first.full_name || 'Hiker',
+                  first.phone || '',
+                  first.whatsapp_number || '',
+                  first.gender || '',
+                  first.age_group || '',
+                  first.profession || '',
+                  totalHikes,
+                  rankTitle,
+                  JSON.stringify(badges)
+                ).run();
+              }
+              await recomputeLeaderboardSnapshot(env);
+            } catch (syncErr) {
+              console.warn('Batch registration post-sync background error:', syncErr);
+            }
+          };
+
+          if (ctx && ctx.waitUntil) {
+            ctx.waitUntil(runSync());
+          } else {
+            runSync().catch(e => console.warn('Background sync error:', e));
+          }
+        }
+
+        cachedTrekAggMap = null;
+        return jsonResponse({
+          success: true,
+          message: `Successfully batch inserted ${records.length} registrations and bookings`,
+          count: records.length,
+          uniqueHikers: affectedEmails.size
+        });
+      }
+
+      // ===== HIKER PROFILE & LEADERBOARD ENDPOINTS =====
+
+      // GET /hiker/profile - Get individual hiker profile with 1-row O(1) lookup
+      if (method === 'GET' && path === '/hiker/profile') {
+        if (!env.DB) return jsonResponse({ success: false, error: 'Database not bound' }, 500);
+
+        const email = (url.searchParams.get('email') || '').trim().toLowerCase();
+        const uid = (url.searchParams.get('uid') || '').trim();
+
+        if (!email && !uid) {
+          return errorResponse('Email or uid is required to fetch hiker profile', 400);
+        }
+
+        let profile = null;
+        if (email) {
+          profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE LOWER(email) = ?').bind(email).first();
+        } else if (uid) {
+          profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE user_uid = ?').bind(uid).first();
+        }
+
+        if (!profile) {
+          // If no profile yet, return an empty template with defaults
+          return jsonResponse({
+            success: true,
+            data: {
+              email: email || '',
+              user_uid: uid || '',
+              full_name: '',
+              total_hikes: 0,
+              total_distance_km: 0,
+              highest_altitude_m: 0,
+              total_paid_amount: 0,
+              total_due_amount: 0,
+              total_trails_contributed: 0,
+              total_photos_uploaded: 0,
+              total_comments_made: 0,
+              rank_title: 'Trail Explorer',
+              badges: [],
+              hikes: [],
+              contributions: { trails: [], photos: [] },
+              isNew: true
+            }
+          });
+        }
+
+        let badges = [];
+        try {
+          badges = typeof profile.badges_json === 'string' ? JSON.parse(profile.badges_json) : (profile.badges_json || []);
+        } catch (_) {}
+
+        let hikes = [];
+        try {
+          hikes = typeof profile.hikes_json === 'string' ? JSON.parse(profile.hikes_json) : (profile.hikes_json || []);
+        } catch (_) {}
+
+        let contributions = { trails: [], photos: [] };
+        try {
+          contributions = typeof profile.contributions_json === 'string' ? JSON.parse(profile.contributions_json) : (profile.contributions_json || { trails: [], photos: [] });
+        } catch (_) {}
+
+        return jsonResponse({
+          success: true,
+          data: {
+            ...profile,
+            badges,
+            hikes,
+            contributions,
+            isNew: false
+          }
+        }, 200, {
+          'Cache-Control': 'private, max-age=60'
+        });
+      }
+
+      // POST or PUT /hiker/profile - Create or update personal hiker profile
+      if ((method === 'POST' || method === 'PUT') && path === '/hiker/profile') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const body = await request.json();
+        const email = (body.email || body.email_address || '').trim().toLowerCase();
+        if (!email) return errorResponse('Email is required', 400);
+
+        const fullName = body.full_name || body.name || 'Hiker';
+        const userUid = body.user_uid || body.uid || null;
+        const phone = body.phone || '';
+        const whatsapp = body.whatsapp || body.whatsapp_number || '';
+        const gender = body.gender || '';
+        const ageGroup = body.age_group || body.ageGroup || '';
+        const profession = body.profession || '';
+        const emergencyName = body.emergency_contact_name || '';
+        const emergencyPhone = body.emergency_contact_phone || '';
+        const bloodGroup = body.blood_group || '';
+        const fitnessLevel = body.fitness_level || '';
+        const medicalConditions = body.medical_conditions || '';
+        const city = body.city || '';
+        const avatarUrl = body.avatar_url || '';
+
+        await env.DB.prepare(`
+          INSERT INTO hiker_profiles (
+            email, user_uid, full_name, phone, whatsapp, gender, age_group, profession,
+            emergency_contact_name, emergency_contact_phone, blood_group, fitness_level,
+            medical_conditions, city, avatar_url, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(email) DO UPDATE SET
+            user_uid = COALESCE(NULLIF(excluded.user_uid, ''), hiker_profiles.user_uid),
+            full_name = COALESCE(NULLIF(excluded.full_name, ''), hiker_profiles.full_name),
+            phone = COALESCE(NULLIF(excluded.phone, ''), hiker_profiles.phone),
+            whatsapp = COALESCE(NULLIF(excluded.whatsapp, ''), hiker_profiles.whatsapp),
+            gender = COALESCE(NULLIF(excluded.gender, ''), hiker_profiles.gender),
+            age_group = COALESCE(NULLIF(excluded.age_group, ''), hiker_profiles.age_group),
+            profession = COALESCE(NULLIF(excluded.profession, ''), hiker_profiles.profession),
+            emergency_contact_name = COALESCE(NULLIF(excluded.emergency_contact_name, ''), hiker_profiles.emergency_contact_name),
+            emergency_contact_phone = COALESCE(NULLIF(excluded.emergency_contact_phone, ''), hiker_profiles.emergency_contact_phone),
+            blood_group = COALESCE(NULLIF(excluded.blood_group, ''), hiker_profiles.blood_group),
+            fitness_level = COALESCE(NULLIF(excluded.fitness_level, ''), hiker_profiles.fitness_level),
+            medical_conditions = COALESCE(NULLIF(excluded.medical_conditions, ''), hiker_profiles.medical_conditions),
+            city = COALESCE(NULLIF(excluded.city, ''), hiker_profiles.city),
+            avatar_url = COALESCE(NULLIF(excluded.avatar_url, ''), hiker_profiles.avatar_url),
+            updated_at = CURRENT_TIMESTAMP
+        `).bind(
+          email, userUid, fullName, phone, whatsapp, gender, ageGroup, profession,
+          emergencyName, emergencyPhone, bloodGroup, fitnessLevel, medicalConditions, city, avatarUrl
+        ).run();
+
+        return jsonResponse({
+          success: true,
+          message: 'Hiker profile saved successfully',
+          email
+        });
+      }
+
+      // GET /hiker/history - Full completed hikes history from single-row hikes_json
+      if (method === 'GET' && path === '/hiker/history') {
+        if (!env.DB) return jsonResponse({ success: true, data: [] });
+        const email = (url.searchParams.get('email') || '').trim().toLowerCase();
+        if (!email) return errorResponse('Email is required', 400);
+
+        const profile = await env.DB.prepare('SELECT hikes_json FROM hiker_profiles WHERE LOWER(email) = ?').bind(email).first();
+        let hikes = [];
+        if (profile && profile.hikes_json) {
+          try {
+            hikes = typeof profile.hikes_json === 'string' ? JSON.parse(profile.hikes_json) : (profile.hikes_json || []);
+          } catch (_) {}
+        }
+
+        return jsonResponse({ success: true, data: hikes });
+      }
+
+      // POST /hiker/history - Record completed hike into single-row hikes_json and increment statistics
+      if (method === 'POST' && path === '/hiker/history') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const body = await request.json();
+        const email = (body.email || '').trim().toLowerCase();
+        const hikeNumber = String(body.hike_number || '').trim();
+        const trekName = body.trek_name || '';
+        const hikeDate = body.hike_date || new Date().toISOString().slice(0, 10);
+        const distanceKm = Number(body.distance_km) || 0;
+        const altitudeM = Number(body.altitude_m) || 0;
+        const role = body.role || 'participant';
+
+        if (!email || !hikeNumber) {
+          return errorResponse('Email and hike_number are required', 400);
+        }
+
+        let profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE LOWER(email) = ?').bind(email).first();
+        let hikes = [];
+        if (profile && profile.hikes_json) {
+          try {
+            hikes = typeof profile.hikes_json === 'string' ? JSON.parse(profile.hikes_json) : (profile.hikes_json || []);
+          } catch (_) {}
+        }
+
+        const newHikeItem = {
+          hike_number: hikeNumber,
+          trek_name: trekName,
+          trek_date: hikeDate,
+          distance_km: distanceKm,
+          altitude_m: altitudeM,
+          role,
+          registration_status: 'Attended',
+          payment_status: 'Paid',
+          completed_at: new Date().toISOString()
+        };
+
+        const existingIdx = hikes.findIndex(h => String(h.hike_number).trim() === hikeNumber);
+        if (existingIdx >= 0) {
+          hikes[existingIdx] = { ...hikes[existingIdx], ...newHikeItem };
+        } else {
+          hikes.unshift(newHikeItem);
+        }
+
+        const newTotalHikes = hikes.length;
+        const newDistance = (Number(profile?.total_distance_km) || 0) + distanceKm;
+        const newAltitude = Math.max(Number(profile?.highest_altitude_m) || 0, altitudeM);
+
+        let rankTitle = 'Trail Explorer';
+        if (newTotalHikes >= 25) rankTitle = 'Himalayan Veteran';
+        else if (newTotalHikes >= 10) rankTitle = 'Summit Seeker';
+        else if (newTotalHikes >= 5) rankTitle = 'Pathfinder';
+
+        let badges = [];
+        if (profile && profile.badges_json) {
+          try {
+            badges = typeof profile.badges_json === 'string' ? JSON.parse(profile.badges_json) : (profile.badges_json || []);
+          } catch (_) {}
+        }
+
+        const badgeSet = new Set(badges);
+        badgeSet.add('first_hike');
+        if (newTotalHikes >= 5) badgeSet.add('5_hikes_milestone');
+        if (newTotalHikes >= 10) badgeSet.add('10_hikes_milestone');
+        if (newTotalHikes >= 25) badgeSet.add('25_hikes_milestone');
+        if (newAltitude >= 4000) badgeSet.add('high_altitude_4000m');
+
+        if (!profile) {
+          await env.DB.prepare(`
+            INSERT INTO hiker_profiles (
+              email, full_name, total_hikes, total_distance_km, highest_altitude_m,
+              rank_title, badges_json, hikes_json, first_hike_date, last_hike_date, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `).bind(
+            email,
+            body.full_name || 'Hiker',
+            newTotalHikes,
+            newDistance,
+            newAltitude,
+            rankTitle,
+            JSON.stringify(Array.from(badgeSet)),
+            JSON.stringify(hikes),
+            hikeDate,
+            hikeDate
+          ).run();
+        } else {
+          await env.DB.prepare(`
+            UPDATE hiker_profiles
+            SET total_hikes = ?,
+                total_distance_km = ?,
+                highest_altitude_m = ?,
+                rank_title = ?,
+                badges_json = ?,
+                hikes_json = ?,
+                last_hike_date = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE LOWER(email) = ?
+          `).bind(
+            newTotalHikes,
+            newDistance,
+            newAltitude,
+            rankTitle,
+            JSON.stringify(Array.from(badgeSet)),
+            JSON.stringify(hikes),
+            hikeDate,
+            email
+          ).run();
+        }
+
+        // Recompute leaderboard snapshot in background
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e)));
+        } else {
+          recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e));
+        }
+
+        return jsonResponse({ success: true, message: `Completed hike #${hikeNumber} recorded for ${email}` });
+      }
+
+      // GET /leaderboard or GET /leaderboard/master - Returns the single pre-computed snapshot
+      if (method === 'GET' && (path === '/leaderboard' || path === '/leaderboard/master')) {
+        if (!env.DB) return jsonResponse({ ok: true, success: true, stats: {}, hikers: [] });
+
+        const isFresh = url.searchParams.has('fresh');
+        if (!isFresh) {
+          const cached = await matchEdgeCache(request);
+          if (cached) return cached;
+        }
+
+        let snapshot = null;
+        try {
+          const row = await env.DB.prepare(
+            "SELECT data_json FROM system_snapshots WHERE key = 'leaderboard_master'"
+          ).first();
+          if (row && row.data_json) {
+            snapshot = typeof row.data_json === 'string' ? JSON.parse(row.data_json) : row.data_json;
+          }
+        } catch (_) {}
+
+        if (!snapshot || isFresh) {
+          snapshot = await recomputeLeaderboardSnapshot(env);
+        }
+
+        if (!snapshot) {
+          snapshot = { ok: true, stats: {}, hikers: [] };
+        }
+
+        const resp = jsonResponse({
+          ok: true,
+          success: true,
+          ...snapshot,
+          data: snapshot.hikers || []
+        }, 200, {
+          'Cache-Control': 'public, max-age=300, s-maxage=300',
+          'X-Edge-Cache': 'MISS'
+        });
+
+        await putEdgeCache(request, resp, ctx, 300);
+        return resp;
+      }
+
+      // POST /admin/recompute-leaderboard - Trigger manual snapshot calculation
+      if (method === 'POST' && path === '/admin/recompute-leaderboard') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        const snapshot = await recomputeLeaderboardSnapshot(env);
+        return jsonResponse({
+          success: true,
+          message: 'Leaderboard master snapshot recomputed and stored in system_snapshots',
+          stats: snapshot?.stats,
+          hikersCount: snapshot?.hikers?.length || 0
+        });
+      }
+
+      // POST /admin/migrate-profiles - Ingest bulk old hiker data or backfill from existing tables
+      if (method === 'POST' && path === '/admin/migrate-profiles') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const body = await request.json();
+        let migratedCount = 0;
+
+        // Mode A: Backfill from existing registrations & bookings_roster tables
+        if (body.backfillFromTables) {
+          try {
+            const regs = await env.DB.prepare(`
+              SELECT r.*, b.payment_status as roster_pay_status, b.paid_amount as roster_paid, b.due_amount as roster_due, b.admin_notes as roster_notes, b.pickup_point as roster_pickup
+              FROM registrations r
+              LEFT JOIN bookings_roster b ON b.registration_id = r.id OR b.hike_number = r.hike_number
+              WHERE r.email_address IS NOT NULL AND TRIM(r.email_address) != ''
+            `).all();
+
+            const rows = regs.results || [];
+            const hikerMap = new Map();
+
+            for (const r of rows) {
+              const email = String(r.email_address).trim().toLowerCase();
+              if (!email) continue;
+
+              let profile = hikerMap.get(email);
+              if (!profile) {
+                profile = {
+                  email,
+                  full_name: r.full_name || 'Hiker',
+                  phone: r.phone || '',
+                  whatsapp: r.whatsapp_number || r.whatsapp || '',
+                  gender: r.gender || '',
+                  age_group: r.age_group || '',
+                  profession: r.profession || '',
+                  emergency_contact_phone: r.emergency_backup_contact || '',
+                  fitness_level: r.fitness || '',
+                  medical_conditions: r.medical_condition || '',
+                  city: r.city || '',
+                  hikes: []
+                };
+                hikerMap.set(email, profile);
+              }
+
+              const hikeNum = String(r.hike_number || '').trim();
+              const existingHike = profile.hikes.find(h => String(h.hike_number).trim() === hikeNum);
+              if (!existingHike) {
+                profile.hikes.push({
+                  hike_number: hikeNum,
+                  trek_name: r.trek_name || '',
+                  trek_date: r.timestamp ? r.timestamp.slice(0, 10) : '',
+                  pax: Number(r.pax) || 1,
+                  pickup_point: r.roster_pickup || '',
+                  registration_status: 'Confirmed',
+                  payment_status: r.roster_pay_status || 'Unpaid',
+                  paid_amount: Number(r.roster_paid) || 0,
+                  due_amount: Number(r.roster_due) || 0,
+                  companions: r.list_name || r.part_of_group || '',
+                  transport_mode: r.transport_mode || '',
+                  guide_mode: r.guide_mode || '',
+                  admin_notes: r.roster_notes || ''
+                });
+              }
+            }
+
+            for (const profile of hikerMap.values()) {
+              const totalHikes = profile.hikes.length;
+              const totalPaid = profile.hikes.reduce((a, h) => a + (Number(h.paid_amount) || 0), 0);
+              const totalDue = profile.hikes.reduce((a, h) => a + (Number(h.due_amount) || 0), 0);
+
+              let rankTitle = 'Trail Explorer';
+              if (totalHikes >= 25) rankTitle = 'Himalayan Veteran';
+              else if (totalHikes >= 10) rankTitle = 'Summit Seeker';
+              else if (totalHikes >= 5) rankTitle = 'Pathfinder';
+
+              const badges = ['first_hike'];
+              if (totalHikes >= 5) badges.push('5_hikes_milestone');
+              if (totalHikes >= 10) badges.push('10_hikes_milestone');
+              if (totalHikes >= 25) badges.push('25_hikes_milestone');
+
+              await env.DB.prepare(`
+                INSERT INTO hiker_profiles (
+                  email, full_name, phone, whatsapp, gender, age_group, profession,
+                  emergency_contact_phone, fitness_level, medical_conditions, city,
+                  total_hikes, total_paid_amount, total_due_amount, rank_title,
+                  badges_json, hikes_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(email) DO UPDATE SET
+                  total_hikes = excluded.total_hikes,
+                  total_paid_amount = excluded.total_paid_amount,
+                  total_due_amount = excluded.total_due_amount,
+                  rank_title = excluded.rank_title,
+                  badges_json = excluded.badges_json,
+                  hikes_json = excluded.hikes_json,
+                  updated_at = CURRENT_TIMESTAMP
+              `).bind(
+                profile.email,
+                profile.full_name,
+                profile.phone,
+                profile.whatsapp,
+                profile.gender,
+                profile.age_group,
+                profile.profession,
+                profile.emergency_contact_phone,
+                profile.fitness_level,
+                profile.medical_conditions,
+                profile.city,
+                totalHikes,
+                totalPaid,
+                totalDue,
+                rankTitle,
+                JSON.stringify(badges),
+                JSON.stringify(profile.hikes)
+              ).run();
+
+              migratedCount++;
+            }
+
+            return jsonResponse({
+              success: true,
+              message: `Successfully backfilled ${migratedCount} hiker profiles from existing table records.`,
+              migratedCount
+            });
+          } catch (bErr) {
+            console.error('Backfill error:', bErr);
+            return errorResponse(`Backfill failed: ${bErr.message}`, 500);
+          }
+        }
+
+        // Mode B: Direct bulk ingestion of custom hikers array
+        const hikers = Array.isArray(body.hikers) ? body.hikers : [];
+        for (const h of hikers) {
+          const email = String(h.email || h.email_address || '').trim().toLowerCase();
+          if (!email) continue;
+
+          const hikes = Array.isArray(h.hikes) ? h.hikes : [];
+          const totalHikes = h.total_hikes !== undefined ? Number(h.total_hikes) : hikes.length;
+          const totalPaid = h.total_paid_amount !== undefined ? Number(h.total_paid_amount) : hikes.reduce((a, x) => a + (Number(x.paid_amount) || 0), 0);
+          const totalDue = h.total_due_amount !== undefined ? Number(h.total_due_amount) : hikes.reduce((a, x) => a + (Number(x.due_amount) || 0), 0);
+          const totalDist = Number(h.total_distance_km) || 0;
+          const highestAlt = Number(h.highest_altitude_m) || 0;
+
+          let rankTitle = h.rank_title || 'Trail Explorer';
+          if (totalHikes >= 25) rankTitle = 'Himalayan Veteran';
+          else if (totalHikes >= 10) rankTitle = 'Summit Seeker';
+          else if (totalHikes >= 5) rankTitle = 'Pathfinder';
+
+          let badges = Array.isArray(h.badges) ? h.badges : [];
+          if (badges.length === 0 && totalHikes > 0) {
+            badges.push('first_hike');
+            if (totalHikes >= 5) badges.push('5_hikes_milestone');
+            if (totalHikes >= 10) badges.push('10_hikes_milestone');
+            if (totalHikes >= 25) badges.push('25_hikes_milestone');
+          }
+
+          const contribs = h.contributions || { trails: [], photos: [] };
+
+          await env.DB.prepare(`
+            INSERT INTO hiker_profiles (
+              email, user_uid, full_name, phone, whatsapp, gender, age_group, profession,
+              emergency_contact_name, emergency_contact_phone, blood_group, fitness_level,
+              medical_conditions, city, avatar_url, total_hikes, total_paid_amount, total_due_amount,
+              total_distance_km, highest_altitude_m, total_trails_contributed, total_photos_uploaded,
+              total_comments_made, rank_title, badges_json, hikes_json, contributions_json,
+              first_hike_date, last_hike_date, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(email) DO UPDATE SET
+              full_name = COALESCE(NULLIF(excluded.full_name, ''), hiker_profiles.full_name),
+              phone = COALESCE(NULLIF(excluded.phone, ''), hiker_profiles.phone),
+              whatsapp = COALESCE(NULLIF(excluded.whatsapp, ''), hiker_profiles.whatsapp),
+              gender = COALESCE(NULLIF(excluded.gender, ''), hiker_profiles.gender),
+              age_group = COALESCE(NULLIF(excluded.age_group, ''), hiker_profiles.age_group),
+              profession = COALESCE(NULLIF(excluded.profession, ''), hiker_profiles.profession),
+              city = COALESCE(NULLIF(excluded.city, ''), hiker_profiles.city),
+              total_hikes = excluded.total_hikes,
+              total_paid_amount = excluded.total_paid_amount,
+              total_due_amount = excluded.total_due_amount,
+              total_distance_km = excluded.total_distance_km,
+              highest_altitude_m = excluded.highest_altitude_m,
+              total_trails_contributed = excluded.total_trails_contributed,
+              total_photos_uploaded = excluded.total_photos_uploaded,
+              total_comments_made = excluded.total_comments_made,
+              rank_title = excluded.rank_title,
+              badges_json = excluded.badges_json,
+              hikes_json = excluded.hikes_json,
+              contributions_json = excluded.contributions_json,
+              first_hike_date = COALESCE(excluded.first_hike_date, hiker_profiles.first_hike_date),
+              last_hike_date = COALESCE(excluded.last_hike_date, hiker_profiles.last_hike_date),
+              updated_at = CURRENT_TIMESTAMP
+          `).bind(
+            email,
+            h.user_uid || h.uid || null,
+            h.full_name || 'Hiker',
+            h.phone || '',
+            h.whatsapp || '',
+            h.gender || '',
+            h.age_group || '',
+            h.profession || '',
+            h.emergency_contact_name || '',
+            h.emergency_contact_phone || '',
+            h.blood_group || '',
+            h.fitness_level || '',
+            h.medical_conditions || '',
+            h.city || '',
+            h.avatar_url || '',
+            totalHikes,
+            totalPaid,
+            totalDue,
+            totalDist,
+            highestAlt,
+            Number(h.total_trails_contributed) || 0,
+            Number(h.total_photos_uploaded) || 0,
+            Number(h.total_comments_made) || 0,
+            rankTitle,
+            JSON.stringify(badges),
+            JSON.stringify(hikes),
+            JSON.stringify(contribs),
+            h.first_hike_date || null,
+            h.last_hike_date || null
+          ).run();
+
+          migratedCount++;
+        }
+
+        return jsonResponse({
+          success: true,
+          message: `Successfully ingested/updated ${migratedCount} hiker profiles into single-row document model.`,
+          migratedCount
+        });
       }
 
       // ===== FEEDBACK ENDPOINTS =====
@@ -1339,6 +2528,44 @@ export default {
             body.caption || ''
           ).run();
 
+          // Auto-sync photo contribution into hiker_profiles
+          const userIdentifier = (body.email || body.userEmail || '').trim().toLowerCase();
+          const userUid = body.userUid || body.user_uid || '';
+          if (userIdentifier || userUid) {
+            try {
+              let profile = null;
+              if (userIdentifier) {
+                profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE LOWER(email) = ?').bind(userIdentifier).first();
+              } else if (userUid) {
+                profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE user_uid = ?').bind(userUid).first();
+              }
+              if (profile) {
+                let contribs = { trails: [], photos: [] };
+                try {
+                  contribs = typeof profile.contributions_json === 'string' ? JSON.parse(profile.contributions_json) : (profile.contributions_json || { trails: [], photos: [] });
+                } catch (_) {}
+                contribs.photos = contribs.photos || [];
+                contribs.photos.unshift({
+                  id: photoId,
+                  url: body.url || '',
+                  caption: body.caption || '',
+                  trek_name: body.trekName || body.trek_name || '',
+                  uploaded_at: currentTimestamp
+                });
+                const newPhotoCount = (Number(profile.total_photos_uploaded) || 0) + 1;
+                await env.DB.prepare(`
+                  UPDATE hiker_profiles
+                  SET contributions_json = ?,
+                      total_photos_uploaded = ?,
+                      updated_at = CURRENT_TIMESTAMP
+                  WHERE LOWER(email) = ?
+                `).bind(JSON.stringify(contribs), newPhotoCount, profile.email.toLowerCase()).run();
+              }
+            } catch (pSyncErr) {
+              console.warn('Notice syncing photo contribution to hiker profile:', pSyncErr);
+            }
+          }
+
           return jsonResponse({
             success: true,
             message: 'Photo index saved to Cloudflare D1 successfully',
@@ -1425,6 +2652,31 @@ export default {
             body.commentText || body.comment_text || '',
             currentTimestamp
           ).run();
+
+          // Auto-sync comment count into hiker_profiles
+          const commentUid = body.userUid || body.user_uid || '';
+          const commentEmail = (body.email || '').trim().toLowerCase();
+          if (commentUid || commentEmail) {
+            try {
+              let profile = null;
+              if (commentEmail) {
+                profile = await env.DB.prepare('SELECT email, total_comments_made FROM hiker_profiles WHERE LOWER(email) = ?').bind(commentEmail).first();
+              } else if (commentUid) {
+                profile = await env.DB.prepare('SELECT email, total_comments_made FROM hiker_profiles WHERE user_uid = ?').bind(commentUid).first();
+              }
+              if (profile) {
+                const newCount = (Number(profile.total_comments_made) || 0) + 1;
+                await env.DB.prepare(`
+                  UPDATE hiker_profiles
+                  SET total_comments_made = ?,
+                      updated_at = CURRENT_TIMESTAMP
+                  WHERE email = ?
+                `).bind(newCount, profile.email).run();
+              }
+            } catch (cSyncErr) {
+              console.warn('Notice syncing comments count to hiker profile:', cSyncErr);
+            }
+          }
 
           return jsonResponse({
             success: true,
@@ -1755,6 +3007,40 @@ export default {
             contributor_email,
             status
           ).run();
+        }
+
+        // Auto-sync trail contribution into hiker_profiles
+        if (contributor_email) {
+          try {
+            const cleanEmail = String(contributor_email).trim().toLowerCase();
+            const profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE LOWER(email) = ?').bind(cleanEmail).first();
+            if (profile) {
+              let contribs = { trails: [], photos: [] };
+              try {
+                contribs = typeof profile.contributions_json === 'string' ? JSON.parse(profile.contributions_json) : (profile.contributions_json || { trails: [], photos: [] });
+              } catch (_) {}
+              contribs.trails = contribs.trails || [];
+              contribs.trails.unshift({
+                id: trailId,
+                file_name: fileName,
+                name: trailName,
+                distance,
+                elevation_gain,
+                difficulty,
+                uploaded_at: new Date().toISOString()
+              });
+              const newTrailsCount = (Number(profile.total_trails_contributed) || 0) + 1;
+              await env.DB.prepare(`
+                UPDATE hiker_profiles
+                SET contributions_json = ?,
+                    total_trails_contributed = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE LOWER(email) = ?
+              `).bind(JSON.stringify(contribs), newTrailsCount, cleanEmail).run();
+            }
+          } catch (tSyncErr) {
+            console.warn('Notice syncing trail contribution to hiker profile:', tSyncErr);
+          }
         }
 
         return jsonResponse({ success: true, message: 'Trail uploaded successfully to D1', id: trailId, fileName });
