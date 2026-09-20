@@ -152,6 +152,19 @@ let indexesEnsured = false;
 async function ensurePerformanceIndexes(env) {
   if (indexesEnsured || !env || !env.DB) return;
   try {
+    // 1. Ensure admin_activity_logs table exists
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS admin_activity_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_email TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        metadata_json TEXT DEFAULT '{}',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+
+    // 2. Setup indexes
     await env.DB.batch([
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_hike_number ON registrations (hike_number)'),
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_email ON registrations (email_address)'),
@@ -170,11 +183,31 @@ async function ensurePerformanceIndexes(env) {
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_hiker_email_lower ON hiker_profiles (LOWER(email))'),
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_hiker_total_hikes ON hiker_profiles (total_hikes DESC)'),
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_status_date ON treks (status, hike_date DESC)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_hiker_uid ON hiker_profiles (user_uid)')
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_hiker_uid ON hiker_profiles (user_uid)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs (created_at DESC)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_email ON admin_activity_logs (admin_email)')
     ]);
     indexesEnsured = true;
   } catch (e) {
     // Non-blocking
+  }
+}
+
+async function logAdminActivity(env, request, actionType, description, metadata = {}) {
+  if (!env || !env.DB) return;
+  try {
+    const adminEmail = (request.headers.get('X-Admin-Email') || 'system_worker@walknepal.org').trim().toLowerCase();
+    await env.DB.prepare(`
+      INSERT INTO admin_activity_logs (admin_email, action_type, description, metadata_json)
+      VALUES (?, ?, ?, ?)
+    `).bind(
+      adminEmail,
+      actionType,
+      description,
+      JSON.stringify(metadata)
+    ).run();
+  } catch (err) {
+    console.error('Failed to log admin activity:', err);
   }
 }
 
@@ -862,6 +895,12 @@ export default {
           }
         }
 
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(logAdminActivity(env, request, 'SYNC_ALL_PROFILES', `Synced ${profileCount} hiker profiles and recomputed leaderboard`, { profileCount }));
+        } else {
+          await logAdminActivity(env, request, 'SYNC_ALL_PROFILES', `Synced ${profileCount} hiker profiles and recomputed leaderboard`, { profileCount });
+        }
+
         return jsonResponse({
           success: true,
           message: `🎉 Successfully synced database! Forwarded ${profileCount} hiker profiles and updated leaderboard.`,
@@ -880,6 +919,8 @@ export default {
         await env.DB.prepare(
           'UPDATE treks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? OR hike_number = ?'
         ).bind(newStatus, idOrNum, idOrNum).run();
+
+        await logAdminActivity(env, request, 'UPDATE_TREK_STATUS', `Updated trek ${idOrNum} status to '${newStatus}'`, { trekId: idOrNum, status: newStatus });
 
         return jsonResponse({ success: true, message: `Status updated to ${newStatus}` });
       }
@@ -935,6 +976,8 @@ export default {
           row.data_json || '{}',
           row.author_email || 'walknepalwalk@gmail.com'
         ).run();
+
+        await logAdminActivity(env, request, 'CLONE_TREK', `Cloned trek '${row.title || 'Trek'}' as '${newTitle}'`, { originalId: idOrNum, clonedId: newId });
 
         return jsonResponse({
           success: true,
@@ -1063,6 +1106,13 @@ export default {
             recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e));
           }
         }
+
+        await logAdminActivity(env, request, 'UPDATE_EVENT_EXECUTION', `Updated event execution for trek '${row.title}' (#${row.hike_number || idOrNum})`, {
+          hike_number: row.hike_number || idOrNum,
+          execution_status: body.data?.execution_status || 'Scheduled',
+          assigned_leader: teamLeader,
+          capacity: maxCapacity
+        });
 
         return jsonResponse({
           success: true,
@@ -1325,6 +1375,12 @@ export default {
           }
         }
 
+        await logAdminActivity(env, request, 'UPSERT_TREK', `Upserted trek '${title || 'Trek'}' (#${hikeNum})`, {
+          trekId,
+          hike_number: hikeNum,
+          title
+        });
+
         return jsonResponse({
           success: true,
           message: 'Trek synced to Cloudflare D1 successfully',
@@ -1344,6 +1400,8 @@ export default {
         await env.DB.prepare(
           'DELETE FROM treks WHERE hike_number = ? OR id = ?'
         ).bind(idOrNum, idOrNum).run();
+
+        await logAdminActivity(env, request, 'DELETE_TREK', `Deleted trek '${idOrNum}'`, { trekId: idOrNum });
 
         return jsonResponse({ success: true, message: `Deleted trek ${idOrNum}` });
       }
@@ -1610,6 +1668,16 @@ export default {
           return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
         }
 
+        await logAdminActivity(env, request, 'UPDATE_BOOKING', `Updated booking/roster for '${regRow?.full_name || 'Hiker'}' (#${regRow?.hike_number || ''})`, {
+          registration_id: id,
+          status,
+          payment_status,
+          paid_amount: paid,
+          due_amount: due,
+          admin_notes: updates,
+          pickup_point
+        });
+
         return jsonResponse({
           success: true,
           message: 'Bookings & Roster details updated in D1 successfully'
@@ -1624,12 +1692,14 @@ export default {
         try {
           await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(id).run();
           cachedTrekAggMap = null;
+          await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, { registration_id: id });
           return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully' });
         } catch (dbErr) {
           console.error('Failed to delete registration from D1:', dbErr);
           try {
             await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(Number(id) || id).run();
             cachedTrekAggMap = null;
+            await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, { registration_id: id });
             return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully (fallback ID type)' });
           } catch (fallbackErr) {
             return errorResponse(`D1 delete error: ${fallbackErr.message}`, 500);
@@ -2307,6 +2377,61 @@ export default {
           stats: snapshot?.stats,
           hikersCount: snapshot?.hikers?.length || 0
         });
+      }
+
+      // GET /admin/logs - Query activity logs with pagination and filters
+      if (method === 'GET' && path === '/admin/logs') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50'), 1), 200);
+        const offset = Math.max(parseInt(url.searchParams.get('offset') || '0'), 0);
+        const action = url.searchParams.get('action');
+        const searchEmail = url.searchParams.get('email');
+
+        let query = 'SELECT id, admin_email, action_type, description, metadata_json, created_at FROM admin_activity_logs';
+        let countQuery = 'SELECT COUNT(*) as total FROM admin_activity_logs';
+        let conditions = [];
+        let params = [];
+
+        if (action) {
+          conditions.push('action_type = ?');
+          params.push(action);
+        }
+        if (searchEmail) {
+          conditions.push('admin_email = ?');
+          params.push(searchEmail.trim().toLowerCase());
+        }
+
+        if (conditions.length > 0) {
+          const condStr = ' WHERE ' + conditions.join(' AND ');
+          query += condStr;
+          countQuery += condStr;
+        }
+
+        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        
+        const countParams = [...params];
+        const selectParams = [...params, limit, offset];
+
+        try {
+          const batchResults = await env.DB.batch([
+            env.DB.prepare(countQuery).bind(...countParams),
+            env.DB.prepare(query).bind(...selectParams)
+          ]);
+
+          const total = batchResults[0]?.results?.[0]?.total || 0;
+          const logs = batchResults[1]?.results || [];
+
+          return jsonResponse({
+            success: true,
+            total,
+            limit,
+            offset,
+            data: logs
+          });
+        } catch (err) {
+          return errorResponse('Failed to fetch activity logs: ' + err.message, 500);
+        }
       }
 
       // POST /admin/migrate-profiles - Ingest bulk old hiker data or backfill from existing tables

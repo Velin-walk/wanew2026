@@ -223,7 +223,19 @@ CREATE TABLE IF NOT EXISTS system_snapshots (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 12. Admin Activity Logs (Audit trail for payment approvals, syncs, updates, etc.)
+CREATE TABLE IF NOT EXISTS admin_activity_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admin_email TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  description TEXT NOT NULL,
+  metadata_json TEXT DEFAULT '{}',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for Ultra-Low Row Reads & High-Speed Querying
+CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_email ON admin_activity_logs (admin_email);
 CREATE INDEX IF NOT EXISTS idx_photo_comments_photo_id ON photo_comments (photo_id);
 CREATE INDEX IF NOT EXISTS idx_regs_hike_number ON registrations (hike_number);
 CREATE INDEX IF NOT EXISTS idx_regs_email ON registrations (email_address);

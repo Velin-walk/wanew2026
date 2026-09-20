@@ -39,7 +39,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleMobileTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'admin') => {
+  const handleMobileTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin') => {
     if (tab === 'mapminers' && !user) {
       openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers'));
       return;
@@ -126,30 +126,25 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           <span className="text-[10px] tracking-tight mt-0.5">Bookings</span>
         </button>
 
-        {/* Saved / Favorites Tab */}
+        {/* Leaderboard Tab */}
         <button
           type="button"
-          id="tab-saved"
-          onClick={() => handleMobileTabClick('saved')}
+          id="tab-leaderboard"
+          onClick={() => handleMobileTabClick('leaderboard')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all relative ${
-            currentTab === 'saved'
-              ? 'text-rose-600 font-bold'
+            currentTab === 'leaderboard'
+              ? 'text-amber-600 font-bold'
               : 'text-[#8B8680] hover:text-[#1F1F1F] font-medium'
           }`}
         >
           <div
             className={`p-1 rounded-lg relative transition-transform ${
-              currentTab === 'saved' ? 'bg-rose-50 scale-105' : ''
+              currentTab === 'leaderboard' ? 'bg-amber-50 scale-105' : ''
             }`}
           >
-            <Heart className={`w-5 h-5 ${currentTab === 'saved' ? 'fill-rose-500 text-rose-500' : ''}`} />
-            {savedCount > 0 && (
-              <span className="absolute -top-1 -right-1.5 px-1 min-w-[16px] h-4 bg-rose-500 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center shadow-xs">
-                {savedCount}
-              </span>
-            )}
+            <Trophy className={`w-5 h-5 ${currentTab === 'leaderboard' ? 'text-amber-500 fill-amber-100' : ''}`} />
           </div>
-          <span className="text-[10px] tracking-tight mt-0.5">Saved</span>
+          <span className="text-[10px] tracking-tight mt-0.5">Leaderboard</span>
         </button>
 
         {/* MapMiners Tab */}
@@ -236,21 +231,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               <div className="px-3 py-1.5 border-b border-[#F9F7F5] mb-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-[#8B8680]">Guides & Support</span>
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setDropdownOpen(false);
-                  onTabChange('leaderboard');
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-[#E08828]" />
-                  <span>Leaderboard & Badges</span>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
-              </button>
 
               <button
                 type="button"

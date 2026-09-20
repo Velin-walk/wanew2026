@@ -146,8 +146,24 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   const isFull = currentParticipants >= trek.capacity;
   const fillPercentage = Math.min(100, Math.round((currentParticipants / trek.capacity) * 100));
 
+  const getBorderColor = (difficulty?: string) => {
+    switch (difficulty?.toLowerCase()) {
+      case 'easy':
+        return 'border-[#7ABA42]/75 hover:border-[#7ABA42]';
+      case 'moderate':
+        return 'border-[#E08828]/75 hover:border-[#E08828]';
+      case 'difficult':
+      case 'hard':
+        return 'border-rose-500/75 hover:border-rose-500';
+      default:
+        return 'border-[#D8D2C9] hover:border-[#8B8680]';
+    }
+  };
+
+  const borderClass = getBorderColor(trek.difficulty);
+
   return (
-    <div className="bg-white rounded-2xl border border-[#D8D2C9] shadow-[0_6px_20px_rgba(0,0,0,0.06)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between w-full max-w-full overflow-hidden">
+    <div className={`bg-white rounded-2xl border-2 ${borderClass} shadow-[0_6px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.11)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between w-full max-w-full overflow-hidden`}>
       {/* Card Image */}
       <div className="relative h-40 sm:h-48 w-full overflow-hidden group">
         <img

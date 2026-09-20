@@ -136,16 +136,16 @@ export const LeaderboardScreen: React.FC = () => {
   return (
     <div className="space-y-4 sm:space-y-6 w-full pb-10">
       {/* Header Banner */}
-      <div className="bg-gradient-to-br from-[#1B361D] via-[#254A23] to-[#1E381C] text-white rounded-3xl p-5 sm:p-7 shadow-md relative overflow-hidden border border-[#7ABA42]/30">
+      <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-3xl p-5 sm:p-7 shadow-md relative overflow-hidden border border-[#F5A844]/30">
         {/* Glow & ambient accent */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-[#E08828]/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-        <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#A8D878]">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+        <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#FED7AA]">
           <Trophy className="w-56 h-56" />
         </div>
 
         <div className="relative z-10 w-full">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E08828]/25 border border-[#F5A844]/50 text-[#FED7AA] text-[10px] sm:text-xs font-bold uppercase tracking-wider shadow-3xs">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/25 border border-white/20 text-[#FED7AA] text-[10px] sm:text-xs font-bold uppercase tracking-wider shadow-3xs">
               <Crown className="w-3.5 h-3.5 text-[#F5A844] shrink-0" />
               <span>Community Leadership Board</span>
             </div>
@@ -163,11 +163,8 @@ export const LeaderboardScreen: React.FC = () => {
           </div>
 
           <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-            Top Himalayan Hikers &amp; Trekkers
+            Celebrating Community Milestones
           </h1>
-          <p className="text-[#B5F07E] text-xs sm:text-sm mt-1 leading-relaxed font-bold tracking-wider uppercase">
-            Celebrating endurance, camaraderie &amp; milestones
-          </p>
 
           {/* Quick Summary Strip */}
           {currentStats && (
@@ -352,13 +349,13 @@ export const LeaderboardScreen: React.FC = () => {
       )}
 
       {/* Control Panel: Filters & Sorting */}
-      <div className="bg-white rounded-2xl p-4 border border-[#E5E1DB] shadow-xs space-y-3.5">
-        {/* Category Tabs (All / Day Hikers / Multi-day Trekkers) */}
-        <div className="flex items-center gap-1.5 p-1 bg-[#F4EFEA] rounded-2xl overflow-x-auto no-scrollbar">
+      <div className="bg-white rounded-2xl p-4 border border-[#E5E1DB] shadow-xs space-y-4">
+        {/* Category Tabs (All / Day Hikers / Multi-day Trekkers) - Optimized Responsive Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 p-1 bg-[#F4EFEA] rounded-2xl">
           <button
             type="button"
             onClick={() => { setCategory('all'); setLimit(20); }}
-            className={`flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
+            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
               category === 'all'
                 ? 'bg-white text-[#1F1F1F] shadow-xs ring-1 ring-black/5'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
@@ -367,24 +364,24 @@ export const LeaderboardScreen: React.FC = () => {
             <Trophy className={`w-3.5 h-3.5 ${category === 'all' ? 'text-[#E08828]' : 'text-[#8B8680]'}`} />
             <span>Overall Board</span>
           </button>
-
+ 
           <button
             type="button"
             onClick={() => { setCategory('hikers'); setLimit(20); }}
-            className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
+            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
               category === 'hikers'
-                ? 'bg-[#7ABA42] text-white shadow-xs font-black'
+                ? 'bg-[#E08828] text-white shadow-xs font-black'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
             }`}
           >
             <Footprints className="w-3.5 h-3.5" />
             <span>Hikers (≤ 2 Days)</span>
           </button>
-
+ 
           <button
             type="button"
             onClick={() => { setCategory('trekkers'); setLimit(20); }}
-            className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
+            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
               category === 'trekkers'
                 ? 'bg-[#4527A0] text-white shadow-xs font-black'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
@@ -394,44 +391,46 @@ export const LeaderboardScreen: React.FC = () => {
             <span>Trekkers (&gt; 2 Days)</span>
           </button>
         </div>
-
+ 
         {/* Time Window Pills & Metric Toggle */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-[#F0EBE5]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[#F0EBE5]">
           {/* Timeframe */}
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-            <span className="text-[11px] font-bold text-[#8B8680] mr-1 shrink-0 flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-[#E08828]" /> Period:
+          <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+            <span className="text-[11px] font-bold text-[#8B8680] mr-1 shrink-0 flex items-center gap-1 w-full sm:w-auto mb-1 sm:mb-0">
+              <Calendar className="w-3.5 h-3.5 text-[#E08828]" /> Period:
             </span>
-            {(
-              [
-                { id: 't30', label: '30 Days' },
-                { id: 't60', label: '60 Days' },
-                { id: 't90', label: '90 Days' },
-                { id: 't365', label: '1 Year' },
-                { id: 'overall', label: 'All Time' },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => { setPeriod(t.id); setLimit(20); }}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shrink-0 active:scale-95 cursor-pointer shadow-3xs select-none ${
-                  period === t.id
-                    ? 'bg-[#1B361D] text-white shadow-xs font-black'
-                    : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+            <div className="flex flex-wrap gap-1 w-full sm:w-auto">
+              {(
+                [
+                  { id: 't30', label: '30 Days' },
+                  { id: 't60', label: '60 Days' },
+                  { id: 't90', label: '90 Days' },
+                  { id: 't365', label: '1 Year' },
+                  { id: 'overall', label: 'All Time' },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => { setPeriod(t.id); setLimit(20); }}
+                  className={`flex-1 sm:flex-initial text-center px-2.5 py-1.5 sm:py-1 rounded-xl text-[11px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
+                    period === t.id
+                      ? 'bg-stone-900 text-white shadow-xs font-black'
+                      : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
-
-          {/* Sort Metric Selector */}
-          <div className="flex items-center gap-1 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] shrink-0 self-start sm:self-auto">
+ 
+          {/* Sort Metric Selector - Optimized Full Width on Mobile */}
+          <div className="grid grid-cols-2 sm:flex items-center gap-1 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-full sm:w-auto shrink-0">
             <button
               type="button"
               onClick={() => { setMetric('dist'); setLimit(20); }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`py-2 sm:py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
                 metric === 'dist'
                   ? 'bg-[#E08828] text-white font-black shadow-xs'
                   : 'text-[#6A645D] hover:text-[#1F1F1F]'
@@ -442,9 +441,9 @@ export const LeaderboardScreen: React.FC = () => {
             <button
               type="button"
               onClick={() => { setMetric('count'); setLimit(20); }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`py-2 sm:py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
                 metric === 'count'
-                  ? 'bg-[#7ABA42] text-white font-black shadow-xs'
+                  ? 'bg-stone-900 text-white font-black shadow-xs'
                   : 'text-[#6A645D] hover:text-[#1F1F1F]'
               }`}
             >

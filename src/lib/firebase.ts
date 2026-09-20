@@ -21,7 +21,7 @@ try {
   firestoreDb = initializeFirestore(
     app,
     {
-      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
     },
     databaseId
   );
@@ -91,10 +91,15 @@ async function testConnection() {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
+      console.warn('Firebase Firestore is operating in offline mode.');
+    } else {
+      console.info('Firestore initial connectivity ping:', error instanceof Error ? error.message : String(error));
     }
   }
 }
 
-testConnection();
+// Run connectivity check after a slight delay so initial static module loading is smooth
+setTimeout(() => {
+  testConnection();
+}, 1500);
 

@@ -17,7 +17,8 @@ import {
   X,
   MapPin,
   Database,
-  Wifi
+  Wifi,
+  Clock
 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -30,6 +31,7 @@ import { EventExecutionManager } from './EventExecutionManager';
 import { SalesAnalyticsManager } from './SalesAnalyticsManager';
 import { CoordinatorHub } from './CoordinatorHub';
 import { CloudflareRegistrationsTable } from './CloudflareRegistrationsTable';
+import { AdminActivityLogs } from './AdminActivityLogs';
 import {
   SavedHikeRecord,
   DEFAULT_SAVED_HIKES
@@ -44,7 +46,7 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<
-    'bookings' | 'd1_table' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps'
+    'bookings' | 'd1_table' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps' | 'audit_logs'
   >('bookings');
   const [hikes, setHikes] = useState<SavedHikeRecord[]>(DEFAULT_SAVED_HIKES);
   const [loadingHikes, setLoadingHikes] = useState(true);
@@ -1172,6 +1174,21 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             <Map className="w-4 h-4" />
             <span>Map Moderation</span>
           </button>
+
+          {/* Audit Logs Tab */}
+          <button
+            id="admin-tab-audit-logs"
+            type="button"
+            onClick={() => setActiveTab('audit_logs')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'audit_logs'
+                ? 'bg-stone-900 text-white shadow-xs border border-stone-850'
+                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+            }`}
+          >
+            <Clock className="w-4 h-4 text-[#F38020]" />
+            <span>Audit Trail</span>
+          </button>
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-2">
@@ -1569,6 +1586,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'audit_logs' && (
+        <AdminActivityLogs />
       )}
     </div>
   );

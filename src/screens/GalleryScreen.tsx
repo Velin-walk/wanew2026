@@ -561,11 +561,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   return (
     <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Hero Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#1F1F1F] via-[#2A2A2A] to-[#121212] rounded-3xl p-6 sm:p-10 text-white shadow-xl">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-[#7ABA42]/15 blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] rounded-3xl p-6 sm:p-10 text-white shadow-xl border border-[#F5A844]/30">
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-white/10 blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-extrabold text-[#7ABA42]">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/25 border border-white/15 text-xs font-extrabold text-[#FFE8D1]">
               <Camera className="w-3.5 h-3.5 shrink-0" />
               <span>Walk Nepal Walk Community Wall</span>
             </div>

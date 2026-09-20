@@ -150,18 +150,18 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Hero Banner with Nepal Himalayan green & orange vibe - mobile optimized */}
+      {/* Hero Banner with Nepal Himalayan warm orange vibe - mobile optimized */}
       {!savedOnly && (
-        <div className="bg-gradient-to-br from-[#1B361D] via-[#254A23] to-[#1E381C] text-white rounded-2xl p-4 sm:p-5 shadow-md relative overflow-hidden border border-[#7ABA42]/30">
+        <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-2xl p-4 sm:p-5 shadow-md relative overflow-hidden border border-[#F5A844]/30">
           {/* Ambient Warm Sunset Orange Glow */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-[#E08828]/15 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+          <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
           
-          <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#A8D878]">
+          <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#FED7AA]">
             <Mountain className="w-52 h-52" />
           </div>
 
           <div className="relative z-10 w-full">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E08828]/25 border border-[#F5A844]/50 text-[#FED7AA] text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2.5 shadow-3xs">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/25 border border-white/20 text-[#FED7AA] text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2.5 shadow-3xs">
               <Flame className="w-3.5 h-3.5 text-[#F5A844] shrink-0" />
               <span>All Season Himalayan Treks & Hikes</span>
             </div>
@@ -170,8 +170,8 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
               Trek Schedule & Archive
             </h1>
             <div className="flex items-center gap-2 mt-1">
-              <span className="w-2 h-2 rounded-full bg-[#7ABA42]" />
-              <p className="text-xs sm:text-sm font-extrabold tracking-widest text-[#B5F07E] uppercase">
+              <span className="w-2 h-2 rounded-full bg-white" />
+              <p className="text-xs sm:text-sm font-extrabold tracking-widest text-[#FFE8D1] uppercase">
                 Fitness • Fun • Friendship
               </p>
             </div>
@@ -237,57 +237,61 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
           />
         </div>
 
-        {/* Trip Type Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-          <span className="text-[#8B8680] font-bold text-[11px] flex items-center gap-1 mr-1 shrink-0">
-            Trip:
+        {/* Trip Type Pills - Fully Optimized for Mobile Views */}
+        <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+          <span className="text-[#8B8680] font-bold text-[11px] flex items-center gap-1 mr-1 shrink-0 w-full sm:w-auto mb-1 sm:mb-0">
+            Trip Category:
           </span>
-          {(
-            [
-              { id: 'all', label: 'All Types' },
-              { id: 'day', label: '1 Day Hikes' },
-              { id: 'overnight', label: 'Overnight Hikes' },
-              { id: 'treks', label: 'Multi-Day Treks' },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setTripTypeFilter(item.id)}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shrink-0 active:scale-95 cursor-pointer shadow-3xs select-none ${
-                tripTypeFilter === item.id
-                  ? 'bg-[#7ABA42] text-white shadow-sm ring-2 ring-[#7ABA42]/30 font-black'
-                  : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Grade / Difficulty Tags */}
-        <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2.5 border-t border-[#F0EBE5] text-xs">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-            <span className="text-[#8B8680] font-bold text-[11px] flex items-center gap-1 mr-1 shrink-0">
-              <SlidersHorizontal className="w-3 h-3" /> Grade:
-            </span>
-            {(['all', 'easy', 'moderate', 'difficult'] as const).map((diff) => (
+          <div className="flex flex-wrap gap-1 w-full sm:w-auto">
+            {(
+              [
+                { id: 'all', label: 'All Types' },
+                { id: 'day', label: '1 Day Hikes' },
+                { id: 'overnight', label: 'Overnight' },
+                { id: 'treks', label: 'Multi-Day Treks' },
+              ] as const
+            ).map((item) => (
               <button
-                key={diff}
+                key={item.id}
                 type="button"
-                onClick={() => setDifficultyFilter(diff)}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold capitalize transition-all shrink-0 active:scale-95 cursor-pointer shadow-3xs select-none ${
-                  difficultyFilter === diff
-                    ? 'bg-[#1F1F1F] text-white shadow-xs font-black'
+                onClick={() => setTripTypeFilter(item.id)}
+                className={`flex-1 sm:flex-initial text-center px-2.5 py-2 sm:py-1 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
+                  tripTypeFilter === item.id
+                    ? 'bg-[#7ABA42] text-white shadow-sm ring-2 ring-[#7ABA42]/30 font-black'
                     : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'
                 }`}
               >
-                {diff}
+                {item.label}
               </button>
             ))}
           </div>
+        </div>
 
-          <span className="text-[11px] text-[#8B8680] font-medium ml-auto">
+        {/* Grade / Difficulty Tags - Fully Optimized for Mobile Views */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#F0EBE5] text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+            <span className="text-[#8B8680] font-bold text-[11px] flex items-center gap-1 mr-1 shrink-0 w-full sm:w-auto mb-1 sm:mb-0">
+              <SlidersHorizontal className="w-3.5 h-3.5" /> Difficulty Grade:
+            </span>
+            <div className="flex flex-wrap gap-1 w-full sm:w-auto">
+              {(['all', 'easy', 'moderate', 'difficult'] as const).map((diff) => (
+                <button
+                  key={diff}
+                  type="button"
+                  onClick={() => setDifficultyFilter(diff)}
+                  className={`flex-1 sm:flex-initial text-center px-2.5 py-2 sm:py-1 rounded-xl text-xs font-bold capitalize transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
+                    difficultyFilter === diff
+                      ? 'bg-[#1F1F1F] text-white shadow-xs font-black'
+                      : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'
+                  }`}
+                >
+                  {diff}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <span className="text-[11px] text-[#8B8680] font-medium ml-auto w-full sm:w-auto text-right sm:text-left mt-1 sm:mt-0">
             Showing <strong className="text-[#1F1F1F]">{filteredTreks.length}</strong> events
           </span>
         </div>
