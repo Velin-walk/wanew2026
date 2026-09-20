@@ -156,8 +156,13 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
           {/* Ambient Warm Sunset Orange Glow */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
           
-          <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#FED7AA]">
-            <Mountain className="w-52 h-52" />
+          <div className="absolute -right-4 -bottom-4 opacity-20 pointer-events-none w-44 h-44 sm:w-52 sm:h-52 overflow-hidden rounded-full flex items-center justify-center">
+            <img 
+              src="/logo.png" 
+              className="w-full h-full object-contain filter brightness-125 saturate-100" 
+              alt="Walk Nepal Walk Logo" 
+              referrerPolicy="no-referrer" 
+            />
           </div>
 
           <div className="relative z-10 w-full">
