@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   TrekItineraryData,
   INITIAL_ITINERARY_TEMPLATE,
+  normalizeItineraryData,
   SavedHikeRecord,
   PriceTier,
   AddOnItem,
@@ -61,12 +62,13 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
 }) => {
   const [formData, setFormData] = useState<TrekItineraryData>(() => {
     if (initialRecord?.data) {
-      return initialRecord.data;
+      return normalizeItineraryData(initialRecord.data);
     }
     const saved = localStorage.getItem('wnw_itinerary_template_draft');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return normalizeItineraryData(parsed);
       } catch (e) {
         return INITIAL_ITINERARY_TEMPLATE;
       }
@@ -92,34 +94,38 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const [rangeEndInput, setRangeEndInput] = useState<string>('');
 
   // Section 4, 5, 7: List format raw multiline text states
-  const [includesInputText, setIncludesInputText] = useState<string>(() =>
-    (initialRecord?.data || INITIAL_ITINERARY_TEMPLATE).costIncludes.join('\n')
-  );
-  const [excludesInputText, setExcludesInputText] = useState<string>(() =>
-    (initialRecord?.data || INITIAL_ITINERARY_TEMPLATE).costExcludes.join('\n')
-  );
+  const [includesInputText, setIncludesInputText] = useState<string>(() => {
+    const normalized = normalizeItineraryData(initialRecord?.data);
+    return (normalized.costIncludes || []).join('\n');
+  });
+  const [excludesInputText, setExcludesInputText] = useState<string>(() => {
+    const normalized = normalizeItineraryData(initialRecord?.data);
+    return (normalized.costExcludes || []).join('\n');
+  });
   const [dayScheduleTexts, setDayScheduleTexts] = useState<Record<string, string>>(() => {
     const map: Record<string, string> = {};
-    const days = (initialRecord?.data || INITIAL_ITINERARY_TEMPLATE).itineraryDays;
+    const normalized = normalizeItineraryData(initialRecord?.data);
+    const days = normalized.itineraryDays || [];
     days.forEach((d) => {
-      map[d.id] = d.items.map((it) => (it.time ? `${it.time} - ${it.activity}` : it.activity)).join('\n');
+      map[d.id] = (d.items || []).map((it) => (it.time ? `${it.time} - ${it.activity}` : it.activity)).join('\n');
     });
     return map;
   });
 
   useEffect(() => {
     if (initialRecord) {
-      setFormData(initialRecord.data);
-      setCurrentStatus(initialRecord.status);
+      const normalized = normalizeItineraryData(initialRecord.data);
+      setFormData(normalized);
+      setCurrentStatus(initialRecord.status || 'draft');
       setRecordId(initialRecord.id);
-      setIncludesInputText(initialRecord.data.costIncludes.join('\n'));
-      setExcludesInputText(initialRecord.data.costExcludes.join('\n'));
+      setIncludesInputText((normalized.costIncludes || []).join('\n'));
+      setExcludesInputText((normalized.costExcludes || []).join('\n'));
       const map: Record<string, string> = {};
-      initialRecord.data.itineraryDays.forEach((d) => {
-        map[d.id] = d.items.map((it) => (it.time ? `${it.time} - ${it.activity}` : it.activity)).join('\n');
+      (normalized.itineraryDays || []).forEach((d) => {
+        map[d.id] = (d.items || []).map((it) => (it.time ? `${it.time} - ${it.activity}` : it.activity)).join('\n');
       });
       setDayScheduleTexts(map);
-      if (initialRecord.data.category === 'Multi Day Treks') {
+      if (normalized.category === 'Multi Day Treks') {
         setDatePickerMode('range');
       }
     }
@@ -180,7 +186,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     const parsed = parseScheduleLines(text, dayId);
     updateData((prev) => ({
       ...prev,
-      itineraryDays: prev.itineraryDays.map((d) =>
+      itineraryDays: (prev.itineraryDays || []).map((d) =>
         d.id === dayId ? { ...d, items: parsed } : d
       ),
     }));
@@ -231,11 +237,11 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
 
   // Section 1: Price Tier Helpers
   const handleAddPriceTier = () => {
-    if (formData.priceTiers.length >= 3) return;
+    if ((formData.priceTiers || []).length >= 3) return;
     updateData((prev) => ({
       ...prev,
       priceTiers: [
-        ...prev.priceTiers,
+        ...(prev.priceTiers || []),
         { id: `tier-${Date.now()}`, label: 'Special Tier', price: 0 }
       ]
     }));
@@ -244,7 +250,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const handleUpdatePriceTier = (id: string, field: 'label' | 'price', value: any) => {
     updateData((prev) => ({
       ...prev,
-      priceTiers: prev.priceTiers.map((t) =>
+      priceTiers: (prev.priceTiers || []).map((t) =>
         t.id === id ? { ...t, [field]: field === 'price' ? Number(value) || 0 : value } : t
       )
     }));
@@ -253,7 +259,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const handleRemovePriceTier = (id: string) => {
     updateData((prev) => ({
       ...prev,
-      priceTiers: prev.priceTiers.filter((t) => t.id !== id)
+      priceTiers: (prev.priceTiers || []).filter((t) => t.id !== id)
     }));
   };
 
@@ -261,13 +267,13 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const handleAddInclusion = () => {
     updateData((prev) => ({
       ...prev,
-      costIncludes: [...prev.costIncludes, '']
+      costIncludes: [...(prev.costIncludes || []), '']
     }));
   };
 
   const handleUpdateInclusion = (index: number, val: string) => {
     updateData((prev) => {
-      const copy = [...prev.costIncludes];
+      const copy = [...(prev.costIncludes || [])];
       copy[index] = val;
       return { ...prev, costIncludes: copy };
     });
@@ -276,20 +282,20 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const handleRemoveInclusion = (index: number) => {
     updateData((prev) => ({
       ...prev,
-      costIncludes: prev.costIncludes.filter((_, i) => i !== index)
+      costIncludes: (prev.costIncludes || []).filter((_, i) => i !== index)
     }));
   };
 
   const handleAddExclusion = () => {
     updateData((prev) => ({
       ...prev,
-      costExcludes: [...prev.costExcludes, '']
+      costExcludes: [...(prev.costExcludes || []), '']
     }));
   };
 
   const handleUpdateExclusion = (index: number, val: string) => {
     updateData((prev) => {
-      const copy = [...prev.costExcludes];
+      const copy = [...(prev.costExcludes || [])];
       copy[index] = val;
       return { ...prev, costExcludes: copy };
     });
@@ -298,7 +304,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const handleRemoveExclusion = (index: number) => {
     updateData((prev) => ({
       ...prev,
-      costExcludes: prev.costExcludes.filter((_, i) => i !== index)
+      costExcludes: (prev.costExcludes || []).filter((_, i) => i !== index)
     }));
   };
 
@@ -307,7 +313,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     updateData((prev) => ({
       ...prev,
       addOns: [
-        ...prev.addOns,
+        ...(prev.addOns || []),
         { id: `addon-${Date.now()}`, name: 'New Addon', price: 500, unit: 'per person' }
       ]
     }));
@@ -316,7 +322,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const handleUpdateAddOn = (id: string, field: keyof AddOnItem, val: any) => {
     updateData((prev) => ({
       ...prev,
-      addOns: prev.addOns.map((a) =>
+      addOns: (prev.addOns || []).map((a) =>
         a.id === id ? { ...a, [field]: field === 'price' ? Number(val) || 0 : val } : a
       )
     }));
@@ -325,13 +331,13 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const handleRemoveAddOn = (id: string) => {
     updateData((prev) => ({
       ...prev,
-      addOns: prev.addOns.filter((a) => a.id !== id)
+      addOns: (prev.addOns || []).filter((a) => a.id !== id)
     }));
   };
 
   // Section 7: Itinerary Days Helpers
   const handleAddDay = () => {
-    const nextDayNum = formData.itineraryDays.length + 1;
+    const nextDayNum = (formData.itineraryDays || []).length + 1;
     const newDayId = `day-${Date.now()}`;
     const defaultText = `06:30 AM - Morning gathering & briefing\n07:00 AM - Departure towards destination\n01:00 PM - Lunch & scenic exploration\n05:00 PM - Arrive at destination / Teahouse check-in`;
     const defaultItems = parseScheduleLines(defaultText, newDayId);
@@ -344,7 +350,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     updateData((prev) => ({
       ...prev,
       itineraryDays: [
-        ...prev.itineraryDays,
+        ...(prev.itineraryDays || []),
         {
           id: newDayId,
           dayNumber: nextDayNum,
@@ -363,7 +369,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     });
     updateData((prev) => ({
       ...prev,
-      itineraryDays: prev.itineraryDays
+      itineraryDays: (prev.itineraryDays || [])
         .filter((d) => d.id !== dayId)
         .map((d, idx) => ({ ...d, dayNumber: idx + 1 })),
     }));
@@ -391,46 +397,55 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const handleSaveToServer = async (targetStatus?: 'draft' | 'published' | 'archived') => {
     setIsSaving(true);
     const statusToSave = targetStatus || currentStatus;
+    const updatedFormData = {
+      ...formData,
+      status: statusToSave,
+    };
+    setFormData(updatedFormData);
+    setCurrentStatus(statusToSave);
 
     try {
-      localStorage.setItem('wnw_itinerary_template_draft', JSON.stringify(formData));
+      localStorage.setItem('wnw_itinerary_template_draft', JSON.stringify(updatedFormData));
 
       let res;
       
       // Calculate min/max price for D1 treks table matching server.ts
-      const priceTiers = formData.priceTiers || [];
+      const priceTiers = updatedFormData.priceTiers || [];
       const minPrice = priceTiers.length > 0 ? Math.min(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
       const maxPrice = priceTiers.length > 0 ? Math.max(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
 
+      const trekFinalId = recordId || `hike-${updatedFormData.hikeNumber ? updatedFormData.hikeNumber + '-' : ''}${Date.now()}`;
+
       const syncPayload = {
-        id: recordId || `hike-${formData.hikeNumber ? formData.hikeNumber + '-' : ''}${Date.now()}`,
-        hike_number: (formData.hikeNumber || '').trim() || 'TBD',
-        hikeNumber: (formData.hikeNumber || '').trim() || 'TBD',
-        title: formData.title || 'Walk Nepal Walk Hike',
-        category: formData.category || 'Overnight Bus Hikes',
+        id: trekFinalId,
+        hike_number: (updatedFormData.hikeNumber || '').trim() || 'TBD',
+        hikeNumber: (updatedFormData.hikeNumber || '').trim() || 'TBD',
+        title: updatedFormData.title || 'Walk Nepal Walk Hike',
+        category: updatedFormData.category || 'Overnight Bus Hikes',
         status: statusToSave,
-        cover_image_url: formData.coverImageUrl || '',
-        hike_date: formData.hikeDate || '',
+        cover_image_url: updatedFormData.coverImageUrl || '',
+        hike_date: updatedFormData.hikeDate || '',
         min_price: minPrice,
         max_price: maxPrice,
-        currency: formData.currency || 'NPR',
-        meeting_point: formData.overview?.meetingPoint || '',
-        meeting_time: formData.overview?.meetingTime || '',
-        expected_duration: formData.overview?.expectedDuration || '',
-        difficulty: formData.overview?.difficulty || 'Moderate',
-        approx_distance: formData.overview?.approxDistance || '',
-        elevation_range: formData.overview?.elevationRange || '',
-        max_capacity: formData.maxCapacity || 25,
-        data: formData,
+        currency: updatedFormData.currency || 'NPR',
+        meeting_point: updatedFormData.overview?.meetingPoint || '',
+        meeting_time: updatedFormData.overview?.meetingTime || '',
+        expected_duration: updatedFormData.overview?.expectedDuration || '',
+        difficulty: updatedFormData.overview?.difficulty || 'Moderate',
+        approx_distance: updatedFormData.overview?.approxDistance || '',
+        elevation_range: updatedFormData.overview?.elevationRange || '',
+        max_capacity: updatedFormData.maxCapacity || 25,
+        data: updatedFormData,
         author_email: 'walknepalwalk@gmail.com',
       };
 
       // 1. Save directly to Cloudflare Worker treks table
       try {
-        await apiFetch('treks', {
+        res = await apiFetch('treks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(syncPayload),
+          forceFresh: true,
         });
       } catch (cfErr) {
         console.warn('[ItineraryBuilder] Failed direct Cloudflare save:', cfErr);
@@ -447,42 +462,38 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         console.warn('[ItineraryBuilder] Dual-write to Firestore failed (non-blocking):', fsErr);
       }
 
-      // 2. Also save to local Express fallback
-      if (recordId) {
-        // Update existing record
-        res = await apiFetch(`admin/itineraries/${recordId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: formData, status: statusToSave }),
-        });
-      } else {
-        // Create new record
-        res = await apiFetch('admin/itineraries', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: formData, status: statusToSave }),
-        });
-      }
-
       if (res && res.ok) {
         const json = await res.json();
-        if (json.success && json.data) {
-          setRecordId(json.data.id);
-          setCurrentStatus(json.data.status);
-          if (onSaveRecord) {
-            onSaveRecord(json.data);
-          }
+        const savedData = json.data || syncPayload;
+        const finalSavedRecord: SavedHikeRecord = {
+          id: savedData.id || trekFinalId,
+          hikeNumber: syncPayload.hikeNumber,
+          title: syncPayload.title,
+          category: syncPayload.category,
+          status: statusToSave,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          authorEmail: 'walknepalwalk@gmail.com',
+          data: updatedFormData,
+        };
 
-          setSaveStatus(
-            statusToSave === 'published'
-              ? '🎉 Itinerary published and saved to catalog!'
-              : '✅ Itinerary draft saved successfully!'
-          );
-        } else {
-          throw new Error('Server returned unsuccessful response');
+        setRecordId(finalSavedRecord.id);
+        setCurrentStatus(statusToSave);
+        if (onSaveRecord) {
+          onSaveRecord(finalSavedRecord);
         }
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
+        }
+
+        setSaveStatus(
+          statusToSave === 'published'
+            ? '🎉 Itinerary published and live for all users!'
+            : '✅ Itinerary draft saved successfully!'
+        );
       } else {
-        throw new Error('Network or server error');
+        throw new Error('Server returned non-200 response');
       }
     } catch (err: any) {
       console.warn('Network save fallback to localStorage:', err);
@@ -492,20 +503,23 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
       setCurrentStatus(statusToSave);
       const fallbackRecord: SavedHikeRecord = {
         id: fallbackId,
-        hikeNumber: formData.hikeNumber || 'TBD',
-        title: formData.title || 'Untitled Hike',
-        category: formData.category,
+        hikeNumber: updatedFormData.hikeNumber || 'TBD',
+        title: updatedFormData.title || 'Untitled Hike',
+        category: updatedFormData.category,
         status: statusToSave,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         authorEmail: 'admin@walknepalwalk.com',
-        data: formData,
+        data: updatedFormData,
       };
       if (onSaveRecord) {
         onSaveRecord(fallbackRecord);
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
+      }
       setSaveStatus(
-        `⚠️ Sync Failed: Saved only in browser cache (${err?.message || 'Network error'}). Click Save/Publish again to retry.`
+        `⚠️ Saved locally: Cloudflare sync error (${err?.message || 'Network error'}). Click Publish again to retry.`
       );
     } finally {
       setIsSaving(false);
@@ -971,7 +985,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                 </span>
               </div>
 
-              {formData.priceTiers.length < 3 && (
+              {(formData.priceTiers || []).length < 3 && (
                 <button
                   type="button"
                   onClick={handleAddPriceTier}
@@ -984,7 +998,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {formData.priceTiers.map((tier, idx) => (
+              {(formData.priceTiers || []).map((tier, idx) => (
                 <div
                   key={tier.id || idx}
                   className="p-3 bg-[#FAF8F5] rounded-xl border border-[#EFEAE4] space-y-2 relative"
@@ -993,7 +1007,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                     <span className="text-[10px] font-bold uppercase text-[#8B8680]">
                       Tier #{idx + 1}
                     </span>
-                    {formData.priceTiers.length > 1 && (
+                    {(formData.priceTiers || []).length > 1 && (
                       <button
                         type="button"
                         onClick={() => handleRemovePriceTier(tier.id)}
@@ -1411,7 +1425,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                 <h3 className="text-sm font-bold text-[#1F1F1F]">Cost Includes</h3>
               </div>
               <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                {formData.costIncludes.length} Items Listed
+                {(formData.costIncludes || []).length} Items Listed
               </span>
             </div>
 
@@ -1442,7 +1456,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                 <h3 className="text-sm font-bold text-[#1F1F1F]">Cost Excludes</h3>
               </div>
               <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-                {formData.costExcludes.length} Items Listed
+                {(formData.costExcludes || []).length} Items Listed
               </span>
             </div>
 
@@ -1488,7 +1502,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
           </div>
 
           <div className="space-y-3">
-            {formData.addOns.map((addon) => (
+            {(formData.addOns || []).map((addon) => (
               <div
                 key={addon.id}
                 className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E5E1DB] items-center"
@@ -1576,7 +1590,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
           </div>
 
           <div className="space-y-5">
-            {formData.itineraryDays.map((day) => (
+            {(formData.itineraryDays || []).map((day) => (
               <div
                 key={day.id}
                 className="p-4 sm:p-5 bg-[#FAF8F5] rounded-2xl border border-[#E5E1DB] space-y-3"
@@ -1592,7 +1606,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                       onChange={(e) =>
                         updateData((prev) => ({
                           ...prev,
-                          itineraryDays: prev.itineraryDays.map((d) =>
+                          itineraryDays: (prev.itineraryDays || []).map((d) =>
                             d.id === day.id ? { ...d, title: e.target.value } : d
                           )
                         }))
@@ -1602,7 +1616,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                     />
                   </div>
 
-                  {formData.itineraryDays.length > 1 && (
+                  {(formData.itineraryDays || []).length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveDay(day.id)}
@@ -1779,6 +1793,22 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Share Modal from Top Bar */}
+      {isShareModalOpen && (
+        <ShareHikeModal
+          hike={currentHikeRecord}
+          onClose={() => setIsShareModalOpen(false)}
+          onStatusChange={async (newStatus) => {
+            setCurrentStatus(newStatus);
+            await handleSaveToServer(newStatus);
+          }}
+          onPreview={() => {
+            setIsShareModalOpen(false);
+            setViewMode('preview');
+          }}
+        />
       )}
     </div>
   );

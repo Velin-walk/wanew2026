@@ -33,6 +33,7 @@ export interface Trek {
   type_of_trail?: string;
   is_cancelled?: boolean;
   cancellation_reason?: string;
+  status?: 'draft' | 'published' | 'archived' | string;
   data?: any;
 }
 

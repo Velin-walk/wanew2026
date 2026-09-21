@@ -98,39 +98,42 @@ function MainApp() {
     }
 
     try {
-      // 1. Fetch treks (uses persistent 10-minute session/memory cache if not forced)
-      let baseTreks: Trek[] = [];
+      // 1. Fetch treks from Cloudflare & Firestore in parallel to ensure 100% complete catalog
+      const trekMap = new Map<string, Trek>();
+
       try {
         const res = await apiFetch('/treks', { forceFresh: isForce });
         const contentType = res.headers.get('content-type') || '';
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           const trekItems = Array.isArray(data) ? data : data?.data;
-          if (Array.isArray(trekItems) && trekItems.length > 0) {
-            baseTreks = trekItems.map(normalizeTrek);
+          if (Array.isArray(trekItems)) {
+            trekItems.forEach((t) => {
+              const norm = normalizeTrek(t);
+              const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
+              trekMap.set(key, norm);
+            });
           }
         }
       } catch (err) {
-        console.warn('Network issue fetching treks, attempting Firestore fallback...', err);
+        console.warn('Network issue fetching treks from Cloudflare:', err);
       }
 
-      // Secondary Failover: Load itineraries from Firestore if Cloudflare returned empty or errored
-      if (baseTreks.length === 0) {
-        try {
-          const querySnapshot = await getDocs(collection(db, 'treks'));
-          const fsTreks: Trek[] = [];
-          querySnapshot.forEach((docSnap) => {
-            fsTreks.push(normalizeTrek(docSnap.data()));
-          });
-          if (fsTreks.length > 0) {
-            baseTreks = fsTreks;
-            console.log('Successfully fetched fallback itineraries from Firestore:', fsTreks.length);
+      // 2. Merge Firestore treks (so newly created/dual-written treks are never missed)
+      try {
+        const querySnapshot = await getDocs(collection(db, 'treks'));
+        querySnapshot.forEach((docSnap) => {
+          const norm = normalizeTrek({ id: docSnap.id, ...docSnap.data() });
+          const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
+          if (!trekMap.has(key)) {
+            trekMap.set(key, norm);
           }
-        } catch (fsErr) {
-          console.warn('Could not load fallback treks from Firestore:', fsErr);
-        }
+        });
+      } catch (fsErr) {
+        console.warn('Could not load treks from Firestore:', fsErr);
       }
 
+      let baseTreks = Array.from(trekMap.values());
       if (baseTreks.length === 0) {
         baseTreks = FALLBACK_TREKS;
       }
@@ -287,9 +290,15 @@ function MainApp() {
     window.addEventListener('focus', handleFocusOrVisibility);
     document.addEventListener('visibilitychange', handleFocusOrVisibility);
 
+    const handleTreksUpdated = () => {
+      refreshDataRef.current({ force: true });
+    };
+    window.addEventListener('wnw-treks-updated', handleTreksUpdated);
+
     return () => {
       window.removeEventListener('focus', handleFocusOrVisibility);
       document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+      window.removeEventListener('wnw-treks-updated', handleTreksUpdated);
     };
   }, []); // Empty dependency array prevents double-fetching on auth resolution
 

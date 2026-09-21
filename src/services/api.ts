@@ -86,11 +86,22 @@ export function apiUrl(path: string, directCloudflare = true): string {
 
 export async function apiFetch(path: string, options?: ApiFetchOptions): Promise<Response> {
   const cleanPath = path.replace(/^\/+/, "");
-  const directUrl = `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
   const method = (options?.method || "GET").toUpperCase();
+  const isFresh = Boolean(options?.forceFresh || method !== "GET");
+
+  // Construct URL with fresh cache-busting parameter if forceFresh is requested
+  let directUrl = `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
+  if (isFresh) {
+    const separator = directUrl.includes("?") ? "&" : "?";
+    directUrl = `${directUrl}${separator}fresh=1&_t=${Date.now()}`;
+  }
 
   // Dynamically attach authenticated user's email if logged in for write actions (non-GET)
   const headers = new Headers(options?.headers);
+  if (isFresh) {
+    headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    headers.set("Pragma", "no-cache");
+  }
   try {
     const userEmail = auth.currentUser?.email;
     if (userEmail && method !== "GET") {
@@ -313,6 +324,7 @@ export function normalizeTrek(row: any): Trek {
     itinerary: row.itinerary || "",
     is_cancelled: Boolean(d.is_cancelled || row.exec_is_cancelled || row.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled')),
     cancellation_reason: d.cancellation_reason || row.exec_cancellation_reason || row.cancellation_reason || "",
+    status: (row.status || d.status || 'published').toString().toLowerCase(),
     data: d,
   };
 }

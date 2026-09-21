@@ -621,9 +621,15 @@ export default {
       if (method === 'GET' && (path === '/treks' || path === '/admin/itineraries')) {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
 
-        const isFresh = url.searchParams.has('fresh') || url.searchParams.has('forceFresh');
+        const isAdminPath = path.startsWith('/admin');
+        const isFresh = isAdminPath ||
+          url.searchParams.has('fresh') ||
+          url.searchParams.has('forceFresh') ||
+          url.searchParams.has('_t') ||
+          request.headers.get('Cache-Control')?.includes('no-cache') ||
+          request.headers.has('X-Admin-Email');
         
-        // 1. Check Cloudflare Global Edge Cache first (0 D1 row reads)
+        // 1. Check Cloudflare Global Edge Cache first for public cached requests
         if (!isFresh) {
           const cached = await matchEdgeCache(request);
           if (cached) {
@@ -720,12 +726,14 @@ export default {
         });
 
         const resp = jsonResponse({ success: true, data }, 200, {
-          'Cache-Control': 'public, max-age=300, s-maxage=300',
+          'Cache-Control': isAdminPath || isFresh ? 'no-cache, no-store, must-revalidate' : 'public, max-age=60, s-maxage=60',
           'X-Edge-Cache': 'MISS'
         });
 
-        // Store in Cloudflare Edge Cache asynchronously
-        await putEdgeCache(request, resp, ctx, 300);
+        // Store in Cloudflare Edge Cache asynchronously only for public cached GET requests
+        if (!isAdminPath && !isFresh) {
+          await putEdgeCache(request, resp, ctx, 60);
+        }
 
         return resp;
       }
@@ -1032,6 +1040,74 @@ export default {
           success: true,
           message: 'Trek cloned successfully',
           data: { id: newId, title: newTitle },
+        });
+      }
+
+      // PATCH /admin/itineraries/:id/status or PATCH /treks/:id/status - Update Status Toggle (Draft / Published / Archived)
+      if (
+        method === 'PATCH' &&
+        path.includes('/status') &&
+        (path.startsWith('/admin/itineraries/') || path.startsWith('/treks/'))
+      ) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        const rawId = path.replace(/^\/(admin\/itineraries|treks)\//, '').replace(/\/status$/, '');
+        const idOrNum = decodeURIComponent(rawId);
+        const body = await request.json();
+        const newStatus = body.status || (body.data && body.data.status) || 'published';
+
+        const row = await env.DB.prepare(
+          'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
+        ).bind(idOrNum, idOrNum).first();
+
+        if (!row) {
+          return errorResponse('Trek not found to update status', 404);
+        }
+
+        let parsedData = {};
+        try {
+          const rawData = row.data_json || row.data || '{}';
+          parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+        } catch (e) {}
+        parsedData.status = newStatus;
+
+        await env.DB.prepare(`
+          UPDATE treks SET
+            status = ?,
+            data_json = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? OR hike_number = ?
+        `).bind(
+          newStatus,
+          JSON.stringify(parsedData),
+          row.id,
+          row.hike_number
+        ).run();
+
+        await logAdminActivity(env, request, 'UPDATE_TREK_STATUS', `Changed status of '${row.title || 'Trek'}' (#${row.hike_number || idOrNum}) to ${newStatus}`, {
+          hike_number: row.hike_number || idOrNum,
+          newStatus
+        });
+
+        // Invalidate Cloudflare Edge Cache immediately
+        await purgeEdgeCache([
+          `${url.origin}/treks`,
+          `${url.origin}/admin/itineraries`,
+          `${url.origin}/treks/${idOrNum}`,
+          `${url.origin}/admin/itineraries/${idOrNum}`,
+          `${url.origin}/treks/${row.id}`,
+          `${url.origin}/admin/itineraries/${row.id}`,
+          `${url.origin}/treks/${row.hike_number}`,
+          `${url.origin}/admin/itineraries/${row.hike_number}`
+        ], ctx);
+
+        return jsonResponse({
+          success: true,
+          message: `Trek status updated to ${newStatus}`,
+          data: {
+            id: row.id,
+            hike_number: row.hike_number,
+            status: newStatus
+          }
         });
       }
 
@@ -1408,6 +1484,16 @@ export default {
           title
         });
 
+        // Invalidate Cloudflare Edge Cache immediately
+        await purgeEdgeCache([
+          `${url.origin}/treks`,
+          `${url.origin}/admin/itineraries`,
+          `${url.origin}/treks/${trekId}`,
+          `${url.origin}/admin/itineraries/${trekId}`,
+          `${url.origin}/treks/${hikeNum}`,
+          `${url.origin}/admin/itineraries/${hikeNum}`
+        ], ctx);
+
         return jsonResponse({
           success: true,
           message: 'Trek synced to Cloudflare D1 successfully',
@@ -1429,6 +1515,14 @@ export default {
         ).bind(idOrNum, idOrNum).run();
 
         await logAdminActivity(env, request, 'DELETE_TREK', `Deleted trek '${idOrNum}'`, { trekId: idOrNum });
+
+        // Invalidate Cloudflare Edge Cache immediately
+        await purgeEdgeCache([
+          `${url.origin}/treks`,
+          `${url.origin}/admin/itineraries`,
+          `${url.origin}/treks/${idOrNum}`,
+          `${url.origin}/admin/itineraries/${idOrNum}`
+        ], ctx);
 
         return jsonResponse({ success: true, message: `Deleted trek ${idOrNum}` });
       }

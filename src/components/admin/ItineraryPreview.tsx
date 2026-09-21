@@ -1,7 +1,8 @@
 import React from 'react';
 import { jsPDF } from 'jspdf';
 import {
-  TrekItineraryData
+  TrekItineraryData,
+  normalizeItineraryData
 } from '../../data/defaultItineraryTemplate';
 import {
   Calendar,
@@ -31,11 +32,12 @@ interface ItineraryPreviewProps {
 }
 
 export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
-  data,
+  data: rawData,
   onBackToEdit,
   onPublishTemplate,
   onShare,
 }) => {
+  const data = normalizeItineraryData(rawData);
   const handleDownloadPDF = () => {
     try {
       const doc = new jsPDF('p', 'mm', 'a4');

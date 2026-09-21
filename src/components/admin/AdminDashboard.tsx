@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiFetch, normalizeTrek, enrichTreksWithRegistrations } from '../../services/api';
+import { apiFetch, normalizeTrek, enrichTreksWithRegistrations, clearApiCache } from '../../services/api';
 import {
   CheckCircle,
   XCircle,
@@ -35,7 +35,8 @@ import { CloudflareRegistrationsTable } from './CloudflareRegistrationsTable';
 import { AdminActivityLogs } from './AdminActivityLogs';
 import {
   SavedHikeRecord,
-  DEFAULT_SAVED_HIKES
+  DEFAULT_SAVED_HIKES,
+  normalizeItineraryData
 } from '../../data/defaultItineraryTemplate';
 import { Trek } from '../../types';
 import { db } from '../../lib/firebase';
@@ -404,26 +405,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const ensureHikeData = (h: SavedHikeRecord): SavedHikeRecord => {
     if (!h) return h;
-    const data = h.data || ({} as any);
+    const normalizedData = normalizeItineraryData({
+      ...(h.data || {}),
+      hikeNumber: h.data?.hikeNumber || h.hikeNumber || '',
+      title: h.data?.title || h.title || '',
+      category: h.data?.category || h.category || 'Overnight Bus Hikes',
+    });
     return {
       ...h,
-      data: {
-        ...data,
-        hikeNumber: data.hikeNumber || h.hikeNumber || '',
-        title: data.title || h.title || '',
-        category: data.category || h.category || 'Overnight Bus Hikes',
-        overview: {
-          meetingTime: '',
-          meetingPoint: '',
-          expectedDuration: '1 Day',
-          difficulty: 'Moderate',
-          approxDistance: '',
-          elevationRange: '',
-          elevationGross: '',
-          endingPoint: '',
-          ...(data.overview || {}),
-        },
-      },
+      hikeNumber: h.hikeNumber || normalizedData.hikeNumber,
+      title: h.title || normalizedData.title,
+      category: h.category || normalizedData.category,
+      data: normalizedData,
     };
   };
 
@@ -488,12 +481,16 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         d = t.data;
       }
     }
+    const rawStatus = (t.status || d.status || 'published').toString().toLowerCase();
+    const status: 'draft' | 'published' | 'archived' =
+      rawStatus === 'draft' ? 'draft' : rawStatus === 'archived' ? 'archived' : 'published';
+
     return {
       id: t.id,
       hikeNumber: t.hike_number || d.hikeNumber || '',
       title: t.name || t.title || d.title || '',
       category: t.category || d.category || 'Overnight Bus Hikes',
-      status: t.is_active || t.status === 'published' ? 'published' : 'draft',
+      status: status,
       createdAt: t.created_at || t.createdAt || new Date().toISOString(),
       updatedAt: t.updated_at || t.updatedAt || new Date().toISOString(),
       authorEmail: t.author_email || t.authorEmail || 'walknepalwalk@gmail.com',
@@ -502,6 +499,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         hikeNumber: t.hike_number || d.hikeNumber || '',
         title: t.name || t.title || d.title || '',
         category: t.category || d.category || 'Overnight Bus Hikes',
+        status: status,
       }
     };
   };
@@ -509,48 +507,65 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const fetchItineraries = async () => {
     setLoadingHikes(true);
     try {
-      // 1. Fetch directly from Cloudflare Worker treks table
-      const res = await apiFetch('treks');
-      if (res.ok) {
-        const json = await res.json();
-        const trekItems = Array.isArray(json) ? json : json?.data;
-        if (Array.isArray(trekItems) && trekItems.length > 0) {
-          const serverHikes = deduplicateHikesList(trekItems.map(convertTrekToSavedHikeRecord));
-          setServerHikeIds(serverHikes.map(h => h.id));
+      const allCollectedHikes: SavedHikeRecord[] = [];
+      const foundServerIds = new Set<string>();
 
-          const unsynced = getUnsyncedLocalHikes(serverHikes);
-          const merged = deduplicateHikesList([...unsynced, ...serverHikes]);
-
-          setHikes(merged);
-          localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(merged));
-          setD1Status('healthy');
-          setD1Stats(prev => ({
-            treks: serverHikes.length,
-            bookings: prev?.bookings ?? 0,
-            lastChecked: new Date().toLocaleTimeString()
-          }));
-          setD1ErrorMsg(null);
-          return;
-        }
-      }
-
-      const cached = localStorage.getItem('wnw_saved_itineraries_cache');
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const deduped = deduplicateHikesList(parsed);
-            setHikes(deduped);
-            localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
-            return;
+      // 1. Fetch directly from Cloudflare Worker admin itineraries endpoint (fresh, uncached)
+      try {
+        const res = await apiFetch('admin/itineraries', { forceFresh: true });
+        if (res.ok) {
+          const json = await res.json();
+          const trekItems = Array.isArray(json) ? json : json?.data;
+          if (Array.isArray(trekItems) && trekItems.length > 0) {
+            const serverHikes = trekItems.map(convertTrekToSavedHikeRecord);
+            serverHikes.forEach(h => {
+              allCollectedHikes.push(h);
+              foundServerIds.add(h.id);
+            });
+            setD1Status('healthy');
+            setD1Stats(prev => ({
+              treks: serverHikes.length,
+              bookings: prev?.bookings ?? 0,
+              lastChecked: new Date().toLocaleTimeString()
+            }));
+            setD1ErrorMsg(null);
           }
-        } catch (e) {
-          console.warn('Failed parsing cached itineraries:', e);
         }
+      } catch (cfErr) {
+        console.warn('Cloudflare fetch itineraries error:', cfErr);
       }
-      setHikes(deduplicateHikesList(DEFAULT_SAVED_HIKES));
+
+      // 2. Fetch directly from Firestore treks collection (so nothing saved in Firestore is ever missing)
+      try {
+        const querySnapshot = await getDocs(collection(db, 'treks'));
+        querySnapshot.forEach((docSnap) => {
+          const docData = docSnap.data();
+          const trekRecord = convertTrekToSavedHikeRecord({
+            id: docSnap.id,
+            ...docData
+          });
+          allCollectedHikes.push(trekRecord);
+          foundServerIds.add(docSnap.id);
+        });
+      } catch (fsErr) {
+        console.warn('Firestore fetch itineraries error:', fsErr);
+      }
+
+      // 3. Merge local cached drafts that haven't synced yet
+      const unsynced = getUnsyncedLocalHikes(allCollectedHikes);
+      allCollectedHikes.push(...unsynced);
+
+      // 4. If total list is empty, seed with default templates
+      if (allCollectedHikes.length === 0) {
+        allCollectedHikes.push(...DEFAULT_SAVED_HIKES);
+      }
+
+      const merged = deduplicateHikesList(allCollectedHikes);
+      setServerHikeIds(Array.from(foundServerIds));
+      setHikes(merged);
+      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(merged));
     } catch (e) {
-      console.warn('Network error fetching itineraries, using default cache:', e);
+      console.warn('Error fetching itineraries, using default cache:', e);
       const cached = localStorage.getItem('wnw_saved_itineraries_cache');
       if (cached) {
         try {
@@ -559,6 +574,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           setHikes(deduped);
           localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
         } catch {}
+      } else {
+        setHikes(deduplicateHikesList(DEFAULT_SAVED_HIKES));
       }
     } finally {
       setLoadingHikes(false);
@@ -899,9 +916,11 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const handleDeleteHike = async (hikeId: string) => {
+    clearApiCache();
     try {
       await apiFetch(`admin/itineraries/${hikeId}`, {
         method: 'DELETE',
+        forceFresh: true,
       });
     } catch (e) {
       console.warn('Network delete error:', e);
@@ -916,17 +935,22 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     const next = hikes.filter((h) => h.id !== hikeId);
     setHikes(next);
     localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
+    }
   };
 
   const handleToggleStatus = async (
     hikeId: string,
     newStatus: 'draft' | 'published' | 'archived'
   ) => {
+    clearApiCache();
     try {
       await apiFetch(`admin/itineraries/${hikeId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
+        forceFresh: true,
       });
     } catch (e) {
       console.warn('Network status update error:', e);
@@ -935,20 +959,32 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     try {
       await updateDoc(doc(db, 'treks', hikeId), {
         status: newStatus,
+        'data.status': newStatus,
         updatedAt: new Date().toISOString()
       });
       console.log('Updated status in Firestore for trek:', hikeId);
     } catch (fsErr) {
       console.warn('Failed to update status in Firestore:', fsErr);
     }
-    const next = hikes.map((h) =>
-      h.id === hikeId ? { ...h, status: newStatus, updatedAt: new Date().toISOString() } : h
-    );
+    const next = hikes.map((h) => {
+      const isTarget = h.id === hikeId || (h.hikeNumber && h.hikeNumber === hikeId);
+      if (!isTarget) return h;
+      return {
+        ...h,
+        status: newStatus,
+        data: h.data ? { ...h.data, status: newStatus } : h.data,
+        updatedAt: new Date().toISOString(),
+      };
+    });
     setHikes(next);
     localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
+    }
   };
 
   const handleSaveRecord = (savedRecord: SavedHikeRecord) => {
+    clearApiCache();
     setServerHikeIds((prev) => Array.from(new Set([...prev, savedRecord.id])));
     setHikes((prev) => {
       const idx = prev.findIndex((h) => 
@@ -967,6 +1003,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       return deduped;
     });
     setEditingHike(savedRecord);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
+    }
   };
 
   const unsyncedLocalCount = hikes.filter(h => {
@@ -997,6 +1036,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       featured_image: d.coverImageUrl || '',
       is_cancelled: Boolean(d.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled')),
       cancellation_reason: d.cancellation_reason || '',
+      status: (h.status || d.status || 'published') as any,
       data: d,
     };
   });

@@ -203,6 +203,49 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
   helpContacts: ['+977-9860071064', '+977-9803568612'],
 };
 
+export const normalizeItineraryData = (raw?: Partial<TrekItineraryData> | null): TrekItineraryData => {
+  const d = raw || {};
+  return {
+    hikeNumber: d.hikeNumber || INITIAL_ITINERARY_TEMPLATE.hikeNumber,
+    title: d.title || INITIAL_ITINERARY_TEMPLATE.title,
+    category: d.category || INITIAL_ITINERARY_TEMPLATE.category,
+    coverImageUrl: d.coverImageUrl ?? INITIAL_ITINERARY_TEMPLATE.coverImageUrl,
+    currency: d.currency || 'NPR',
+    pricingNotes: d.pricingNotes ?? INITIAL_ITINERARY_TEMPLATE.pricingNotes,
+    teamLeader: d.teamLeader || INITIAL_ITINERARY_TEMPLATE.teamLeader,
+    maxCapacity: Number(d.maxCapacity) > 0 ? Number(d.maxCapacity) : INITIAL_ITINERARY_TEMPLATE.maxCapacity,
+    whatsappLink: d.whatsappLink ?? '',
+    itineraryLink: d.itineraryLink ?? '',
+    faqLink: d.faqLink ?? '',
+    priceTiers: Array.isArray(d.priceTiers) && d.priceTiers.length > 0 
+      ? d.priceTiers 
+      : INITIAL_ITINERARY_TEMPLATE.priceTiers,
+    hikeDate: d.hikeDate || INITIAL_ITINERARY_TEMPLATE.hikeDate,
+    overview: {
+      meetingTime: d.overview?.meetingTime ?? INITIAL_ITINERARY_TEMPLATE.overview.meetingTime,
+      meetingPoint: d.overview?.meetingPoint ?? INITIAL_ITINERARY_TEMPLATE.overview.meetingPoint,
+      expectedDuration: d.overview?.expectedDuration ?? INITIAL_ITINERARY_TEMPLATE.overview.expectedDuration,
+      difficulty: d.overview?.difficulty ?? INITIAL_ITINERARY_TEMPLATE.overview.difficulty,
+      approxDistance: d.overview?.approxDistance ?? INITIAL_ITINERARY_TEMPLATE.overview.approxDistance,
+      elevationRange: d.overview?.elevationRange ?? INITIAL_ITINERARY_TEMPLATE.overview.elevationRange,
+      elevationGross: d.overview?.elevationGross ?? INITIAL_ITINERARY_TEMPLATE.overview.elevationGross,
+      endingPoint: d.overview?.endingPoint ?? INITIAL_ITINERARY_TEMPLATE.overview.endingPoint,
+    },
+    costIncludes: Array.isArray(d.costIncludes) ? d.costIncludes : [...INITIAL_ITINERARY_TEMPLATE.costIncludes],
+    costExcludes: Array.isArray(d.costExcludes) ? d.costExcludes : [...INITIAL_ITINERARY_TEMPLATE.costExcludes],
+    addOns: Array.isArray(d.addOns) ? d.addOns : [...INITIAL_ITINERARY_TEMPLATE.addOns],
+    addOnsNotice: d.addOnsNotice ?? INITIAL_ITINERARY_TEMPLATE.addOnsNotice,
+    itineraryDays: Array.isArray(d.itineraryDays) && d.itineraryDays.length > 0
+      ? d.itineraryDays
+      : INITIAL_ITINERARY_TEMPLATE.itineraryDays,
+    bookingProcessSteps: Array.isArray(d.bookingProcessSteps) ? d.bookingProcessSteps : [...INITIAL_ITINERARY_TEMPLATE.bookingProcessSteps],
+    bookingNotes: Array.isArray(d.bookingNotes) ? d.bookingNotes : [...INITIAL_ITINERARY_TEMPLATE.bookingNotes],
+    participationGuidelines: d.participationGuidelines ?? INITIAL_ITINERARY_TEMPLATE.participationGuidelines,
+    safetyRules: Array.isArray(d.safetyRules) ? d.safetyRules : [...INITIAL_ITINERARY_TEMPLATE.safetyRules],
+    helpContacts: Array.isArray(d.helpContacts) ? d.helpContacts : [...INITIAL_ITINERARY_TEMPLATE.helpContacts],
+  };
+};
+
 export interface SavedHikeRecord {
   id: string;
   hikeNumber: string;
@@ -482,21 +525,22 @@ export function formatDateRange(startIso: string, endIso: string): string {
  * into WhatsApp broadcast groups or direct chats.
  */
 export function generateWhatsAppSummary(hike: SavedHikeRecord | TrekItineraryData): string {
-  const data: TrekItineraryData = 'data' in hike ? hike.data : hike;
+  const rawData: TrekItineraryData = 'data' in hike ? hike.data : hike;
+  const data: TrekItineraryData = normalizeItineraryData(rawData);
   const hikeNum = data.hikeNumber ? `Hike #${data.hikeNumber}` : 'Upcoming Trek';
 
-  const priceLines = data.priceTiers
+  const priceLines = (data.priceTiers || [])
     .map((tier) => `  • *${tier.label}*: ${data.currency} ${tier.price.toLocaleString()}`)
     .join('\n');
 
-  const inclusions = data.costIncludes.map((inc) => `  ✅ ${inc}`).join('\n');
-  const exclusions = data.costExcludes.map((exc) => `  ❌ ${exc}`).join('\n');
+  const inclusions = (data.costIncludes || []).map((inc) => `  ✅ ${inc}`).join('\n');
+  const exclusions = (data.costExcludes || []).map((exc) => `  ❌ ${exc}`).join('\n');
 
-  const schedule = data.itineraryDays
+  const schedule = (data.itineraryDays || [])
     .map(
       (day) =>
         `*Day ${day.dayNumber}: ${day.title}*\n` +
-        day.items.map((it) => `  ⏱ ${it.time} - ${it.activity}`).join('\n')
+        (day.items || []).map((it) => `  ⏱ ${it.time} - ${it.activity}`).join('\n')
     )
     .join('\n\n');
 

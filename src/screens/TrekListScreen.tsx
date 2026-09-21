@@ -69,6 +69,12 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
   // Base filtering logic
   const filteredTreks = useMemo(() => {
     return treks.filter((trek) => {
+      // Exclude draft or archived treks from public display
+      const trekStatus = (trek.status || trek.data?.status || '').toLowerCase().trim();
+      if (trekStatus === 'draft' || trekStatus === 'archived') {
+        return false;
+      }
+
       if (savedOnly && !favorites.includes(trek.id)) {
         return false;
       }

@@ -69,6 +69,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     const upcoming = sourceTreks.filter((t) => {
       // If this is the specific trek the user clicked "Register" on, always ensure it's in the list
       if (trek && t.id === trek.id) return true;
+      const status = (t.status || t.data?.status || '').toLowerCase().trim();
+      if (status === 'draft' || status === 'archived') return false;
       const dt = parseTrekDate(t.date);
       return !dt || dt.getTime() >= today.getTime();
     });
