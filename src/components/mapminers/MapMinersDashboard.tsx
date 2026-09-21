@@ -67,11 +67,20 @@ export default function MapMinersDashboard({
     try {
       const parseStartPos = (pos: any): { lat: number; lng: number } | null => {
         if (!pos) return null;
-        if (typeof pos.lat === 'number' && !isNaN(pos.lat) && typeof pos.lng === 'number' && !isNaN(pos.lng)) {
-          return { lat: pos.lat, lng: pos.lng };
+        let parsed = pos;
+        if (typeof pos === 'string') {
+          try {
+            parsed = JSON.parse(pos);
+          } catch (_) {
+            return null;
+          }
         }
-        if (Array.isArray(pos) && pos.length >= 2 && typeof pos[0] === 'number' && typeof pos[1] === 'number' && !isNaN(pos[0]) && !isNaN(pos[1])) {
-          return { lat: pos[0], lng: pos[1] };
+        if (!parsed) return null;
+        if (typeof parsed.lat === 'number' && !isNaN(parsed.lat) && typeof parsed.lng === 'number' && !isNaN(parsed.lng)) {
+          return { lat: parsed.lat, lng: parsed.lng };
+        }
+        if (Array.isArray(parsed) && parsed.length >= 2 && typeof parsed[0] === 'number' && typeof parsed[1] === 'number' && !isNaN(parsed[0]) && !isNaN(parsed[1])) {
+          return { lat: parsed[0], lng: parsed[1] };
         }
         return null;
       };
@@ -86,10 +95,17 @@ export default function MapMinersDashboard({
 
           if (rawItems.length > 0) {
             const loadedRoutes = rawItems.map((anyMeta: any, index: number) => {
-              const startPosObj = parseStartPos(anyMeta.startPos);
+              const startPosObj = parseStartPos(anyMeta.start_pos || anyMeta.startPos);
               const realFileName = anyMeta.fileName || anyMeta.file_name || anyMeta.name || `trail_${index}.gpx`;
               const trailId = anyMeta.id || realFileName;
               const moderationStatus = (anyMeta.status || 'approved').toLowerCase();
+
+              let parsedBounds = anyMeta.bounds;
+              if (typeof anyMeta.bounds === 'string') {
+                try {
+                  parsedBounds = JSON.parse(anyMeta.bounds);
+                } catch (_) {}
+              }
 
               return {
                 ...anyMeta,
@@ -113,7 +129,7 @@ export default function MapMinersDashboard({
                 uploadedAt: anyMeta.uploadedAt || anyMeta.uploaded_at || new Date().toISOString(),
                 contributorEmail: anyMeta.contributorEmail || anyMeta.contributor_email || '',
                 contributorName: anyMeta.contributorName || 'Community Member',
-                bounds: anyMeta.bounds,
+                bounds: parsedBounds,
                 coordinates: startPosObj ? [startPosObj, startPosObj] : [],
                 isLazyLoaded: false,
                 isCommunityTrail: true,

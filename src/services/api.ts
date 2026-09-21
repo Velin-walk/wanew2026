@@ -4,6 +4,9 @@ import { auth } from "../lib/firebase";
 export const CLOUDFLARE_WORKER_URL =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
   "https://walk-nepal-walk-api.velinrai-vr.workers.dev";
+export const MAPMINERS_WORKER_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MAPMINERS_API_BASE_URL) ||
+  "https://walk-nepal-walk-mapminers-api.velinrai-vr.workers.dev";
 export const LOCAL_API_URL = "/api";
 
 export interface ApiFetchOptions extends RequestInit {
@@ -79,7 +82,9 @@ export function clearApiCache(pathPrefix?: string) {
 export function apiUrl(path: string, directCloudflare = true): string {
   const cleanPath = path.replace(/^\/+/, "");
   if (directCloudflare) {
-    return `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
+    const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails") || cleanPath.startsWith("images");
+    const baseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
+    return `${baseUrl}/${cleanPath}`;
   }
   return `/api/${cleanPath}`;
 }
@@ -89,8 +94,11 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
   const method = (options?.method || "GET").toUpperCase();
   const isFresh = Boolean(options?.forceFresh || method !== "GET");
 
+  const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails") || cleanPath.startsWith("images");
+  const baseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
+
   // Construct URL with fresh cache-busting parameter if forceFresh is requested
-  let directUrl = `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
+  let directUrl = `${baseUrl}/${cleanPath}`;
   if (isFresh) {
     const separator = directUrl.includes("?") ? "&" : "?";
     directUrl = `${directUrl}${separator}fresh=1&_t=${Date.now()}`;
