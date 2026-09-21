@@ -30,13 +30,20 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
 import { db } from './lib/firebase';
-import { doc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
 
 function MainApp() {
   const { user, userEmail, isAdmin, openAuthModal } = useAuth();
   const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>('treks');
   const [treks, setTreks] = useState<Trek[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>(() => {
+    try {
+      const saved = localStorage.getItem('wnw_device_bookings');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [loadingTreks, setLoadingTreks] = useState(true);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -65,17 +72,32 @@ function MainApp() {
     }
   });
 
-  const activeUserEmail = userEmail || 'walknepalwalk@gmail.com';
+  const activeUserEmail = userEmail || '';
 
   // Look up the most recent booking/registration made by the user to prefill future forms
   const latestUserBooking = React.useMemo(() => {
-    if (!activeUserEmail) return null;
-    const userEmailLower = activeUserEmail.toLowerCase().trim();
-    const userBookings = bookings.filter(
-      (b: any) => (b.email_address || b.user_email || b.email || '').toLowerCase().trim() === userEmailLower
-    );
-    return userBookings[0] || null;
-  }, [bookings, activeUserEmail]);
+    // 1. Try finding from user bookings in state
+    if (bookings && bookings.length > 0) {
+      return bookings[0];
+    }
+
+    // 2. Try localStorage saved profile
+    try {
+      const saved = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+
+    // 3. Try device bookings
+    try {
+      const devB = localStorage.getItem('wnw_device_bookings');
+      if (devB) {
+        const parsed = JSON.parse(devB);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+      }
+    } catch {}
+
+    return null;
+  }, [bookings]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const lastFetchTimeRef = useRef<number>(0);
@@ -140,79 +162,8 @@ function MainApp() {
 
       setTreks(baseTreks);
 
-      // 2. Targeted User Bookings: Only fetch personal bookings if user is logged in
-      // Notice: Public visitors never fetch the full registrations table
-      if (activeUserEmail) {
-        try {
-          const userRegs = await fetchUserBookings(activeUserEmail);
-          // Enrich bookings with trek is_cancelled and cancellation_reason if matched
-          const enrichedBookings = userRegs.map((b: any) => {
-            const matchedTrek = baseTreks.find(
-              (t) =>
-                (t.id && (t.id === b.trek_id || t.id === b.hike_id)) ||
-                (t.hike_number && (t.hike_number === b.hike_number || t.hike_number === b.trek_id)) ||
-                (t.name && b.trek_name && t.name.toLowerCase().trim() === b.trek_name.toLowerCase().trim())
-            );
-            return {
-              ...b,
-              is_cancelled: Boolean(b.is_cancelled || matchedTrek?.is_cancelled),
-              cancellation_reason: b.cancellation_reason || matchedTrek?.cancellation_reason || '',
-            };
-          });
-          setBookings(enrichedBookings);
-        } catch (err) {
-          console.warn('Could not fetch user personal bookings from Cloudflare, attempting Firestore fallback...', err);
-          // Secondary Failover: Load user bookings from Firestore registrations
-          try {
-            const q = query(
-              collection(db, 'registrations'),
-              where('email_address', '==', activeUserEmail)
-            );
-            const querySnapshot = await getDocs(q);
-            const fsBookings: any[] = [];
-            querySnapshot.forEach((docSnap) => {
-              fsBookings.push(docSnap.data());
-            });
-
-            const now = new Date();
-            const twoMonthsAgo = new Date();
-            twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-
-            const filteredFs = fsBookings.filter((b: any) => {
-              let compareDate = null;
-
-              if (b.trek_date) {
-                const parsed = new Date(b.trek_date.replace(' ', 'T'));
-                if (!isNaN(parsed.getTime())) {
-                  compareDate = parsed;
-                }
-              }
-
-              if (!compareDate && b.timestamp) {
-                const parsed = new Date(b.timestamp.replace(' ', 'T'));
-                if (!isNaN(parsed.getTime())) {
-                  compareDate = parsed;
-                }
-              }
-
-              if (!compareDate) return true;
-
-              if (compareDate >= now) return true;
-
-              return compareDate >= twoMonthsAgo;
-            });
-
-            if (filteredFs.length > 0) {
-              setBookings(filteredFs);
-              console.log('Successfully fetched user bookings fallback from Firestore:', filteredFs.length);
-            }
-          } catch (fsErr) {
-            console.warn('Failed to fetch user bookings fallback from Firestore:', fsErr);
-          }
-        }
-      } else {
-        setBookings([]);
-      }
+      // 2. Fetch all user bookings across local storage, D1, and Firestore
+      await loadUserBookings(baseTreks);
 
       lastFetchTimeRef.current = Date.now();
       if (isForce) {
@@ -225,13 +176,172 @@ function MainApp() {
       setLoadingBookings(false);
       setIsRefreshing(false);
     }
-  }, [activeUserEmail]);
+  }, [user, userEmail, isAdmin]);
+
+  const loadUserBookings = useCallback(async (baseTreks: Trek[]) => {
+    setLoadingBookings(true);
+    try {
+      const candidateEmails = new Set<string>();
+      if (user?.email) candidateEmails.add(user.email.toLowerCase().trim());
+      if (userEmail) candidateEmails.add(userEmail.toLowerCase().trim());
+
+      try {
+        const saved = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.email) candidateEmails.add(parsed.email.toLowerCase().trim());
+          if (parsed.email_address) candidateEmails.add(parsed.email_address.toLowerCase().trim());
+        }
+      } catch {}
+
+      if (isAdmin && !candidateEmails.has('walknepalwalk@gmail.com')) {
+        candidateEmails.add('walknepalwalk@gmail.com');
+      }
+
+      const mergedMap = new Map<string, any>();
+
+      // 1. Initial device local cache
+      try {
+        const localDeviceBookings = localStorage.getItem('wnw_device_bookings');
+        if (localDeviceBookings) {
+          const parsed: Booking[] = JSON.parse(localDeviceBookings);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((b) => {
+              const key = String(b.id || `${b.hike_number || b.trek_id}_${b.email || b.user_email}_${b.trek_date}`);
+              mergedMap.set(key, b);
+            });
+          }
+        }
+      } catch {}
+
+      // 2. Fetch from Cloudflare D1 for candidate emails
+      for (const email of candidateEmails) {
+        try {
+          const userRegs = await fetchUserBookings(email);
+          if (Array.isArray(userRegs)) {
+            userRegs.forEach((b: any) => {
+              const key = String(b.id || `${b.hike_number || b.trek_id}_${b.email_address || b.user_email}_${b.trek_date || b.timestamp}`);
+              mergedMap.set(key, b);
+            });
+          }
+        } catch (cfErr) {
+          console.warn(`Could not fetch D1 bookings for ${email}:`, cfErr);
+        }
+      }
+
+      // 3. Fetch from Firestore for candidate emails or user UID
+      try {
+        const fsPromises: Promise<any>[] = [];
+
+        for (const email of candidateEmails) {
+          fsPromises.push(
+            getDocs(query(collection(db, 'registrations'), where('email_address', '==', email))),
+            getDocs(query(collection(db, 'registrations'), where('email', '==', email)))
+          );
+        }
+
+        if (user?.uid) {
+          fsPromises.push(
+            getDocs(query(collection(db, 'registrations'), where('userId', '==', user.uid)))
+          );
+        }
+
+        const snapshots = await Promise.all(fsPromises);
+        snapshots.forEach((snap) => {
+          snap.forEach((docSnap: any) => {
+            const data = docSnap.data();
+            const id = data.id || docSnap.id;
+            const key = String(id || `${data.hike_number || data.trekId}_${data.email_address || data.email}_${data.trek_date || data.timestamp}`);
+            mergedMap.set(key, { ...data, id });
+          });
+        });
+      } catch (fsErr) {
+        console.warn('Could not query Firestore registrations:', fsErr);
+      }
+
+      // 4. Normalize & enrich each booking with trek details
+      const rawList = Array.from(mergedMap.values());
+      const currentTreks = baseTreks.length > 0 ? baseTreks : treks;
+      const enriched = rawList.map((b: any) => {
+        const trekId = String(b.trek_id || b.trekId || b.hike_number || '');
+        const hikeNum = String(b.hike_number || b.trek_id || b.trekId || '');
+        const matchedTrek = currentTreks.find(
+          (t) =>
+            (t.id && (t.id === trekId || t.id === hikeNum)) ||
+            (t.hike_number && (t.hike_number === hikeNum || t.hike_number === trekId)) ||
+            (t.name && b.trek_name && t.name.toLowerCase().trim() === b.trek_name.toLowerCase().trim()) ||
+            (t.name && b.trekTitle && t.name.toLowerCase().trim() === b.trekTitle.toLowerCase().trim())
+        );
+
+        const id = b.id || b.registration_id || `reg-${Math.random()}`;
+        const phone = b.phone || b.phoneNumber || '';
+        const email = b.email_address || b.email || b.user_email || '';
+        const pax = Number(b.pax || b.paxCount) > 0 ? Number(b.pax || b.paxCount) : 1 + (b.team_members?.length || 0);
+
+        return {
+          ...b,
+          id,
+          trek_id: trekId || matchedTrek?.id || '',
+          hike_number: hikeNum || matchedTrek?.hike_number || '',
+          user_email: email,
+          email: email,
+          full_name: b.full_name || b.hikerName || b.name || 'Hiker',
+          phone,
+          whatsapp: b.whatsapp || b.whatsapp_number || phone,
+          emergency_contact: b.emergency_contact || b.emergency_backup_contact || '',
+          profession: b.profession || '',
+          is_group: b.is_group || b.part_of_group || (pax > 1 ? 'Group' : 'Solo'),
+          age_group: b.age_group || b.ageGroup || '20-30',
+          gender: b.gender || 'Not specified',
+          joined_at: b.joined_at || b.registeredAt || b.timestamp || new Date().toISOString(),
+          trek_name: b.trek_name || b.trekTitle || matchedTrek?.name || 'Himalayan Trek',
+          trek_date: b.trek_date || matchedTrek?.date || b.timestamp || '',
+          trek_difficulty: b.trek_difficulty || matchedTrek?.difficulty || 'moderate',
+          trek_days: b.trek_days || matchedTrek?.days || 1,
+          pax,
+          team_members: Array.isArray(b.team_members) ? b.team_members : [],
+          has_medical: b.has_medical || (b.medical_condition && b.medical_condition !== 'No' ? 'Yes' : 'No'),
+          specify_medical: b.specify_medical || b.medical_condition || '',
+          recent_hikes: b.recent_hikes || '',
+          agree_rules: b.agree_rules || b.agreement || 'Yes',
+          guide_preference: b.guide_preference || b.guide_mode || 'Guided',
+          transport_preference: b.transport_preference || b.transport_mode || 'Bus',
+          suggestions: b.suggestions || '',
+          itinerary_link: b.itinerary_link || matchedTrek?.itinerary_link || '',
+          faq_link: b.faq_link || matchedTrek?.faq_link || '',
+          whatsapp_link: b.whatsapp_link || matchedTrek?.whatsapp_link || '',
+          is_cancelled: Boolean(b.is_cancelled || matchedTrek?.is_cancelled),
+          cancellation_reason: b.cancellation_reason || matchedTrek?.cancellation_reason || '',
+          status: b.status || b.registration_status || 'Confirmed',
+          payment_status: b.payment_status || 'Unpaid',
+          paid_amount: Number(b.paid_amount) || 0,
+          due_amount: Number(b.due_amount) || 0,
+          pickup_point: b.pickup_point || b.pickupPoint || '',
+          admin_notes: b.admin_notes || '',
+        } as Booking;
+      });
+
+      enriched.sort((a, b) => {
+        const timeA = new Date(a.joined_at || a.trek_date || 0).getTime();
+        const timeB = new Date(b.joined_at || b.trek_date || 0).getTime();
+        return timeB - timeA;
+      });
+
+      setBookings(enriched);
+      try {
+        localStorage.setItem('wnw_device_bookings', JSON.stringify(enriched));
+      } catch {}
+    } catch (err) {
+      console.error('Error in loadUserBookings:', err);
+    } finally {
+      setLoadingBookings(false);
+    }
+  }, [user, userEmail, isAdmin, treks]);
 
   const fetchTreks = refreshData;
   const fetchBookings = refreshData;
 
   // On mount: Check if URL targets a specific shared trek (?trek=..., ?hike=..., or #itinerary-...)
-  // Option 4: Immediately load ONLY that single itinerary row and its roster in <150ms!
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
@@ -258,16 +368,12 @@ function MainApp() {
     }
   }, []);
 
-  // When user visits Bookings tab, fetch their targeted bookings if logged in
+  // When user visits Bookings tab, refresh bookings
   useEffect(() => {
-    if (currentTab === 'bookings' && activeUserEmail) {
-      setLoadingBookings(true);
-      fetchUserBookings(activeUserEmail).then((userRegs) => {
-        setBookings(userRegs);
-        setLoadingBookings(false);
-      });
+    if (currentTab === 'bookings') {
+      loadUserBookings(treks);
     }
-  }, [currentTab, activeUserEmail]);
+  }, [currentTab, loadUserBookings, treks]);
 
   // Keep a stable ref to refreshData to avoid re-attaching listeners
   const refreshDataRef = useRef(refreshData);
@@ -533,28 +639,125 @@ function MainApp() {
       }
     }
 
+    // Construct full client booking record for instantaneous UI reactivity
+    const newBooking: Booking = {
+      id: primaryId,
+      trek_id: String(trek.id || trek.hike_number || ''),
+      hike_number: String(trek.hike_number || trek.id || ''),
+      user_email: formData.email || activeUserEmail || '',
+      email: formData.email || activeUserEmail || '',
+      full_name: formData.full_name,
+      phone: formData.phone,
+      whatsapp: formData.whatsapp || formData.phone,
+      emergency_contact: formData.emergency_contact,
+      profession: formData.profession,
+      is_group: formData.is_group,
+      age_group: formData.age_group,
+      gender: formData.gender,
+      joined_at: new Date().toISOString(),
+      trek_name: trek.name,
+      trek_date: trek.date,
+      trek_difficulty: trek.difficulty,
+      trek_days: trek.days,
+      pax: totalNewPeople,
+      team_members: formData.team_members || [],
+      has_medical: formData.has_medical,
+      specify_medical: formData.specify_medical,
+      recent_hikes: formData.recent_hikes,
+      agree_rules: formData.agree_rules,
+      guide_preference: formData.guide_preference,
+      transport_preference: formData.transport_preference,
+      suggestions: formData.suggestions,
+      itinerary_link: trek.itinerary_link,
+      faq_link: trek.faq_link,
+      whatsapp_link: trek.whatsapp_link,
+      is_cancelled: Boolean(trek.is_cancelled),
+      cancellation_reason: trek.cancellation_reason || '',
+      status: 'Confirmed',
+      payment_status: 'Unpaid',
+      paid_amount: 0,
+      due_amount: 0,
+      pickup_point: '',
+      admin_notes: '',
+    };
+
+    // Save to localStorage for seamless auto-prefill on next registration & instant bookings view
+    try {
+      const profileToSave = {
+        fullName: formData.full_name,
+        full_name: formData.full_name,
+        phone: formData.phone,
+        whatsapp: formData.whatsapp,
+        whatsapp_number: formData.whatsapp,
+        emergencyContact: formData.emergency_contact,
+        emergency_backup_contact: formData.emergency_contact,
+        email: formData.email,
+        email_address: formData.email,
+        profession: formData.profession,
+        ageGroup: formData.age_group,
+        age_group: formData.age_group,
+        gender: formData.gender,
+        medicalCondition: formData.specify_medical,
+        medical_condition: formData.specify_medical,
+        recentHikes: formData.recent_hikes,
+        recent_hikes: formData.recent_hikes,
+        guidePreference: formData.guide_preference,
+        transportPreference: formData.transport_preference,
+      };
+      localStorage.setItem('wnw_user_registration_profile', JSON.stringify(profileToSave));
+      localStorage.setItem('wnw_last_registration_data', JSON.stringify(profileToSave));
+
+      const existingDevJson = localStorage.getItem('wnw_device_bookings');
+      let devBookings: Booking[] = [];
+      if (existingDevJson) {
+        try { devBookings = JSON.parse(existingDevJson); } catch (_) {}
+      }
+      const updatedDevBookings = [newBooking, ...devBookings.filter(b => String(b.id) !== String(primaryId))];
+      localStorage.setItem('wnw_device_bookings', JSON.stringify(updatedDevBookings));
+    } catch (e) {
+      console.warn('Could not save registration profile/bookings to localStorage:', e);
+    }
+
+    setBookings((prev) => [newBooking, ...prev.filter(b => String(b.id) !== String(primaryId))]);
+
     const toastMsg = isCloudflareDown
-      ? '✓ Booking recorded securely in backup storage! (Cloudflare offline)'
-      : '✓ Successfully registered and saved!';
+      ? `✓ Booking recorded for ${trek.name}! (Backup mode)`
+      : `🎉 Registered for ${trek.name}! See you on the trail!`;
     showToast(toastMsg, 'success');
-    await refreshData({ force: true });
-    setCurrentTab('bookings');
+    setSelectedTrekForRegister(null);
+    // Background refresh
+    refreshData({ force: true });
   };
 
-  const handleCancelBooking = async (bookingId: number) => {
-    const res = await apiFetch(`/registrations/${bookingId}`, {
-      method: 'DELETE',
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      let errMsg = 'Failed to cancel booking';
-      try {
-        const errObj = JSON.parse(errText);
-        errMsg = errObj.error || errMsg;
-      } catch (e) {
-        errMsg = errText || errMsg;
+  const handleCancelBooking = async (bookingId: number | string) => {
+    // 1. Remove from local memory and device localStorage immediately for instant feedback
+    setBookings((prev) => prev.filter((b) => String(b.id) !== String(bookingId)));
+    try {
+      const existingDevJson = localStorage.getItem('wnw_device_bookings');
+      if (existingDevJson) {
+        const parsed: Booking[] = JSON.parse(existingDevJson);
+        const filtered = parsed.filter((b) => String(b.id) !== String(bookingId));
+        localStorage.setItem('wnw_device_bookings', JSON.stringify(filtered));
       }
-      throw new Error(errMsg);
+    } catch (_) {}
+
+    // 2. Dual-delete from Cloudflare and Firestore
+    let cfDeleted = false;
+    try {
+      const res = await apiFetch(`/registrations/${bookingId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        cfDeleted = true;
+      }
+    } catch (e) {
+      console.warn('Cloudflare delete failed, proceeding with Firestore deletion:', e);
+    }
+
+    try {
+      await deleteDoc(doc(db, 'registrations', String(bookingId)));
+    } catch (fsErr) {
+      console.warn('Firestore registration delete error:', fsErr);
     }
 
     showToast('Registration cancelled successfully', 'success');

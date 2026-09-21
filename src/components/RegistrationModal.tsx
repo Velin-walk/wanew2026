@@ -125,34 +125,103 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isAutoFilled, setIsAutoFilled] = useState(false);
 
-  // Auto-fill when latestBooking details are provided and modal opens
-  useEffect(() => {
-    if (isOpen && latestBooking) {
-      if (latestBooking.full_name) setFullName(latestBooking.full_name);
-      if (latestBooking.phone) setPhone(latestBooking.phone);
-      if (latestBooking.whatsapp_number || latestBooking.whatsapp) {
-        setWhatsapp(latestBooking.whatsapp_number || latestBooking.whatsapp || '');
-      }
-      if (latestBooking.emergency_backup_contact) {
-        setEmergencyContact(latestBooking.emergency_backup_contact);
-      }
-      if (latestBooking.profession) setProfession(latestBooking.profession);
-      if (latestBooking.age_group) setAgeGroup(latestBooking.age_group);
-      if (latestBooking.gender) setGender(latestBooking.gender);
-      
-      if (latestBooking.medical_condition && latestBooking.medical_condition !== 'No') {
-        setHasMedical('Yes');
-        setSpecifyMedical(latestBooking.medical_condition);
-      } else {
-        setHasMedical('No');
-        setSpecifyMedical('');
-      }
-      if (latestBooking.recent_hikes) setRecentHikes(latestBooking.recent_hikes);
-      setIsAutoFilled(true);
-    } else if (!isOpen) {
-      setIsAutoFilled(false);
+  // Helper to load saved profile data from localStorage or passed props
+  const getSavedProfile = () => {
+    try {
+      const saved = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
     }
-  }, [isOpen, latestBooking]);
+  };
+
+  // Auto-fill when modal opens from latestBooking, localStorage, or user profile
+  useEffect(() => {
+    if (isOpen) {
+      const saved = getSavedProfile();
+      const source = latestBooking || saved;
+
+      let filledCount = 0;
+
+      if (source) {
+        const nameVal = source.full_name || source.hikerName || source.fullName || source.name;
+        if (nameVal) {
+          setFullName(nameVal);
+          filledCount++;
+        }
+
+        const phoneVal = source.phone || source.phoneNumber || source.phone_number;
+        if (phoneVal) {
+          setPhone(phoneVal);
+          filledCount++;
+        }
+
+        const whatsappVal = source.whatsapp || source.whatsapp_number || source.whatsappNumber;
+        if (whatsappVal) {
+          setWhatsapp(whatsappVal);
+        } else if (phoneVal) {
+          setWhatsapp(phoneVal);
+        }
+
+        const emergencyVal = source.emergency_backup_contact || source.emergency_contact || source.emergencyContact || source.emergencyBackupContact;
+        if (emergencyVal) {
+          setEmergencyContact(emergencyVal);
+          filledCount++;
+        }
+
+        const emailVal = userEmail || source.email_address || source.email || source.user_email || source.userEmail;
+        if (emailVal) {
+          setEmail(emailVal);
+        }
+
+        const professionVal = source.profession || source.job;
+        if (professionVal) {
+          setProfession(professionVal);
+        }
+
+        const ageVal = source.age_group || source.ageGroup;
+        if (ageVal) {
+          setAgeGroup(ageVal);
+        }
+
+        const genderVal = source.gender;
+        if (genderVal) {
+          setGender(genderVal);
+        }
+
+        const medVal = source.medical_condition || source.medicalCondition || source.specifyMedical;
+        if (medVal && medVal !== 'No' && medVal !== 'None') {
+          setHasMedical('Yes');
+          setSpecifyMedical(medVal === 'Yes' ? '' : medVal);
+        } else {
+          setHasMedical('No');
+          setSpecifyMedical('');
+        }
+
+        const recentVal = source.recent_hikes || source.recentHikes;
+        if (recentVal) {
+          setRecentHikes(recentVal);
+        }
+
+        const guideVal = source.guide_mode || source.guide_preference || source.guidePreference;
+        if (guideVal === 'Guided' || guideVal === 'Unguided') {
+          setGuidePreference(guideVal);
+        }
+
+        const transportVal = source.transport_mode || source.transport_preference || source.transportPreference;
+        if (transportVal === 'Jeep' || transportVal === 'Bus') {
+          setTransportPreference(transportVal);
+        }
+      } else if (userEmail) {
+        setEmail(userEmail);
+      }
+
+      setIsAutoFilled(filledCount > 0);
+    } else {
+      setIsAutoFilled(false);
+      setIsReviewMode(false);
+    }
+  }, [isOpen, latestBooking, userEmail]);
 
   // Reset or pre-fill when active trek or email changes
   useEffect(() => {
@@ -280,6 +349,35 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     };
 
     try {
+      // Save profile locally so subsequent registrations always prefill smoothly
+      const profileToSave = {
+        fullName: payload.full_name,
+        full_name: payload.full_name,
+        phone: payload.phone,
+        whatsapp: payload.whatsapp,
+        whatsapp_number: payload.whatsapp,
+        emergencyContact: payload.emergency_contact,
+        emergency_backup_contact: payload.emergency_contact,
+        email: payload.email,
+        email_address: payload.email,
+        profession: payload.profession,
+        ageGroup: payload.age_group,
+        age_group: payload.age_group,
+        gender: payload.gender,
+        medicalCondition: payload.specify_medical,
+        medical_condition: payload.specify_medical,
+        recentHikes: payload.recent_hikes,
+        recent_hikes: payload.recent_hikes,
+        guidePreference: payload.guide_preference,
+        transportPreference: payload.transport_preference,
+      };
+      try {
+        localStorage.setItem('wnw_user_registration_profile', JSON.stringify(profileToSave));
+        localStorage.setItem('wnw_last_registration_data', JSON.stringify(profileToSave));
+      } catch (e) {
+        console.warn('Could not save profile to localStorage:', e);
+      }
+
       await onSubmit(payload);
       onClose();
     } catch (err: any) {

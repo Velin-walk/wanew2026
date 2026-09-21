@@ -68,7 +68,7 @@ export interface BookingFormData {
 }
 
 export interface Booking {
-  id: number;
+  id: number | string;
   trek_id: string;
   hike_number?: string;
   user_email: string;
@@ -86,6 +86,7 @@ export interface Booking {
   trek_date?: string;
   trek_difficulty?: string;
   trek_days?: string | number;
+  pax?: number;
   team_members?: TeamMember[];
   has_medical?: string;
   specify_medical?: string;
@@ -99,6 +100,12 @@ export interface Booking {
   whatsapp_link?: string;
   is_cancelled?: boolean;
   cancellation_reason?: string;
+  status?: string;
+  payment_status?: string;
+  paid_amount?: number;
+  due_amount?: number;
+  pickup_point?: string;
+  admin_notes?: string;
 }
 
 export interface Invite {

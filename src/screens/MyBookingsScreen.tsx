@@ -22,7 +22,7 @@ import {
 interface MyBookingsScreenProps {
   bookings: Booking[];
   loading: boolean;
-  onCancelBooking: (bookingId: number) => Promise<void>;
+  onCancelBooking: (bookingId: number | string) => Promise<void>;
   onExploreTreks: () => void;
   onShare: (booking: Booking) => void;
   onLeaveFeedback?: (booking: Booking) => void;
@@ -38,9 +38,9 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   onLeaveFeedback,
   onViewItinerary,
 }) => {
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [cancelingId, setCancelingId] = useState<number | null>(null);
-  const [confirmCancelId, setConfirmCancelId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | string | null>(null);
+  const [cancelingId, setCancelingId] = useState<number | string | null>(null);
+  const [confirmCancelId, setConfirmCancelId] = useState<number | string | null>(null);
 
   const formatGender = (g?: string) => {
     if (!g) return 'Not specified';
@@ -76,7 +76,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
     }
   };
 
-  const handleCancelClick = async (id: number) => {
+  const handleCancelClick = async (id: number | string) => {
     setCancelingId(id);
     try {
       await onCancelBooking(id);
@@ -134,7 +134,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
         {bookings.map((booking) => {
           const isExpanded = expandedId === booking.id;
           const isConfirmingCancel = confirmCancelId === booking.id;
-          const totalPeople = 1 + (booking.team_members?.length || 0);
+          const totalPeople = Number(booking.pax) > 0 ? Number(booking.pax) : 1 + (booking.team_members?.length || 0);
 
           return (
             <div
