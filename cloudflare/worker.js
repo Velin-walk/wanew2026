@@ -101,7 +101,7 @@ async function processBase64Images(obj, env, urlOrigin, prefix = 'img') {
 // Performance & Rate-Limit Optimization: In-memory cache for aggregate trek counts
 let cachedTrekAggMap = null;
 let lastTrekAggTime = 0;
-const TREK_AGG_TTL = 5 * 60 * 1000; // 5 minutes in ms
+const TREK_AGG_TTL = 15 * 60 * 1000; // 15 minutes in ms
 
 // Native Cloudflare Edge Cache API Helpers (Zero-Cost RAM Caching at the Edge)
 async function matchEdgeCache(request) {
@@ -152,19 +152,76 @@ let indexesEnsured = false;
 async function ensurePerformanceIndexes(env) {
   if (indexesEnsured || !env || !env.DB) return;
   try {
-    // 1. Ensure admin_activity_logs table exists
-    await env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS admin_activity_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        admin_email TEXT NOT NULL,
-        action_type TEXT NOT NULL,
-        description TEXT NOT NULL,
-        metadata_json TEXT DEFAULT '{}',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `).run();
+    // 1. Ensure essential tables exist
+    await env.DB.batch([
+      env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS admin_activity_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          admin_email TEXT NOT NULL,
+          action_type TEXT NOT NULL,
+          description TEXT NOT NULL,
+          metadata_json TEXT DEFAULT '{}',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `),
+      env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS community_trails (
+          id TEXT PRIMARY KEY,
+          file_name TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          difficulty TEXT DEFAULT 'Moderate',
+          distance REAL DEFAULT 0,
+          elevation_gain REAL DEFAULT 0,
+          elevation_loss REAL DEFAULT 0,
+          min_elevation REAL DEFAULT 0,
+          max_elevation REAL DEFAULT 0,
+          estimated_hours REAL DEFAULT 0,
+          bounds TEXT,
+          start_pos TEXT,
+          contributor_name TEXT,
+          contributor_email TEXT,
+          province TEXT,
+          district TEXT,
+          nearby_city TEXT,
+          highlights TEXT,
+          uploaded_at TEXT,
+          file_size INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'pending'
+        )
+      `),
+      env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS trek_participant_summary (
+          hike_number TEXT PRIMARY KEY,
+          total_pax INTEGER DEFAULT 0,
+          male_pax INTEGER DEFAULT 0,
+          female_pax INTEGER DEFAULT 0,
+          recent_participants TEXT DEFAULT '[]',
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `),
+      env.DB.prepare(`
+        CREATE TRIGGER IF NOT EXISTS update_trek_summary_on_reg_insert
+        AFTER INSERT ON registrations
+        BEGIN
+          INSERT INTO trek_participant_summary (hike_number, total_pax, male_pax, female_pax, updated_at)
+          VALUES (
+            NEW.hike_number,
+            COALESCE((SELECT SUM(COALESCE(CAST(pax AS INTEGER), 1)) FROM registrations WHERE hike_number = NEW.hike_number), 0),
+            COALESCE((SELECT SUM(COALESCE(CAST(pax AS INTEGER), 1)) FROM registrations WHERE hike_number = NEW.hike_number AND LOWER(gender) LIKE 'f%'), 0),
+            COALESCE((SELECT SUM(COALESCE(CAST(pax AS INTEGER), 1)) FROM registrations WHERE hike_number = NEW.hike_number AND LOWER(gender) NOT LIKE 'f%'), 0),
+            CURRENT_TIMESTAMP
+          )
+          ON CONFLICT(hike_number) DO UPDATE SET
+            total_pax = excluded.total_pax,
+            male_pax = excluded.male_pax,
+            female_pax = excluded.female_pax,
+            updated_at = CURRENT_TIMESTAMP;
+        END
+      `)
+    ]);
 
-    // 2. Setup indexes
+    // 2. Setup performance indexes
     await env.DB.batch([
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_hike_number ON registrations (hike_number)'),
       env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_email ON registrations (email_address)'),
@@ -583,82 +640,26 @@ export default {
               e.is_cancelled as exec_is_cancelled,
               e.cancellation_reason as exec_cancellation_reason,
               e.capacity as exec_capacity,
-              e.assigned_leader as exec_assigned_leader
+              e.assigned_leader as exec_assigned_leader,
+              s.total_pax as agg_total_pax,
+              s.male_pax as agg_male_pax,
+              s.female_pax as agg_female_pax,
+              s.recent_participants as agg_recent_json
             FROM treks t
             LEFT JOIN event_executions e ON t.hike_number = e.hike_number
+            LEFT JOIN trek_participant_summary s ON t.hike_number = s.hike_number
             ORDER BY t.created_at DESC
           `).all();
           results = joined;
         } catch (joinErr) {
-          console.warn('Failed to join treks with event_executions:', joinErr);
-          const { results: rawTreks } = await env.DB.prepare(
-            'SELECT * FROM treks ORDER BY created_at DESC'
-          ).all();
-          results = rawTreks;
-        }
-
-        // Server-Side Anonymous Aggregate:
-        // Uses GROUP BY on indexed hike_number to avoid scanning all raw registrations
-        let aggMap = cachedTrekAggMap;
-        if (!aggMap || isFresh || (Date.now() - lastTrekAggTime > TREK_AGG_TTL)) {
-          aggMap = new Map();
+          console.warn('Failed to join treks with summary table:', joinErr);
           try {
-            const { results: aggRows } = await env.DB.prepare(`
-              SELECT 
-                hike_number,
-                COUNT(*) as total_bookings,
-                SUM(COALESCE(CAST(pax AS INTEGER), 1)) as total_pax,
-                SUM(CASE WHEN LOWER(gender) LIKE 'f%' THEN COALESCE(CAST(pax AS INTEGER), 1) ELSE 0 END) as female_pax,
-                SUM(CASE WHEN LOWER(gender) NOT LIKE 'f%' THEN COALESCE(CAST(pax AS INTEGER), 1) ELSE 0 END) as male_pax
-              FROM registrations
-              WHERE hike_number IS NOT NULL AND hike_number != ''
-              GROUP BY hike_number
-            `).all();
-
-            for (const r of (aggRows || [])) {
-              const hn = String(r.hike_number || '').trim();
-              if (!hn) continue;
-              aggMap.set(hn, {
-                total: Number(r.total_pax) || 0,
-                male: Number(r.male_pax) || 0,
-                female: Number(r.female_pax) || 0,
-                recent: [],
-              });
-            }
-
-            // Fetch top recent attendees with strict LIMIT 40 to avoid scanning large historical datasets
-            try {
-              const { results: recentRows } = await env.DB.prepare(`
-                SELECT hike_number, full_name, gender
-                FROM registrations
-                WHERE hike_number IS NOT NULL AND hike_number != '' AND full_name IS NOT NULL AND full_name != ''
-                ORDER BY timestamp DESC
-                LIMIT 40
-              `).all();
-
-              for (const r of (recentRows || [])) {
-                const hn = String(r.hike_number || '').trim();
-                if (!hn || !aggMap.has(hn)) continue;
-                const stat = aggMap.get(hn);
-                if (stat.recent.length < 5) {
-                  const rawName = (r.full_name || '').trim();
-                  const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
-                  const parts = rawName.split(/\s+/).filter(Boolean);
-                  const anonymized = parts.length > 1
-                    ? `${parts[0]} ${parts[1].charAt(0)}.`
-                    : (parts[0] || 'Hiker');
-                  stat.recent.push({
-                    name: anonymized,
-                    gender: isFemale ? 'f' : 'm',
-                  });
-                }
-              }
-            } catch (_) {}
-
-            cachedTrekAggMap = aggMap;
-            lastTrekAggTime = Date.now();
-          } catch (aggErr) {
-            console.warn('Could not compute registration aggregates in D1:', aggErr);
+            const { results: rawTreks } = await env.DB.prepare(
+              'SELECT * FROM treks ORDER BY created_at DESC'
+            ).all();
+            results = rawTreks;
+          } catch (_) {
+            results = [];
           }
         }
 
@@ -687,9 +688,18 @@ export default {
             parsedData.teamLeader = row.exec_assigned_leader;
           }
 
-          const hn = String(row.hike_number || '').trim();
-          const trekId = String(row.id || '').trim();
-          const agg = aggMap.get(hn) || aggMap.get(trekId) || { total: 0, male: 0, female: 0, recent: [] };
+          let recentParticipants = [];
+          try {
+            if (row.agg_recent_json) {
+              recentParticipants = typeof row.agg_recent_json === 'string'
+                ? JSON.parse(row.agg_recent_json)
+                : row.agg_recent_json;
+            }
+          } catch (_) {}
+
+          const totalPax = Number(row.agg_total_pax) || 0;
+          const malePax = Number(row.agg_male_pax) || 0;
+          const femalePax = Number(row.agg_female_pax) || 0;
 
           return {
             ...row,
@@ -697,14 +707,14 @@ export default {
             team_leader: row.exec_assigned_leader !== undefined ? row.exec_assigned_leader : row.team_leader,
             hikeNumber: row.hike_number,
             hike_number: row.hike_number,
-            participants: agg.total,
-            registered_pax: agg.total,
+            participants: totalPax,
+            registered_pax: totalPax,
             participants_by_gender: {
-              total: agg.total,
-              male: agg.male,
-              female: agg.female,
+              total: totalPax,
+              male: malePax,
+              female: femalePax,
             },
-            recent_participants: agg.recent,
+            recent_participants: recentParticipants,
             data: parsedData,
           };
         });
@@ -826,13 +836,31 @@ export default {
       // POST /admin/sync-all - Bulk sync trigger: syncs itineraries, forwards registrations to hiker_profiles, and recomputes leaderboard
       if (method === 'POST' && path === '/admin/sync-all') {
         let profileCount = 0;
+        const isFullSync = url.searchParams.has('full') || url.searchParams.has('all');
         if (env.DB) {
           try {
-            const regs = await env.DB.prepare(`
+            let syncQuery = `
               SELECT r.*, b.payment_status as roster_pay_status, b.paid_amount as roster_paid, b.due_amount as roster_due, b.admin_notes as roster_notes, b.pickup_point as roster_pickup
               FROM registrations r
               LEFT JOIN bookings_roster b ON b.registration_id = r.id
-            `).all();
+            `;
+            
+            // Incremental optimization: by default, sync registrations from the last 48 hours for speed
+            if (!isFullSync) {
+              syncQuery += ` WHERE r.timestamp >= datetime('now', '-48 hours') OR b.updated_at >= datetime('now', '-48 hours') `;
+            }
+
+            let regs = await env.DB.prepare(syncQuery).all();
+            
+            // Fallback to full sync if incremental returned no records
+            if (!isFullSync && (!regs.results || regs.results.length === 0)) {
+              syncQuery = `
+                SELECT r.*, b.payment_status as roster_pay_status, b.paid_amount as roster_paid, b.due_amount as roster_due, b.admin_notes as roster_notes, b.pickup_point as roster_pickup
+                FROM registrations r
+                LEFT JOIN bookings_roster b ON b.registration_id = r.id
+              `;
+              regs = await env.DB.prepare(syncQuery).all();
+            }
 
             const rows = regs.results || [];
             const hikerMap = new Map();
@@ -1117,17 +1145,6 @@ export default {
           console.warn('Error syncing event_executions table, proceeding:', execErr);
         }
 
-        // Automatic Leaderboard Recompute Trigger:
-        // When an event is marked completed/executed, update the precomputed snapshot in background
-        const execStatus = String(body.data?.execution_status || '').toLowerCase();
-        if (execStatus === 'completed' || execStatus === 'executed' || newStatus === 'completed') {
-          if (ctx && ctx.waitUntil) {
-            ctx.waitUntil(recomputeLeaderboardSnapshot(env).catch(e => console.warn('Background leaderboard recompute failed:', e)));
-          } else {
-            recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e));
-          }
-        }
-
         await logAdminActivity(env, request, 'UPDATE_EVENT_EXECUTION', `Updated event execution for trek '${row.title}' (#${row.hike_number || idOrNum})`, {
           hike_number: row.hike_number || idOrNum,
           execution_status: body.data?.execution_status || 'Scheduled',
@@ -1383,17 +1400,6 @@ export default {
             dataJson,
             body.author_email || body.authorEmail || 'walknepalwalk@gmail.com'
           ).run();
-        }
-
-        // Automatic Leaderboard Recompute Trigger:
-        // When a trek status is set to completed, refresh the precomputed snapshot in background
-        const finalTrekStatus = String(body.status || dataObj.status || '').toLowerCase();
-        if (finalTrekStatus === 'completed') {
-          if (ctx && ctx.waitUntil) {
-            ctx.waitUntil(recomputeLeaderboardSnapshot(env).catch(e => console.warn('Background leaderboard recompute failed:', e)));
-          } else {
-            recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e));
-          }
         }
 
         await logAdminActivity(env, request, 'UPSERT_TREK', `Upserted trek '${title || 'Trek'}' (#${hikeNum})`, {
@@ -2023,7 +2029,6 @@ export default {
                   JSON.stringify(badges)
                 ).run();
               }
-              await recomputeLeaderboardSnapshot(env, true);
             } catch (syncErr) {
               console.warn('Batch registration post-sync background error:', syncErr);
             }
@@ -2302,13 +2307,6 @@ export default {
           ).run();
         }
 
-        // Recompute leaderboard snapshot in background
-        if (ctx && ctx.waitUntil) {
-          ctx.waitUntil(recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e)));
-        } else {
-          recomputeLeaderboardSnapshot(env).catch(e => console.warn('Leaderboard recompute failed:', e));
-        }
-
         return jsonResponse({ success: true, message: `Completed hike #${hikeNumber} recorded for ${email}` });
       }
 
@@ -2485,6 +2483,7 @@ export default {
               }
             }
 
+            const allStmts = [];
             for (const profile of hikerMap.values()) {
               const totalHikes = profile.hikes.length;
               const totalPaid = profile.hikes.reduce((a, h) => a + (Number(h.paid_amount) || 0), 0);
@@ -2500,7 +2499,7 @@ export default {
               if (totalHikes >= 10) badges.push('10_hikes_milestone');
               if (totalHikes >= 25) badges.push('25_hikes_milestone');
 
-              await env.DB.prepare(`
+              allStmts.push(env.DB.prepare(`
                 INSERT INTO hiker_profiles (
                   email, full_name, phone, whatsapp, gender, age_group, profession,
                   emergency_contact_phone, fitness_level, medical_conditions, city,
@@ -2533,9 +2532,18 @@ export default {
                 rankTitle,
                 JSON.stringify(badges),
                 JSON.stringify(profile.hikes)
-              ).run();
+              ));
 
               migratedCount++;
+            }
+
+            // Execute in batches of 50
+            const CHUNK_SIZE = 50;
+            for (let i = 0; i < allStmts.length; i += CHUNK_SIZE) {
+              const chunk = allStmts.slice(i, i + CHUNK_SIZE);
+              if (chunk.length > 0) {
+                await env.DB.batch(chunk);
+              }
             }
 
             return jsonResponse({
@@ -3143,38 +3151,6 @@ export default {
           } catch (r2Err) {
             console.error(`❌ R2 storage upload failed for ${fileName}:`, r2Err);
           }
-        }
-
-        // Auto-create table if it doesn't exist in D1 yet
-        try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS community_trails (
-              id TEXT PRIMARY KEY,
-              file_name TEXT UNIQUE NOT NULL,
-              name TEXT NOT NULL,
-              description TEXT,
-              difficulty TEXT DEFAULT 'Moderate',
-              distance REAL DEFAULT 0,
-              elevation_gain REAL DEFAULT 0,
-              elevation_loss REAL DEFAULT 0,
-              min_elevation REAL DEFAULT 0,
-              max_elevation REAL DEFAULT 0,
-              estimated_hours REAL DEFAULT 0,
-              bounds TEXT,
-              start_pos TEXT,
-              contributor_name TEXT,
-              contributor_email TEXT,
-              province TEXT,
-              district TEXT,
-              nearby_city TEXT,
-              highlights TEXT,
-              uploaded_at TEXT,
-              file_size INTEGER DEFAULT 0,
-              status TEXT DEFAULT 'pending'
-            )
-          `).run();
-        } catch (tblErr) {
-          console.warn('Auto table creation notice:', tblErr);
         }
 
         // Extract metadata fields sent from frontend
