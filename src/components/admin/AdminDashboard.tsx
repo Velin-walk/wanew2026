@@ -510,7 +510,23 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const allCollectedHikes: SavedHikeRecord[] = [];
       const foundServerIds = new Set<string>();
 
-      // 1. Fetch directly from Cloudflare Worker admin itineraries endpoint (fresh, uncached)
+      // 1. Fetch directly from Firestore treks collection (so nothing saved in Firestore is ever missing, and real-time edits are preferred)
+      try {
+        const querySnapshot = await getDocs(collection(db, 'treks'));
+        querySnapshot.forEach((docSnap) => {
+          const docData = docSnap.data();
+          const trekRecord = convertTrekToSavedHikeRecord({
+            id: docSnap.id,
+            ...docData
+          });
+          allCollectedHikes.push(trekRecord);
+          foundServerIds.add(docSnap.id);
+        });
+      } catch (fsErr) {
+        console.warn('Firestore fetch itineraries error:', fsErr);
+      }
+
+      // 2. Fetch directly from Cloudflare Worker admin itineraries endpoint (fresh, uncached)
       try {
         const res = await apiFetch('admin/itineraries', { forceFresh: true });
         if (res.ok) {
@@ -533,22 +549,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         }
       } catch (cfErr) {
         console.warn('Cloudflare fetch itineraries error:', cfErr);
-      }
-
-      // 2. Fetch directly from Firestore treks collection (so nothing saved in Firestore is ever missing)
-      try {
-        const querySnapshot = await getDocs(collection(db, 'treks'));
-        querySnapshot.forEach((docSnap) => {
-          const docData = docSnap.data();
-          const trekRecord = convertTrekToSavedHikeRecord({
-            id: docSnap.id,
-            ...docData
-          });
-          allCollectedHikes.push(trekRecord);
-          foundServerIds.add(docSnap.id);
-        });
-      } catch (fsErr) {
-        console.warn('Firestore fetch itineraries error:', fsErr);
       }
 
       // 3. Merge local cached drafts that haven't synced yet

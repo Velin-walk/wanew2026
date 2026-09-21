@@ -141,15 +141,14 @@ function MainApp() {
         console.warn('Network issue fetching treks from Cloudflare:', err);
       }
 
-      // 2. Merge Firestore treks (so newly created/dual-written treks are never missed)
+      // 2. Merge Firestore treks (so newly created/dual-written treks are never missed and real-time edits are preferred)
       try {
         const querySnapshot = await getDocs(collection(db, 'treks'));
         querySnapshot.forEach((docSnap) => {
           const norm = normalizeTrek({ id: docSnap.id, ...docSnap.data() });
           const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
-          if (!trekMap.has(key)) {
-            trekMap.set(key, norm);
-          }
+          // Firestore is our real-time database and has the most authoritative updates, so we let it overwrite Cloudflare
+          trekMap.set(key, norm);
         });
       } catch (fsErr) {
         console.warn('Could not load treks from Firestore:', fsErr);
