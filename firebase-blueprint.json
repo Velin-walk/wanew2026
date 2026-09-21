@@ -45,6 +45,36 @@
       },
       "required": ["title", "authorEmail"]
     },
+    "community_trail_firestore": {
+      "title": "Community Trail Firestore",
+      "description": "Full community trail metadata and geometry stored inside Firestore as a highly resilient backup and offline-ready option",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 256 },
+        "name": { "type": "string", "maxLength": 256 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "difficulty": { "type": "string", "maxLength": 64 },
+        "distance": { "type": "number" },
+        "elevationGain": { "type": "number" },
+        "elevationLoss": { "type": "number" },
+        "minElevation": { "type": "number" },
+        "maxElevation": { "type": "number" },
+        "estimatedHours": { "type": "number" },
+        "province": { "type": "string", "maxLength": 128 },
+        "district": { "type": "string", "maxLength": 128 },
+        "nearbyCity": { "type": "string", "maxLength": 128 },
+        "highlights": { "type": "string", "maxLength": 2000 },
+        "contributorName": { "type": "string", "maxLength": 128 },
+        "contributorEmail": { "type": "string", "maxLength": 256 },
+        "uploadedAt": { "type": "string", "maxLength": 64 },
+        "fileContent": { "type": "string", "maxLength": 800000 },
+        "bounds": { "type": "string", "maxLength": 1000 },
+        "startPos": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["id", "fileName", "name", "fileContent", "contributorEmail"]
+    },
     "trail_moderation": {
       "title": "Trail Moderation Status",
       "description": "Admin review decisions and approval statuses for community trails",
@@ -139,6 +169,10 @@
     "/community_trails/{trailId}": {
       "schema": { "$ref": "#/entities/community_trail" },
       "description": "Map Miners GPX/KML trails"
+    },
+    "/community_trails_firestore/{trailId}": {
+      "schema": { "$ref": "#/entities/community_trail_firestore" },
+      "description": "Map Miners resilient community trails backup database in Firestore"
     },
     "/trail_moderation/{trailId}": {
       "schema": { "$ref": "#/entities/trail_moderation" },

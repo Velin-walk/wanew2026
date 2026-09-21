@@ -1,12 +1,13 @@
 import { Trek, PhotoComment } from "../types";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 export const CLOUDFLARE_WORKER_URL =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
-  "https://walk-nepal-walk-api.velinrai-vr.workers.dev";
+  ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+  "https://walk-nepal-walk-api.velinrai-vr.workers.dev").replace(/\/+$/, "");
 export const MAPMINERS_WORKER_URL =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MAPMINERS_API_BASE_URL) ||
-  "https://walk-nepal-walk-mapminers-api.velinrai-vr.workers.dev";
+  ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_MAPMINERS_API_BASE_URL) ||
+  "https://walk-nepal-walk-mapminers-api.velinrai-vr.workers.dev").replace(/\/+$/, "");
 export const LOCAL_API_URL = "/api";
 
 export interface ApiFetchOptions extends RequestInit {
@@ -80,22 +81,24 @@ export function clearApiCache(pathPrefix?: string) {
 }
 
 export function apiUrl(path: string, directCloudflare = true): string {
-  const cleanPath = path.replace(/^\/+/, "");
+  const cleanPath = path.replace(/^\/+/, "").replace(/\/+/g, "/");
   if (directCloudflare) {
     const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails") || cleanPath.startsWith("images");
-    const baseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
+    const rawBaseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
+    const baseUrl = (rawBaseUrl || "").replace(/\/+$/, "");
     return `${baseUrl}/${cleanPath}`;
   }
   return `/api/${cleanPath}`;
 }
 
 export async function apiFetch(path: string, options?: ApiFetchOptions): Promise<Response> {
-  const cleanPath = path.replace(/^\/+/, "");
+  const cleanPath = path.replace(/^\/+/, "").replace(/\/+/g, "/");
   const method = (options?.method || "GET").toUpperCase();
   const isFresh = Boolean(options?.forceFresh || method !== "GET");
 
   const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails") || cleanPath.startsWith("images");
-  const baseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
+  const rawBaseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
+  const baseUrl = (rawBaseUrl || "").replace(/\/+$/, "");
 
   // Construct URL with fresh cache-busting parameter if forceFresh is requested
   let directUrl = `${baseUrl}/${cleanPath}`;
@@ -106,10 +109,6 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
 
   // Dynamically attach authenticated user's email if logged in for write actions (non-GET)
   const headers = new Headers(options?.headers);
-  if (isFresh) {
-    headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
-    headers.set("Pragma", "no-cache");
-  }
   try {
     const userEmail = auth.currentUser?.email;
     if (userEmail && method !== "GET") {
@@ -125,6 +124,12 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
   // If this is a mutation (POST, PUT, DELETE, PATCH), invalidate relevant caches
   if (method !== "GET") {
     clearApiCache(); // Invalidate cached queries on any state mutation
+    if (cleanPath.startsWith("mapminers")) {
+      try {
+        const docRef = doc(db, "metadata", "mapminers");
+        setDoc(docRef, { lastUpdated: Date.now() }, { merge: true }).catch(() => {});
+      } catch (_) {}
+    }
   }
 
   const ttl = options?.cacheTtl ?? DEFAULT_CACHE_TTL;
@@ -179,11 +184,13 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
     // Instead of throwing and crashing, return simulated successful fallback responses
     console.warn('[apiFetch] Cloudflare direct connection failed. Supplying elegant fallback data.', netErr);
 
+    if (method !== "GET") {
+      throw new Error(`Connection to server failed. Your upload could not be completed: ${netErr instanceof Error ? netErr.message : String(netErr)}`);
+    }
+
     let fallbackData: any = { success: true, data: [] };
 
-    if (method !== "GET") {
-      fallbackData = { success: true, message: "Action simulated successfully in offline mode" };
-    } else if (cleanPath.includes('activity-logs') || cleanPath.includes('logs')) {
+    if (cleanPath.includes('activity-logs') || cleanPath.includes('logs')) {
       fallbackData = {
         success: true,
         total: 2,

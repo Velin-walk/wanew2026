@@ -466,7 +466,7 @@ function buildElevationProfile(segments: Coordinate[][], maxPoints: number) {
   };
 }
 
-function simplifyLineSegments(segments: Coordinate[][], maxTotalPoints: number): Coordinate[][] {
+export function simplifyLineSegments(segments: Coordinate[][], maxTotalPoints: number): Coordinate[][] {
   const totalPoints = segments.reduce((sum, seg) => sum + seg.length, 0);
   if (totalPoints <= maxTotalPoints) return segments;
 
@@ -533,4 +533,40 @@ function calculateBounds(coords: Coordinate[]): [[number, number], [number, numb
   }
 
   return [[minLat, minLng], [maxLat, maxLng]];
+}
+
+export function parseRouteFile(fileText: string, fileName: string, nameOverride = ''): ParsedRoute | null {
+  if (!fileText || typeof fileText !== 'string' || !fileText.trim()) return null;
+
+  const cleanText = fileText.trim().replace(/^\uFEFF/, '');
+  const lower = cleanText.toLowerCase();
+  const ext = (fileName || '').split('.').pop()?.toLowerCase();
+
+  // If text contains GPX markers or extension is .gpx
+  if (lower.includes('<gpx') || lower.includes('<trk') || lower.includes('<trkpt') || ext === 'gpx') {
+    try {
+      const gpxResult = parseGPX(cleanText, fileName, nameOverride);
+      if (gpxResult && gpxResult.coordinates && gpxResult.coordinates.length > 0) {
+        return gpxResult;
+      }
+    } catch (_) {}
+  }
+
+  // Try KML
+  try {
+    const kmlResult = parseKML(cleanText, fileName, nameOverride);
+    if (kmlResult && kmlResult.coordinates && kmlResult.coordinates.length > 0) {
+      return kmlResult;
+    }
+  } catch (_) {}
+
+  // Fallback try GPX if KML didn't match
+  try {
+    const fallbackGpx = parseGPX(cleanText, fileName, nameOverride);
+    if (fallbackGpx && fallbackGpx.coordinates && fallbackGpx.coordinates.length > 0) {
+      return fallbackGpx;
+    }
+  } catch (_) {}
+
+  return null;
 }

@@ -63,7 +63,23 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       }
     }
     const d = new Date(trimmed);
-    return isNaN(d.getTime()) ? null : d;
+    if (!isNaN(d.getTime())) return d;
+
+    // Handle range formats like "Wed 14 Oct – Sun 18 Oct 2026 (5 Days)" or "14 Oct - 18 Oct 2026"
+    try {
+      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+      const year = yearMatch ? yearMatch[1] : '';
+      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+      const parts = cleanRange.split(/[–—\-]/);
+      if (parts.length > 1 && year) {
+        const firstPart = parts[0].replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '').trim();
+        const testStr = `${firstPart} ${year}`;
+        const rangeDate = new Date(testStr);
+        if (!isNaN(rangeDate.getTime())) return rangeDate;
+      }
+    } catch {}
+
+    return null;
   };
 
   // Base filtering logic
@@ -386,44 +402,51 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
             </div>
           )}
 
-          {/* 2. PAST EVENTS AS LIST (Hidden by default, simple single line text toggle) */}
-          {pastTreks.length > 0 && (
-            <div className="pt-3 border-t border-[#F0EBE5]">
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  id="toggle-past-events-archive-btn"
-                  onClick={() => setShowPastEvents((prev) => !prev)}
-                  className="inline-flex items-center gap-2 text-xs font-bold text-[#5A5551] hover:text-[#1F1F1F] py-1 transition-colors cursor-pointer group"
-                  aria-expanded={showPastEvents}
-                >
-                  <History className="w-3.5 h-3.5 text-[#7ABA42] group-hover:scale-110 transition-transform shrink-0" />
-                  <span>Past Events Archive ({pastTreks.length} Completed)</span>
-                  <span className="text-[#8B8680] font-normal group-hover:text-[#5A5551]">
-                    — {showPastEvents ? 'click to hide' : 'click to view'}
-                  </span>
-                  {showPastEvents ? (
-                    <ChevronUp className="w-3.5 h-3.5 text-[#7ABA42]" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5 text-[#7ABA42]" />
-                  )}
-                </button>
-              </div>
+          {/* 2. PAST EVENTS AS LIST (Auto-expanded if no upcoming events to avoid blank screen) */}
+          {pastTreks.length > 0 && (() => {
+            const isArchiveOpen = showPastEvents || upcomingTreks.length === 0;
+            return (
+              <div className="pt-3 border-t border-[#F0EBE5]">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    id="toggle-past-events-archive-btn"
+                    onClick={() => setShowPastEvents((prev) => !prev)}
+                    className="inline-flex items-center gap-2 text-xs font-bold text-[#5A5551] hover:text-[#1F1F1F] py-1 transition-colors cursor-pointer group"
+                    aria-expanded={isArchiveOpen}
+                  >
+                    <History className="w-3.5 h-3.5 text-[#7ABA42] group-hover:scale-110 transition-transform shrink-0" />
+                    <span>
+                      {upcomingTreks.length === 0
+                        ? `Recent & Completed Events (${pastTreks.length})`
+                        : `Past Events Archive (${pastTreks.length} Completed)`}
+                    </span>
+                    <span className="text-[#8B8680] font-normal group-hover:text-[#5A5551]">
+                      — {isArchiveOpen ? 'click to hide' : 'click to view'}
+                    </span>
+                    {isArchiveOpen ? (
+                      <ChevronUp className="w-3.5 h-3.5 text-[#7ABA42]" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-[#7ABA42]" />
+                    )}
+                  </button>
+                </div>
 
-              {/* Collapsible Content */}
-              {showPastEvents && (
-                <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-2.5">
-                    {pastTreks.slice(0, pastLimit).map((trek) => (
-                      <PastEventListItem
-                        key={trek.id}
-                        trek={trek}
-                        onViewItinerary={onViewItinerary}
-                        onToggleFavorite={onToggleFavorite}
-                        isFavorited={favorites.includes(trek.id)}
-                        onLeaveFeedback={onLeaveFeedback}
-                      />
-                    ))}
+                {/* Collapsible Content */}
+                {isArchiveOpen && (
+                  <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-2.5">
+                      {pastTreks.slice(0, pastLimit).map((trek) => (
+                        <PastEventListItem
+                          key={trek.id}
+                          trek={trek}
+                          onViewItinerary={onViewItinerary}
+                          onToggleFavorite={onToggleFavorite}
+                          isFavorited={favorites.includes(trek.id)}
+                          onLeaveFeedback={onLeaveFeedback}
+                        />
+                      ))}
+                    </div>
 
                     {/* Load more if list is long */}
                     {pastTreks.length > pastLimit && (
@@ -438,10 +461,10 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

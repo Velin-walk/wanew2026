@@ -170,6 +170,18 @@ CREATE TABLE IF NOT EXISTS photo_comments (
   created_at DATETIME
 );
 
+-- 9b. Trail Comments Table (MapMiners Community Trails)
+CREATE TABLE IF NOT EXISTS trail_comments (
+  id TEXT PRIMARY KEY,
+  trail_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  author_name TEXT,
+  author_email TEXT,
+  guest_session_id TEXT,
+  timestamp INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 10. Individual Hiker Profiles (Pre-aggregated Single-Row Document: 1-row O(1) read access)
 CREATE TABLE IF NOT EXISTS hiker_profiles (
   -- 1. PRIMARY KEY & AUTHENTICATION

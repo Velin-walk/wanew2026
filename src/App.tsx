@@ -35,7 +35,16 @@ import { doc, setDoc, deleteDoc, collection, getDocs, query, where } from 'fireb
 function MainApp() {
   const { user, userEmail, isAdmin, openAuthModal } = useAuth();
   const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>('treks');
-  const [treks, setTreks] = useState<Trek[]>([]);
+  const [treks, setTreks] = useState<Trek[]>(() => {
+    try {
+      const cached = localStorage.getItem('wnw_cached_cloudflare_treks');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return FALLBACK_TREKS;
+  });
   const [bookings, setBookings] = useState<Booking[]>(() => {
     try {
       const saved = localStorage.getItem('wnw_device_bookings');
@@ -120,43 +129,89 @@ function MainApp() {
     }
 
     try {
-      // 1. Fetch treks from Cloudflare & Firestore in parallel to ensure 100% complete catalog
+      // 1. Fetch treks: Dual-Source strategy as specified in ARCHITECTURE.md
       const trekMap = new Map<string, Trek>();
-
+      let currentSource: 'cloudflare' | 'firebase' = 'cloudflare';
       try {
-        const res = await apiFetch('/treks', { forceFresh: isForce });
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const data = await res.json();
-          const trekItems = Array.isArray(data) ? data : data?.data;
-          if (Array.isArray(trekItems)) {
-            trekItems.forEach((t) => {
-              const norm = normalizeTrek(t);
+        if (localStorage.getItem('wnw_trek_data_source') === 'firebase') {
+          currentSource = 'firebase';
+        }
+      } catch {}
+
+      // A. Populate from local saved itineraries cache (Admin Panel published/saved treks)
+      try {
+        const localSaved = localStorage.getItem('wnw_saved_itineraries_cache');
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            parsed.forEach((item) => {
+              const norm = normalizeTrek(item);
               const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
               trekMap.set(key, norm);
             });
           }
         }
-      } catch (err) {
-        console.warn('Network issue fetching treks from Cloudflare:', err);
+      } catch {}
+
+      // B. Fetch from Cloudflare Worker & D1 (Default / Zero-Quota Mode)
+      if (currentSource !== 'firebase') {
+        try {
+          const res = await apiFetch('/treks', { forceFresh: isForce });
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
+            const data = await res.json();
+            const trekItems = Array.isArray(data) ? data : data?.data;
+            if (Array.isArray(trekItems) && trekItems.length > 0) {
+              trekItems.forEach((t) => {
+                const norm = normalizeTrek(t);
+                const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
+                trekMap.set(key, norm);
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('[Cloudflare Treks] Network issue fetching treks from Cloudflare:', err);
+        }
       }
 
-      // 2. Merge Firestore treks (so newly created/dual-written treks are never missed and real-time edits are preferred)
-      try {
-        const querySnapshot = await getDocs(collection(db, 'treks'));
-        querySnapshot.forEach((docSnap) => {
-          const norm = normalizeTrek({ id: docSnap.id, ...docSnap.data() });
-          const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
-          // Firestore is our real-time database and has the most authoritative updates, so we let it overwrite Cloudflare
-          trekMap.set(key, norm);
-        });
-      } catch (fsErr) {
-        console.warn('Could not load treks from Firestore:', fsErr);
+      // C. Query Firestore if Admin explicitly switched to Firebase OR if Cloudflare returned 0 treks
+      if (currentSource === 'firebase' || trekMap.size === 0) {
+        try {
+          const querySnapshot = await getDocs(collection(db, 'treks'));
+          querySnapshot.forEach((docSnap) => {
+            const norm = normalizeTrek({ id: docSnap.id, ...docSnap.data() });
+            const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
+            // Live Firestore data takes precedence according to ARCHITECTURE.md
+            trekMap.set(key, norm);
+          });
+        } catch (fsErr: any) {
+          if (fsErr?.code === 'resource-exhausted') {
+            console.warn('[Firestore] Quota limit reached; continuing with local and cached trek data.');
+          } else {
+            console.warn('[Firestore] Notice fetching treks:', fsErr);
+          }
+        }
       }
 
       let baseTreks = Array.from(trekMap.values());
-      if (baseTreks.length === 0) {
-        baseTreks = FALLBACK_TREKS;
+      if (baseTreks.length > 0) {
+        try {
+          localStorage.setItem('wnw_cached_cloudflare_treks', JSON.stringify(baseTreks));
+        } catch {}
+      } else {
+        // If live fetch returned nothing, preserve cached treks before falling back to static
+        try {
+          const cached = localStorage.getItem('wnw_cached_cloudflare_treks');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              baseTreks = parsed;
+            }
+          }
+        } catch {}
+        if (baseTreks.length === 0) {
+          baseTreks = FALLBACK_TREKS;
+        }
       }
 
       setTreks(baseTreks);
@@ -425,11 +480,13 @@ function MainApp() {
       refreshDataRef.current({ force: true });
     };
     window.addEventListener('wnw-treks-updated', handleTreksUpdated);
+    window.addEventListener('wnw-data-source-changed', handleTreksUpdated);
 
     return () => {
       window.removeEventListener('focus', handleFocusOrVisibility);
       document.removeEventListener('visibilitychange', handleFocusOrVisibility);
       window.removeEventListener('wnw-treks-updated', handleTreksUpdated);
+      window.removeEventListener('wnw-data-source-changed', handleTreksUpdated);
     };
   }, []); // Empty dependency array prevents double-fetching on auth resolution
 

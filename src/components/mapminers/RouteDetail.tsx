@@ -3,7 +3,8 @@ import { X, TrendingUp, TrendingDown, Download, MapPin, Flag, Share2, Check, Che
 import ElevationChart from './ElevationChart';
 import { routeToGPX } from './kmlParser';
 import { db } from '../../lib/firebase';
-import { collection, addDoc, query, where, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { apiFetch } from '../../services/api';
 
 interface RouteDetailProps {
   route: any;
@@ -20,6 +21,30 @@ interface TrailComment {
   authorEmail: string;
   guestSessionId?: string | null;
   timestamp: number;
+}
+
+function getLocalComments(trailId: string): TrailComment[] {
+  try {
+    const raw = localStorage.getItem(`wnw_comments_${trailId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (_) {}
+  return [];
+}
+
+function saveLocalComments(trailId: string, list: TrailComment[]) {
+  try {
+    localStorage.setItem(`wnw_comments_${trailId}`, JSON.stringify(list));
+  } catch (_) {}
+}
+
+function mergeComments(existing: TrailComment[], incoming: TrailComment[]): TrailComment[] {
+  const map = new Map<string, TrailComment>();
+  existing.forEach(c => map.set(c.id, c));
+  incoming.forEach(c => map.set(c.id, c));
+  return Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
 function formatEstimatedTime(hours: number): string {
@@ -75,10 +100,19 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
   const [shareCopied, setShareCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Comments state
-  const [comments, setComments] = useState<TrailComment[]>([]);
+  // Initialize comments from localStorage cache so UI is instantaneous and resilient
+  const [comments, setComments] = useState<TrailComment[]>(() => {
+    return route?.id ? getLocalComments(String(route.id)) : [];
+  });
   const [commentInput, setCommentInput] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
+
+  // Sync comments from local cache when route changes
+  useEffect(() => {
+    if (route?.id) {
+      setComments(getLocalComments(String(route.id)));
+    }
+  }, [route.id]);
 
   // Persist unique guest session ID for comment deletion validations
   const [currentSessionId] = useState(() => {
@@ -98,41 +132,85 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
     setIsExpanded(false);
   }, [route.id]);
 
-  // Real-time comments listener
+  // Lazy-load comments ONLY when the COMMENTS tab is selected
   useEffect(() => {
-    if (!route?.id) return;
+    if (activeTab !== 'COMMENTS' || !route?.id) return;
+
+    let isMounted = true;
+    const trailIdStr = String(route.id);
     setLoadingComments(true);
 
-    const q = query(
-      collection(db, 'trail_comments'),
-      where('trailId', '==', String(route.id))
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: TrailComment[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        list.push({
-          id: doc.id,
-          trailId: data.trailId || '',
-          text: data.text || '',
-          authorName: data.authorName || 'Anonymous',
-          authorEmail: data.authorEmail || '',
-          guestSessionId: data.guestSessionId || null,
-          timestamp: data.timestamp || Date.now()
-        });
+    // 1. Fetch from Cloudflare Worker first
+    apiFetch(`mapminers/comments?trailId=${encodeURIComponent(trailIdStr)}`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (data?.success && Array.isArray(data.comments) && isMounted) {
+          setComments((prev) => {
+            const merged = mergeComments(prev, data.comments);
+            saveLocalComments(trailIdStr, merged);
+            return merged;
+          });
+          setLoadingComments(false);
+        }
+      })
+      .catch((cfErr) => {
+        console.info('[MapMiners] Cloudflare comments query notice:', cfErr?.message || cfErr);
       });
-      // Sort in-memory to prevent missing index errors
-      list.sort((a, b) => a.timestamp - b.timestamp);
-      setComments(list);
-      setLoadingComments(false);
-    }, (err) => {
-      console.error("Firestore trail comments listener error:", err);
-      setLoadingComments(false);
-    });
 
-    return () => unsubscribe();
-  }, [route.id]);
+    // 2. Resilient Firestore sync listener (gracefully handles free tier quota limits)
+    let unsubscribe: (() => void) | null = null;
+    try {
+      const q = query(
+        collection(db, 'trail_comments'),
+        where('trailId', '==', trailIdStr)
+      );
+
+      unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          if (!isMounted) return;
+          const list: TrailComment[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            list.push({
+              id: docSnap.id,
+              trailId: data.trailId || '',
+              text: data.text || '',
+              authorName: data.authorName || 'Anonymous',
+              authorEmail: data.authorEmail || '',
+              guestSessionId: data.guestSessionId || null,
+              timestamp: data.timestamp || Date.now()
+            });
+          });
+          setComments((prev) => {
+            const merged = mergeComments(prev, list);
+            saveLocalComments(trailIdStr, merged);
+            return merged;
+          });
+          setLoadingComments(false);
+        },
+        (err) => {
+          // Gracefully absorb Firestore quota / offline limits without throwing console.error
+          const isQuota = err?.code === 'resource-exhausted' || String(err?.message || '').toLowerCase().includes('quota');
+          if (isQuota) {
+            console.info('[MapMiners] Firestore comment read quota reached; using Cloudflare & local storage cache.');
+          } else {
+            console.info('[MapMiners] Firestore comments listener notice:', err?.message || err);
+          }
+          if (isMounted) setLoadingComments(false);
+        }
+      );
+    } catch (fsInitErr) {
+      console.info('[MapMiners] Firestore comments listener init notice:', fsInitErr);
+      if (isMounted) setLoadingComments(false);
+    }
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [activeTab, route.id]);
 
   const handleDownloadGPX = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -179,8 +257,11 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
       }
     }
 
-    const payload = {
-      trailId: String(route.id),
+    const trailIdStr = String(route.id);
+    const commentId = `tc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newComment: TrailComment = {
+      id: commentId,
+      trailId: trailIdStr,
       text: commentInput.trim(),
       authorName,
       authorEmail: currentUserEmail || 'guest@walknepal.com',
@@ -188,22 +269,62 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
       timestamp: Date.now()
     };
 
-    const textToSubmit = commentInput;
+    // 1. Optimistically display and store in local cache immediately
+    setComments((prev) => {
+      const updated = [...prev, newComment];
+      saveLocalComments(trailIdStr, updated);
+      return updated;
+    });
     setCommentInput('');
 
+    // 2. Post to Cloudflare Worker backend
     try {
-      await addDoc(collection(db, 'trail_comments'), payload);
-    } catch (err) {
-      console.error("Failed to post comment:", err);
-      setCommentInput(textToSubmit); // Restore text on failure
+      await apiFetch('mapminers/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newComment)
+      });
+    } catch (cfErr) {
+      console.info('[MapMiners] Cloudflare comment post notice:', cfErr);
+    }
+
+    // 3. Resiliently sync to Firestore if quota permits, ignoring quota errors
+    try {
+      await addDoc(collection(db, 'trail_comments'), {
+        trailId: newComment.trailId,
+        text: newComment.text,
+        authorName: newComment.authorName,
+        authorEmail: newComment.authorEmail,
+        guestSessionId: newComment.guestSessionId,
+        timestamp: newComment.timestamp
+      });
+    } catch (fsErr: any) {
+      console.info('[MapMiners] Note: Comment saved locally; Firestore sync was deferred (quota/offline).');
     }
   };
 
   const handleDeleteComment = async (commentId: string) => {
+    const trailIdStr = String(route.id);
+
+    // 1. Instantly remove from local state and cache
+    setComments((prev) => {
+      const updated = prev.filter((c) => c.id !== commentId);
+      saveLocalComments(trailIdStr, updated);
+      return updated;
+    });
+
+    // 2. Delete from Cloudflare Worker
+    try {
+      await apiFetch(`mapminers/comments/${encodeURIComponent(commentId)}`, {
+        method: 'DELETE'
+      });
+    } catch (_) {}
+
+    // 3. Resiliently delete from Firestore
     try {
       await deleteDoc(doc(db, 'trail_comments', commentId));
     } catch (err) {
-      console.error("Failed to delete comment:", err);
+      console.info('[MapMiners] Firestore delete notice:', err);
     }
   };
 

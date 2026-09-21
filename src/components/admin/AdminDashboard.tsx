@@ -19,7 +19,9 @@ import {
   Database,
   Wifi,
   Clock,
-  Trophy
+  Trophy,
+  Zap,
+  Flame
 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -40,7 +42,7 @@ import {
 } from '../../data/defaultItineraryTemplate';
 import { Trek } from '../../types';
 import { db } from '../../lib/firebase';
-import { collection, getDocs, doc, deleteDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, updateDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 interface AdminDashboardProps {
   currentUserEmail: string;
@@ -77,6 +79,31 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const [d1Status, setD1Status] = useState<'testing' | 'healthy' | 'error'>('testing');
   const [d1Stats, setD1Stats] = useState<{ treks: number; bookings: number; lastChecked: string } | null>(null);
   const [d1ErrorMsg, setD1ErrorMsg] = useState<string | null>(null);
+
+  // Trek Data Source Mode State (Cloudflare D1 default vs Firebase Firestore manual override)
+  const [trekDataSource, setTrekDataSource] = useState<'cloudflare' | 'firebase'>(() => {
+    try {
+      return localStorage.getItem('wnw_trek_data_source') === 'firebase' ? 'firebase' : 'cloudflare';
+    } catch {
+      return 'cloudflare';
+    }
+  });
+
+  const handleToggleTrekDataSource = (newSource: 'cloudflare' | 'firebase') => {
+    setTrekDataSource(newSource);
+    try {
+      localStorage.setItem('wnw_trek_data_source', newSource);
+    } catch {}
+    window.dispatchEvent(new CustomEvent('wnw-data-source-changed', { detail: { source: newSource } }));
+    window.dispatchEvent(new Event('wnw-treks-updated'));
+    setSyncMessage(
+      newSource === 'firebase'
+        ? '⚠️ Trek Data Source set to Firebase Firestore (Manual Override). Homepage & Admin will query Firestore.'
+        : '✓ Trek Data Source set to Cloudflare D1 (Recommended / Zero-Quota). Homepage & Admin will query Cloudflare.'
+    );
+    setTimeout(() => setSyncMessage(null), 5000);
+    fetchItineraries();
+  };
 
   const runD1Diagnostic = async () => {
     setD1Status('testing');
@@ -144,6 +171,31 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     if (activeTab === 'maps') {
       fetchPendingTrails();
     }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'maps') return;
+    // Real-time Firestore metadata subscription to synchronize trail list updates in Admin panel
+    const docRef = doc(db, 'metadata', 'mapminers');
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const lastUpdated = data.lastUpdated;
+        const localLastUpdated = sessionStorage.getItem('wnw_mapminers_last_updated');
+        if (localLastUpdated && lastUpdated && Number(localLastUpdated) !== lastUpdated) {
+          console.info('[Admin] External trail updates detected! Invalidation of static cache triggered.');
+          sessionStorage.setItem('wnw_mapminers_last_updated', String(lastUpdated));
+          clearApiCache('mapminers');
+          fetchPendingTrails();
+        } else if (lastUpdated) {
+          sessionStorage.setItem('wnw_mapminers_last_updated', String(lastUpdated));
+        }
+      }
+    }, (error) => {
+      console.info('[Admin] Firestore metadata subscription inactive or silent offline state:', error);
+    });
+
+    return () => unsubscribe();
   }, [activeTab]);
 
   const fetchRegistrations = async () => {
@@ -510,23 +562,26 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const allCollectedHikes: SavedHikeRecord[] = [];
       const foundServerIds = new Set<string>();
 
-      // 1. Fetch directly from Firestore treks collection (so nothing saved in Firestore is ever missing, and real-time edits are preferred)
-      try {
-        const querySnapshot = await getDocs(collection(db, 'treks'));
-        querySnapshot.forEach((docSnap) => {
-          const docData = docSnap.data();
-          const trekRecord = convertTrekToSavedHikeRecord({
-            id: docSnap.id,
-            ...docData
+      // 1. Fetch from Firestore ONLY when Admin has switched to Firebase mode
+      const activeSource = localStorage.getItem('wnw_trek_data_source') || 'cloudflare';
+      if (activeSource === 'firebase') {
+        try {
+          const querySnapshot = await getDocs(collection(db, 'treks'));
+          querySnapshot.forEach((docSnap) => {
+            const docData = docSnap.data();
+            const trekRecord = convertTrekToSavedHikeRecord({
+              id: docSnap.id,
+              ...docData
+            });
+            allCollectedHikes.push(trekRecord);
+            foundServerIds.add(docSnap.id);
           });
-          allCollectedHikes.push(trekRecord);
-          foundServerIds.add(docSnap.id);
-        });
-      } catch (fsErr) {
-        console.warn('Firestore fetch itineraries error:', fsErr);
+        } catch (fsErr) {
+          console.warn('[Admin Override] Firestore fetch itineraries error:', fsErr);
+        }
       }
 
-      // 2. Fetch directly from Cloudflare Worker admin itineraries endpoint (fresh, uncached)
+      // 2. Fetch directly from Cloudflare Worker admin itineraries / treks endpoint (fresh, uncached)
       try {
         const res = await apiFetch('admin/itineraries', { forceFresh: true });
         if (res.ok) {
@@ -535,8 +590,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           if (Array.isArray(trekItems) && trekItems.length > 0) {
             const serverHikes = trekItems.map(convertTrekToSavedHikeRecord);
             serverHikes.forEach(h => {
-              allCollectedHikes.push(h);
-              foundServerIds.add(h.id);
+              if (!foundServerIds.has(h.id)) {
+                allCollectedHikes.push(h);
+                foundServerIds.add(h.id);
+              }
             });
             setD1Status('healthy');
             setD1Stats(prev => ({
@@ -549,6 +606,26 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         }
       } catch (cfErr) {
         console.warn('Cloudflare fetch itineraries error:', cfErr);
+      }
+
+      // If Cloudflare admin/itineraries was empty and in cloudflare mode, try public treks endpoint as well
+      if (allCollectedHikes.length === 0 && activeSource !== 'firebase') {
+        try {
+          const res = await apiFetch('treks', { forceFresh: true });
+          if (res.ok) {
+            const json = await res.json();
+            const trekItems = Array.isArray(json) ? json : json?.data;
+            if (Array.isArray(trekItems) && trekItems.length > 0) {
+              const serverHikes = trekItems.map(convertTrekToSavedHikeRecord);
+              serverHikes.forEach(h => {
+                if (!foundServerIds.has(h.id)) {
+                  allCollectedHikes.push(h);
+                  foundServerIds.add(h.id);
+                }
+              });
+            }
+          }
+        } catch (_) {}
       }
 
       // 3. Merge local cached drafts that haven't synced yet
@@ -1112,6 +1189,66 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           >
             <Trophy className={`w-3.5 h-3.5 text-[#E08828] ${syncingLeaderboard ? 'animate-bounce' : ''}`} />
             <span>{syncingLeaderboard ? 'Syncing...' : 'Force Leaderboard Sync'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Homepage & Admin Trek Data Source Engine Toggle */}
+      <div className="bg-white border border-[#E5E1DB] rounded-2xl p-4 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-xl flex items-center justify-center ${
+            trekDataSource === 'cloudflare' 
+              ? 'bg-[#FFF3E6] text-[#E08828]' 
+              : 'bg-rose-100 text-rose-700'
+          }`}>
+            <Layers className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black text-stone-800 tracking-tight">Trek Data Source Engine</h3>
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase ${
+                trekDataSource === 'cloudflare'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-rose-50 text-rose-700 border border-rose-200'
+              }`}>
+                {trekDataSource === 'cloudflare' ? 'Cloudflare D1 (Recommended)' : 'Firebase Firestore (Manual Override)'}
+              </div>
+            </div>
+            <p className="text-xs text-stone-500 mt-0.5">
+              {trekDataSource === 'cloudflare'
+                ? 'Homepage & app load trek cards directly from Cloudflare Worker & D1 edge cache. Zero Firestore read quota consumed.'
+                : 'Emergency Override Active: Homepage is querying Firestore directly (consumes Firebase daily read quota).'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-stretch md:self-auto bg-stone-100 p-1 rounded-xl border border-stone-200">
+          <button
+            id="btn-source-cloudflare"
+            type="button"
+            onClick={() => handleToggleTrekDataSource('cloudflare')}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              trekDataSource === 'cloudflare'
+                ? 'bg-white text-stone-800 shadow-2xs border border-stone-300 font-black'
+                : 'text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-[#E08828]" />
+            <span>Cloudflare D1 (Default)</span>
+          </button>
+          
+          <button
+            id="btn-source-firebase"
+            type="button"
+            onClick={() => handleToggleTrekDataSource('firebase')}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              trekDataSource === 'firebase'
+                ? 'bg-[#D93025] text-white shadow-2xs font-black'
+                : 'text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5" />
+            <span>Switch to Firebase</span>
           </button>
         </div>
       </div>

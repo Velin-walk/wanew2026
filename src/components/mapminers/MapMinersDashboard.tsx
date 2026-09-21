@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Compass, X, Filter, RefreshCw, Upload, AlertTriangle, ListFilter, MapPin, Map, MessageSquare } from 'lucide-react';
+import { Search, Compass, X, Filter, RefreshCw, Upload, AlertTriangle, ListFilter, MapPin, Map as MapIcon, MessageSquare } from 'lucide-react';
 import MapView from './MapView';
 import RouteCard from './RouteCard';
 import RouteDetail from './RouteDetail';
-import { parseGPX, parseKML } from './kmlParser';
+import { parseGPX, parseKML, parseRouteFile, routeToGPX, simplifyLineSegments } from './kmlParser';
 import { resolveAssetUrl } from './assetUrl';
 import { generateDemoRoutes } from './demoData';
-import { apiFetch } from '../../services/api';
+import { apiFetch, clearApiCache } from '../../services/api';
+import { db } from '../../lib/firebase';
+import { doc, onSnapshot, collection, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import MapChat from './MapChat';
 
 interface MapMinersDashboardProps {
@@ -59,10 +61,9 @@ export default function MapMinersDashboard({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Load trails directly from Cloudflare D1 and R2 via backend API
+  // Load trails directly from Cloudflare D1/R2 and Firestore (with seamless fallback/dual-load)
   const loadKMLFolder = useCallback(async () => {
     setLoadingState({ status: 'loading', errors: [] });
-    setRoutes([]);
 
     try {
       const parseStartPos = (pos: any): { lat: number; lng: number } | null => {
@@ -85,16 +86,18 @@ export default function MapMinersDashboard({
         return null;
       };
 
-      const communityRes = await apiFetch('mapminers/trails');
-      if (communityRes.ok) {
-        const communityData = await communityRes.json();
-        if (communityData.success && communityData.data) {
-          const rawItems = Array.isArray(communityData.data)
-            ? communityData.data
-            : Object.values(communityData.data);
+      // 1. Fetch Cloudflare Trails
+      let cloudflareRoutes: any[] = [];
+      try {
+        const communityRes = await apiFetch('mapminers/trails');
+        if (communityRes.ok) {
+          const communityData = await communityRes.json();
+          if (communityData.success && communityData.data) {
+            const rawItems = Array.isArray(communityData.data)
+              ? communityData.data
+              : Object.values(communityData.data);
 
-          if (rawItems.length > 0) {
-            const loadedRoutes = rawItems.map((anyMeta: any, index: number) => {
+            cloudflareRoutes = rawItems.map((anyMeta: any, index: number) => {
               const startPosObj = parseStartPos(anyMeta.start_pos || anyMeta.startPos);
               const realFileName = anyMeta.fileName || anyMeta.file_name || anyMeta.name || `trail_${index}.gpx`;
               const trailId = anyMeta.id || realFileName;
@@ -113,14 +116,14 @@ export default function MapMinersDashboard({
                 fileName: realFileName,
                 name: anyMeta.name || realFileName,
                 description: anyMeta.description || '',
-                difficulty: anyMeta.difficultyOverride !== 'Auto' ? anyMeta.difficultyOverride : (anyMeta.calculatedDifficulty || 'Moderate'),
+                difficulty: (anyMeta.difficultyOverride && anyMeta.difficultyOverride !== 'Auto') ? anyMeta.difficultyOverride : (anyMeta.difficulty || anyMeta.calculatedDifficulty || 'Moderate'),
                 stats: {
                   distance: Number(anyMeta.distance || anyMeta.stats?.distance || 0),
                   elevationGain: Number(anyMeta.elevation_gain || anyMeta.elevationGain || anyMeta.stats?.elevationGain || 0),
                   elevationLoss: Number(anyMeta.elevation_loss || anyMeta.elevationLoss || anyMeta.stats?.elevationLoss || 0),
                   minElevation: Number(anyMeta.min_elevation || anyMeta.minElevation || anyMeta.stats?.minElevation || 0),
                   maxElevation: Number(anyMeta.max_elevation || anyMeta.maxElevation || anyMeta.stats?.maxElevation || 0),
-                  estimatedHours: anyMeta.hoursOverride !== 'Auto' ? anyMeta.hoursOverride : (anyMeta.estimated_hours || anyMeta.estimatedHours || anyMeta.stats?.estimatedHours || 0)
+                  estimatedHours: (anyMeta.hoursOverride && anyMeta.hoursOverride !== 'Auto') ? anyMeta.hoursOverride : (anyMeta.estimated_hours || anyMeta.estimatedHours || anyMeta.stats?.estimatedHours || 0)
                 },
                 province: anyMeta.province || 'Bagmati',
                 district: anyMeta.district || 'Kathmandu',
@@ -136,42 +139,126 @@ export default function MapMinersDashboard({
                 moderationStatus
               };
             });
-
-            // Filter routes based on Cloudflare status
-            const filteredRoutes = loadedRoutes.filter((r: any) => {
-              const status = (r.moderationStatus || 'approved').toLowerCase();
-              
-              // 1. Explicitly approved trails are always visible to everyone
-              if (status === 'approved') return true;
-              
-              // 2. Explicitly rejected or deleted trails are hidden
-              if (status === 'rejected' || status === 'deleted') return false;
-              
-              // 3. Pending review trails are only visible to the contributor who submitted them
-              if (status === 'pending' || status === 'pending review') {
-                if (currentUserEmail && r.contributorEmail && r.contributorEmail.toLowerCase() === currentUserEmail.toLowerCase()) {
-                  return true;
-                }
-                return false;
-              }
-              
-              return true;
-            });
-
-            filteredRoutes.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-            setRoutes(filteredRoutes);
-            setLoadingState({ status: 'done', errors: [] });
-            return;
           }
         }
+      } catch (cfErr) {
+        console.warn('Could not load trails from Cloudflare Worker:', cfErr);
       }
 
-      // Fallback to offline demo routes if Cloudflare returns empty
-      console.warn('No Cloudflare trails returned, providing demo routes.');
-      setRoutes(generateDemoRoutes());
-      setLoadingState({ status: 'done', errors: [] });
+      // 2. Fetch Firestore Fallback/Resilient Trails
+      let firestoreRoutes: any[] = [];
+      try {
+        const querySnapshot = await getDocs(collection(db, 'community_trails_firestore'));
+        querySnapshot.forEach((docSnap) => {
+          const docData = docSnap.data();
+          
+          let parsedBounds = docData.bounds;
+          if (typeof docData.bounds === 'string') {
+            try {
+              parsedBounds = JSON.parse(docData.bounds);
+            } catch (_) {}
+          }
+          let parsedStartPos = docData.startPos;
+          if (typeof docData.startPos === 'string') {
+            try {
+              parsedStartPos = JSON.parse(docData.startPos);
+            } catch (_) {}
+          }
+          const startPosObj = parseStartPos(parsedStartPos || docData.start_pos);
+
+          firestoreRoutes.push({
+            ...docData,
+            id: docSnap.id,
+            fileName: docData.fileName || docData.file_name || `${docSnap.id}.gpx`,
+            name: docData.name || docData.title || 'Untitled Trail',
+            description: docData.description || '',
+            difficulty: docData.difficulty || 'Moderate',
+            stats: {
+              distance: Number(docData.distance || 0),
+              elevationGain: Number(docData.elevationGain || docData.elevation_gain || 0),
+              elevationLoss: Number(docData.elevationLoss || docData.elevation_loss || 0),
+              minElevation: Number(docData.minElevation || docData.min_elevation || 0),
+              maxElevation: Number(docData.maxElevation || docData.max_elevation || 0),
+              estimatedHours: Number(docData.estimatedHours || docData.estimated_hours || 0)
+            },
+            province: docData.province || 'Bagmati',
+            district: docData.district || 'Kathmandu',
+            nearbyCity: docData.nearbyCity || 'Kathmandu',
+            highlights: docData.highlights || '',
+            uploadedAt: docData.uploadedAt || docData.uploaded_at || new Date().toISOString(),
+            contributorEmail: docData.contributorEmail || docData.contributor_email || '',
+            contributorName: docData.contributorName || docData.contributor_name || 'Community Member',
+            bounds: parsedBounds,
+            coordinates: startPosObj ? [startPosObj, startPosObj] : [],
+            isLazyLoaded: false,
+            isCommunityTrail: true,
+            isFirestoreTrail: true,
+            fileContent: docData.fileContent || docData.file_content || '',
+            moderationStatus: (docData.status || 'approved').toLowerCase()
+          });
+        });
+      } catch (fsErr) {
+        console.warn('Failed to load community trails from Firestore:', fsErr);
+      }
+
+      // 3. Merge and Deduplicate by trail ID (preferring Cloudflare metadata if present)
+      const mergedMap = new Map<string, any>();
+      
+      firestoreRoutes.forEach(r => {
+        mergedMap.set(r.id, r);
+      });
+      cloudflareRoutes.forEach(r => {
+        mergedMap.set(r.id, r);
+      });
+
+      const allMergedRoutes = Array.from(mergedMap.values());
+
+      // Filter routes based on status and permissions
+      const filteredRoutes = allMergedRoutes.filter((r: any) => {
+        const status = (r.moderationStatus || 'approved').toLowerCase();
+        
+        // 1. Explicitly approved trails are always visible to everyone
+        if (status === 'approved') return true;
+        
+        // 2. Explicitly rejected or deleted trails are hidden
+        if (status === 'rejected' || status === 'deleted') return false;
+        
+        // 3. Pending review trails are only visible to the contributor who submitted them
+        if (status === 'pending' || status === 'pending review') {
+          if (currentUserEmail && r.contributorEmail && r.contributorEmail.toLowerCase() === currentUserEmail.toLowerCase()) {
+            return true;
+          }
+          return false;
+        }
+        
+        return true;
+      });
+
+      if (filteredRoutes.length > 0) {
+        setRoutes(prev => {
+          const merged = new Map<string, any>();
+          prev.forEach(r => {
+            if (r.id) merged.set(r.id, r);
+          });
+          filteredRoutes.forEach(r => {
+            merged.set(r.id, r);
+          });
+          const mergedArray = Array.from(merged.values());
+          mergedArray.sort((a, b) => {
+            const timeA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+            const timeB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+            return timeB - timeA;
+          });
+          return mergedArray;
+        });
+        setLoadingState({ status: 'done', errors: [] });
+      } else {
+        console.warn('No community trails found in Cloudflare or Firestore. Loading offline demo trails.');
+        setRoutes(generateDemoRoutes());
+        setLoadingState({ status: 'done', errors: [] });
+      }
     } catch (e: any) {
-      console.warn('Failed to fetch Cloudflare trails, falling back to offline demo routes:', e);
+      console.warn('Failed to load trails:', e);
       setRoutes(generateDemoRoutes());
       setLoadingState({ status: 'done', errors: [] });
     } finally {
@@ -181,6 +268,30 @@ export default function MapMinersDashboard({
 
   useEffect(() => {
     loadKMLFolder();
+  }, [loadKMLFolder]);
+
+  useEffect(() => {
+    // Real-time Firestore metadata subscription to synchronize trail list updates across users/tabs
+    const docRef = doc(db, 'metadata', 'mapminers');
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const lastUpdated = data.lastUpdated;
+        const localLastUpdated = sessionStorage.getItem('wnw_mapminers_last_updated');
+        if (localLastUpdated && lastUpdated && Number(localLastUpdated) !== lastUpdated) {
+          console.info('[MapMiners] External updates detected! Invalidation of static cache triggered.');
+          sessionStorage.setItem('wnw_mapminers_last_updated', String(lastUpdated));
+          clearApiCache('mapminers');
+          loadKMLFolder();
+        } else if (lastUpdated) {
+          sessionStorage.setItem('wnw_mapminers_last_updated', String(lastUpdated));
+        }
+      }
+    }, (error) => {
+      console.info('[MapMiners] Firestore subscription inactive or silent offline state:', error);
+    });
+
+    return () => unsubscribe();
   }, [loadKMLFolder]);
 
   const handleRouteClick = useCallback(async (route: any) => {
@@ -195,26 +306,30 @@ export default function MapMinersDashboard({
 
     if (!route.isLazyLoaded && !route.isDemo) {
       try {
-        // Download directly from Cloudflare Worker which pulls from R2
-        const res = await apiFetch(`mapminers/download/${encodeURIComponent(route.fileName)}`);
-
-        if (!res.ok) throw new Error(`HTTP ${res.status} while loading ${route.fileName}`);
-        const text = await res.text();
+        let text = '';
+        if (route.isFirestoreTrail) {
+          text = route.fileContent || '';
+        } else {
+          // Download directly from Cloudflare Worker which pulls from R2
+          const res = await apiFetch(`mapminers/download/${encodeURIComponent(route.fileName)}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status} while loading ${route.fileName}`);
+          text = await res.text();
+        }
 
         // 350ms delay lets CSS slide-up panels animate beautifully
         await new Promise(resolve => setTimeout(resolve, 350));
 
-        const routeExtension = (route.fileName || '').split('.').pop()?.toLowerCase();
-        const parser = routeExtension === 'gpx' ? parseGPX : parseKML;
-        const fullParsed = parser(text, route.fileName);
-        if (!fullParsed) throw new Error('File has no valid route geometry');
+        const fullParsed = parseRouteFile(text, route.fileName, route.name);
+        if (!fullParsed) {
+          throw new Error('File has no valid route geometry');
+        }
 
         const updatedRoute = {
           ...fullParsed,
           id: route.id,
           name: route.name,
-          description: route.description,
-          difficulty: route.difficulty,
+          description: route.description || fullParsed.description,
+          difficulty: route.difficulty || fullParsed.difficulty,
           province: route.province,
           district: route.district,
           nearbyCity: route.nearbyCity,
@@ -223,13 +338,17 @@ export default function MapMinersDashboard({
           contributorEmail: route.contributorEmail,
           isLazyLoaded: true,
           loadError: null,
+          isFirestoreTrail: route.isFirestoreTrail,
+          fileContent: route.fileContent
         };
-        updatedRoute.stats.estimatedHours = route.stats.estimatedHours;
+        if (route.stats?.estimatedHours) {
+          updatedRoute.stats.estimatedHours = route.stats.estimatedHours;
+        }
         
         setRoutes(prev => prev.map(r => r.id === route.id ? updatedRoute : r));
         setActiveRoute(updatedRoute);
       } catch (err: any) {
-        console.error('Failed to parse route KML', err);
+        console.error('Failed to parse route file', err);
         const failedRoute = {
           ...route,
           loadError: err?.message || 'Failed to parse map file',
@@ -251,9 +370,9 @@ export default function MapMinersDashboard({
         const decodedParam = decodeURIComponent(routeParam).toLowerCase();
         const matched = routes.find(
           (r) =>
-            r.fileName?.toLowerCase() === decodedParam ||
-            r.id?.toLowerCase() === decodedParam ||
-            r.name?.toLowerCase() === decodedParam
+              r.fileName?.toLowerCase() === decodedParam ||
+              r.id?.toLowerCase() === decodedParam ||
+              r.name?.toLowerCase() === decodedParam
         );
         if (matched) {
           handleRouteClick(matched);
@@ -267,12 +386,28 @@ export default function MapMinersDashboard({
   const handleDeleteRoute = useCallback(async (id: string) => {
     setRoutes(prev => prev.filter(r => r.id !== id));
     setActiveRoute(null);
+    
+    // Attempt delete from Cloudflare
     try {
       await apiFetch(`mapminers/trails/${encodeURIComponent(id)}`, {
         method: 'DELETE'
       });
     } catch (err) {
       console.warn('Could not delete trail from Cloudflare R2 / D1:', err);
+    }
+
+    // Attempt delete from Firestore
+    try {
+      await deleteDoc(doc(db, 'community_trails_firestore', id));
+      // Trigger sync signal metadata update to sync other tabs
+      try {
+        await setDoc(doc(db, 'metadata', 'mapminers'), {
+          lastUpdated: Date.now()
+        }, { merge: true });
+      } catch (_) {}
+      console.log(`Successfully deleted trail ${id} from Firestore`);
+    } catch (fsErr) {
+      console.warn('Could not delete trail from Firestore:', fsErr);
     }
   }, []);
 
@@ -318,10 +453,7 @@ export default function MapMinersDashboard({
 
     try {
       const fileText = await contributionFile.text();
-      const extension = contributionFile.name.split('.').pop()?.toLowerCase();
-      
-      const parser = extension === 'gpx' ? parseGPX : parseKML;
-      const parsedRoute = parser(fileText, contributionFile.name, contributionName.trim());
+      const parsedRoute = parseRouteFile(fileText, contributionFile.name, contributionName.trim());
       
       if (!parsedRoute) {
         throw new Error('No valid coordinate tracks (<trkpt>, <rtept>, <coordinates>, <wpt>) were found in this file.');
@@ -329,41 +461,48 @@ export default function MapMinersDashboard({
 
       const defaultStartPos = (parsedRoute as any).startPos || (parsedRoute.coordinates?.[0] ? { lat: parsedRoute.coordinates[0].lat, lng: parsedRoute.coordinates[0].lng } : { lat: 27.7, lng: 85.3 });
 
-      // Call the real backend API (Cloudflare Worker) which stores in R2 + D1
-      let uploadResult: any = null;
-      try {
-        const response = await apiFetch('mapminers/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            fileName: contributionFile.name,
-            fileContent: fileText,
-            name: contributionName.trim(),
-            description: parsedRoute.description || '',
-            difficulty: parsedRoute.difficulty || 'Moderate',
-            stats: parsedRoute.stats,
-            bounds: parsedRoute.bounds || [[27.6, 85.2], [27.8, 85.5]],
-            startPos: defaultStartPos,
-            contributorName: currentUserEmail ? currentUserEmail.split('@')[0] : 'Map Miner',
-            contributorEmail: currentUserEmail || '',
-            province: (parsedRoute as any).province || 'Bagmati',
-            district: (parsedRoute as any).district || 'Kathmandu',
-            nearbyCity: (parsedRoute as any).nearbyCity || 'Kathmandu',
-            highlights: (parsedRoute as any).highlights || 'Uploaded by community'
-          })
-        });
+      // Call the Cloudflare Worker API which stores file in R2 and metadata in D1
+      const response = await apiFetch('mapminers/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fileName: contributionFile.name,
+          file_name: contributionFile.name,
+          fileContent: fileText,
+          name: contributionName.trim(),
+          description: parsedRoute.description || '',
+          difficulty: parsedRoute.difficulty || 'Moderate',
+          stats: parsedRoute.stats,
+          bounds: parsedRoute.bounds || [[27.6, 85.2], [27.8, 85.5]],
+          startPos: defaultStartPos,
+          contributorName: currentUserEmail ? currentUserEmail.split('@')[0] : 'Map Miner',
+          contributorEmail: currentUserEmail || '',
+          province: (parsedRoute as any).province || 'Bagmati',
+          district: (parsedRoute as any).district || 'Kathmandu',
+          nearbyCity: (parsedRoute as any).nearbyCity || 'Kathmandu',
+          highlights: (parsedRoute as any).highlights || 'Uploaded by community'
+        })
+      });
 
-        if (response.ok) {
-          uploadResult = await response.json();
-        } else {
-          const errorData = await response.json().catch(() => ({}));
-          console.warn('Backend upload notice:', errorData.error || `HTTP ${response.status}`);
-        }
-      } catch (backendErr) {
-        console.warn('Backend network upload notice (rendering locally in session):', backendErr);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server upload failed with status ${response.status}`);
       }
+
+      const uploadResult = await response.json();
+      if (uploadResult && uploadResult.success === false) {
+        throw new Error(uploadResult.error || 'The server rejected this file.');
+      }
+
+      // Signal cache invalidation and trigger sync signal metadata update in Firestore to sync other tabs
+      clearApiCache('mapminers');
+      try {
+        await setDoc(doc(db, 'metadata', 'mapminers'), {
+          lastUpdated: Date.now()
+        }, { merge: true });
+      } catch (_) {}
 
       const sessionRoute = {
         ...parsedRoute,
@@ -374,10 +513,14 @@ export default function MapMinersDashboard({
         contributorName: currentUserEmail ? currentUserEmail.split('@')[0] : 'Map Miner',
         contributorEmail: currentUserEmail || '',
         isLazyLoaded: true,
-        isCommunityTrail: true
+        isCommunityTrail: true,
+        isFirestoreTrail: false,
       };
 
-      setRoutes(prev => [sessionRoute, ...prev]);
+      setRoutes(prev => {
+        const filtered = prev.filter(r => r.id !== sessionRoute.id);
+        return [sessionRoute, ...filtered];
+      });
       setActiveRoute(sessionRoute);
       setContributionModalOpen(false);
       setContributionName('');
@@ -462,7 +605,7 @@ export default function MapMinersDashboard({
               className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 bg-white/80 hover:bg-white text-neutral-700 hover:text-[#7ABA42] rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs border border-neutral-200/60"
               title="Focus full map view"
             >
-              <Map className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
+              <MapIcon className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
               <span className="truncate">Map View</span>
             </button>
           </div>

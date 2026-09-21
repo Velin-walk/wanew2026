@@ -58,7 +58,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const method = request.method;
-    const path = url.pathname;
+    const path = url.pathname.replace(/\/+/g, '/');
 
     // Handle OPTIONS Preflight CORS Request
     if (method === 'OPTIONS') {
@@ -71,9 +71,11 @@ export default {
     try {
       // ===== MAPMINERS / COMMUNITY TRAILS ENDPOINTS =====
 
-      // GET /mapminers/trails or GET /community_trails - List trails
-      if (method === 'GET' && (path === '/mapminers/trails' || path === '/community_trails')) {
-        if (!env.DB) return jsonResponse({ success: true, data: [] });
+      // GET /mapminers/trails or GET /community_trails or GET /trails - List trails
+      if (method === 'GET' && (path === '/mapminers/trails' || path === '/community_trails' || path === '/trails')) {
+        if (!env.DB) {
+          return jsonResponse({ success: false, error: "Cloudflare D1 Database binding 'DB' is missing in wrangler-mapminers.toml or Cloudflare dashboard settings" });
+        }
 
         const isFresh = url.searchParams.has('fresh');
         if (!isFresh) {
@@ -86,7 +88,7 @@ export default {
           const res = await env.DB.prepare('SELECT * FROM community_trails ORDER BY uploaded_at DESC').all();
           results = res.results || [];
         } catch (e) {
-          console.error('Error querying community_trails:', e);
+          return jsonResponse({ success: false, error: "D1 Query Error: " + (e instanceof Error ? e.message : String(e)) });
         }
 
         const data = results.map((r) => ({
@@ -178,6 +180,122 @@ export default {
         });
       }
 
+      // ===== TRAIL COMMENTS ENDPOINTS =====
+
+      // GET /mapminers/comments or GET /community_trails/comments or GET /comments - Fetch comments for trail
+      if (method === 'GET' && (path === '/mapminers/comments' || path === '/community_trails/comments' || path === '/comments')) {
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+
+        const trailId = url.searchParams.get('trailId') || url.searchParams.get('trail_id') || '';
+        try {
+          // Ensure table exists
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS trail_comments (
+              id TEXT PRIMARY KEY,
+              trail_id TEXT NOT NULL,
+              text TEXT NOT NULL,
+              author_name TEXT,
+              author_email TEXT,
+              guest_session_id TEXT,
+              timestamp INTEGER,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `).run();
+
+          let sql = 'SELECT * FROM trail_comments';
+          const params = [];
+          if (trailId) {
+            sql += ' WHERE trail_id = ?';
+            params.push(trailId);
+          }
+          sql += ' ORDER BY timestamp ASC LIMIT 200';
+
+          const res = await env.DB.prepare(sql).bind(...params).all();
+          const comments = (res.results || []).map(r => ({
+            id: r.id,
+            trailId: r.trail_id,
+            text: r.text,
+            authorName: r.author_name || 'Anonymous',
+            authorEmail: r.author_email || '',
+            guestSessionId: r.guest_session_id || null,
+            timestamp: Number(r.timestamp) || Date.now()
+          }));
+
+          return jsonResponse({ success: true, comments, count: comments.length });
+        } catch (err) {
+          console.warn('Error querying trail_comments in D1:', err);
+          return jsonResponse({ success: true, comments: [], error: err.message });
+        }
+      }
+
+      // POST /mapminers/comments or POST /community_trails/comments or POST /comments - Create comment
+      if (method === 'POST' && (path === '/mapminers/comments' || path === '/community_trails/comments' || path === '/comments')) {
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+
+        const body = await request.json().catch(() => ({}));
+        const commentId = body.id || `comment_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const trailId = body.trailId || body.trail_id || '';
+        const text = body.text || '';
+        const authorName = body.authorName || body.author_name || 'Hiker';
+        const authorEmail = body.authorEmail || body.author_email || '';
+        const guestSessionId = body.guestSessionId || body.guest_session_id || null;
+        const timestamp = Number(body.timestamp) || Date.now();
+
+        if (!trailId || !text) {
+          return errorResponse('trailId and text are required', 400);
+        }
+
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS trail_comments (
+              id TEXT PRIMARY KEY,
+              trail_id TEXT NOT NULL,
+              text TEXT NOT NULL,
+              author_name TEXT,
+              author_email TEXT,
+              guest_session_id TEXT,
+              timestamp INTEGER,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `).run();
+
+          await env.DB.prepare(`
+            INSERT INTO trail_comments (id, trail_id, text, author_name, author_email, guest_session_id, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).bind(commentId, trailId, text, authorName, authorEmail, guestSessionId, timestamp).run();
+
+          return jsonResponse({
+            success: true,
+            message: 'Comment posted successfully',
+            comment: {
+              id: commentId,
+              trailId,
+              text,
+              authorName,
+              authorEmail,
+              guestSessionId,
+              timestamp
+            }
+          });
+        } catch (err) {
+          console.error('Error saving trail comment to D1:', err);
+          return errorResponse(`Failed to save comment: ${err.message}`, 500);
+        }
+      }
+
+      // DELETE /mapminers/comments/:id or DELETE /comments/:id
+      if (method === 'DELETE' && (path.startsWith('/mapminers/comments/') || path.startsWith('/community_trails/comments/') || path.startsWith('/comments/'))) {
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+
+        const commentId = decodeURIComponent(path.replace(/^\/(mapminers|community_trails)?\/?comments\//, ''));
+        try {
+          await env.DB.prepare('DELETE FROM trail_comments WHERE id = ?').bind(commentId).run();
+          return jsonResponse({ success: true, message: `Comment ${commentId} deleted` });
+        } catch (err) {
+          return errorResponse(`Failed to delete comment: ${err.message}`, 500);
+        }
+      }
+
       // GET /images/:fileName - Serve R2 uploaded images directly
       if (method === 'GET' && path.startsWith('/images/')) {
         const fileName = decodeURIComponent(path.replace('/images/', ''));
@@ -205,9 +323,9 @@ export default {
         return new Response(object.body, { headers });
       }
 
-      // GET /mapminers/download/:fileName - Download file from R2
-      if (method === 'GET' && (path.startsWith('/mapminers/download/') || path.startsWith('/community_trails/download/'))) {
-        const fileName = decodeURIComponent(path.replace(/^\/(mapminers|community_trails)\/download\//, ''));
+      // GET /mapminers/download/:fileName or GET /download/:fileName - Download file from R2
+      if (method === 'GET' && (path.startsWith('/mapminers/download/') || path.startsWith('/community_trails/download/') || path.startsWith('/download/'))) {
+        const fileName = decodeURIComponent(path.replace(/^\/(mapminers\/|community_trails\/)?download\//, ''));
         const bucket = env.TRAILS_BUCKET || env.BUCKET;
         if (!bucket) return errorResponse('R2 Storage binding BUCKET missing', 500);
 
@@ -226,8 +344,8 @@ export default {
         return new Response(object.body, { headers });
       }
 
-      // POST /mapminers/upload or POST /community_trails/upload (Fills all snake_case and camelCase metadata)
-      if (method === 'POST' && (path === '/mapminers/upload' || path === '/community_trails/upload')) {
+      // POST /mapminers/upload or POST /community_trails/upload or POST /upload (Fills all snake_case and camelCase metadata)
+      if (method === 'POST' && (path === '/mapminers/upload' || path === '/community_trails/upload' || path === '/upload')) {
         if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
 
         const bucket = env.TRAILS_BUCKET || env.BUCKET;
@@ -321,10 +439,11 @@ export default {
           console.warn('Full D1 insert failed, trying minimal core columns fallback:', d1Err);
           await env.DB.prepare(`
             INSERT INTO community_trails (
-              id, name, description, difficulty, distance, bounds, start_pos, contributor_email, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              id, file_name, name, description, difficulty, distance, bounds, start_pos, contributor_email, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             trailId,
+            fileName,
             trailName,
             description,
             difficulty,
