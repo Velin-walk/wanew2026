@@ -178,7 +178,21 @@ function MainApp() {
     }
   }, [user, userEmail, isAdmin]);
 
-  const loadUserBookings = useCallback(async (baseTreks: Trek[]) => {
+  const treksRef = useRef<Trek[]>([]);
+  useEffect(() => {
+    treksRef.current = treks;
+  }, [treks]);
+
+  const lastUserBookingsFetchRef = useRef<number>(0);
+
+  const loadUserBookings = useCallback(async (baseTreks?: Trek[], force = false) => {
+    // Throttle user bookings queries to prevent hammering Cloudflare D1 (at most once every 2 minutes unless forced)
+    const now = Date.now();
+    if (!force && now - lastUserBookingsFetchRef.current < 2 * 60 * 1000 && bookings.length > 0) {
+      return;
+    }
+    lastUserBookingsFetchRef.current = now;
+
     setLoadingBookings(true);
     try {
       const candidateEmails = new Set<string>();
@@ -193,10 +207,6 @@ function MainApp() {
           if (parsed.email_address) candidateEmails.add(parsed.email_address.toLowerCase().trim());
         }
       } catch {}
-
-      if (isAdmin && !candidateEmails.has('walknepalwalk@gmail.com')) {
-        candidateEmails.add('walknepalwalk@gmail.com');
-      }
 
       const mergedMap = new Map<string, any>();
 
@@ -214,18 +224,20 @@ function MainApp() {
         }
       } catch {}
 
-      // 2. Fetch from Cloudflare D1 for candidate emails
-      for (const email of candidateEmails) {
-        try {
-          const userRegs = await fetchUserBookings(email);
-          if (Array.isArray(userRegs)) {
-            userRegs.forEach((b: any) => {
-              const key = String(b.id || `${b.hike_number || b.trek_id}_${b.email_address || b.user_email}_${b.trek_date || b.timestamp}`);
-              mergedMap.set(key, b);
-            });
+      // 2. Fetch from Cloudflare D1 for candidate emails only if we have candidate emails
+      if (candidateEmails.size > 0) {
+        for (const email of candidateEmails) {
+          try {
+            const userRegs = await fetchUserBookings(email, force);
+            if (Array.isArray(userRegs)) {
+              userRegs.forEach((b: any) => {
+                const key = String(b.id || `${b.hike_number || b.trek_id}_${b.email_address || b.user_email}_${b.trek_date || b.timestamp}`);
+                mergedMap.set(key, b);
+              });
+            }
+          } catch (cfErr) {
+            console.warn(`Could not fetch D1 bookings for ${email}:`, cfErr);
           }
-        } catch (cfErr) {
-          console.warn(`Could not fetch D1 bookings for ${email}:`, cfErr);
         }
       }
 
@@ -246,22 +258,36 @@ function MainApp() {
           );
         }
 
-        const snapshots = await Promise.all(fsPromises);
-        snapshots.forEach((snap) => {
-          snap.forEach((docSnap: any) => {
-            const data = docSnap.data();
-            const id = data.id || docSnap.id;
-            const key = String(id || `${data.hike_number || data.trekId}_${data.email_address || data.email}_${data.trek_date || data.timestamp}`);
-            mergedMap.set(key, { ...data, id });
+        if (fsPromises.length > 0) {
+          const snapshots = await Promise.all(fsPromises);
+          snapshots.forEach((snap) => {
+            snap.forEach((docSnap: any) => {
+              const data = docSnap.data();
+              const id = data.id || docSnap.id;
+              const key = String(id || `${data.hike_number || data.trekId}_${data.email_address || data.email}_${data.trek_date || data.timestamp}`);
+              mergedMap.set(key, { ...data, id });
+            });
           });
-        });
+        }
       } catch (fsErr) {
         console.warn('Could not query Firestore registrations:', fsErr);
       }
 
       // 4. Normalize & enrich each booking with trek details
-      const rawList = Array.from(mergedMap.values());
-      const currentTreks = baseTreks.length > 0 ? baseTreks : treks;
+      const cancelledIds = new Set<string>();
+      try {
+        const cJson = localStorage.getItem('wnw_cancelled_booking_ids');
+        if (cJson) {
+          const parsed = JSON.parse(cJson);
+          if (Array.isArray(parsed)) parsed.forEach((id: any) => cancelledIds.add(String(id)));
+        }
+      } catch {}
+
+      const rawList = Array.from(mergedMap.values()).filter((b: any) => {
+        const id = String(b.id || b.registration_id || '');
+        return id && !cancelledIds.has(id);
+      });
+      const currentTreks = (baseTreks && baseTreks.length > 0) ? baseTreks : treksRef.current;
       const enriched = rawList.map((b: any) => {
         const trekId = String(b.trek_id || b.trekId || b.hike_number || '');
         const hikeNum = String(b.hike_number || b.trek_id || b.trekId || '');
@@ -368,12 +394,12 @@ function MainApp() {
     }
   }, []);
 
-  // When user visits Bookings tab, refresh bookings
+  // When user visits Bookings tab, refresh bookings if needed
   useEffect(() => {
     if (currentTab === 'bookings') {
-      loadUserBookings(treks);
+      loadUserBookings();
     }
-  }, [currentTab, loadUserBookings, treks]);
+  }, [currentTab, loadUserBookings]);
 
   // Keep a stable ref to refreshData to avoid re-attaching listeners
   const refreshDataRef = useRef(refreshData);
@@ -731,13 +757,21 @@ function MainApp() {
 
   const handleCancelBooking = async (bookingId: number | string) => {
     // 1. Remove from local memory and device localStorage immediately for instant feedback
-    setBookings((prev) => prev.filter((b) => String(b.id) !== String(bookingId)));
+    const idStr = String(bookingId);
+    setBookings((prev) => prev.filter((b) => String(b.id) !== idStr));
     try {
       const existingDevJson = localStorage.getItem('wnw_device_bookings');
       if (existingDevJson) {
         const parsed: Booking[] = JSON.parse(existingDevJson);
-        const filtered = parsed.filter((b) => String(b.id) !== String(bookingId));
+        const filtered = parsed.filter((b) => String(b.id) !== idStr);
         localStorage.setItem('wnw_device_bookings', JSON.stringify(filtered));
+      }
+
+      const cJson = localStorage.getItem('wnw_cancelled_booking_ids');
+      const list = cJson ? JSON.parse(cJson) : [];
+      if (!list.includes(idStr)) {
+        list.push(idStr);
+        localStorage.setItem('wnw_cancelled_booking_ids', JSON.stringify(list));
       }
     } catch (_) {}
 

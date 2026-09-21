@@ -456,11 +456,14 @@ export async function fetchSingleTrek(idOrHikeNumber: string): Promise<Trek | nu
  * User-specific bookings loader.
  * Queries Cloudflare D1 with a targeted email filter instead of downloading all registrations.
  */
-export async function fetchUserBookings(email: string): Promise<any[]> {
+export async function fetchUserBookings(email: string, forceFresh = false): Promise<any[]> {
   if (!email || !email.trim()) return [];
   try {
     const cleanEmail = email.trim().toLowerCase();
-    const res = await apiFetch(`registrations?email=${encodeURIComponent(cleanEmail)}`);
+    const res = await apiFetch(`registrations?email=${encodeURIComponent(cleanEmail)}`, {
+      forceFresh,
+      cacheTtl: 5 * 60 * 1000, // 5 minutes cache to prevent D1 row reads
+    });
     if (!res.ok) return [];
     const json = await res.json();
     const items = Array.isArray(json) ? json : json?.data;

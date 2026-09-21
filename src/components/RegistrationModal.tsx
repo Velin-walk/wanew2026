@@ -128,8 +128,24 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   // Helper to load saved profile data from localStorage or passed props
   const getSavedProfile = () => {
     try {
-      const saved = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
-      return saved ? JSON.parse(saved) : null;
+      const p1 = localStorage.getItem('wnw_user_registration_profile');
+      if (p1) {
+        const parsed = JSON.parse(p1);
+        if (parsed && (parsed.fullName || parsed.full_name || parsed.phone)) return parsed;
+      }
+      const p2 = localStorage.getItem('wnw_last_registration_data');
+      if (p2) {
+        const parsed = JSON.parse(p2);
+        if (parsed && (parsed.fullName || parsed.full_name || parsed.phone)) return parsed;
+      }
+      const devB = localStorage.getItem('wnw_device_bookings');
+      if (devB) {
+        const parsed = JSON.parse(devB);
+        if (Array.isArray(parsed) && parsed.length > 0 && (parsed[0].full_name || parsed[0].phone)) {
+          return parsed[0];
+        }
+      }
+      return null;
     } catch {
       return null;
     }

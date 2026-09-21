@@ -148,108 +148,6 @@ async function purgeEdgeCache(urlList, ctx) {
   } catch (_) {}
 }
 
-let indexesEnsured = false;
-async function ensurePerformanceIndexes(env) {
-  if (indexesEnsured || !env || !env.DB) return;
-  try {
-    // 1. Ensure essential tables exist
-    await env.DB.batch([
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS admin_activity_logs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          admin_email TEXT NOT NULL,
-          action_type TEXT NOT NULL,
-          description TEXT NOT NULL,
-          metadata_json TEXT DEFAULT '{}',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS community_trails (
-          id TEXT PRIMARY KEY,
-          file_name TEXT UNIQUE NOT NULL,
-          name TEXT NOT NULL,
-          description TEXT,
-          difficulty TEXT DEFAULT 'Moderate',
-          distance REAL DEFAULT 0,
-          elevation_gain REAL DEFAULT 0,
-          elevation_loss REAL DEFAULT 0,
-          min_elevation REAL DEFAULT 0,
-          max_elevation REAL DEFAULT 0,
-          estimated_hours REAL DEFAULT 0,
-          bounds TEXT,
-          start_pos TEXT,
-          contributor_name TEXT,
-          contributor_email TEXT,
-          province TEXT,
-          district TEXT,
-          nearby_city TEXT,
-          highlights TEXT,
-          uploaded_at TEXT,
-          file_size INTEGER DEFAULT 0,
-          status TEXT DEFAULT 'pending'
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS trek_participant_summary (
-          hike_number TEXT PRIMARY KEY,
-          total_pax INTEGER DEFAULT 0,
-          male_pax INTEGER DEFAULT 0,
-          female_pax INTEGER DEFAULT 0,
-          recent_participants TEXT DEFAULT '[]',
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TRIGGER IF NOT EXISTS update_trek_summary_on_reg_insert
-        AFTER INSERT ON registrations
-        BEGIN
-          INSERT INTO trek_participant_summary (hike_number, total_pax, male_pax, female_pax, updated_at)
-          VALUES (
-            NEW.hike_number,
-            COALESCE((SELECT SUM(COALESCE(CAST(pax AS INTEGER), 1)) FROM registrations WHERE hike_number = NEW.hike_number), 0),
-            COALESCE((SELECT SUM(COALESCE(CAST(pax AS INTEGER), 1)) FROM registrations WHERE hike_number = NEW.hike_number AND LOWER(gender) LIKE 'f%'), 0),
-            COALESCE((SELECT SUM(COALESCE(CAST(pax AS INTEGER), 1)) FROM registrations WHERE hike_number = NEW.hike_number AND LOWER(gender) NOT LIKE 'f%'), 0),
-            CURRENT_TIMESTAMP
-          )
-          ON CONFLICT(hike_number) DO UPDATE SET
-            total_pax = excluded.total_pax,
-            male_pax = excluded.male_pax,
-            female_pax = excluded.female_pax,
-            updated_at = CURRENT_TIMESTAMP;
-        END
-      `)
-    ]);
-
-    // 2. Setup performance indexes
-    await env.DB.batch([
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_hike_number ON registrations (hike_number)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_email ON registrations (email_address)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_email_lower ON registrations (LOWER(email_address))'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_user_email_lower ON registrations (LOWER(user_email))'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_regs_timestamp ON registrations (timestamp DESC)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_reg_id ON bookings_roster (registration_id)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_hike_number ON bookings_roster (hike_number)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_email_lower ON bookings_roster (LOWER(email))'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_created_at ON treks (created_at DESC)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_hike_number ON treks (hike_number)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_number)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_community_trails_status ON community_trails (status)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_hiker_email ON hiker_profiles (email)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_hiker_email_lower ON hiker_profiles (LOWER(email))'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_hiker_total_hikes ON hiker_profiles (total_hikes DESC)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_status_date ON treks (status, hike_date DESC)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_hiker_uid ON hiker_profiles (user_uid)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs (created_at DESC)'),
-      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_email ON admin_activity_logs (admin_email)')
-    ]);
-    indexesEnsured = true;
-  } catch (e) {
-    // Non-blocking
-  }
-}
-
 async function logAdminActivity(env, request, actionType, description, metadata = {}) {
   if (!env || !env.DB) return;
   try {
@@ -272,7 +170,6 @@ async function logAdminActivity(env, request, actionType, description, metadata 
  * Recomputes the unified Leaderboard Master Snapshot from hiker_profiles and treks.
  * Stored in system_snapshots table for O(1) single-read and Edge-cached delivery.
  */
-let systemSnapshotsTableEnsured = false;
 async function recomputeLeaderboardSnapshot(env, force = false) {
   if (!env || !env.DB) return null;
 
@@ -296,18 +193,6 @@ async function recomputeLeaderboardSnapshot(env, force = false) {
       } catch (throttleErr) {
         console.warn('Leaderboard throttle check error:', throttleErr);
       }
-    }
-
-    // 1. Ensure system_snapshots table exists (guarded to run once per worker instance)
-    if (!systemSnapshotsTableEnsured) {
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS system_snapshots (
-          key TEXT PRIMARY KEY,
-          data_json TEXT NOT NULL,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
-      systemSnapshotsTableEnsured = true;
     }
 
     // 2. Fetch completed treks for community timeline and duration classifications
@@ -594,15 +479,6 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const method = request.method.toUpperCase();
-
-    // Ensure performance indexes are created in D1 (runs once per isolate, non-blocking)
-    if (env.DB && !indexesEnsured) {
-      if (ctx && ctx.waitUntil) {
-        ctx.waitUntil(ensurePerformanceIndexes(env));
-      } else {
-        ensurePerformanceIndexes(env);
-      }
-    }
 
     try {
       // ===== HEALTH CHECK =====
@@ -1550,42 +1426,72 @@ export default {
           stmt = env.DB.prepare(query).bind(hikeNum);
         }
 
-        let baseJoinQuery = `
-          SELECT 
-            r.*,
-            b.registration_status,
-            b.payment_status as roster_payment_status,
-            b.paid_amount as roster_paid_amount,
-            b.due_amount as roster_due_amount,
-            b.admin_notes as roster_admin_notes,
-            b.pickup_point as roster_pickup_point,
-            b.trek_date as roster_trek_date
-          FROM registrations r
-          LEFT JOIN bookings_roster b ON r.id = b.registration_id
-        `;
-        let joinParams = [];
+        // Ultra-Efficient Query Optimization:
+        // 1. Query the target registrations slice with indexes first
+        // 2. Attach any roster edits without unindexed N*M cartesian joins
+        let regSql = 'SELECT * FROM registrations';
+        let regParams = [];
         if (email) {
-          baseJoinQuery += ' WHERE LOWER(r.email_address) = LOWER(?) OR LOWER(r.user_email) = LOWER(?)';
-          joinParams.push(email.trim(), email.trim());
+          const cleanEmail = email.trim().toLowerCase();
+          regSql += ' WHERE LOWER(email_address) = ? OR LOWER(user_email) = ?';
+          regParams.push(cleanEmail, cleanEmail);
         } else if (hikeNum) {
-          baseJoinQuery += ' WHERE r.hike_number = ?';
-          joinParams.push(hikeNum.trim());
+          regSql += ' WHERE hike_number = ?';
+          regParams.push(hikeNum.trim());
         }
-        baseJoinQuery += ' ORDER BY r.timestamp DESC';
+        regSql += ' ORDER BY timestamp DESC';
 
         const effectiveLimit = limit > 0 ? limit : (email || hikeNum ? 500 : 120);
-        baseJoinQuery += ' LIMIT ? OFFSET ?';
-        joinParams.push(effectiveLimit, offset);
+        regSql += ' LIMIT ? OFFSET ?';
+        regParams.push(effectiveLimit, offset);
 
         let results = [];
         try {
-          const stmt = env.DB.prepare(baseJoinQuery);
-          const { results: joined } = joinParams.length > 0 ? await stmt.bind(...joinParams).all() : await stmt.all();
-          results = joined;
-        } catch (joinErr) {
-          console.warn('Failed to join registrations with bookings_roster, falling back:', joinErr);
-          const { results: rawRegs } = await stmt.all();
-          results = rawRegs;
+          const stmt = env.DB.prepare(regSql);
+          const { results: rawRegs } = regParams.length > 0 ? await stmt.bind(...regParams).all() : await stmt.all();
+          const regsList = rawRegs || [];
+
+          if (regsList.length > 0) {
+            // Batch lookup matching bookings_roster records by IDs using indexed IN clause
+            const regIds = regsList.map((r) => String(r.id)).filter(Boolean);
+            const placeholders = regIds.map(() => '?').join(',');
+            
+            const rosterMap = new Map();
+            try {
+              if (regIds.length > 0) {
+                const rosterStmt = env.DB.prepare(
+                  `SELECT registration_id, registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point, trek_date 
+                   FROM bookings_roster 
+                   WHERE registration_id IN (${placeholders})`
+                );
+                const { results: rosterRows } = await rosterStmt.bind(...regIds).all();
+                (rosterRows || []).forEach((b) => {
+                  rosterMap.set(String(b.registration_id), b);
+                });
+              }
+            } catch (rosterErr) {
+              console.warn('Optional roster lookup error:', rosterErr);
+            }
+
+            results = regsList.map((r) => {
+              const b = rosterMap.get(String(r.id)) || {};
+              return {
+                ...r,
+                registration_status: b.registration_status || r.registration_status,
+                roster_payment_status: b.payment_status,
+                roster_paid_amount: b.paid_amount,
+                roster_due_amount: b.due_amount,
+                roster_admin_notes: b.admin_notes,
+                roster_pickup_point: b.pickup_point,
+                roster_trek_date: b.trek_date,
+              };
+            });
+          } else {
+            results = [];
+          }
+        } catch (err) {
+          console.error('Error fetching registrations from D1:', err);
+          return errorResponse('Failed to fetch registrations', 500);
         }
 
         const mapped = (results || []).map((r) => ({
