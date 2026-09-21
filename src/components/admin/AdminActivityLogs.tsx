@@ -139,6 +139,7 @@ export function AdminActivityLogs() {
   };
 
   const formatLogDate = (dateStr: string) => {
+    if (!dateStr || typeof dateStr !== 'string') return '';
     try {
       const d = new Date(dateStr.replace(' ', 'T'));
       if (isNaN(d.getTime())) return dateStr;
@@ -312,8 +313,8 @@ export function AdminActivityLogs() {
 
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${getActionBadgeColor(log.action_type)}`}>
-                            {log.action_type.replace(/_/g, ' ')}
+                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${getActionBadgeColor(log.action_type || '')}`}>
+                            {(log.action_type || 'SYSTEM').replace(/_/g, ' ')}
                           </span>
                           <span className="text-xs font-bold text-stone-900 leading-tight">
                             {log.description}

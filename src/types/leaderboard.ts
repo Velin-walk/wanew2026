@@ -52,6 +52,8 @@ export interface LeaderboardResponse {
   ts?: string | number;
   stats: LeaderboardStats;
   hikers: HikerStats[];
+  last_updated?: string;
+  updated_at?: string;
   growth_curve?: Array<{
     event_no: string | number;
     title: string;

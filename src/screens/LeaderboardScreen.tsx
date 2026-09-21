@@ -45,7 +45,7 @@ export const LeaderboardScreen: React.FC = () => {
     try {
       if (!data || isRefresh) setLoading(true);
       setError(null);
-      const res = await fetchLeaderboardData();
+      const res = await fetchLeaderboardData(isRefresh);
       if (res && res.hikers) {
         setData(res);
       } else {
@@ -87,6 +87,26 @@ export const LeaderboardScreen: React.FC = () => {
     if (per === 'overall') return { d: 'd', c: 'c' };
     return { d: `${per}d`, c: `${per}c` };
   };
+
+  // Computed dynamic last updated timestamp matching the cache cycle
+  const lastUpdatedText = useMemo(() => {
+    if (data?.last_updated) {
+      try {
+        const d = new Date(data.last_updated);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch (e) { /* ignore */ }
+    }
+    if (data?.updated_at) {
+      try {
+        const d = new Date(data.updated_at);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch (e) { /* ignore */ }
+    }
+    // Dynamic fallback to the most recent midnight (sync baseline)
+    const baseline = new Date();
+    baseline.setHours(0, 0, 0, 0);
+    return baseline.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' (Midnight)';
+  }, [data]);
 
   // Filtered & Sorted Hikers list
   const filteredHikers = useMemo(() => {
@@ -150,16 +170,12 @@ export const LeaderboardScreen: React.FC = () => {
               <span>Community Leadership Board</span>
             </div>
 
-            <button
-              type="button"
-              onClick={() => loadData(true)}
-              disabled={loading}
-              className="p-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 hover:text-white rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[11px] font-bold"
-              title="Refresh stats"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] sm:text-[10px] text-[#FFE8D1] font-extrabold uppercase tracking-widest bg-black/35 border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span>Last updated: {lastUpdatedText}</span>
+              </span>
+            </div>
           </div>
 
           <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight">

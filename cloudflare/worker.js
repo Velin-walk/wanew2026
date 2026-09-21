@@ -10,7 +10,7 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Admin-Email',
 };
 
 function jsonResponse(data, status = 200, customHeaders = {}) {
@@ -216,10 +216,31 @@ async function logAdminActivity(env, request, actionType, description, metadata 
  * Stored in system_snapshots table for O(1) single-read and Edge-cached delivery.
  */
 let systemSnapshotsTableEnsured = false;
-async function recomputeLeaderboardSnapshot(env) {
+async function recomputeLeaderboardSnapshot(env, force = false) {
   if (!env || !env.DB) return null;
 
   try {
+    // Check if we can bypass recomputation (throttle for 30 minutes unless forced)
+    if (!force) {
+      try {
+        const lastSnap = await env.DB.prepare(`
+          SELECT data_json, updated_at 
+          FROM system_snapshots 
+          WHERE key = 'leaderboard_master'
+        `).first();
+        if (lastSnap && lastSnap.updated_at && lastSnap.data_json) {
+          const lastUpdated = new Date(lastSnap.updated_at.replace(' ', 'T') + 'Z').getTime();
+          const ageMs = Date.now() - lastUpdated;
+          if (ageMs < 30 * 60 * 1000) { // 30 minutes throttle
+            console.log(`[Leaderboard] Serving throttled snapshot (age: ${Math.round(ageMs/1000)}s)`);
+            return typeof lastSnap.data_json === 'string' ? JSON.parse(lastSnap.data_json) : lastSnap.data_json;
+          }
+        }
+      } catch (throttleErr) {
+        console.warn('Leaderboard throttle check error:', throttleErr);
+      }
+    }
+
     // 1. Ensure system_snapshots table exists (guarded to run once per worker instance)
     if (!systemSnapshotsTableEnsured) {
       await env.DB.prepare(`
@@ -1478,46 +1499,12 @@ export default {
           pickup_point: r.roster_pickup_point || r.pickup_point || '',
         }));
 
-        // Apply 2-month view limit on past registrations, while keeping any upcoming ones fully visible.
-        const now = new Date();
-        const twoMonthsAgo = new Date();
-        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-
-        const filtered = mapped.filter((r) => {
-          let compareDate = null;
-
-          // Parse trek_date if available
-          if (r.roster_trek_date) {
-            const parsed = new Date(r.roster_trek_date.replace(' ', 'T'));
-            if (!isNaN(parsed.getTime())) {
-              compareDate = parsed;
-            }
-          }
-
-          // Fallback to registration timestamp
-          if (!compareDate && r.timestamp) {
-            const parsed = new Date(r.timestamp.replace(' ', 'T'));
-            if (!isNaN(parsed.getTime())) {
-              compareDate = parsed;
-            }
-          }
-
-          // If no parseable date is found, keep for safety
-          if (!compareDate) return true;
-
-          // Upcoming is always accessible
-          if (compareDate >= now) return true;
-
-          // Past events must be within the last 2 months
-          return compareDate >= twoMonthsAgo;
-        });
-
         const responseHeaders = {};
         if (hikeNum) {
           responseHeaders['Cache-Control'] = 'public, max-age=30, s-maxage=60';
         }
 
-        return jsonResponse({ success: true, data: filtered }, 200, responseHeaders);
+        return jsonResponse({ success: true, data: mapped }, 200, responseHeaders);
       }
 
       // PATCH /registrations/:id - Update Bookings & Roster details in Cloudflare D1
@@ -2036,7 +2023,7 @@ export default {
                   JSON.stringify(badges)
                 ).run();
               }
-              await recomputeLeaderboardSnapshot(env);
+              await recomputeLeaderboardSnapshot(env, true);
             } catch (syncErr) {
               console.warn('Batch registration post-sync background error:', syncErr);
             }
@@ -2346,7 +2333,7 @@ export default {
         } catch (_) {}
 
         if (!snapshot || isFresh) {
-          snapshot = await recomputeLeaderboardSnapshot(env);
+          snapshot = await recomputeLeaderboardSnapshot(env, isFresh);
         }
 
         if (!snapshot) {
@@ -2370,7 +2357,7 @@ export default {
       // POST /admin/recompute-leaderboard - Trigger manual snapshot calculation
       if (method === 'POST' && path === '/admin/recompute-leaderboard') {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
-        const snapshot = await recomputeLeaderboardSnapshot(env);
+        const snapshot = await recomputeLeaderboardSnapshot(env, true);
         return jsonResponse({
           success: true,
           message: 'Leaderboard master snapshot recomputed and stored in system_snapshots',

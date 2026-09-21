@@ -89,11 +89,11 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
   const directUrl = `${CLOUDFLARE_WORKER_URL}/${cleanPath}`;
   const method = (options?.method || "GET").toUpperCase();
 
-  // Dynamically attach authenticated user's email if logged in
+  // Dynamically attach authenticated user's email if logged in for write actions (non-GET)
   const headers = new Headers(options?.headers);
   try {
     const userEmail = auth.currentUser?.email;
-    if (userEmail) {
+    if (userEmail && method !== "GET") {
       headers.set("X-Admin-Email", userEmail);
     }
   } catch (_) {}
@@ -170,21 +170,23 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
         total: 2,
         data: [
           {
-            id: "mock-log-1",
-            action: "SYNC_ALL_PROFILES",
-            email: "walknepalwalk@gmail.com",
+            id: 1,
+            action_type: "SYNC_ALL_PROFILES",
+            admin_email: "walknepalwalk@gmail.com",
             ip: "127.0.0.1",
             status: "success",
-            details: "Synchronized 24 hiker profiles securely",
+            description: "Synchronized 24 hiker profiles securely",
+            metadata_json: "{}",
             created_at: new Date().toISOString()
           },
           {
-            id: "mock-log-2",
-            action: "UPSERT_TREK",
-            email: "walknepalwalk@gmail.com",
+            id: 2,
+            action_type: "UPSERT_TREK",
+            admin_email: "walknepalwalk@gmail.com",
             ip: "127.0.0.1",
             status: "success",
-            details: "Published Everest Base Camp Trek (Hike #15)",
+            description: "Published Everest Base Camp Trek (Hike #15)",
+            metadata_json: "{}",
             created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString()
           }
         ]
@@ -461,12 +463,15 @@ export async function fetchUserBookings(email: string): Promise<any[]> {
  * Fetch Leaderboard aggregated stats designed specifically for Community Dashboard.
  * Tries Cloudflare endpoint first, with fallback to Google Apps Script proxy.
  */
-export async function fetchLeaderboardData(): Promise<any> {
+export async function fetchLeaderboardData(forceFresh = false): Promise<any> {
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbyIT-PJSPuLLUT-7d3CYnyjg0juWHoLbkVDMrNh9GK7_KidnsZZBLkQiYVxyft29KtHvA/exec';
   
   // Try direct Cloudflare Worker endpoint first
   try {
-    const cfRes = await apiFetch('leaderboard', { cacheTtl: 5 * 60 * 1000 });
+    const cfRes = await apiFetch(`leaderboard${forceFresh ? '?fresh=1' : ''}`, { 
+      forceFresh,
+      cacheTtl: 24 * 60 * 60 * 1000 // 24 hours Cache TTL
+    });
     if (cfRes.ok) {
       const data = await cfRes.json();
       if (data && (data.hikers || data.stats || data.ok || Array.isArray(data.data))) {
@@ -629,13 +634,13 @@ export async function fetchHikerHistory(email: string) {
 }
 
 /**
- * Fetch community leaderboard with 5-minute Cloudflare Edge Caching.
+ * Fetch community leaderboard with 24-hour Cloudflare Edge Caching.
  */
 export async function fetchLeaderboard(forceFresh = false) {
   try {
     const res = await apiFetch(`leaderboard${forceFresh ? '?fresh=1' : ''}`, {
       forceFresh,
-      cacheTtl: 5 * 60 * 1000
+      cacheTtl: 24 * 60 * 60 * 1000
     });
     if (!res.ok) return [];
     const json = await res.json();
