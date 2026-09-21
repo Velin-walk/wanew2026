@@ -28,35 +28,59 @@ function errorResponse(errorMsg, status = 500) {
   return jsonResponse({ success: false, error: errorMsg }, status);
 }
 
-function cleanLightweightData(parsedObj) {
-  if (!parsedObj || typeof parsedObj !== 'object') return parsedObj;
+function formatDisplayName(fullName, rankTitle) {
+  const rawName = String(fullName || 'Hiker').trim();
+  const parts = rawName.split(/\s+/).filter(Boolean);
+  let displayName = rawName;
+  if (parts.length >= 2) {
+    const first = parts[0].length > 3 ? parts[0].slice(0, 3) + '.' : parts[0];
+    displayName = `${first} ${parts.slice(1).join(' ')}`;
+  }
+  if (rankTitle && (rankTitle.includes('Veteran') || rankTitle.includes('Summit') || rankTitle.includes('Leader'))) {
+    displayName += ' 👑';
+  }
+  return displayName;
+}
+
+function cleanLightweightData(parsedObj, isListView = true, depth = 0) {
+  if (!parsedObj || typeof parsedObj !== 'object' || depth > 8) return parsedObj;
   
   for (const key in parsedObj) {
     if (Object.prototype.hasOwnProperty.call(parsedObj, key)) {
       if (typeof parsedObj[key] === 'string') {
         // Strip duplicate heavy base64 strings (such as cover images or day-by-day images)
-        if (parsedObj[key].length > 1000 && parsedObj[key].startsWith('data:image')) {
+        if (parsedObj[key].startsWith('data:image') || (isListView && parsedObj[key].startsWith('data:'))) {
           parsedObj[key] = '';
         }
         // Truncate extremely long texts/coordinates in list view to keep payload under 100KB
+        else if (isListView && parsedObj[key].length > 500) {
+          parsedObj[key] = parsedObj[key].substring(0, 200) + '... (truncated for list performance)';
+        }
         else if (parsedObj[key].length > 10000) {
           parsedObj[key] = parsedObj[key].substring(0, 100) + '... (truncated for performance)';
         }
       } else if (typeof parsedObj[key] === 'object' && parsedObj[key] !== null) {
-        cleanLightweightData(parsedObj[key]);
+        cleanLightweightData(parsedObj[key], isListView, depth + 1);
       }
     }
   }
   return parsedObj;
 }
 
-async function processBase64Images(obj, env, urlOrigin, prefix = 'img') {
-  if (!obj || typeof obj !== 'object') return obj;
+const MAX_BASE64_DEPTH = 8;
+const MAX_BASE64_SIZE = 5 * 1024 * 1024; // 5MB guard against Worker RAM limit
+
+async function processBase64Images(obj, env, urlOrigin, prefix = 'img', depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > MAX_BASE64_DEPTH) return obj;
 
   for (const key in obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
       const val = obj[key];
       if (typeof val === 'string' && val.startsWith('data:image/') && val.includes(';base64,')) {
+        if (val.length > MAX_BASE64_SIZE) {
+          console.warn(`[Base64] Skipping oversized base64 image (${Math.round(val.length / 1024)} KB)`);
+          continue;
+        }
         try {
           const parts = val.split(';base64,');
           const mimePart = parts[0]; // e.g. "data:image/jpeg"
@@ -91,7 +115,7 @@ async function processBase64Images(obj, env, urlOrigin, prefix = 'img') {
           console.error('Error processing and uploading Base64 image to R2:', err);
         }
       } else if (typeof val === 'object' && val !== null) {
-        await processBase64Images(val, env, urlOrigin, prefix);
+        await processBase64Images(val, env, urlOrigin, prefix, depth + 1);
       }
     }
   }
@@ -287,18 +311,32 @@ async function recomputeLeaderboardSnapshot(env, force = false) {
       });
     }
 
-    // 3. Query all active hiker profiles
-    let hikerRows = [];
+    // 3. Query all active hiker profiles and pre-parse JSON once
+    let rawHikerRows = [];
     try {
       const { results } = await env.DB.prepare(`
         SELECT email, full_name, avatar_url, city, total_hikes, total_distance_km, rank_title, badges_json, hikes_json
         FROM hiker_profiles
         WHERE total_hikes > 0
       `).all();
-      hikerRows = results || [];
+      rawHikerRows = results || [];
     } catch (hErr) {
       console.warn('Notice querying hiker_profiles for leaderboard snapshot:', hErr);
     }
+
+    // Pre-parse JSON in a single batch pass before processing
+    const hikerRows = rawHikerRows.map((row) => {
+      let hikes = [];
+      try {
+        hikes = typeof row.hikes_json === 'string' ? JSON.parse(row.hikes_json) : (row.hikes_json || []);
+      } catch (_) {
+        hikes = [];
+      }
+      return {
+        ...row,
+        parsedHikes: Array.isArray(hikes) ? hikes : []
+      };
+    });
 
     const t30Cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const t60Cutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
@@ -309,22 +347,8 @@ async function recomputeLeaderboardSnapshot(env, force = false) {
     let uniqueTrekWalkers = new Set();
 
     const formattedHikers = hikerRows.map((row) => {
-      let hikes = [];
-      try {
-        hikes = typeof row.hikes_json === 'string' ? JSON.parse(row.hikes_json) : (row.hikes_json || []);
-      } catch (_) {}
-
-      // Mask name cleanly (e.g. "Pha. Ghimire 👑")
-      const rawName = String(row.full_name || 'Hiker').trim();
-      const parts = rawName.split(/\s+/).filter(Boolean);
-      let displayName = rawName;
-      if (parts.length >= 2) {
-        const first = parts[0].length > 3 ? parts[0].slice(0, 3) + '.' : parts[0];
-        displayName = `${first} ${parts.slice(1).join(' ')}`;
-      }
-      if (row.rank_title && (row.rank_title.includes('Veteran') || row.rank_title.includes('Summit') || row.rank_title.includes('Leader'))) {
-        displayName += ' 👑';
-      }
+      const hikes = row.parsedHikes;
+      const displayName = formatDisplayName(row.full_name, row.rank_title);
 
       let d = 0, c = 0;
       let hd = 0, hc = 0;
@@ -1405,7 +1429,7 @@ export default {
 
       // ===== REGISTRATIONS ENDPOINTS =====
 
-      // GET /registrations - List registrations
+      // GET /registrations - List registrations (Optimized Single LEFT JOIN query)
       if (method === 'GET' && path === '/registrations') {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
         const email = url.searchParams.get('email');
@@ -1415,89 +1439,49 @@ export default {
         const limit = limitParam ? parseInt(limitParam, 10) : 0;
         const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
 
-        let query = 'SELECT * FROM registrations ORDER BY timestamp DESC';
-        let stmt = env.DB.prepare(query);
-
-        if (email) {
-          query = 'SELECT * FROM registrations WHERE email_address = ? ORDER BY timestamp DESC';
-          stmt = env.DB.prepare(query).bind(email);
-        } else if (hikeNum) {
-          query = 'SELECT * FROM registrations WHERE hike_number = ? ORDER BY timestamp DESC';
-          stmt = env.DB.prepare(query).bind(hikeNum);
-        }
-
-        // Ultra-Efficient Query Optimization:
-        // 1. Query the target registrations slice with indexes first
-        // 2. Attach any roster edits without unindexed N*M cartesian joins
-        let regSql = 'SELECT * FROM registrations';
+        let regSql = `
+          SELECT 
+            r.*,
+            b.registration_status AS roster_registration_status,
+            b.payment_status AS roster_payment_status,
+            b.paid_amount AS roster_paid_amount,
+            b.due_amount AS roster_due_amount,
+            b.admin_notes AS roster_admin_notes,
+            b.pickup_point AS roster_pickup_point,
+            b.trek_date AS roster_trek_date
+          FROM registrations r
+          LEFT JOIN bookings_roster b ON b.registration_id = CAST(r.id AS TEXT)
+        `;
         let regParams = [];
         if (email) {
           const cleanEmail = email.trim().toLowerCase();
-          regSql += ' WHERE LOWER(email_address) = ? OR LOWER(user_email) = ?';
+          regSql += ' WHERE LOWER(r.email_address) = ? OR LOWER(r.user_email) = ?';
           regParams.push(cleanEmail, cleanEmail);
         } else if (hikeNum) {
-          regSql += ' WHERE hike_number = ?';
+          regSql += ' WHERE r.hike_number = ?';
           regParams.push(hikeNum.trim());
         }
-        regSql += ' ORDER BY timestamp DESC';
+        regSql += ' ORDER BY r.timestamp DESC';
 
         const effectiveLimit = limit > 0 ? limit : (email || hikeNum ? 500 : 120);
         regSql += ' LIMIT ? OFFSET ?';
         regParams.push(effectiveLimit, offset);
 
-        let results = [];
+        let rawRows = [];
         try {
           const stmt = env.DB.prepare(regSql);
-          const { results: rawRegs } = regParams.length > 0 ? await stmt.bind(...regParams).all() : await stmt.all();
-          const regsList = rawRegs || [];
-
-          if (regsList.length > 0) {
-            // Batch lookup matching bookings_roster records by IDs using indexed IN clause
-            const regIds = regsList.map((r) => String(r.id)).filter(Boolean);
-            const placeholders = regIds.map(() => '?').join(',');
-            
-            const rosterMap = new Map();
-            try {
-              if (regIds.length > 0) {
-                const rosterStmt = env.DB.prepare(
-                  `SELECT registration_id, registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point, trek_date 
-                   FROM bookings_roster 
-                   WHERE registration_id IN (${placeholders})`
-                );
-                const { results: rosterRows } = await rosterStmt.bind(...regIds).all();
-                (rosterRows || []).forEach((b) => {
-                  rosterMap.set(String(b.registration_id), b);
-                });
-              }
-            } catch (rosterErr) {
-              console.warn('Optional roster lookup error:', rosterErr);
-            }
-
-            results = regsList.map((r) => {
-              const b = rosterMap.get(String(r.id)) || {};
-              return {
-                ...r,
-                registration_status: b.registration_status || r.registration_status,
-                roster_payment_status: b.payment_status,
-                roster_paid_amount: b.paid_amount,
-                roster_due_amount: b.due_amount,
-                roster_admin_notes: b.admin_notes,
-                roster_pickup_point: b.pickup_point,
-                roster_trek_date: b.trek_date,
-              };
-            });
-          } else {
-            results = [];
-          }
+          const { results } = regParams.length > 0 ? await stmt.bind(...regParams).all() : await stmt.all();
+          rawRows = results || [];
         } catch (err) {
-          console.error('Error fetching registrations from D1:', err);
+          console.error('Error fetching registrations with LEFT JOIN from D1:', err);
           return errorResponse('Failed to fetch registrations', 500);
         }
 
-        const mapped = (results || []).map((r) => ({
+        const mapped = rawRows.map((r) => ({
           ...r,
           person_remarks: r.list_name || '', // Backward-compatibility mapping for companion parsing
-          status: r.registration_status || r.status || 'Confirmed',
+          registration_status: r.roster_registration_status || r.registration_status || 'Confirmed',
+          status: r.roster_registration_status || r.registration_status || r.status || 'Confirmed',
           payment_status: r.roster_payment_status || r.payment_status || 'Unpaid',
           paid_amount: r.roster_paid_amount !== undefined ? Number(r.roster_paid_amount) : 0,
           due_amount: r.roster_due_amount !== undefined ? Number(r.roster_due_amount) : 0,
@@ -1891,6 +1875,9 @@ export default {
         }
 
         cachedTrekAggMap = null;
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(recomputeLeaderboardSnapshot(env, false));
+        }
         return jsonResponse({ success: true, message: 'Registration saved successfully', id: insertedId });
       }
 
@@ -2029,6 +2016,7 @@ export default {
                   JSON.stringify(badges)
                 ).run();
               }
+              await recomputeLeaderboardSnapshot(env, false);
             } catch (syncErr) {
               console.warn('Batch registration post-sync background error:', syncErr);
             }

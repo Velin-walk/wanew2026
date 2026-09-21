@@ -263,7 +263,10 @@ CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_
 CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id);
 CREATE INDEX IF NOT EXISTS idx_community_trails_status ON community_trails (status);
 CREATE INDEX IF NOT EXISTS idx_hiker_email_lower ON hiker_profiles (LOWER(email));
+CREATE INDEX IF NOT EXISTS idx_hiker_profiles_email ON hiker_profiles (email);
 CREATE INDEX IF NOT EXISTS idx_hiker_total_hikes ON hiker_profiles (total_hikes DESC);
 CREATE INDEX IF NOT EXISTS idx_hiker_uid ON hiker_profiles (user_uid);
+CREATE INDEX IF NOT EXISTS idx_system_snapshots_key ON system_snapshots (key);
+CREATE INDEX IF NOT EXISTS idx_regs_hike_timestamp ON registrations (hike_number, timestamp DESC);
 
 

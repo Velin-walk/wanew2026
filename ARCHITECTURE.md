@@ -214,3 +214,29 @@ When an administrator edits, clones, or publishes an itinerary in `src/component
 * **Service Worker Caching:** Static application assets are cached for offline trail usage.
 * **Storage Persistence:** Offline registrations and trail favoriting operate on `localStorage` queues that sync when network connectivity is restored.
 * **Graceful Degradation:** When offline, the app transparently serves cached Cloudflare payloads and local itinerary templates.
+
+---
+
+## 🚀 Worker API Performance & Query Optimization Layer
+
+To ensure ultra-low execution latency, stay within Cloudflare Workers' 128MB memory ceiling, and minimize D1 database read units:
+
+1. **Single `LEFT JOIN` Registration Architecture (`GET /registrations`):**
+   * Replaced the legacy 2-query N+1 pattern (which fetched registrations first then queried `bookings_roster` via dynamic `IN (...)` clauses) with a single `LEFT JOIN bookings_roster ON bookings_roster.registration_id = CAST(registrations.id AS TEXT)`.
+   * Halves database round-trips from 2 to 1 and leverages the indexed `idx_roster_reg_id`.
+
+2. **Leaderboard Pre-parsing & Asynchronous Computation:**
+   * In `recomputeLeaderboardSnapshot()`, `hikes_json` is parsed once in a pre-processing pass instead of being re-parsed repeatedly inside aggregation loops.
+   * Hiker title and display names use a streamlined, top-level `formatDisplayName` helper to prevent regex churn.
+   * Leaderboard recalculations triggered by incoming registrations (`POST /registrations` and `/registrations/batch`) are scheduled in the background using `ctx.waitUntil()`, delivering instantaneous HTTP responses to the client while throttled snapshots prevent redundant computations within a 30-minute window.
+
+3. **Guarded Recursive Base64 Media Processing:**
+   * In `processBase64Images()`, recursive traversal is bound by `MAX_BASE64_DEPTH = 8`.
+   * Base64 payloads larger than 5MB (`MAX_BASE64_SIZE`) are rejected before buffer allocation to prevent Worker memory exhaustion (Error 1102).
+
+4. **Aggressive Lightweight Data Cleaning for Edge Caches:**
+   * `cleanLightweightData(parsedObj, isListView)` strips inline base64 strings completely and truncates massive track descriptions for `GET /treks` list queries, keeping compressed edge responses under 100KB for rapid mobile rendering.
+
+5. **D1 High-Throughput Indexing (`cloudflare/schema.sql`):**
+   * Indexed foreign keys and high-frequency filter targets: `idx_regs_hike_timestamp (hike_number, timestamp DESC)`, `idx_roster_reg_id (registration_id)`, `idx_hiker_profiles_email (email)`, and `idx_system_snapshots_key (key)`.
+
