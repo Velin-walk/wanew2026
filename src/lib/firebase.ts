@@ -18,14 +18,12 @@ const databaseId =
 
 let firestoreDb: Firestore;
 try {
-  firestoreDb = initializeFirestore(
-    app,
-    {
-      experimentalForceLongPolling: true,
-    },
-    databaseId
-  );
-} catch {
+  // Use initializeFirestore to set vital long-polling settings for sandboxed environments
+  firestoreDb = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+  }, databaseId);
+} catch (e) {
+  // If already initialized, get the existing instance
   firestoreDb = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
 }
 
@@ -88,13 +86,19 @@ export function handleFirestoreError(
 // Validate Connection to Firestore as per Firebase skill mandates
 async function testConnection() {
   try {
+    // Only perform a lightweight check
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase Firestore is operating in offline mode.');
-    } else {
-      console.info('Firestore initial connectivity ping:', error instanceof Error ? error.message : String(error));
+  } catch (error: any) {
+    // Silence common transient network/environment errors to avoid console noise
+    const msg = error?.message?.toLowerCase() || '';
+    if (
+      msg.includes('unavailable') || 
+      msg.includes('offline') || 
+      msg.includes('could not reach')
+    ) {
+      return; 
     }
+    console.info('Firestore initial connectivity ping:', error instanceof Error ? error.message : String(error));
   }
 }
 

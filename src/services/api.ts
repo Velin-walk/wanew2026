@@ -83,7 +83,9 @@ export function clearApiCache(pathPrefix?: string) {
 export function apiUrl(path: string, directCloudflare = true): string {
   const cleanPath = path.replace(/^\/+/, "").replace(/\/+/g, "/");
   if (directCloudflare) {
-    const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails") || cleanPath.startsWith("images");
+    // Only `/mapminers/images/` and `/community_trails/images/` route to MapMiners
+    // Trek cover images stored in Core BUCKET are NOT served via this path
+    const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails");
     const rawBaseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
     const baseUrl = (rawBaseUrl || "").replace(/\/+$/, "");
     return `${baseUrl}/${cleanPath}`;
@@ -96,7 +98,7 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
   const method = (options?.method || "GET").toUpperCase();
   const isFresh = Boolean(options?.forceFresh || method !== "GET");
 
-  const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails") || cleanPath.startsWith("images");
+  const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails");
   const rawBaseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
   const baseUrl = (rawBaseUrl || "").replace(/\/+$/, "");
 

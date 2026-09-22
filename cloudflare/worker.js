@@ -102,7 +102,8 @@ async function processBase64Images(obj, env, urlOrigin, prefix = 'img', depth = 
             bytes[i] = binaryString.charCodeAt(i);
           }
 
-          const bucket = env.TRAILS_BUCKET || env.BUCKET;
+          // Trek cover images MUST use Core Worker's BUCKET only, never MapMiners' TRAILS_BUCKET
+          const bucket = env.BUCKET;
           if (bucket) {
             await bucket.put(fileName, bytes, {
               httpMetadata: { contentType: mimeType }

@@ -296,11 +296,11 @@ export default {
         }
       }
 
-      // GET /images/:fileName - Serve R2 uploaded images directly
+      // GET /images/:fileName - Serve trail preview images from TRAILS_BUCKET only
       if (method === 'GET' && path.startsWith('/images/')) {
         const fileName = decodeURIComponent(path.replace('/images/', ''));
-        const bucket = env.TRAILS_BUCKET || env.BUCKET;
-        if (!bucket) return errorResponse('R2 Storage binding BUCKET missing', 500);
+        const bucket = env.TRAILS_BUCKET;
+        if (!bucket) return errorResponse('R2 Storage binding TRAILS_BUCKET missing', 500);
 
         const object = await bucket.get(fileName);
         if (!object) {
@@ -348,7 +348,8 @@ export default {
       if (method === 'POST' && (path === '/mapminers/upload' || path === '/community_trails/upload' || path === '/upload')) {
         if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
 
-        const bucket = env.TRAILS_BUCKET || env.BUCKET;
+        // MapMiners MUST only use TRAILS_BUCKET for GPS/KML files, never Core's BUCKET
+        const bucket = env.TRAILS_BUCKET;
 
         const contentType = request.headers.get('content-type') || '';
         let fileName = '';

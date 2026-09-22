@@ -12,7 +12,6 @@ import {
   Award,
   Crown,
   RefreshCw,
-  Search,
   Filter,
   User,
   ExternalLink,
@@ -28,17 +27,293 @@ type TimePeriod = 't30' | 't60' | 't90' | 't365' | 'overall';
 type SortMetric = 'dist' | 'count';
 type BoardCategory = 'all' | 'hikers' | 'trekkers';
 
+// Safe privacy masking
+const maskName = (name?: string) => {
+  if (!name || !name.trim()) return 'Anonymous Hiker';
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0].slice(0, 3);
+  const last = parts.slice(1).join(' ');
+  return last ? `${first}. ${last}` : first;
+};
+
+// Helper to extract keys by category and period
+const getKeys = (cat: BoardCategory, per: TimePeriod) => {
+  if (cat === 'hikers') {
+    const px = 'h';
+    if (per === 'overall') return { d: 'hd', c: 'hc' };
+    return { d: `${px}${per}d`, c: `${px}${per}c` };
+  }
+  if (cat === 'trekkers') {
+    const px = 't';
+    if (per === 'overall') return { d: 'td', c: 'tc' };
+    return { d: `${px}${per}d`, c: `${px}${per}c` };
+  }
+  // Overall
+  if (per === 'overall') return { d: 'd', c: 'c' };
+  return { d: `${per}d`, c: `${per}c` };
+};
+
+interface LeaderboardSectionProps {
+  category: BoardCategory;
+  data: LeaderboardResponse | null;
+  loading: boolean;
+  error: string | null;
+  setSelectedHiker: (hiker: HikerStats) => void;
+  maskName: (name?: string) => string;
+  getKeys: (cat: BoardCategory, per: TimePeriod) => { d: string; c: string };
+}
+
+const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
+  category,
+  data,
+  loading,
+  error,
+  setSelectedHiker,
+  maskName,
+  getKeys
+}) => {
+  const [period, setPeriod] = useState<TimePeriod>('t30');
+  const [metric, setMetric] = useState<SortMetric>('dist');
+  const [limit, setLimit] = useState(20);
+
+  // Filtered & Sorted Hikers list
+  const filteredHikers = useMemo(() => {
+    if (!data?.hikers) return [];
+    const { d: distKey, c: countKey } = getKeys(category, period);
+
+    let list = data.hikers.filter((h: any) => {
+      const dist = (h[distKey] as number) || 0;
+      const count = (h[countKey] as number) || 0;
+      const hasActivity = metric === 'dist' ? dist > 0 : count > 0;
+      return hasActivity;
+    });
+
+    list.sort((a: any, b: any) => {
+      const aVal = (a[metric === 'dist' ? distKey : countKey] as number) || 0;
+      const bVal = (b[metric === 'dist' ? distKey : countKey] as number) || 0;
+      return bVal - aVal;
+    });
+
+    return list.slice(0, 100);
+  }, [data, category, period, metric, getKeys]);
+
+  const visibleHikers = useMemo(() => {
+    return filteredHikers.slice(0, limit);
+  }, [filteredHikers, limit]);
+
+  const categoryTitle = {
+    all: 'Overall Standing',
+    hikers: 'Day Hiker Standing',
+    trekkers: 'Multi-day Trekker Standing'
+  }[category];
+
+  const categoryIcon = {
+    all: <Trophy className="w-5 h-5 text-[#E08828]" />,
+    hikers: <Footprints className="w-5 h-5 text-[#E08828]" />,
+    trekkers: <Mountain className="w-5 h-5 text-[#4527A0]" />
+  }[category];
+
+  return (
+    <div className="rounded-3xl border border-[#E5E1DB] bg-white shadow-xs overflow-hidden">
+      {/* Board Header & Controls */}
+      <div className="p-5 border-b border-[#F0EBE5] space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-[#FAF8F5]">
+              {categoryIcon}
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-[#1F1F1F]">{categoryTitle}</h2>
+              <p className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">Community Top 100 Rankings</p>
+            </div>
+          </div>
+          <div className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-black uppercase tracking-tighter shadow-3xs">
+            Top 100
+          </div>
+        </div>
+
+        {/* Time Window Pills & Metric Toggle */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-[#8B8680] mr-1 shrink-0 flex items-center gap-1 w-full sm:w-auto mb-1 sm:mb-0">
+              <Calendar className="w-3.5 h-3.5 text-[#E08828]" /> Period:
+            </span>
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  { id: 't30', label: '30 Days' },
+                  { id: 't60', label: '60 Days' },
+                  { id: 't90', label: '90 Days' },
+                  { id: 't365', label: '1 Year' },
+                  { id: 'overall', label: 'All Time' },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => { setPeriod(t.id); setLimit(20); }}
+                  className={`px-2.5 py-1 sm:py-1 rounded-xl text-[11px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
+                    period === t.id
+                      ? 'bg-stone-900 text-white shadow-xs font-black'
+                      : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:flex items-center gap-1 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-full sm:w-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => { setMetric('dist'); setLimit(20); }}
+              className={`py-2 sm:py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                metric === 'dist'
+                  ? 'bg-[#E08828] text-white font-black shadow-xs'
+                  : 'text-[#6A645D] hover:text-[#1F1F1F]'
+              }`}
+            >
+              By KM
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMetric('count'); setLimit(20); }}
+              className={`py-2 sm:py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                metric === 'count'
+                  ? 'bg-stone-900 text-white font-black shadow-xs'
+                  : 'text-[#6A645D] hover:text-[#1F1F1F]'
+              }`}
+            >
+              By Trips
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Table Content */}
+      {loading ? (
+        <div className="p-12 text-center space-y-3">
+          <RefreshCw className="w-8 h-8 text-[#E08828] animate-spin mx-auto" />
+          <p className="text-xs font-bold text-[#5A5551]">Loading hiker standings...</p>
+        </div>
+      ) : error ? (
+        <div className="p-8 text-center space-y-3">
+          <p className="text-xs font-bold text-rose-600">{error}</p>
+        </div>
+      ) : filteredHikers.length === 0 ? (
+        <div className="p-10 text-center space-y-2">
+          <Mountain className="w-8 h-8 text-[#C2BCB4] mx-auto" />
+          <p className="text-xs font-bold text-[#5A5551]">No activity found for this period</p>
+        </div>
+      ) : (
+        <div>
+          <div className="grid grid-cols-12 px-4 py-3 bg-[#FAF8F5] border-b border-[#EFEAE4] text-[11px] font-black uppercase tracking-wider text-[#6A645D]">
+            <div className="col-span-2 sm:col-span-1 text-center">Rank</div>
+            <div className="col-span-5 sm:col-span-6">Hiker</div>
+            <div className="col-span-3 sm:col-span-3 text-right">Distance</div>
+            <div className="col-span-2 sm:col-span-2 text-right">Trips</div>
+          </div>
+
+          <div className="divide-y divide-[#F4EFEA]">
+            {visibleHikers.map((hiker, idx) => {
+              const { d: distKey, c: countKey } = getKeys(category, period);
+              const distanceVal = ((hiker as any)[distKey] as number) || 0;
+              const countVal = ((hiker as any)[countKey] as number) || 0;
+
+              return (
+                <div
+                  key={`${hiker.n}-${idx}`}
+                  onClick={() => setSelectedHiker(hiker)}
+                  className="grid grid-cols-12 items-center px-4 py-3 hover:bg-[#FFFDF9] transition-colors cursor-pointer group"
+                >
+                  <div className="col-span-2 sm:col-span-1 flex items-center justify-center">
+                    {idx === 0 ? (
+                      <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 font-black text-xs flex items-center justify-center shadow-3xs border border-amber-300">
+                        👑 1
+                      </span>
+                    ) : idx === 1 ? (
+                      <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center shadow-3xs border border-slate-300">
+                        🥈 2
+                      </span>
+                    ) : idx === 2 ? (
+                      <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-800 font-black text-xs flex items-center justify-center shadow-3xs border border-amber-200">
+                        🥉 3
+                      </span>
+                    ) : (
+                      <span className="text-xs font-black text-[#8B8680]">#{idx + 1}</span>
+                    )}
+                  </div>
+
+                  <div className="col-span-5 sm:col-span-6 flex items-center gap-2 pr-2">
+                    <div className="w-8 h-8 rounded-xl bg-[#FAF6F0] border border-[#E5E1DB] flex items-center justify-center text-xs font-black text-[#5A5551] shrink-0 group-hover:border-[#E08828]/40 transition-colors">
+                      {(hiker.n || 'H')[0]?.toUpperCase()}
+                    </div>
+                    <div className="truncate">
+                      <span className="text-xs sm:text-sm font-bold text-[#1F1F1F] group-hover:text-[#E08828] transition-colors block truncate">
+                        {maskName(hiker.n)}
+                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {hiker.d >= 500 ? (
+                          <span className="px-1.5 py-0.2 rounded-md bg-purple-50 text-purple-700 text-[9px] font-bold border border-purple-200">
+                            500KM Legend 💎
+                          </span>
+                        ) : hiker.d >= 100 ? (
+                          <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 text-[9px] font-bold border border-emerald-200">
+                            100KM Century 💯
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-[#8B8680]">Trail Walker</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-span-3 sm:col-span-3 text-right">
+                    <span className="text-xs sm:text-sm font-black text-[#1F5BBB] block">
+                      {distanceVal.toLocaleString()} km
+                    </span>
+                    <span className="text-[10px] text-[#8B8680]">
+                      {period === 'overall' ? 'lifetime' : period}
+                    </span>
+                  </div>
+
+                  <div className="col-span-2 sm:col-span-2 text-right">
+                    <span className="text-xs sm:text-sm font-black text-[#7ABA42] block">
+                      {countVal}
+                    </span>
+                    <span className="text-[10px] text-[#8B8680]">
+                      {category === 'hikers' ? 'hikes' : category === 'trekkers' ? 'treks' : 'trips'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {visibleHikers.length < filteredHikers.length && (
+            <div className="p-4 bg-[#FAF8F5] border-t border-[#EFEAE4] text-center">
+              <button
+                type="button"
+                onClick={() => setLimit((prev) => prev + 20)}
+                className="w-full sm:w-auto px-6 py-2 bg-white hover:bg-[#F3EFEA] border-2 border-dashed border-[#7ABA42] text-[#1B5E20] font-black text-[11px] rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer"
+              >
+                See More ⬇
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const LeaderboardScreen: React.FC = () => {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [period, setPeriod] = useState<TimePeriod>('t30');
-  const [metric, setMetric] = useState<SortMetric>('dist');
-  const [category, setCategory] = useState<BoardCategory>('all');
   const [journeyPeriod, setJourneyPeriod] = useState<TimePeriod>('overall');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [limit, setLimit] = useState(20);
   const [selectedHiker, setSelectedHiker] = useState<HikerStats | null>(null);
 
   const loadData = async (isRefresh = false) => {
@@ -62,32 +337,6 @@ export const LeaderboardScreen: React.FC = () => {
     loadData();
   }, []);
 
-  // Safe privacy masking
-  const maskName = (name?: string) => {
-    if (!name || !name.trim()) return 'Anonymous Hiker';
-    const parts = name.trim().split(/\s+/);
-    const first = parts[0].slice(0, 3);
-    const last = parts.slice(1).join(' ');
-    return last ? `${first}. ${last}` : first;
-  };
-
-  // Helper to extract keys by category and period
-  const getKeys = (cat: BoardCategory, per: TimePeriod) => {
-    if (cat === 'hikers') {
-      const px = 'h';
-      if (per === 'overall') return { d: 'hd', c: 'hc' };
-      return { d: `${px}${per}d`, c: `${px}${per}c` };
-    }
-    if (cat === 'trekkers') {
-      const px = 't';
-      if (per === 'overall') return { d: 'td', c: 'tc' };
-      return { d: `${px}${per}d`, c: `${px}${per}c` };
-    }
-    // Overall
-    if (per === 'overall') return { d: 'd', c: 'c' };
-    return { d: `${per}d`, c: `${per}c` };
-  };
-
   // Computed dynamic last updated timestamp matching the cache cycle
   const lastUpdatedText = useMemo(() => {
     if (data?.last_updated) {
@@ -107,37 +356,6 @@ export const LeaderboardScreen: React.FC = () => {
     baseline.setHours(0, 0, 0, 0);
     return baseline.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' (Midnight)';
   }, [data]);
-
-  // Filtered & Sorted Hikers list
-  const filteredHikers = useMemo(() => {
-    if (!data?.hikers) return [];
-    const { d: distKey, c: countKey } = getKeys(category, period);
-
-    let list = data.hikers.filter((h: any) => {
-      const dist = (h[distKey] as number) || 0;
-      const count = (h[countKey] as number) || 0;
-      const hasActivity = metric === 'dist' ? dist > 0 : count > 0;
-      if (!hasActivity) return false;
-
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        return (h.n || '').toLowerCase().includes(query);
-      }
-      return true;
-    });
-
-    list.sort((a: any, b: any) => {
-      const aVal = (a[metric === 'dist' ? distKey : countKey] as number) || 0;
-      const bVal = (b[metric === 'dist' ? distKey : countKey] as number) || 0;
-      return bVal - aVal;
-    });
-
-    return list;
-  }, [data, category, period, metric, searchQuery]);
-
-  const visibleHikers = useMemo(() => {
-    return filteredHikers.slice(0, limit);
-  }, [filteredHikers, limit]);
 
   const currentStats = data?.stats;
 
@@ -364,269 +582,36 @@ export const LeaderboardScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Control Panel: Filters & Sorting */}
-      <div className="bg-white rounded-2xl p-4 border border-[#E5E1DB] shadow-xs space-y-4">
-        {/* Category Tabs (All / Day Hikers / Multi-day Trekkers) - Optimized Responsive Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 p-1 bg-[#F4EFEA] rounded-2xl">
-          <button
-            type="button"
-            onClick={() => { setCategory('all'); setLimit(20); }}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
-              category === 'all'
-                ? 'bg-white text-[#1F1F1F] shadow-xs ring-1 ring-black/5'
-                : 'text-[#6A645D] hover:text-[#1F1F1F]'
-            }`}
-          >
-            <Trophy className={`w-3.5 h-3.5 ${category === 'all' ? 'text-[#E08828]' : 'text-[#8B8680]'}`} />
-            <span>Overall Board</span>
-          </button>
- 
-          <button
-            type="button"
-            onClick={() => { setCategory('hikers'); setLimit(20); }}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
-              category === 'hikers'
-                ? 'bg-[#E08828] text-white shadow-xs font-black'
-                : 'text-[#6A645D] hover:text-[#1F1F1F]'
-            }`}
-          >
-            <Footprints className="w-3.5 h-3.5" />
-            <span>Hikers (≤ 2 Days)</span>
-          </button>
- 
-          <button
-            type="button"
-            onClick={() => { setCategory('trekkers'); setLimit(20); }}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer select-none active:scale-95 ${
-              category === 'trekkers'
-                ? 'bg-[#4527A0] text-white shadow-xs font-black'
-                : 'text-[#6A645D] hover:text-[#1F1F1F]'
-            }`}
-          >
-            <Mountain className="w-3.5 h-3.5" />
-            <span>Trekkers (&gt; 2 Days)</span>
-          </button>
-        </div>
- 
-        {/* Time Window Pills & Metric Toggle */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[#F0EBE5]">
-          {/* Timeframe */}
-          <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-            <span className="text-[11px] font-bold text-[#8B8680] mr-1 shrink-0 flex items-center gap-1 w-full sm:w-auto mb-1 sm:mb-0">
-              <Calendar className="w-3.5 h-3.5 text-[#E08828]" /> Period:
-            </span>
-            <div className="flex flex-wrap gap-1 w-full sm:w-auto">
-              {(
-                [
-                  { id: 't30', label: '30 Days' },
-                  { id: 't60', label: '60 Days' },
-                  { id: 't90', label: '90 Days' },
-                  { id: 't365', label: '1 Year' },
-                  { id: 'overall', label: 'All Time' },
-                ] as const
-              ).map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => { setPeriod(t.id); setLimit(20); }}
-                  className={`flex-1 sm:flex-initial text-center px-2.5 py-1.5 sm:py-1 rounded-xl text-[11px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
-                    period === t.id
-                      ? 'bg-stone-900 text-white shadow-xs font-black'
-                      : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
- 
-          {/* Sort Metric Selector - Optimized Full Width on Mobile */}
-          <div className="grid grid-cols-2 sm:flex items-center gap-1 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-full sm:w-auto shrink-0">
-            <button
-              type="button"
-              onClick={() => { setMetric('dist'); setLimit(20); }}
-              className={`py-2 sm:py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
-                metric === 'dist'
-                  ? 'bg-[#E08828] text-white font-black shadow-xs'
-                  : 'text-[#6A645D] hover:text-[#1F1F1F]'
-              }`}
-            >
-              By Distance (KM)
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMetric('count'); setLimit(20); }}
-              className={`py-2 sm:py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
-                metric === 'count'
-                  ? 'bg-stone-900 text-white font-black shadow-xs'
-                  : 'text-[#6A645D] hover:text-[#1F1F1F]'
-              }`}
-            >
-              By Hike Count
-            </button>
-          </div>
-        </div>
+      {/* Separate Boards for Overall, Hikers, and Trekkers */}
+      <LeaderboardBoardSection
+        category="all"
+        data={data}
+        loading={loading}
+        error={error}
+        setSelectedHiker={setSelectedHiker}
+        maskName={maskName}
+        getKeys={getKeys}
+      />
 
-        {/* Search Filter Input */}
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8B8680]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search hiker name..."
-            className="w-full pl-9 pr-8 py-2 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-[#E08828]/40 focus:border-[#E08828] transition-all"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8B8680] hover:text-[#1F1F1F]"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
+      <LeaderboardBoardSection
+        category="hikers"
+        data={data}
+        loading={loading}
+        error={error}
+        setSelectedHiker={setSelectedHiker}
+        maskName={maskName}
+        getKeys={getKeys}
+      />
 
-      {/* Leaderboard Table / Roster Cards */}
-      <div className="bg-white rounded-2xl border border-[#E5E1DB] shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center space-y-3">
-            <RefreshCw className="w-8 h-8 text-[#E08828] animate-spin mx-auto" />
-            <p className="text-xs font-bold text-[#5A5551]">Loading community hiker standings...</p>
-          </div>
-        ) : error ? (
-          <div className="p-8 text-center space-y-3">
-            <p className="text-xs font-bold text-rose-600">{error}</p>
-            <button
-              type="button"
-              onClick={() => loadData(true)}
-              className="px-4 py-2 bg-[#E08828] text-white text-xs font-bold rounded-xl shadow-xs"
-            >
-              Retry
-            </button>
-          </div>
-        ) : filteredHikers.length === 0 ? (
-          <div className="p-10 text-center space-y-2">
-            <Mountain className="w-8 h-8 text-[#C2BCB4] mx-auto" />
-            <p className="text-xs font-bold text-[#5A5551]">No hikers found matching criteria</p>
-            <p className="text-[11px] text-[#8B8680]">Try selecting a broader timeframe or clearing your search.</p>
-          </div>
-        ) : (
-          <div>
-            {/* Table Header */}
-            <div className="grid grid-cols-12 px-4 py-3 bg-[#FAF8F5] border-b border-[#EFEAE4] text-[11px] font-black uppercase tracking-wider text-[#6A645D]">
-              <div className="col-span-2 sm:col-span-1 text-center">Rank</div>
-              <div className="col-span-5 sm:col-span-6">Hiker</div>
-              <div className="col-span-3 sm:col-span-3 text-right">Distance</div>
-              <div className="col-span-2 sm:col-span-2 text-right">Hikes</div>
-            </div>
-
-            {/* List Rows */}
-            <div className="divide-y divide-[#F4EFEA]">
-              {visibleHikers.map((hiker, idx) => {
-                const { d: distKey, c: countKey } = getKeys(category, period);
-                const distanceVal = ((hiker as any)[distKey] as number) || 0;
-                const countVal = ((hiker as any)[countKey] as number) || 0;
-                const isTopThree = idx < 3 && !searchQuery;
-
-                return (
-                  <div
-                    key={`${hiker.n}-${idx}`}
-                    onClick={() => setSelectedHiker(hiker)}
-                    className="grid grid-cols-12 items-center px-4 py-3 hover:bg-[#FFFDF9] transition-colors cursor-pointer group"
-                  >
-                    {/* Rank Badge */}
-                    <div className="col-span-2 sm:col-span-1 flex items-center justify-center">
-                      {idx === 0 && !searchQuery ? (
-                        <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 font-black text-xs flex items-center justify-center shadow-3xs border border-amber-300">
-                          👑 1
-                        </span>
-                      ) : idx === 1 && !searchQuery ? (
-                        <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center shadow-3xs border border-slate-300">
-                          🥈 2
-                        </span>
-                      ) : idx === 2 && !searchQuery ? (
-                        <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-800 font-black text-xs flex items-center justify-center shadow-3xs border border-amber-200">
-                          🥉 3
-                        </span>
-                      ) : (
-                        <span className="text-xs font-black text-[#8B8680]">
-                          #{idx + 1}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Hiker Name & Badge */}
-                    <div className="col-span-5 sm:col-span-6 flex items-center gap-2 pr-2">
-                      <div className="w-8 h-8 rounded-xl bg-[#FAF6F0] border border-[#E5E1DB] flex items-center justify-center text-xs font-black text-[#5A5551] shrink-0 group-hover:border-[#E08828]/40 transition-colors">
-                        {(hiker.n || 'H')[0]?.toUpperCase()}
-                      </div>
-                      <div className="truncate">
-                        <span className="text-xs sm:text-sm font-bold text-[#1F1F1F] group-hover:text-[#E08828] transition-colors block truncate">
-                          {maskName(hiker.n)}
-                        </span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {hiker.d >= 500 ? (
-                            <span className="px-1.5 py-0.2 rounded-md bg-purple-50 text-purple-700 text-[9px] font-bold border border-purple-200">
-                              500KM Legend 💎
-                            </span>
-                          ) : hiker.d >= 200 ? (
-                            <span className="px-1.5 py-0.2 rounded-md bg-blue-50 text-blue-700 text-[9px] font-bold border border-blue-200">
-                              200KM Club 🌟
-                            </span>
-                          ) : hiker.d >= 100 ? (
-                            <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 text-[9px] font-bold border border-emerald-200">
-                              100KM Century 💯
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-[#8B8680]">Trail Walker</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Distance Metric */}
-                    <div className="col-span-3 sm:col-span-3 text-right">
-                      <span className="text-xs sm:text-sm font-black text-[#1F5BBB] block">
-                        {distanceVal.toLocaleString()} km
-                      </span>
-                      <span className="text-[10px] text-[#8B8680]">
-                        {period === 'overall' ? 'lifetime' : period}
-                      </span>
-                    </div>
-
-                    {/* Trips Count */}
-                    <div className="col-span-2 sm:col-span-2 text-right">
-                      <span className="text-xs sm:text-sm font-black text-[#7ABA42] block">
-                        {countVal}
-                      </span>
-                      <span className="text-[10px] text-[#8B8680]">
-                        {category === 'hikers' ? 'hikes' : category === 'trekkers' ? 'treks' : 'trips'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Load More Button */}
-            {visibleHikers.length < filteredHikers.length && (
-              <div className="p-4 bg-[#FAF8F5] border-t border-[#EFEAE4] text-center">
-                <button
-                  type="button"
-                  onClick={() => setLimit((prev) => prev + 20)}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-[#F3EFEA] border-2 border-dashed border-[#7ABA42] text-[#1B5E20] font-black text-xs rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer"
-                >
-                  See More Hikers ⬇ ({filteredHikers.length - visibleHikers.length} remaining)
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <LeaderboardBoardSection
+        category="trekkers"
+        data={data}
+        loading={loading}
+        error={error}
+        setSelectedHiker={setSelectedHiker}
+        maskName={maskName}
+        getKeys={getKeys}
+      />
 
       {/* Clubs & Milestones Showcase */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
