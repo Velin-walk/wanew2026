@@ -20,7 +20,7 @@
     "@xmldom/xmldom": "^0.9.12",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "firebase": "11.1.0",
+    "firebase": "^12.19.0",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.16.0",
