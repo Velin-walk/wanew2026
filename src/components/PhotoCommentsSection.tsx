@@ -8,11 +8,13 @@ import { PhotoComment } from '../types';
 interface PhotoCommentsSectionProps {
   photoId: string;
   isDarkTheme?: boolean;
+  onCommentCountChange?: (count: number) => void;
 }
 
 export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
   photoId,
   isDarkTheme = true,
+  onCommentCountChange,
 }) => {
   const { user, isAdmin, openAuthModal } = useAuth();
   const [comments, setComments] = useState<PhotoComment[]>([]);
@@ -33,6 +35,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
         const data = await fetchPhotoComments(photoId);
         if (active) {
           setComments(data);
+          onCommentCountChange?.(data.length);
         }
       } catch (err) {
         console.error('Error fetching comments:', err);
@@ -46,7 +49,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
     return () => {
       active = false;
     };
-  }, [photoId]);
+  }, [photoId, onCommentCountChange]);
 
   // Scroll comments into view when new comment arrives
   useEffect(() => {
@@ -80,7 +83,11 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
       );
 
       if (newComment) {
-        setComments((prev) => [...prev, newComment]);
+        setComments((prev) => {
+          const next = [...prev, newComment];
+          onCommentCountChange?.(next.length);
+          return next;
+        });
         setCommentText('');
       }
     } catch (err) {
@@ -94,7 +101,11 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
     try {
       const success = await deletePhotoComment(id);
       if (success) {
-        setComments((prev) => prev.filter((c) => c.id !== id));
+        setComments((prev) => {
+          const next = prev.filter((c) => c.id !== id);
+          onCommentCountChange?.(next.length);
+          return next;
+        });
         if (deleteId === id) setDeleteId(null);
       }
     } catch (err) {

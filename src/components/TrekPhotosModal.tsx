@@ -16,11 +16,12 @@ import {
   ChevronRight,
   Download,
   UploadCloud,
-  MoreVertical
+  MoreVertical,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Trek } from '../types';
-import { apiFetch } from '../services/api';
+import { apiFetch, fetchPhotoComments } from '../services/api';
 import { PhotoCommentsSection } from './PhotoCommentsSection';
 
 interface TrekPhotosModalProps {
@@ -70,6 +71,9 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   const [activePhoto, setActivePhoto] = useState<TrekPhoto | null>(null);
   const [activePhotoIndex, setActivePhotoIndex] = useState<number>(-1);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [mobileDiscussionOpen, setMobileDiscussionOpen] = useState(false);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+  const [activeCommentCount, setActiveCommentCount] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [viewerPovMode, setViewerPovMode] = useState(false);
   const [uploadingPreviews, setUploadingPreviews] = useState<{ id: string; url: string; file: File }[]>([]);
@@ -406,31 +410,58 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
     setActivePhoto(photo);
     setActivePhotoIndex(idx);
     setShowOptionsMenu(false);
+    setMobileDiscussionOpen(false);
+    setCaptionExpanded(false);
+    setActiveCommentCount(null);
+    fetchPhotoComments(photo.id).then((res) => {
+      setActiveCommentCount(res.length);
+    }).catch(() => {});
   };
 
   const handleCloseLightbox = () => {
     setActivePhoto(null);
     setActivePhotoIndex(-1);
     setShowOptionsMenu(false);
+    setMobileDiscussionOpen(false);
+    setCaptionExpanded(false);
+    setActiveCommentCount(null);
   };
 
   const handlePrevPhoto = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setShowOptionsMenu(false);
+    setMobileDiscussionOpen(false);
+    setCaptionExpanded(false);
     if (activePhotoIndex > 0) {
       const prevIdx = activePhotoIndex - 1;
+      const targetPhoto = photos[prevIdx];
       setActivePhotoIndex(prevIdx);
-      setActivePhoto(photos[prevIdx]);
+      setActivePhoto(targetPhoto);
+      setActiveCommentCount(null);
+      if (targetPhoto) {
+        fetchPhotoComments(targetPhoto.id).then((res) => {
+          setActiveCommentCount(res.length);
+        }).catch(() => {});
+      }
     }
   };
 
   const handleNextPhoto = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setShowOptionsMenu(false);
+    setMobileDiscussionOpen(false);
+    setCaptionExpanded(false);
     if (activePhotoIndex < photos.length - 1) {
       const nextIdx = activePhotoIndex + 1;
+      const targetPhoto = photos[nextIdx];
       setActivePhotoIndex(nextIdx);
-      setActivePhoto(photos[nextIdx]);
+      setActivePhoto(targetPhoto);
+      setActiveCommentCount(null);
+      if (targetPhoto) {
+        fetchPhotoComments(targetPhoto.id).then((res) => {
+          setActiveCommentCount(res.length);
+        }).catch(() => {});
+      }
     }
   };
 
@@ -798,18 +829,20 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
       {/* Lightbox Modal */}
       {activePhoto && (
         <div
-          className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-0 md:p-4 select-none overflow-hidden"
           onClick={(e) => {
-            if (e.target === e.currentTarget) {
+            if (e.target === e.currentTarget && !mobileDiscussionOpen) {
               handleCloseLightbox();
             }
           }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
+          {/* Top Close Button (Desktop & Mobile) */}
           <button
             onClick={handleCloseLightbox}
-            className="absolute top-4 right-4 z-[10000] w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="fixed top-3 right-3 md:top-4 md:right-4 z-[10020] w-10 h-10 rounded-full bg-black/60 backdrop-blur-md hover:bg-black/80 text-white flex items-center justify-center border border-white/20 shadow-xl transition-all cursor-pointer active:scale-95"
+            title="Close viewer"
           >
             <X className="w-6 h-6" />
           </button>
@@ -820,7 +853,8 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
               <button
                 onClick={handlePrevPhoto}
                 disabled={activePhotoIndex <= 0}
-                className="absolute left-4 z-[10000] w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="fixed left-2 md:left-4 z-[10010] w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/60 backdrop-blur-md hover:bg-black/80 disabled:opacity-20 disabled:cursor-not-allowed text-white flex items-center justify-center border border-white/15 transition-all cursor-pointer shadow-xl active:scale-95"
+                title="Previous photo"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
@@ -828,38 +862,40 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
               <button
                 onClick={handleNextPhoto}
                 disabled={activePhotoIndex >= photos.length - 1}
-                className="absolute right-4 z-[10000] w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="fixed right-2 md:right-4 z-[10010] w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/60 backdrop-blur-md hover:bg-black/80 disabled:opacity-20 disabled:cursor-not-allowed text-white flex items-center justify-center border border-white/15 transition-all cursor-pointer shadow-xl active:scale-95"
+                title="Next photo"
               >
                 <ChevronRight className="w-6 h-6" />
               </button>
             </>
           )}
 
+          {/* DESKTOP VIEW (md:flex) - Side-by-side spacious modal */}
           <div
-            className="relative max-w-5xl w-full bg-[#121214] border border-stone-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]"
+            className="hidden md:flex relative max-w-5xl w-full bg-[#121214] border border-stone-800 rounded-2xl overflow-hidden shadow-2xl flex-row max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Left side: Image Panel */}
-            <div className="flex-1 bg-black/60 flex flex-col items-center justify-center p-4 relative min-h-[250px] md:min-h-0">
+            {/* Left side: High-Res Image Panel */}
+            <div className="flex-1 bg-black/70 flex flex-col items-center justify-center p-4 relative min-h-[350px]">
               <img
                 src={activePhoto.url}
                 alt="Full view memory"
-                className="max-w-full max-h-[45vh] md:max-h-[70vh] object-contain rounded-xl"
+                className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl"
               />
             </div>
 
             {/* Right side: Sidebar with details & Comments */}
-            <div className="w-full md:w-[320px] lg:w-[380px] bg-[#0c0c0e] border-t md:border-t-0 md:border-l border-stone-800 flex flex-col p-4 overflow-y-auto">
+            <div className="w-[340px] lg:w-[380px] bg-[#0c0c0e] border-l border-stone-800 flex flex-col p-4 overflow-y-auto">
               <div className="flex items-center justify-between mb-3 text-white text-xs gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-[#7ABA42] text-sm">{activePhoto.uploadedBy}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-bold text-[#7ABA42] text-sm truncate">{activePhoto.uploadedBy}</span>
                   <span className="text-stone-400">•</span>
-                  <span className="text-stone-300">
+                  <span className="text-stone-400 shrink-0 text-[11px]">
                     {new Date(activePhoto.uploadedAt).toLocaleDateString()}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <a
                     href={activePhoto.url}
                     target="_blank"
@@ -954,9 +990,205 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
 
               {/* Photo Comments Section Component */}
               <div className="flex-1 min-h-0">
-                <PhotoCommentsSection photoId={activePhoto.id} isDarkTheme={true} />
+                <PhotoCommentsSection
+                  photoId={activePhoto.id}
+                  isDarkTheme={true}
+                  onCommentCountChange={(cnt) => setActiveCommentCount(cnt)}
+                />
               </div>
             </div>
+          </div>
+
+          {/* MOBILE VIEW (flex md:hidden) - Immersive Edge-to-Edge Photo with Slide-up Drawer */}
+          <div
+            className="flex md:hidden relative w-full h-[100dvh] flex-col justify-between overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Floating Glass Bar: Uploader badge + Download/Options */}
+            <div className="absolute top-3 left-3 right-14 z-30 flex items-center justify-between pointer-events-auto">
+              <div className="bg-black/70 backdrop-blur-md border border-white/20 px-3 py-1.5 rounded-full flex items-center gap-2 text-white text-xs shadow-lg max-w-[70%]">
+                <span className="font-bold text-[#7ABA42] truncate">{activePhoto.uploadedBy}</span>
+                <span className="text-stone-400 text-[10px] shrink-0">
+                  {new Date(activePhoto.uploadedAt).toLocaleDateString()}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <a
+                  href={activePhoto.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="p-2 bg-black/70 backdrop-blur-md hover:bg-black/90 text-white rounded-full border border-white/20 transition-colors shadow-lg"
+                  title="Download photo"
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+
+                {/* Mobile Options (...) Button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                    className="p-2 bg-black/70 backdrop-blur-md hover:bg-black/90 text-white rounded-full border border-white/20 transition-colors shadow-lg cursor-pointer"
+                    title="More options"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+
+                  {showOptionsMenu && (
+                    <div
+                      className="absolute right-0 top-full mt-2 w-44 bg-[#1F1F1F] border border-white/20 rounded-2xl shadow-2xl p-1.5 text-white z-[10050] animate-in fade-in zoom-in-95 duration-150"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {(user && user.uid === activePhoto.userUid) || isAdmin ? (
+                        confirmDeleteId === activePhoto.id ? (
+                          <div className="p-2 space-y-2">
+                            <p className="text-[10px] font-black text-stone-300 text-center uppercase tracking-wider">Confirm Delete?</p>
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteId(null);
+                                  setShowOptionsMenu(false);
+                                }}
+                                className="flex-1 py-1 bg-stone-700 hover:bg-stone-600 rounded-lg text-[10px] font-black text-center transition-colors cursor-pointer text-white"
+                              >
+                                No
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteId(null);
+                                  setShowOptionsMenu(false);
+                                  handleDeletePhoto(activePhoto, e);
+                                }}
+                                className="flex-1 py-1 bg-red-600 hover:bg-red-500 rounded-lg text-[10px] font-black text-center text-white transition-colors cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteId(activePhoto.id);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/20 rounded-xl transition-colors cursor-pointer text-left"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
+                            <span>Delete Photo</span>
+                          </button>
+                        )
+                      ) : (
+                        <div className="px-3 py-2 text-[11px] text-stone-400 font-medium text-center">
+                          Shared by hiker
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Immersive Photo Hero Area (Maximum Screen Real Estate on Mobile) */}
+            <div className="flex-1 w-full flex items-center justify-center p-2 pt-14 pb-24 overflow-hidden">
+              <img
+                src={activePhoto.url}
+                alt="Full view memory"
+                className="max-w-full max-h-[82dvh] object-contain rounded-2xl shadow-2xl transition-all"
+              />
+            </div>
+
+            {/* Bottom Floating Overlay: Caption + Open Discussion Action Pill */}
+            <div className="absolute bottom-3 inset-x-3 z-30 flex flex-col gap-2 pointer-events-auto">
+              {/* Collapsible Floating Caption */}
+              {activePhoto.caption && (
+                <div
+                  onClick={() => setCaptionExpanded(!captionExpanded)}
+                  className="bg-black/75 backdrop-blur-md border border-white/20 p-2.5 rounded-2xl text-white shadow-xl cursor-pointer transition-all active:scale-99"
+                >
+                  <p className={`text-xs text-stone-100 font-medium leading-relaxed italic ${captionExpanded ? '' : 'line-clamp-2'}`}>
+                    "{activePhoto.caption}"
+                  </p>
+                  {activePhoto.caption.length > 80 && (
+                    <span className="text-[10px] font-bold text-[#7ABA42] mt-0.5 inline-block">
+                      {captionExpanded ? 'Show less' : 'Read more...'}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Discussion Drawer Trigger Pill */}
+              <button
+                type="button"
+                onClick={() => setMobileDiscussionOpen(true)}
+                className="w-full py-2.5 px-4 bg-[#7ABA42] hover:bg-[#68A337] active:scale-98 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-2xl border border-white/20 transition-all cursor-pointer"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>
+                  {typeof activeCommentCount === 'number' && activeCommentCount > 0
+                    ? `Comments (${activeCommentCount})`
+                    : 'Comments'}
+                </span>
+              </button>
+            </div>
+
+            {/* Mobile Discussion Slide-Up Drawer */}
+            {mobileDiscussionOpen && (
+              <>
+                {/* Drawer Backdrop */}
+                <div
+                  className="fixed inset-0 z-[10030] bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+                  onClick={() => setMobileDiscussionOpen(false)}
+                />
+
+                {/* Bottom Sheet Modal */}
+                <div
+                  className="absolute bottom-0 inset-x-0 z-[10040] bg-[#121214] border-t border-stone-800 rounded-t-3xl shadow-2xl flex flex-col max-h-[75vh] h-[75vh] animate-in slide-in-from-bottom duration-200 overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Drawer Drag Bar & Header */}
+                  <div className="p-3 border-b border-stone-800/80 flex items-center justify-between shrink-0 bg-[#0e0e10]">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-[#7ABA42] animate-pulse" />
+                      <span className="font-bold text-white text-xs uppercase tracking-wider">
+                        Comments {typeof activeCommentCount === 'number' && activeCommentCount > 0 ? `(${activeCommentCount})` : ''}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setMobileDiscussionOpen(false)}
+                      className="p-1 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white transition-colors cursor-pointer"
+                      title="Close comments"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Caption preview inside drawer if available */}
+                  {activePhoto.caption && (
+                    <div className="px-4 py-2 bg-stone-900/60 border-b border-stone-800/50 text-[11px] text-stone-300 italic">
+                      "{activePhoto.caption}"
+                    </div>
+                  )}
+
+                  {/* Comments Thread Area */}
+                  <div className="flex-1 min-h-0 overflow-y-auto p-3">
+                    <PhotoCommentsSection
+                      photoId={activePhoto.id}
+                      isDarkTheme={true}
+                      onCommentCountChange={(cnt) => setActiveCommentCount(cnt)}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
