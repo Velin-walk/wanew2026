@@ -143,8 +143,16 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
     const upcoming: Trek[] = [];
     const past: Trek[] = [];
+    const seenIds = new Set<string>();
 
     for (const trek of filteredTreks) {
+      if (!trek) continue;
+      const tid = String(trek.id || '').trim();
+      if (tid && seenIds.has(tid)) {
+        continue;
+      }
+      if (tid) seenIds.add(tid);
+
       const dt = parseTrekDate(trek.date);
       if (!dt || dt.getTime() >= today.getTime()) {
         upcoming.push(trek);
@@ -386,9 +394,9 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4 lg:gap-5 w-full">
-                {upcomingTreks.map((trek) => (
+                {upcomingTreks.map((trek, idx) => (
                   <TrekCard
-                    key={trek.id}
+                    key={trek.id ? `${trek.id}-${idx}` : `trek-${idx}`}
                     trek={trek}
                     isFavorited={favorites.includes(trek.id)}
                     onToggleFavorite={onToggleFavorite}
@@ -436,9 +444,9 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                 {isArchiveOpen && (
                   <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-2.5">
-                      {pastTreks.slice(0, pastLimit).map((trek) => (
+                      {pastTreks.slice(0, pastLimit).map((trek, idx) => (
                         <PastEventListItem
-                          key={trek.id}
+                          key={trek.id ? `past-${trek.id}-${idx}` : `past-${idx}`}
                           trek={trek}
                           onViewItinerary={onViewItinerary}
                           onToggleFavorite={onToggleFavorite}

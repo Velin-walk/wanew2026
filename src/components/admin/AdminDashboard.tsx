@@ -391,15 +391,16 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const ensureHikeData = (h: SavedHikeRecord): SavedHikeRecord => {
     if (!h) return h;
+    const hNum = (h.hikeNumber || h.data?.hikeNumber || '').trim();
     const normalizedData = normalizeItineraryData({
       ...(h.data || {}),
-      hikeNumber: h.data?.hikeNumber || h.hikeNumber || '',
+      hikeNumber: hNum,
       title: h.data?.title || h.title || '',
       category: h.data?.category || h.category || 'Overnight Bus Hikes',
     });
     return {
       ...h,
-      hikeNumber: h.hikeNumber || normalizedData.hikeNumber,
+      hikeNumber: hNum,
       title: h.title || normalizedData.title,
       category: h.category || normalizedData.category,
       data: normalizedData,
@@ -411,7 +412,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     const result: SavedHikeRecord[] = [];
     for (const r of records) {
       if (!r || !r.id) continue;
-      const hNum = (r.hikeNumber || '').trim();
+      const hNum = (r.hikeNumber || r.data?.hikeNumber || '').trim();
       const key = (hNum && hNum !== 'TBD') ? `num:${hNum}` : `id:${r.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -471,9 +472,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     const status: 'draft' | 'published' | 'archived' =
       rawStatus === 'draft' ? 'draft' : rawStatus === 'archived' ? 'archived' : 'published';
 
+    const hNum = (t.hike_number && t.hike_number !== 'TBD')
+      ? t.hike_number
+      : (d.hikeNumber && d.hikeNumber !== 'TBD' ? d.hikeNumber : (t.hike_number || d.hikeNumber || ''));
+
     return {
       id: t.id,
-      hikeNumber: t.hike_number || d.hikeNumber || '',
+      hikeNumber: hNum,
       title: t.name || t.title || d.title || '',
       category: t.category || d.category || 'Overnight Bus Hikes',
       status: status,
@@ -482,7 +487,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       authorEmail: t.author_email || t.authorEmail || 'walknepalwalk@gmail.com',
       data: {
         ...d,
-        hikeNumber: t.hike_number || d.hikeNumber || '',
+        hikeNumber: hNum,
         title: t.name || t.title || d.title || '',
         category: t.category || d.category || 'Overnight Bus Hikes',
         status: status,
@@ -846,28 +851,33 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          setHikes((prev) => [json.data, ...prev]);
-          localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify([json.data, ...hikes]));
+          const newRecord = ensureHikeData(json.data);
+          const deduped = deduplicateHikesList([newRecord, ...hikes]);
+          setHikes(deduped);
+          localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
           return;
         }
       }
       const source = hikes.find((h) => h.id === hikeId);
       if (source) {
+        const randomSuffix = Math.random().toString(36).substring(2, 8);
         const cloned: SavedHikeRecord = {
           ...source,
-          id: `hike-copy-${Date.now()}`,
+          id: `hike-copy-${Date.now()}-${randomSuffix}`,
+          hikeNumber: 'TBD',
           title: `${source.title} (Copy)`,
           status: 'draft',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           data: {
             ...source.data,
+            hikeNumber: 'TBD',
             title: `${source.title} (Copy)`,
           },
         };
-        const next = [cloned, ...hikes];
-        setHikes(next);
-        localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
+        const deduped = deduplicateHikesList([cloned, ...hikes]);
+        setHikes(deduped);
+        localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
       }
     } catch (e) {
       console.error('Error cloning hike:', e);
@@ -1189,6 +1199,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
         {activeTab === 'editor' && (
           <ItineraryBuilder
+            key={editingHike?.id || 'new'}
             initialRecord={editingHike}
             onBackToList={() => setActiveTab('library')}
             onSaveRecord={handleSaveRecord}

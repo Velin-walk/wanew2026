@@ -617,4 +617,35 @@ export async function fetchLeaderboard(forceFresh = false) {
   }
 }
 
+/**
+ * Ensures strict uniqueness of Treks across ID and hike_number to prevent React key collisions.
+ */
+export function deduplicateTreks(treksList: Trek[]): Trek[] {
+  if (!Array.isArray(treksList)) return [];
+  const seenIds = new Set<string>();
+  const seenHikeNums = new Set<string>();
+  const unique: Trek[] = [];
+
+  for (const t of treksList) {
+    if (!t) continue;
+    const tid = String(t.id || '').trim();
+    const hNum = String(t.hike_number || '').trim();
+
+    if (tid && seenIds.has(tid)) {
+      continue;
+    }
+    if (hNum && hNum !== 'TBD' && seenHikeNums.has(hNum)) {
+      continue;
+    }
+
+    if (tid) seenIds.add(tid);
+    if (hNum && hNum !== 'TBD') seenHikeNums.add(hNum);
+
+    unique.push(t);
+  }
+
+  return unique;
+}
+
+
 

@@ -857,9 +857,13 @@ export default {
 
         // Map status based on execution status
         let newStatus = row.status;
-        if (body.data && body.data.execution_status) {
+        if (body.status) {
+          newStatus = body.status;
+        } else if (body.data && body.data.execution_status) {
           const execStat = String(body.data.execution_status).toLowerCase();
-          newStatus = execStat === 'cancelled' ? 'draft' : 'published';
+          if (execStat === 'cancelled') {
+            newStatus = 'draft';
+          }
         }
 
         await env.DB.prepare(`
@@ -1101,10 +1105,10 @@ export default {
         // Check if existing record exists safely by ID or unique hike_number
         let existing = null;
         if (trekId) {
-          existing = await env.DB.prepare('SELECT id FROM treks WHERE id = ?').bind(trekId).first();
+          existing = await env.DB.prepare('SELECT id, hike_number FROM treks WHERE id = ?').bind(trekId).first();
         }
         if (!existing && hikeNum && hikeNum !== 'TBD') {
-          existing = await env.DB.prepare('SELECT id FROM treks WHERE hike_number = ?').bind(hikeNum).first();
+          existing = await env.DB.prepare('SELECT id, hike_number FROM treks WHERE hike_number = ?').bind(hikeNum).first();
         }
 
         const priceTiers = dataObj.priceTiers || [];
@@ -1112,17 +1116,32 @@ export default {
         const calculatedMaxPrice = priceTiers.length > 0 ? Math.max(...priceTiers.map((t) => Number(t.price) || 0)) : 0;
 
         if (existing) {
-          // Update existing trek
+          // If hike_number has changed on an existing hike, cascade update registrations, roster, and executions
+          if (existing.hike_number && existing.hike_number !== 'TBD' && hikeNum && hikeNum !== 'TBD' && existing.hike_number !== hikeNum) {
+            try {
+              await env.DB.prepare('UPDATE registrations SET hike_number = ? WHERE hike_number = ?').bind(hikeNum, existing.hike_number).run();
+            } catch (_) {}
+            try {
+              await env.DB.prepare('UPDATE bookings_roster SET hike_number = ? WHERE hike_number = ?').bind(hikeNum, existing.hike_number).run();
+            } catch (_) {}
+            try {
+              await env.DB.prepare('UPDATE event_executions SET hike_number = ? WHERE hike_number = ?').bind(hikeNum, existing.hike_number).run();
+            } catch (_) {}
+          }
+
+          // Update existing trek including hike_number
           await env.DB.prepare(`
             UPDATE treks SET
+              hike_number = ?,
               title = ?, category = ?, status = ?, cover_image_url = ?, hike_date = ?,
               min_price = ?, max_price = ?, currency = ?, meeting_point = ?, meeting_time = ?,
               expected_duration = ?, difficulty = ?, approx_distance = ?, elevation_range = ?,
               elevation_gross = ?, ending_point = ?, team_leader = ?, whatsapp_link = ?,
               itinerary_link = ?, faq_link = ?, max_capacity = ?, data_json = ?,
               author_email = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            WHERE id = ? OR (id IS NULL AND hike_number = ?)
           `).bind(
+            hikeNum,
             title,
             body.category || dataObj.category || 'Overnight Bus Hikes',
             body.status || dataObj.status || 'published',
@@ -1146,7 +1165,8 @@ export default {
             Number(body.max_capacity || body.capacity || dataObj.maxCapacity) || 25,
             dataJson,
             body.author_email || body.authorEmail || 'walknepalwalk@gmail.com',
-            existing.id
+            existing.id || trekId,
+            existing.hike_number || hikeNum
           ).run();
         } else {
           // Insert new trek

@@ -19,6 +19,7 @@ import MapMinersDashboard from './components/mapminers/MapMinersDashboard';
 import {
   apiFetch,
   normalizeTrek,
+  deduplicateTreks,
   enrichTreksWithRegistrations,
   clearApiCache,
   fetchSingleTrek,
@@ -40,10 +41,12 @@ function MainApp() {
       const cached = localStorage.getItem('wnw_cached_cloudflare_treks');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return deduplicateTreks(parsed);
+        }
       }
     } catch {}
-    return FALLBACK_TREKS;
+    return deduplicateTreks(FALLBACK_TREKS);
   });
   const [bookings, setBookings] = useState<Booking[]>(() => {
     try {
@@ -174,7 +177,7 @@ function MainApp() {
         }
       }
 
-      let baseTreks = Array.from(trekMap.values());
+      let baseTreks = deduplicateTreks(Array.from(trekMap.values()));
       if (baseTreks.length > 0) {
         try {
           localStorage.setItem('wnw_cached_cloudflare_treks', JSON.stringify(baseTreks));
@@ -186,12 +189,12 @@ function MainApp() {
           if (cached) {
             const parsed = JSON.parse(cached);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              baseTreks = parsed;
+              baseTreks = deduplicateTreks(parsed);
             }
           }
         } catch {}
         if (baseTreks.length === 0) {
-          baseTreks = FALLBACK_TREKS;
+          baseTreks = deduplicateTreks(FALLBACK_TREKS);
         }
       }
 

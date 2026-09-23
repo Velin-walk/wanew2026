@@ -61,20 +61,22 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   onSaveRecord,
   onCloneHike,
 }) => {
+  const draftKey = initialRecord?.id ? `wnw_itinerary_draft_${initialRecord.id}` : 'wnw_itinerary_new_draft';
+
   const [formData, setFormData] = useState<TrekItineraryData>(() => {
     if (initialRecord?.data) {
       return normalizeItineraryData(initialRecord.data);
     }
-    const saved = localStorage.getItem('wnw_itinerary_template_draft');
+    const saved = localStorage.getItem(draftKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         return normalizeItineraryData(parsed);
       } catch (e) {
-        return INITIAL_ITINERARY_TEMPLATE;
+        return normalizeItineraryData(null);
       }
     }
-    return INITIAL_ITINERARY_TEMPLATE;
+    return normalizeItineraryData(null);
   });
 
   const [currentStatus, setCurrentStatus] = useState<'draft' | 'published' | 'archived'>(
@@ -132,6 +134,18 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
       if (normalized.category === 'Multi Day Treks') {
         setDatePickerMode('range');
       }
+    } else {
+      const blank = normalizeItineraryData(null);
+      setFormData(blank);
+      setCurrentStatus('draft');
+      setRecordId(undefined);
+      setIncludesInputText((blank.costIncludes || []).join('\n'));
+      setExcludesInputText((blank.costExcludes || []).join('\n'));
+      const map: Record<string, string> = {};
+      (blank.itineraryDays || []).forEach((d) => {
+        map[d.id] = (d.items || []).map((it) => (it.time ? `${it.time} - ${it.activity}` : it.activity)).join('\n');
+      });
+      setDayScheduleTexts(map);
     }
   }, [initialRecord]);
 
@@ -234,7 +248,9 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const updateData = (updater: (prev: TrekItineraryData) => TrekItineraryData) => {
     setFormData((prev) => {
       const next = updater(prev);
-      localStorage.setItem('wnw_itinerary_template_draft', JSON.stringify(next));
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(next));
+      } catch (_) {}
       return next;
     });
   };
@@ -472,6 +488,10 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
 
         setRecordId(finalSavedRecord.id);
         setCurrentStatus(statusToSave);
+        try {
+          localStorage.removeItem(draftKey);
+          localStorage.removeItem('wnw_itinerary_template_draft');
+        } catch (_) {}
         if (onSaveRecord) {
           onSaveRecord(finalSavedRecord);
         }

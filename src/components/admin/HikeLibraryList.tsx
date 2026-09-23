@@ -397,7 +397,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0EBE5]">
-                {filteredHikes.map((hike) => {
+                {filteredHikes.map((hike, index) => {
                   const priceTiers = hike.data?.priceTiers || [];
                   const minPrice =
                     priceTiers.length > 0
@@ -413,7 +413,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                     'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80';
 
                   return (
-                    <tr key={hike.id} className="hover:bg-[#FAF8F5] transition-colors">
+                    <tr key={`${hike.id}-${index}`} className="hover:bg-[#FAF8F5] transition-colors">
                       {/* Hike # & Title */}
                       <td className="py-3 px-4 align-middle">
                         <div className="flex items-center gap-3">
@@ -564,7 +564,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
       ) : (
         /* GRID CARDS VIEW */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
-          {filteredHikes.map((hike) => {
+          {filteredHikes.map((hike, index) => {
             const priceTiers = hike.data?.priceTiers || [];
             const minPrice =
               priceTiers.length > 0
@@ -581,7 +581,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
 
             return (
               <div
-                key={hike.id}
+                key={`card-${hike.id}-${index}`}
                 id={`hike-card-${hike.id}`}
                 className="group bg-white rounded-3xl border border-[#E5E1DB] hover:border-[#D5D0C9] overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
               >
