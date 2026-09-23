@@ -133,12 +133,12 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
         </div>
 
         {/* Time Window Pills & Metric Toggle */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-bold text-[#8B8680] mr-1 shrink-0 flex items-center gap-1 w-full sm:w-auto mb-1 sm:mb-0">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-extrabold text-stone-600 mr-1 shrink-0 flex items-center gap-1.5 w-full sm:w-auto mb-1 sm:mb-0 uppercase tracking-wider">
               <Calendar className="w-3.5 h-3.5 text-[#E08828]" /> Period:
             </span>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {(
                 [
                   { id: 't30', label: '30 Days' },
@@ -152,10 +152,10 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   key={t.id}
                   type="button"
                   onClick={() => { setPeriod(t.id); setLimit(20); }}
-                  className={`px-2.5 py-1 sm:py-1 rounded-xl text-[11px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all active:scale-95 cursor-pointer select-none border ${
                     period === t.id
-                      ? 'bg-stone-900 text-white shadow-xs font-black'
-                      : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white'
+                      ? 'bg-stone-900 text-white border-stone-900 shadow-md ring-2 ring-stone-900/20'
+                      : 'bg-white text-stone-700 border-stone-250 hover:border-[#E08828] hover:text-[#E08828] hover:bg-amber-50/40 shadow-2xs'
                   }`}
                 >
                   {t.label}
@@ -164,28 +164,30 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:flex items-center gap-1 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-full sm:w-auto shrink-0">
+          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 bg-stone-100 p-1.5 rounded-2xl border border-stone-250 shadow-inner w-full sm:w-auto shrink-0">
             <button
               type="button"
               onClick={() => { setMetric('dist'); setLimit(20); }}
-              className={`py-2 sm:py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+              className={`py-2 px-4 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95 select-none ${
                 metric === 'dist'
-                  ? 'bg-[#E08828] text-white font-black shadow-xs'
-                  : 'text-[#6A645D] hover:text-[#1F1F1F]'
+                  ? 'bg-[#E08828] text-white shadow-md shadow-[#E08828]/30 ring-2 ring-[#E08828]/25'
+                  : 'bg-white/80 hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-200/80 shadow-2xs'
               }`}
             >
-              By KM
+              <span>🏃</span>
+              <span>By KM</span>
             </button>
             <button
               type="button"
               onClick={() => { setMetric('count'); setLimit(20); }}
-              className={`py-2 sm:py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+              className={`py-2 px-4 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95 select-none ${
                 metric === 'count'
-                  ? 'bg-stone-900 text-white font-black shadow-xs'
-                  : 'text-[#6A645D] hover:text-[#1F1F1F]'
+                  ? 'bg-stone-900 text-white shadow-md shadow-stone-900/30 ring-2 ring-stone-900/25'
+                  : 'bg-white/80 hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-200/80 shadow-2xs'
               }`}
             >
-              By Trips
+              <span>⛰️</span>
+              <span>By Trips</span>
             </button>
           </div>
         </div>
@@ -315,6 +317,7 @@ export const LeaderboardScreen: React.FC = () => {
   
   const [journeyPeriod, setJourneyPeriod] = useState<TimePeriod>('overall');
   const [selectedHiker, setSelectedHiker] = useState<HikerStats | null>(null);
+  const [activeJourneyPoint, setActiveJourneyPoint] = useState<any | null>(null);
 
   const loadData = async (isRefresh = false) => {
     try {
@@ -477,10 +480,10 @@ export const LeaderboardScreen: React.FC = () => {
                   key={t.id}
                   type="button"
                   onClick={() => setJourneyPeriod(t.id)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 active:scale-95 cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 active:scale-95 cursor-pointer select-none border ${
                     journeyPeriod === t.id
-                      ? 'bg-[#1B361D] text-white shadow-xs font-black'
-                      : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:bg-white'
+                      ? 'bg-[#1B361D] text-white border-[#1B361D] shadow-md shadow-[#1B361D]/25 ring-2 ring-[#1B361D]/20'
+                      : 'bg-white text-stone-700 border-stone-250 hover:border-[#1B361D] hover:text-[#1B361D] hover:bg-emerald-50/40 shadow-2xs'
                   }`}
                 >
                   {t.label}
@@ -523,7 +526,35 @@ export const LeaderboardScreen: React.FC = () => {
           <div className="h-48 sm:h-56 w-full pt-2">
             {filteredGrowthCurve.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={filteredGrowthCurve} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart
+                  data={filteredGrowthCurve}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  onClick={(state: any) => {
+                    if (state && state.activePayload && state.activePayload.length) {
+                      setActiveJourneyPoint(state.activePayload[0].payload);
+                    }
+                  }}
+                  onMouseDown={(state: any) => {
+                    if (state && state.activePayload && state.activePayload.length) {
+                      setActiveJourneyPoint(state.activePayload[0].payload);
+                    }
+                  }}
+                  onMouseMove={(state: any) => {
+                    if (state && state.activePayload && state.activePayload.length) {
+                      setActiveJourneyPoint(state.activePayload[0].payload);
+                    }
+                  }}
+                  onTouchStart={(state: any) => {
+                    if (state && state.activePayload && state.activePayload.length) {
+                      setActiveJourneyPoint(state.activePayload[0].payload);
+                    }
+                  }}
+                  onTouchMove={(state: any) => {
+                    if (state && state.activePayload && state.activePayload.length) {
+                      setActiveJourneyPoint(state.activePayload[0].payload);
+                    }
+                  }}
+                >
                   <defs>
                     <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#7ABA42" stopOpacity={0.5}/>
@@ -537,28 +568,93 @@ export const LeaderboardScreen: React.FC = () => {
                   <XAxis dataKey="event_no" tick={{ fontSize: 10, fill: '#8B8680' }} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: '#8B8680' }} tickLine={false} tickFormatter={(val) => `${Math.round(val / 1000)}k`} />
                   <Tooltip
+                    cursor={{ stroke: '#1B5E20', strokeWidth: 1.5, strokeDasharray: '3 3' }}
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const pt = payload[0].payload;
                         return (
-                          <div className="bg-white/95 backdrop-blur-xs p-2.5 rounded-xl shadow-lg border border-[#E5E1DB] text-[11px] space-y-1">
-                            <strong className="block text-[#1F1F1F] font-black">{pt.title || `Event #${pt.event_no}`}</strong>
-                            <span className="text-[10px] text-[#8B8680] block">{pt.date}</span>
+                          <div className="bg-white/95 backdrop-blur-xs p-2 sm:p-2.5 rounded-xl shadow-lg border border-[#E5E1DB] text-[10px] sm:text-[11px] space-y-0.5 sm:space-y-1 pointer-events-none max-w-[180px] sm:max-w-none">
+                            <strong className="block text-[#1F1F1F] font-black truncate">{pt.title || `Event #${pt.event_no}`}</strong>
+                            <span className="text-[9px] sm:text-[10px] text-[#8B8680] block">{pt.date}</span>
                             <div className="text-emerald-700 font-bold">Total: {pt.total_km?.toLocaleString()} km</div>
-                            <div className="text-stone-500 text-[10px]">Hike: {pt.hike_km?.toLocaleString()} km • Trek: {pt.trek_km?.toLocaleString()} km</div>
+                            <div className="text-stone-500 text-[9px] sm:text-[10px]">Hike: {pt.hike_km?.toLocaleString()}k • Trek: {pt.trek_km?.toLocaleString()}k</div>
                           </div>
                         );
                       }
                       return null;
                     }}
                   />
-                  <Area type="monotone" dataKey="total_km" stroke="#1B5E20" strokeWidth={2.5} fillOpacity={1} fill="url(#colorTotal)" />
-                  <Area type="monotone" dataKey="trek_km" stroke="#4527A0" strokeWidth={1.5} fillOpacity={1} fill="url(#colorTrek)" />
+                  <Area
+                    type="monotone"
+                    dataKey="total_km"
+                    stroke="#1B5E20"
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#colorTotal)"
+                    activeDot={{ r: 5, fill: '#1B5E20', stroke: '#ffffff', strokeWidth: 2 }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="trek_km"
+                    stroke="#4527A0"
+                    strokeWidth={1.5}
+                    fillOpacity={1}
+                    fill="url(#colorTrek)"
+                    activeDot={{ r: 4, fill: '#4527A0', stroke: '#ffffff', strokeWidth: 2 }}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-xs text-[#8B8680]">
                 Growth curve updates with completed treks
+              </div>
+            )}
+          </div>
+
+          {/* Active Event Inspection Strip (Docked under chart so mobile chart view is never disrupted) */}
+          <div className="bg-[#FAF8F5] border border-[#EFEAE4] rounded-2xl p-3 sm:p-3.5 transition-all">
+            {activeJourneyPoint ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#1B361D] text-[#A8E063] flex items-center justify-center shrink-0 shadow-2xs">
+                    <Footprints className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-black text-[#1F1F1F]">
+                        {activeJourneyPoint.title || `Event #${activeJourneyPoint.event_no}`}
+                      </span>
+                      {activeJourneyPoint.date && (
+                        <span className="text-[10px] font-bold text-[#8B8680] bg-white px-2 py-0.5 rounded-md border border-[#E5E1DB]">
+                          {activeJourneyPoint.date}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#6A645D] font-medium mt-0.5">
+                      Day Hike: <strong className="text-emerald-800">{activeJourneyPoint.hike_km?.toLocaleString() || 0} km</strong> • Multi-day Trek: <strong className="text-purple-800">{activeJourneyPoint.trek_km?.toLocaleString() || 0} km</strong>
+                    </p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-[#EFEAE4]">
+                  <span className="text-[9px] uppercase font-bold text-[#8B8680] block tracking-wider">Cumulative Total</span>
+                  <span className="text-sm sm:text-base font-black text-[#1B5E20]">
+                    {activeJourneyPoint.total_km?.toLocaleString()} km
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-xs text-[#8B8680] py-0.5">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#E08828] shrink-0" />
+                  <span className="font-semibold text-stone-600 text-[11px] sm:text-xs">
+                    Tap or scrub across the curve to inspect any milestone
+                  </span>
+                </div>
+                {filteredGrowthCurve.length > 0 && (
+                  <span className="text-[11px] font-black text-[#1B5E20] shrink-0 pl-2">
+                    Latest: {filteredGrowthCurve[filteredGrowthCurve.length - 1].total_km?.toLocaleString()} km
+                  </span>
+                )}
               </div>
             )}
           </div>
