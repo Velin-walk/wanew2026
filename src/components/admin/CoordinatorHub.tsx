@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Trek } from '../../types';
 import { AdminRegistration } from './BookingsManager';
+import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 
 interface CoordinatorHubProps {
   treks: Trek[];
@@ -40,13 +41,182 @@ type SortCol =
   | 'medical'
   | 'totalHikes';
 
+const extractHikeNumber = (val?: string): string => {
+  if (!val) return '';
+  const match = String(val).match(/\d+/);
+  return match ? match[0] : '';
+};
+
+const isGenericTitle = (name?: string): boolean => {
+  if (!name) return true;
+  const n = name.toLowerCase().trim();
+  return (
+    !n ||
+    n === 'himalayan trek' ||
+    n === 'hike event' ||
+    n === 'untitled hike' ||
+    n === 'day hike' ||
+    n === 'overnight bus hikes' ||
+    n === 'trek' ||
+    n === 'hike' ||
+    n === 'himalayan trek / event'
+  );
+};
+
+export const getHikeNumberFromAny = (obj: any): string => {
+  if (!obj) return '';
+  if (typeof obj === 'string' || typeof obj === 'number') {
+    const m = String(obj).match(/\b\d{1,4}\b/) || String(obj).match(/\d+/);
+    return m ? m[0] : '';
+  }
+  const fields = [
+    obj.hike_number,
+    obj.hikeNumber,
+    obj.trek_id,
+    obj.hike_id,
+    obj.id,
+    obj.trek_name,
+    obj.trekName,
+    obj.hike_name,
+    obj.list_name,
+    obj.person_remarks,
+    obj.suggestions,
+  ];
+  for (const f of fields) {
+    if (f) {
+      const m = String(f).match(/\b\d{1,4}\b/) || String(f).match(/\d+/);
+      if (m && parseInt(m[0], 10) > 0) return m[0];
+    }
+  }
+  return '';
+};
+
+const getTrekNameForHike = (hikeNum: string, fallbackName?: string): string => {
+  if (fallbackName && !isGenericTitle(fallbackName)) {
+    return fallbackName;
+  }
+  if (hikeNum) {
+    const cleanNum = getHikeNumberFromAny(hikeNum);
+    const hist = HISTORICAL_TREKS.find(
+      (h) => getHikeNumberFromAny(h.hike_number) === cleanNum
+    );
+    if (hist && hist.title) {
+      return hist.title;
+    }
+    return `Hike #${hikeNum}`;
+  }
+  return fallbackName && !isGenericTitle(fallbackName) ? fallbackName : 'Hike Event';
+};
+
+const doesRegistrationMatchTrek = (r: AdminRegistration, trek: Trek): boolean => {
+  if (!r || !trek) return false;
+
+  const regHikeNum = getHikeNumberFromAny(r);
+  const trekHikeNum = getHikeNumberFromAny(trek);
+
+  // 1. Strict numeric hike number comparison if both have numbers
+  if (trekHikeNum && regHikeNum) {
+    return trekHikeNum === regHikeNum;
+  }
+
+  // 2. Strict ID comparison
+  const queryId = (trek.id || trek.hike_number || '').toLowerCase().trim();
+  const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase().trim();
+  if (queryId && regTrekId && (queryId === regTrekId || queryId.includes(regTrekId) || regTrekId.includes(queryId))) {
+    return true;
+  }
+
+  // 3. Name comparison only if neither is generic
+  const trekTitle = (trek.name || '').toLowerCase().trim();
+  const regTrekName = (r.trek_name || '').toLowerCase().trim();
+
+  if (trekTitle && regTrekName && !isGenericTitle(trekTitle) && !isGenericTitle(regTrekName)) {
+    if (regTrekName === trekTitle || regTrekName.includes(trekTitle) || trekTitle.includes(regTrekName)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   treks,
   registrations,
   loading,
   onRefresh,
 }) => {
-  // Filter for upcoming events + last 2 months hikes in Bookings & Roster / Coordinator View
+  // 1. Merge library treks + synthesize virtual trek events from registrations if not yet in library
+  const allAvailableTreks = useMemo(() => {
+    const existingHikeNums = new Set<string>();
+    const existingIds = new Set<string>();
+
+    treks.forEach((t) => {
+      if (t.id) existingIds.add(t.id.toLowerCase());
+      const hNum = getHikeNumberFromAny(t);
+      if (hNum) existingHikeNums.add(hNum);
+    });
+
+    const virtualTreks: Trek[] = [];
+    const seenHikeKeys = new Set<string>();
+
+    // Group registrations by hike number or ID
+    registrations.forEach((r) => {
+      const hNum = getHikeNumberFromAny(r);
+      const rawId = (r.trek_id || r.hike_number || '').trim();
+      const trekKey = hNum || rawId || (r.trek_name || '').trim();
+
+      if (!trekKey || seenHikeKeys.has(trekKey)) return;
+
+      const isCovered =
+        (hNum && existingHikeNums.has(hNum)) ||
+        (rawId && existingIds.has(rawId.toLowerCase()));
+
+      if (!isCovered) {
+        seenHikeKeys.add(trekKey);
+
+        const allMatchingRegs = registrations.filter(
+          (other) => getHikeNumberFromAny(other) === hNum
+        );
+        const namedReg = allMatchingRegs.find((other) => other.trek_name && !isGenericTitle(other.trek_name));
+        const datedReg = allMatchingRegs.find((other) => other.trek_date && other.trek_date.trim().length > 0);
+
+        const trekName = getTrekNameForHike(hNum, namedReg?.trek_name || r.trek_name);
+        const trekDate = datedReg?.trek_date || r.trek_date || '';
+
+        virtualTreks.push({
+          id: rawId || (hNum ? `hike-${hNum}` : `v-${Math.random().toString(36).substring(2, 7)}`),
+          hike_number: hNum || rawId || '',
+          name: trekName,
+          date: trekDate,
+          days: '1',
+          difficulty: 'moderate',
+          leader: 'Walk Nepal Walk Guide',
+          capacity: 30,
+          participants: 0,
+          price: 'NPR 1,500',
+          featured_image: '',
+          status: 'published',
+        });
+      }
+    });
+
+    // Also enrich any existing library treks with real historical names if their title is generic
+    const enrichedTreksList = treks.map((t) => {
+      const hNum = getHikeNumberFromAny(t);
+      if (hNum && isGenericTitle(t.name)) {
+        const namedReg = registrations.find(
+          (r) => getHikeNumberFromAny(r) === hNum && r.trek_name && !isGenericTitle(r.trek_name)
+        );
+        const realName = getTrekNameForHike(hNum, namedReg?.trek_name);
+        return { ...t, name: realName };
+      }
+      return t;
+    });
+
+    return [...enrichedTreksList, ...virtualTreks];
+  }, [treks, registrations]);
+
+  // 2. Filter for upcoming events, events in last 2 months, OR any event that has active registrations
   const upcomingTreks = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -72,25 +242,61 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       return isNaN(d.getTime()) ? null : d;
     };
 
-    return treks.filter((t) => {
-      const dt = parseTrekDate(t.date);
-      // Keep if no date found for safety, otherwise keep if upcoming OR within the last 2 months
-      return !dt || dt.getTime() >= twoMonthsAgo.getTime();
-    }).sort((a, b) => {
-      const da = parseTrekDate(a.date)?.getTime() || 0;
-      const db = parseTrekDate(b.date)?.getTime() || 0;
-      return da - db; // nearest/oldest first
-    });
-  }, [treks]);
+    return allAvailableTreks
+      .filter((t) => {
+        // Always include if this trek has bookings in registrations
+        const hasRegistrations = registrations.some(
+          (r) => doesRegistrationMatchTrek(r, t)
+        );
+        if (hasRegistrations) return true;
+
+        const dt = parseTrekDate(t.date);
+        return !dt || dt.getTime() >= twoMonthsAgo.getTime();
+      })
+      .sort((a, b) => {
+        // Prioritize events with active registered hikers
+        const regsA = registrations.filter(
+          (r) => doesRegistrationMatchTrek(r, a)
+        ).length;
+        const regsB = registrations.filter(
+          (r) => doesRegistrationMatchTrek(r, b)
+        ).length;
+
+        if (regsA > 0 && regsB === 0) return -1;
+        if (regsB > 0 && regsA === 0) return 1;
+
+        // Otherwise sort by numeric hike number descending if available
+        const numA = parseInt(getHikeNumberFromAny(a) || '0', 10);
+        const numB = parseInt(getHikeNumberFromAny(b) || '0', 10);
+        if (numA && numB && numA !== numB) return numB - numA;
+
+        const da = parseTrekDate(a.date)?.getTime() || 0;
+        const db = parseTrekDate(b.date)?.getTime() || 0;
+        return db - da; // newest / nearest first
+      });
+  }, [allAvailableTreks, registrations]);
 
   const [selectedTrekId, setSelectedTrekId] = useState<string>('');
 
-  // Auto-select first upcoming trek once loaded
+  // 3. Auto-select first trek with bookings or first available event
   React.useEffect(() => {
-    if (upcomingTreks.length > 0 && !selectedTrekId) {
-      setSelectedTrekId(upcomingTreks[0].id || upcomingTreks[0].hike_number || '');
+    if (upcomingTreks.length > 0) {
+      const isCurrentValid = upcomingTreks.some(
+        (t) =>
+          t.id === selectedTrekId ||
+          (t.hike_number && t.hike_number === selectedTrekId) ||
+          getHikeNumberFromAny(t) === getHikeNumberFromAny(selectedTrekId)
+      );
+
+      if (!selectedTrekId || !isCurrentValid) {
+        const trekWithBookings = upcomingTreks.find((t) =>
+          registrations.some((r) => doesRegistrationMatchTrek(r, t))
+        );
+        const chosen = trekWithBookings || upcomingTreks[0];
+        setSelectedTrekId(chosen.id || chosen.hike_number || '');
+      }
     }
-  }, [upcomingTreks, selectedTrekId]);
+  }, [upcomingTreks, selectedTrekId, registrations]);
 
   const [tableFilter, setTableFilter] = useState<FilterType>('all');
   const [sortCol, setSortCol] = useState<SortCol>('name');
@@ -100,8 +306,15 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
   // Selected Active Trek
   const currentTrek = useMemo(() => {
+    if (upcomingTreks.length === 0) return null;
     return (
-      upcomingTreks.find((t) => t.id === selectedTrekId || t.hike_number === selectedTrekId) ||
+      upcomingTreks.find(
+        (t) =>
+          t.id === selectedTrekId ||
+          t.hike_number === selectedTrekId ||
+          (selectedTrekId &&
+            getHikeNumberFromAny(t) === getHikeNumberFromAny(selectedTrekId))
+      ) ||
       upcomingTreks[0] ||
       null
     );
@@ -110,19 +323,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   // Registrations matching active trek
   const trekRegistrations = useMemo(() => {
     if (!currentTrek) return [];
-    const queryId = (currentTrek.hike_number || currentTrek.id).toLowerCase();
-    const trekTitle = currentTrek.name.toLowerCase();
-
-    return registrations.filter((r) => {
-      const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase();
-      const regTrekName = (r.trek_name || '').toLowerCase();
-      const matchesTrek =
-        (regTrekId && queryId && (regTrekId.includes(queryId) || queryId.includes(regTrekId))) ||
-        (regTrekName && trekTitle && (regTrekName.includes(trekTitle) || trekTitle.includes(regTrekName)));
-
-      const isNotCancelled = r.status?.toLowerCase() !== 'cancelled';
-      return matchesTrek && isNotCancelled;
-    });
+    return registrations.filter((r) => doesRegistrationMatchTrek(r, currentTrek));
   }, [currentTrek, registrations]);
 
   // Lifetime Hike Count Map
@@ -156,7 +357,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   // Metrics Calculations
   const totalRegistered = trekRegistrations.reduce((acc, r) => acc + (r.paxCount || 1), 0);
   const paidCount = trekRegistrations.filter(
-    (r) => r.payment_status?.toLowerCase() === 'fully paid' || r.paid_amount > 0
+    (r) => r.payment_status?.toLowerCase() === 'fully paid' || (r.paid_amount || 0) > 0
   ).length;
   const totalRevenue = trekRegistrations.reduce((acc, r) => acc + (r.paid_amount || 0), 0);
   const dueCount = trekRegistrations.filter((r) => r.due_amount > 0).length;
@@ -378,17 +579,18 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       {/* ── TOP EVENT CARDS STRIP ── */}
       <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200 print:hidden">
         {upcomingTreks.map((t) => {
-          const isSelected = (currentTrek?.id === t.id) || (currentTrek?.hike_number === t.hike_number);
-          const tRegsCount = registrations.filter((r) => {
-            const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase();
-            const queryId = (t.hike_number || t.id).toLowerCase();
-            return regTrekId && queryId && (regTrekId.includes(queryId) || queryId.includes(regTrekId));
-          }).length;
+          const isSelected =
+            currentTrek?.id === t.id ||
+            (t.hike_number && currentTrek?.hike_number === t.hike_number) ||
+            getHikeNumberFromAny(currentTrek) === getHikeNumberFromAny(t);
+          const tRegsCount = registrations.filter(
+            (r) => doesRegistrationMatchTrek(r, t)
+          ).length;
 
           return (
             <div
               key={t.id}
-              onClick={() => setSelectedTrekId(t.id)}
+              onClick={() => setSelectedTrekId(t.id || t.hike_number || '')}
               className={`p-4 rounded-2xl min-w-[210px] max-w-[230px] shrink-0 cursor-pointer transition-all border ${
                 isSelected
                   ? 'border-2 border-[#16A34A] bg-white shadow-md ring-2 ring-[#16A34A]/10'

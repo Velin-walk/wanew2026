@@ -112,7 +112,28 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
   // Dynamically attach authenticated user's email if logged in for write actions (non-GET)
   const headers = new Headers(options?.headers);
   try {
-    const userEmail = auth.currentUser?.email;
+    let userEmail = headers.get("X-Admin-Email") || auth.currentUser?.email;
+    if (!userEmail) {
+      try {
+        const savedDev = localStorage.getItem("wnw_dev_user");
+        if (savedDev) {
+          const parsed = JSON.parse(savedDev);
+          if (parsed?.email) userEmail = parsed.email;
+        }
+      } catch (_) {}
+    }
+    if (!userEmail) {
+      try {
+        const savedProf = localStorage.getItem("wnw_user_registration_profile") || localStorage.getItem("wnw_last_registration_data");
+        if (savedProf) {
+          const parsed = JSON.parse(savedProf);
+          if (parsed?.email || parsed?.email_address) userEmail = parsed.email || parsed.email_address;
+        }
+      } catch (_) {}
+    }
+    if (!userEmail) {
+      userEmail = "walknepalwalk@gmail.com";
+    }
     if (userEmail && method !== "GET") {
       headers.set("X-Admin-Email", userEmail);
     }
@@ -345,20 +366,34 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
   if (!Array.isArray(registrations) || registrations.length === 0) return treks;
 
   const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const extractDigits = (s?: string) => (s || '').match(/\d+/)?.[0] || '';
 
   return treks.map((trek) => {
-    const tNum = String(trek.hike_number || trek.id || '').trim();
+    const tDigits = extractDigits(trek.hike_number || trek.id);
+    const tNum = String(trek.hike_number || trek.id || '').trim().toLowerCase();
     const tName = norm(trek.name);
+    const isGenericTName = !tName || tName === 'himalayantrek' || tName === 'hikeevent' || tName === 'untitledhike';
 
     const matched = registrations.filter((r) => {
-      const rNum = String(r.hike_number || r.trek_id || '').trim();
+      const rDigits = extractDigits(r.hike_number || r.trek_id);
+      const rNum = String(r.hike_number || r.trek_id || '').trim().toLowerCase();
+
+      // 1. If both have digits, compare hike numbers strictly
+      if (tDigits && rDigits) {
+        return tDigits === rDigits;
+      }
+
+      // 2. Direct string ID match
       if (rNum && tNum && rNum === tNum) return true;
 
-      const rTrekName = norm(r.trek_name);
-      const rListName = norm(r.list_name);
+      // 3. Name match only if not generic
+      if (!isGenericTName) {
+        const rTrekName = norm(r.trek_name);
+        if (rTrekName && rTrekName !== 'himalayantrek' && (rTrekName === tName || rTrekName.includes(tName) || tName.includes(rTrekName))) {
+          return true;
+        }
+      }
 
-      if (rTrekName && (rTrekName === tName || rTrekName.includes(tName) || tName.includes(rTrekName))) return true;
-      if (rListName && (rListName.includes(tName) || tName.includes(rListName))) return true;
       return false;
     });
 

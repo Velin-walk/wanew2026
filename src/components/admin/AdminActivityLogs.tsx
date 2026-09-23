@@ -69,7 +69,14 @@ export function AdminActivityLogs() {
       }
       const data = await res.json();
       if (data.success) {
-        setLogs(data.data || []);
+        const rawLogs: ActivityLog[] = data.data || [];
+        const sortedLogs = [...rawLogs].sort((a, b) => {
+          const timeA = new Date(a.created_at ? a.created_at.replace(' ', 'T') : 0).getTime();
+          const timeB = new Date(b.created_at ? b.created_at.replace(' ', 'T') : 0).getTime();
+          if (timeB !== timeA) return timeB - timeA;
+          return (Number(b.id) || 0) - (Number(a.id) || 0);
+        });
+        setLogs(sortedLogs);
         setTotal(data.total || 0);
       } else {
         throw new Error(data.error || 'Failed to retrieve logs');
@@ -141,16 +148,21 @@ export function AdminActivityLogs() {
   const formatLogDate = (dateStr: string) => {
     if (!dateStr || typeof dateStr !== 'string') return '';
     try {
-      const d = new Date(dateStr.replace(' ', 'T'));
+      const normalizedStr = dateStr.includes('Z') || dateStr.includes('+')
+        ? dateStr
+        : dateStr.replace(' ', 'T') + 'Z';
+      const d = new Date(normalizedStr);
       if (isNaN(d.getTime())) return dateStr;
       return d.toLocaleString('en-US', {
+        timeZone: 'Asia/Kathmandu',
         month: 'short',
         day: 'numeric',
         year: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
+        second: '2-digit',
         hour12: true
-      });
+      }) + ' NPT';
     } catch (_) {
       return dateStr;
     }
@@ -357,7 +369,7 @@ export function AdminActivityLogs() {
                         </div>
                         <div>
                           <strong className="text-stone-500 uppercase text-[10px] tracking-wider block sm:inline sm:mr-1.5">Executed At:</strong>
-                          <span className="text-stone-800 font-mono">{log.created_at}</span>
+                          <span className="text-stone-800 font-mono">{formatLogDate(log.created_at)}</span>
                         </div>
                       </div>
 

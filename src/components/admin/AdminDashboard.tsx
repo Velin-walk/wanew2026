@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch, normalizeTrek, enrichTreksWithRegistrations, clearApiCache } from '../../services/api';
 import {
   CheckCircle,
@@ -43,6 +43,7 @@ import {
   DEFAULT_SAVED_HIKES,
   normalizeItineraryData
 } from '../../data/defaultItineraryTemplate';
+import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { Trek } from '../../types';
 import { db } from '../../lib/firebase';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
@@ -194,37 +195,84 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         const items = Array.isArray(json) ? json : json?.data;
         if (Array.isArray(items) && items.length > 0) {
           setRawRegistrations(items);
-          loaded = items.map((r: any) => ({
-            id: String(r.id || r.registration_id || Math.random()),
-            trek_id: r.trek_id || r.hike_number || '',
-            hike_number: r.hike_number || r.trek_id || '',
-            trek_name: r.trek_name || r.list_name || 'Himalayan Trek',
-            trek_date: r.trek_date || r.date || '',
-            full_name: r.full_name || r.hikerName || r.name || 'Anonymous Hiker',
-            phone: r.phone || r.contact || '',
-            whatsapp: r.whatsapp || r.phone || '',
-            email: r.email_address || r.email || r.user_email || '',
-            paxCount: Number(r.pax || r.paxCount || 1),
-            emergency_contact: r.emergency_contact || '',
-            profession: r.profession || '',
-            pickup_point: r.pickup_point || r.pickupPoint || r.pickup || '',
-            gender: r.gender || '',
-            age_group: r.age_group || '',
-            team_members: r.team_members || [],
-            has_medical: r.has_medical || '',
-            specify_medical: r.specify_medical || '',
-            recent_hikes: r.recent_hikes || '',
-            guide_preference: r.guide_preference || '',
-            transport_preference: r.transport_preference || '',
-            suggestions: r.suggestions || '',
-            person_remarks: r.person_remarks || r.list_name || '',
-            status: r.status || 'Confirmed',
-            payment_status: r.payment_status || r.paymentStatus || 'Unpaid',
-            paid_amount: Number(r.paid_amount ?? r.paidAmount ?? 0),
-            due_amount: Number(r.due_amount ?? r.dueAmount ?? 0),
-            admin_notes: r.admin_notes || r.notes || '',
-            created_at: r.created_at || r.registeredAt || new Date().toISOString(),
-          }));
+          loaded = items.map((r: any) => {
+            const extractHikeNum = (obj: any): string => {
+              if (!obj) return '';
+              const fields = [
+                obj.hike_number,
+                obj.hikeNumber,
+                obj.trek_id,
+                obj.hike_id,
+                obj.id,
+                obj.trek_name,
+                obj.trekName,
+                obj.hike_name,
+                obj.list_name,
+                obj.person_remarks,
+                obj.suggestions,
+              ];
+              for (const f of fields) {
+                if (f) {
+                  const m = String(f).match(/\b\d{1,4}\b/) || String(f).match(/\d+/);
+                  if (m && parseInt(m[0], 10) > 0) return m[0];
+                }
+              }
+              return '';
+            };
+
+            const hNum = extractHikeNum(r);
+            const hist = hNum
+              ? HISTORICAL_TREKS.find(
+                  (h) => String(h.hike_number).match(/\d+/)?.[0] === hNum
+                )
+              : null;
+
+            const isGeneric = (name?: string) => {
+              if (!name) return true;
+              const n = name.toLowerCase().trim();
+              return !n || n === 'himalayan trek' || n === 'hike event' || n === 'untitled hike';
+            };
+
+            const rawName = r.trek_name || r.trekName || r.hike_name || '';
+            const resolvedName = !isGeneric(rawName)
+              ? rawName
+              : hist?.title || (hNum ? `Hike #${hNum}` : 'Himalayan Trek');
+
+            const rawDate = r.trek_date || r.trekDate || r.hike_date || r.date || '';
+            const resolvedDate = rawDate || hist?.hike_date || '';
+
+            return {
+              id: String(r.id || r.registration_id || Math.random()),
+              trek_id: r.trek_id || r.hike_number || r.hikeNumber || (hNum ? `hike-${hNum}` : ''),
+              hike_number: r.hike_number || r.hikeNumber || hNum || r.trek_id || '',
+              trek_name: resolvedName,
+              trek_date: resolvedDate,
+              full_name: r.full_name || r.fullName || r.hikerName || r.name || 'Anonymous Hiker',
+              phone: r.phone || r.contact || r.phoneNumber || '',
+              whatsapp: r.whatsapp || r.phone || r.contact || '',
+              email: r.email_address || r.email || r.user_email || '',
+              paxCount: Number(r.pax || r.paxCount || r.pax_count || 1),
+              emergency_contact: r.emergency_contact || r.emergencyContact || r.emergency_backup_contact || '',
+              profession: r.profession || '',
+              pickup_point: r.pickup_point || r.pickupPoint || r.pickup || '',
+              gender: r.gender || '',
+              age_group: r.age_group || r.ageGroup || '',
+              team_members: r.team_members || [],
+              has_medical: r.has_medical || r.hasMedical || r.medical_condition || '',
+              specify_medical: r.specify_medical || r.specifyMedical || '',
+              recent_hikes: r.recent_hikes || r.recentHikes || '',
+              guide_preference: r.guide_preference || r.guide_mode || '',
+              transport_preference: r.transport_preference || r.transport_mode || '',
+              suggestions: r.suggestions || '',
+              person_remarks: r.person_remarks || r.list_name || '',
+              status: r.status || r.registration_status || 'Confirmed',
+              payment_status: r.payment_status || r.paymentStatus || r.roster_payment_status || 'Unpaid',
+              paid_amount: Number(r.paid_amount ?? r.paidAmount ?? r.paid ?? 0),
+              due_amount: Number(r.due_amount ?? r.dueAmount ?? r.due ?? 0),
+              admin_notes: r.admin_notes || r.notes || '',
+              created_at: r.created_at || r.registeredAt || r.timestamp || new Date().toISOString(),
+            };
+          });
 
           setD1Status('healthy');
           setD1Stats(prev => ({
@@ -363,9 +411,15 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     updates: Partial<Trek> & { is_cancelled?: boolean; cancellation_reason?: string }
   ) => {
     // Update local hikes cache and persist to localStorage
+    const hNumMatch = String(trekId).match(/\d+/);
+    const targetHNum = hNumMatch ? hNumMatch[0] : '';
+
     setHikes((prev) => {
+      let found = false;
       const next = prev.map((h) => {
-        if (h.id === trekId || h.hikeNumber === trekId) {
+        const itemHNum = String(h.hikeNumber || h.data?.hikeNumber || h.id || '').match(/\d+/)?.[0] || '';
+        if (h.id === trekId || (targetHNum && itemHNum === targetHNum)) {
+          found = true;
           const data = h.data || ({} as any);
           const isCancelled = updates.data?.is_cancelled !== undefined
             ? updates.data.is_cancelled
@@ -389,6 +443,33 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         return h;
       });
 
+      if (!found) {
+        const hist = targetHNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === targetHNum) : null;
+        const newRecord: SavedHikeRecord = {
+          id: trekId,
+          hikeNumber: targetHNum || trekId,
+          title: updates.name || hist?.title || (targetHNum ? `Hike #${targetHNum}` : 'Hike Event'),
+          category: 'Overnight Bus Hikes',
+          status: 'published',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          authorEmail: 'walknepalwalk@gmail.com',
+          data: {
+            hikeNumber: targetHNum || trekId,
+            title: updates.name || hist?.title || (targetHNum ? `Hike #${targetHNum}` : 'Hike Event'),
+            category: 'Overnight Bus Hikes',
+            status: 'published',
+            maxCapacity: updates.capacity ?? 25,
+            teamLeader: updates.leader ?? 'Walk Nepal Walk Guide',
+            is_cancelled: !!updates.data?.is_cancelled,
+            cancellation_reason: updates.data?.cancellation_reason || '',
+            execution_status: updates.data?.execution_status || 'Active',
+            ...(updates.data || {}),
+          }
+        };
+        next.push(newRecord);
+      }
+
       try {
         localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
         window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
@@ -399,11 +480,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
     // Save to server
     try {
-      await apiFetch(`admin/itineraries/${trekId}`, {
+      await apiFetch(`admin/itineraries/${targetHNum || trekId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
+      clearApiCache('admin/itineraries');
+      clearApiCache('treks');
       window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
     } catch (err) {
       console.warn('Network update trek execution:', err);
@@ -477,16 +560,17 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const convertTrekToSavedHikeRecord = (t: any): SavedHikeRecord => {
     let d: any = {};
-    if (t.data) {
-      if (typeof t.data === 'string') {
+    const rawData = t.data_json || t.data;
+    if (rawData) {
+      if (typeof rawData === 'string') {
         try {
-          d = JSON.parse(t.data);
+          d = JSON.parse(rawData);
         } catch (e) {
-          console.warn('Failed to parse t.data JSON string in AdminDashboard:', t.data, e);
+          console.warn('Failed to parse t.data JSON string in AdminDashboard:', rawData, e);
           d = {};
         }
       } else {
-        d = t.data;
+        d = rawData;
       }
     }
     const rawStatus = (t.status || d.status || 'published').toString().toLowerCase();
@@ -496,6 +580,12 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     const hNum = (t.hike_number && t.hike_number !== 'TBD')
       ? t.hike_number
       : (d.hikeNumber && d.hikeNumber !== 'TBD' ? d.hikeNumber : (t.hike_number || d.hikeNumber || ''));
+
+    const maxCap = Number(d.maxCapacity ?? t.max_capacity ?? 25);
+    const leader = d.teamLeader || t.team_leader || 'Walk Nepal Walk Guide';
+    const isCancelled = d.is_cancelled !== undefined ? !!d.is_cancelled : false;
+    const cancelReason = d.cancellation_reason || '';
+    const execStatus = d.execution_status || (isCancelled ? 'Cancelled' : 'Active');
 
     return {
       id: t.id,
@@ -512,6 +602,11 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         title: t.name || t.title || d.title || '',
         category: t.category || d.category || 'Overnight Bus Hikes',
         status: status,
+        maxCapacity: maxCap,
+        teamLeader: leader,
+        is_cancelled: isCancelled,
+        cancellation_reason: cancelReason,
+        execution_status: execStatus,
       }
     };
   };
@@ -997,26 +1092,96 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const convertedTreks: Trek[] = hikes.map((h) => {
     const d = h.data || ({} as any);
+    const isCancelled = Boolean(d.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled'));
+    const cancelReason = d.cancellation_reason || '';
+    const execStatus = d.execution_status || (isCancelled ? 'Cancelled' : 'Active');
+
     return {
       id: h.id,
       hike_number: h.hikeNumber || d.hikeNumber || '',
       name: h.title || d.title || 'Himalayan Trek',
-      date: d.hikeDate || d.date || '',
-      days: d.overview?.expectedDuration || '1',
-      difficulty: (d.overview?.difficulty || 'easy').toLowerCase() as any,
+      date: d.hikeDate || d.date || d.schedule?.eventDate || '',
+      days: d.overview?.expectedDuration || (d.itineraryDays?.length ? String(d.itineraryDays.length) : '1'),
+      difficulty: (d.overview?.difficulty || d.difficulty || 'moderate').toLowerCase() as any,
       leader: d.teamLeader || 'Walk Nepal Walk Guide',
       capacity: Number(d.maxCapacity) || 25,
       participants: 0,
-      price: d.priceTiers?.length ? `NPR ${d.priceTiers[0].price}` : 'NPR 1,500',
-      featured_image: d.coverImageUrl || '',
-      is_cancelled: Boolean(d.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled')),
-      cancellation_reason: d.cancellation_reason || '',
+      price: d.priceTiers?.length ? `NPR ${d.priceTiers[0].price}` : (d.costing?.totalEstimatedCost ? `NPR ${d.costing.totalEstimatedCost}` : 'NPR 1,500'),
+      featured_image: d.coverImageUrl || d.images?.[0] || '',
+      is_cancelled: isCancelled,
+      cancellation_reason: cancelReason,
       status: (h.status || d.status || 'published') as any,
-      data: d,
+      data: {
+        ...d,
+        is_cancelled: isCancelled,
+        cancellation_reason: cancelReason,
+        execution_status: execStatus,
+        teamLeader: d.teamLeader,
+        maxCapacity: d.maxCapacity,
+      },
     };
   });
 
-  const enrichedTreks = enrichTreksWithRegistrations(convertedTreks, registrations);
+  const enrichedTreks = useMemo(() => {
+    const existingHikeNums = new Set<string>();
+    const existingIds = new Set<string>();
+
+    convertedTreks.forEach((t) => {
+      if (t.id) existingIds.add(t.id.toLowerCase());
+      const hNumMatch = String(t.hike_number || t.id).match(/\d+/);
+      if (hNumMatch) existingHikeNums.add(hNumMatch[0]);
+    });
+
+    const virtualTreks: Trek[] = [];
+    const seenVirtual = new Set<string>();
+
+    registrations.forEach((r) => {
+      const hNumMatch = String(r.hike_number || r.trek_id || '').match(/\d+/);
+      const hNum = hNumMatch ? hNumMatch[0] : '';
+      const rawId = (r.trek_id || r.hike_number || '').trim();
+      const trekKey = hNum || rawId || (r.trek_name || '').trim();
+
+      if (!trekKey || seenVirtual.has(trekKey)) return;
+
+      const isCovered =
+        (hNum && existingHikeNums.has(hNum)) ||
+        (rawId && existingIds.has(rawId.toLowerCase()));
+
+      if (!isCovered) {
+        seenVirtual.add(trekKey);
+        const hist = hNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === hNum) : null;
+        const trekTitle = hist?.title || (hNum ? `Hike #${hNum}` : (r.trek_name || 'Himalayan Trek'));
+        const trekDate = r.trek_date || hist?.hike_date || '';
+
+        virtualTreks.push({
+          id: rawId || (hNum ? `hike-${hNum}` : `v-${Math.random().toString(36).substring(2, 7)}`),
+          hike_number: hNum || rawId || '',
+          name: trekTitle,
+          date: trekDate,
+          days: '1',
+          difficulty: 'moderate',
+          leader: 'Walk Nepal Walk Guide',
+          capacity: 30,
+          participants: 0,
+          price: 'NPR 1,500',
+          featured_image: '',
+          status: 'published',
+          data: {
+            hikeNumber: hNum || rawId || '',
+            title: trekTitle,
+            maxCapacity: 30,
+            teamLeader: 'Walk Nepal Walk Guide',
+            is_cancelled: false,
+            cancellation_reason: '',
+            execution_status: 'Active',
+          }
+        });
+      }
+    });
+
+    const allTreks = [...convertedTreks, ...virtualTreks];
+    return enrichTreksWithRegistrations(allTreks, registrations);
+  }, [convertedTreks, registrations]);
 
   return (
     <div className="w-full space-y-4">

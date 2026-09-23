@@ -176,7 +176,8 @@ async function purgeEdgeCache(urlList, ctx) {
 async function logAdminActivity(env, request, actionType, description, metadata = {}) {
   if (!env || !env.DB) return;
   try {
-    const adminEmail = (request.headers.get('X-Admin-Email') || 'system_worker@walknepal.org').trim().toLowerCase();
+    const rawEmail = request.headers.get('X-Admin-Email') || request.headers.get('x-admin-email');
+    const adminEmail = (rawEmail || 'walknepalwalk@gmail.com').trim().toLowerCase();
     await env.DB.prepare(`
       INSERT INTO admin_activity_logs (admin_email, action_type, description, metadata_json)
       VALUES (?, ?, ?, ?)
@@ -938,12 +939,55 @@ export default {
         const body = await request.json();
 
         // 1. Fetch current trek record
-        const row = await env.DB.prepare(
+        let row = await env.DB.prepare(
           'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
         ).bind(idOrNum, idOrNum).first();
 
+        const cleanHikeNum = String(idOrNum).match(/\d+/)?.[0] || '';
+        if (!row && cleanHikeNum) {
+          row = await env.DB.prepare(
+            'SELECT * FROM treks WHERE hike_number = ? OR id = ?'
+          ).bind(cleanHikeNum, `hike-${cleanHikeNum}`).first();
+        }
+
         if (!row) {
-          return errorResponse('Trek not found to update execution', 404);
+          // If not in treks table yet, create it so execution changes persist cleanly
+          const newId = idOrNum.startsWith('v-') ? `hike-${cleanHikeNum || idOrNum}` : idOrNum;
+          const initialTitle = body.name || body.title || (cleanHikeNum ? `Hike #${cleanHikeNum}` : 'Himalayan Hike');
+          const initialData = {
+            title: initialTitle,
+            hikeNumber: cleanHikeNum || idOrNum,
+            maxCapacity: body.capacity !== undefined ? Number(body.capacity) : 25,
+            teamLeader: body.leader || 'Walk Nepal Walk Guide',
+            is_cancelled: !!body.data?.is_cancelled,
+            cancellation_reason: body.data?.cancellation_reason || '',
+            execution_status: body.data?.execution_status || (body.data?.is_cancelled ? 'Cancelled' : 'Active'),
+            ...(body.data || {}),
+          };
+
+          await env.DB.prepare(`
+            INSERT INTO treks (id, hike_number, title, category, max_capacity, team_leader, status, data_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `).bind(
+            newId,
+            cleanHikeNum || idOrNum,
+            initialTitle,
+            'Overnight Bus Hikes',
+            initialData.maxCapacity,
+            initialData.teamLeader,
+            'published',
+            JSON.stringify(initialData)
+          ).run();
+
+          row = {
+            id: newId,
+            hike_number: cleanHikeNum || idOrNum,
+            title: initialTitle,
+            max_capacity: initialData.maxCapacity,
+            team_leader: initialData.teamLeader,
+            status: 'published',
+            data_json: JSON.stringify(initialData)
+          };
         }
 
         let parsedData = {};
@@ -1929,7 +1973,7 @@ export default {
           countQuery += condStr;
         }
 
-        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        query += ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
         
         const countParams = [...params];
         const selectParams = [...params, limit, offset];

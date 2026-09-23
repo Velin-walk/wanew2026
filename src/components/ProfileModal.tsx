@@ -66,7 +66,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [activeProfileTab, setActiveProfileTab] = useState<'hikes' | 'bookings' | 'saved' | 'settings'>(initialTab);
 
   const [editName, setEditName] = useState(user?.displayName || '');
-  const [editPhone, setEditPhone] = useState(userPhone || '');
+  const [editPhone, setEditPhone] = useState(() => userPhone || localStorage.getItem('wnw_user_phone') || '');
+  const [editWhatsapp, setEditWhatsapp] = useState(() => localStorage.getItem('wnw_user_whatsapp') || '');
   const [editShowImage, setEditShowImage] = useState(showProfileImage);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -84,13 +85,56 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [syncPhoneInput, setSyncPhoneInput] = useState('');
   const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
 
+  // Auto-populate phone numbers from confirmed registration bookings & profile
   useEffect(() => {
     if (user) {
       setEditName(user.displayName || '');
-      setEditPhone(userPhone || '');
+      const savedPhone = userPhone || localStorage.getItem('wnw_user_phone') || '';
+      const savedWhatsapp = localStorage.getItem('wnw_user_whatsapp') || '';
+
+      let finalPhone = savedPhone;
+      let finalWhatsapp = savedWhatsapp;
+
+      // Extract from latest confirmed hike registration booking
+      if (userBookings && userBookings.length > 0) {
+        const latestWithPhone = userBookings.find(
+          (b) => b.phone || b.whatsapp || b.whatsapp_number
+        );
+        if (latestWithPhone) {
+          if (!finalPhone && latestWithPhone.phone) {
+            finalPhone = String(latestWithPhone.phone).trim();
+            localStorage.setItem('wnw_user_phone', finalPhone);
+          }
+          if (!finalWhatsapp && (latestWithPhone.whatsapp_number || latestWithPhone.whatsapp)) {
+            finalWhatsapp = String(latestWithPhone.whatsapp_number || latestWithPhone.whatsapp).trim();
+            localStorage.setItem('wnw_user_whatsapp', finalWhatsapp);
+          }
+        }
+      }
+
+      // Check registration profile cache if still empty
+      if (!finalPhone || !finalWhatsapp) {
+        try {
+          const regCache = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
+          if (regCache) {
+            const parsed = JSON.parse(regCache);
+            if (!finalPhone && (parsed.phone || parsed.phoneNumber || parsed.phone_number)) {
+              finalPhone = String(parsed.phone || parsed.phoneNumber || parsed.phone_number).trim();
+              localStorage.setItem('wnw_user_phone', finalPhone);
+            }
+            if (!finalWhatsapp && (parsed.whatsapp_number || parsed.whatsapp)) {
+              finalWhatsapp = String(parsed.whatsapp_number || parsed.whatsapp).trim();
+              localStorage.setItem('wnw_user_whatsapp', finalWhatsapp);
+            }
+          }
+        } catch {}
+      }
+
+      setEditPhone(finalPhone);
+      setEditWhatsapp(finalWhatsapp);
       setEditShowImage(showProfileImage);
     }
-  }, [user, userPhone, showProfileImage, isOpen]);
+  }, [user, userPhone, showProfileImage, userBookings, isOpen]);
 
   useEffect(() => {
     if (initialTab) {
@@ -152,15 +196,21 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     if (!leaderboardHikers.length) return { stats: null, rank: 0, matchSource: null };
 
     const cleanUserPhone = (editPhone || userPhone || '').replace(/[^0-9]/g, '');
+    const cleanWhatsApp = (editWhatsapp || '').replace(/[^0-9]/g, '');
     const cleanUserName = (editName || user?.displayName || '').toLowerCase().trim();
 
-    // 1. Try matching by Phone number (highest precision)
-    if (cleanUserPhone.length >= 7) {
+    // 1. Try matching by Phone numbers (Calling phone or WhatsApp - highest precision)
+    if (cleanUserPhone.length >= 7 || cleanWhatsApp.length >= 7) {
       for (let i = 0; i < leaderboardHikers.length; i++) {
         const h = leaderboardHikers[i];
         const hPhone = (h.phone || h.p || '').replace(/[^0-9]/g, '');
-        if (hPhone && (hPhone.endsWith(cleanUserPhone) || cleanUserPhone.endsWith(hPhone))) {
-          return { stats: h, rank: i + 1, matchSource: 'Phone Number' };
+        if (hPhone) {
+          if (cleanUserPhone.length >= 7 && (hPhone.endsWith(cleanUserPhone) || cleanUserPhone.endsWith(hPhone))) {
+            return { stats: h, rank: i + 1, matchSource: 'Calling Phone' };
+          }
+          if (cleanWhatsApp.length >= 7 && (hPhone.endsWith(cleanWhatsApp) || cleanWhatsApp.endsWith(hPhone))) {
+            return { stats: h, rank: i + 1, matchSource: 'WhatsApp Number' };
+          }
         }
       }
     }
@@ -188,7 +238,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
 
     return { stats: null, rank: 0, matchSource: null };
-  }, [leaderboardHikers, editPhone, userPhone, editName, user]);
+  }, [leaderboardHikers, editPhone, editWhatsapp, userPhone, editName, user]);
 
   // Build the user's personal completed hikes list
   // Combines verified hikes from Google Sheet with app-registered completed bookings
@@ -358,13 +408,19 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     setSaving(true);
     setSaveMsg(null);
     try {
+      const cleanPhone = (editPhone || '').trim();
+      const cleanWhatsapp = (editWhatsapp || '').trim();
+
+      localStorage.setItem('wnw_user_phone', cleanPhone);
+      localStorage.setItem('wnw_user_whatsapp', cleanWhatsapp);
+
       await updateUserProfile({
         displayName: editName,
-        phone: editPhone,
+        phone: cleanPhone,
         showProfileImage: editShowImage,
       });
-      setSaveMsg('Profile and phone synced successfully!');
-      setTimeout(() => setSaveMsg(null), 3000);
+      setSaveMsg('Profile and verified phone numbers synced successfully!');
+      setTimeout(() => setSaveMsg(null), 3500);
     } catch (err) {
       console.error('Error saving profile:', err);
     } finally {
@@ -420,15 +476,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black rounded-full flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3 text-emerald-600" /> #{matchedHikerStats.rank} Verified
                   </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-[#8B8680] mt-0.5 flex-wrap">
-                <span className="truncate max-w-[180px]">{user.email}</span>
-                {(editPhone || userPhone) && (
-                  <>
-                    <span>•</span>
-                    <span className="font-semibold text-[#5A5551]">{editPhone || userPhone}</span>
-                  </>
                 )}
               </div>
             </div>
@@ -1038,19 +1085,52 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-black text-[#5A5551] uppercase tracking-wider mb-1.5">
-                    Phone Number (for auto-syncing Google Sheet stats)
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-[#8B8680] absolute left-3.5 top-3 pointer-events-none" />
-                    <input
-                      type="tel"
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#7ABA42] focus:bg-white"
-                      placeholder="e.g. 9840057822"
-                    />
+                {/* 2 Phone Numbers Limit Warning Banner */}
+                <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-2xl text-xs text-amber-950 flex items-start gap-2.5 shadow-3xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <span className="font-black text-amber-950 block text-[11px] uppercase tracking-wider">
+                      Maximum 2 Phone Numbers Allowed
+                    </span>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      Only 2 phone numbers (Calling Phone &amp; WhatsApp Number) are allowed per profile. These auto-populate from your confirmed hike registration forms to sync past records.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-black text-[#5A5551] uppercase tracking-wider mb-1.5">
+                      1. Calling Phone Number
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-[#8B8680] absolute left-3.5 top-3 pointer-events-none" />
+                      <input
+                        type="tel"
+                        value={editPhone}
+                        onChange={(e) => setEditPhone(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#7ABA42] focus:bg-white"
+                        placeholder="e.g. 9840057822"
+                      />
+                    </div>
+                    <span className="text-[10px] text-[#8B8680] mt-1 block">Auto-populated from registration</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-[#5A5551] uppercase tracking-wider mb-1.5">
+                      2. WhatsApp Number
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-emerald-600 absolute left-3.5 top-3 pointer-events-none" />
+                      <input
+                        type="tel"
+                        value={editWhatsapp}
+                        onChange={(e) => setEditWhatsapp(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#7ABA42] focus:bg-white"
+                        placeholder="e.g. 9801234567"
+                      />
+                    </div>
+                    <span className="text-[10px] text-[#8B8680] mt-1 block">Auto-populated from registration</span>
                   </div>
                 </div>
 
