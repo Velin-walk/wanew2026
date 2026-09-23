@@ -34,7 +34,7 @@ import { db } from './lib/firebase';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 
 function MainApp() {
-  const { user, userEmail, isAdmin, openAuthModal } = useAuth();
+  const { user, userEmail, userPhone, isAdmin, openAuthModal } = useAuth();
   const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>('treks');
   const [treks, setTreks] = useState<Trek[]>(() => {
     try {
@@ -59,6 +59,7 @@ function MainApp() {
   const [loadingTreks, setLoadingTreks] = useState(true);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileModalTab, setProfileModalTab] = useState<'hikes' | 'bookings' | 'saved' | 'settings'>('hikes');
 
   const [selectedTrekForRegister, setSelectedTrekForRegister] = useState<Trek | null>(null);
   const [selectedTrekForInvite, setSelectedTrekForInvite] = useState<Trek | null>(null);
@@ -234,15 +235,22 @@ function MainApp() {
     setLoadingBookings(true);
     try {
       const candidateEmails = new Set<string>();
+      const candidatePhones = new Set<string>();
+
       if (user?.email) candidateEmails.add(user.email.toLowerCase().trim());
       if (userEmail) candidateEmails.add(userEmail.toLowerCase().trim());
+      if (userPhone) candidatePhones.add(userPhone.trim());
 
       try {
+        const savedPhone = localStorage.getItem('wnw_user_phone');
+        if (savedPhone) candidatePhones.add(savedPhone.trim());
+
         const saved = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed.email) candidateEmails.add(parsed.email.toLowerCase().trim());
           if (parsed.email_address) candidateEmails.add(parsed.email_address.toLowerCase().trim());
+          if (parsed.phone) candidatePhones.add(parsed.phone.trim());
         }
       } catch {}
 
@@ -262,11 +270,11 @@ function MainApp() {
         }
       } catch {}
 
-      // 2. Fetch from Cloudflare D1 for candidate emails only if we have candidate emails
+      // 2. Fetch from Cloudflare D1 for candidate emails and phones
       if (candidateEmails.size > 0) {
         for (const email of candidateEmails) {
           try {
-            const userRegs = await fetchUserBookings(email, force);
+            const userRegs = await fetchUserBookings(email, undefined, force);
             if (Array.isArray(userRegs)) {
               userRegs.forEach((b: any) => {
                 const key = String(b.id || `${b.hike_number || b.trek_id}_${b.email_address || b.user_email}_${b.trek_date || b.timestamp}`);
@@ -275,6 +283,22 @@ function MainApp() {
             }
           } catch (cfErr) {
             console.warn(`Could not fetch D1 bookings for ${email}:`, cfErr);
+          }
+        }
+      }
+
+      if (candidatePhones.size > 0) {
+        for (const phone of candidatePhones) {
+          try {
+            const userRegs = await fetchUserBookings(undefined, phone, force);
+            if (Array.isArray(userRegs)) {
+              userRegs.forEach((b: any) => {
+                const key = String(b.id || `${b.hike_number || b.trek_id}_${b.phone || b.whatsapp_number}_${b.trek_date || b.timestamp}`);
+                mergedMap.set(key, b);
+              });
+            }
+          } catch (cfErr) {
+            console.warn(`Could not fetch D1 bookings for phone ${phone}:`, cfErr);
           }
         }
       }
@@ -699,6 +723,9 @@ function MainApp() {
       };
       localStorage.setItem('wnw_user_registration_profile', JSON.stringify(profileToSave));
       localStorage.setItem('wnw_last_registration_data', JSON.stringify(profileToSave));
+      if (formData.phone) {
+        localStorage.setItem('wnw_user_phone', formData.phone.trim());
+      }
 
       const existingDevJson = localStorage.getItem('wnw_device_bookings');
       let devBookings: Booking[] = [];
@@ -888,6 +915,10 @@ function MainApp() {
               loading={loadingBookings}
               onCancelBooking={handleCancelBooking}
               onExploreTreks={() => setCurrentTab('treks')}
+              onViewMyHikes={() => {
+                setProfileModalTab('hikes');
+                setProfileModalOpen(true);
+              }}
               onShare={(booking) => {
                 const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number);
                 setSelectedTrekForInvite(matchedTrek || null);
@@ -1076,6 +1107,7 @@ function MainApp() {
           favorites={favorites}
           onToggleFavorite={toggleFavorite}
           onOpenTrek={(t) => setItineraryModalTrek(t)}
+          initialTab={profileModalTab}
         />
       </div>
     </div>

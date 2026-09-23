@@ -16,11 +16,12 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   userEmail: string;
+  userPhone: string;
   showProfileImage: boolean;
   setShowProfileImage: (show: boolean) => void;
-  updateUserProfile: (data: { displayName?: string; showProfileImage?: boolean }) => Promise<void>;
+  updateUserProfile: (data: { displayName?: string; showProfileImage?: boolean; phone?: string }) => Promise<void>;
   signInWithGoogle: () => Promise<User | null>;
-  signInWithDevAccount: (email: string, displayName?: string) => User;
+  signInWithDevAccount: (email: string, displayName?: string, phone?: string) => User;
   signOutUser: () => Promise<void>;
   authModalOpen: boolean;
   authModalReason: string;
@@ -53,6 +54,7 @@ const safeLocalStorage = {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [userPhone, setUserPhone] = useState<string>(() => safeLocalStorage.getItem('wnw_user_phone') || '');
   const [loading, setLoading] = useState(true);
   const [showProfileImage, setShowProfileImageState] = useState<boolean>(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -77,6 +79,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 photoURL: parsed.photoURL || '',
                 emailVerified: true,
               } as unknown as User);
+              if (parsed.phone) {
+                setUserPhone(parsed.phone);
+                safeLocalStorage.setItem('wnw_user_phone', parsed.phone);
+              }
             }
           } catch (e) {
             setUser(null);
@@ -89,6 +95,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     return () => unsubscribe();
   }, []);
+
+  // Load saved phone number from registration profile if not set
+  useEffect(() => {
+    if (!userPhone) {
+      try {
+        const saved = safeLocalStorage.getItem('wnw_user_registration_profile') || safeLocalStorage.getItem('wnw_last_registration_data');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const ph = parsed.phone || parsed.phoneNumber || parsed.phone_number || parsed.whatsapp;
+          if (ph) {
+            setUserPhone(ph);
+            safeLocalStorage.setItem('wnw_user_phone', ph);
+          }
+        }
+      } catch {}
+    }
+  }, [userPhone]);
 
   // Load showProfileImage preference when user changes
   useEffect(() => {
@@ -109,7 +132,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateUserProfile = async (data: { displayName?: string; showProfileImage?: boolean }) => {
+  const updateUserProfile = async (data: { displayName?: string; showProfileImage?: boolean; phone?: string }) => {
+    if (data.phone !== undefined) {
+      const cleanPhone = data.phone.trim();
+      setUserPhone(cleanPhone);
+      safeLocalStorage.setItem('wnw_user_phone', cleanPhone);
+      try {
+        const p1 = safeLocalStorage.getItem('wnw_user_registration_profile');
+        const existing = p1 ? JSON.parse(p1) : {};
+        existing.phone = cleanPhone;
+        safeLocalStorage.setItem('wnw_user_registration_profile', JSON.stringify(existing));
+      } catch {}
+    }
+
     if (!user) return;
 
     if (data.showProfileImage !== undefined) {
@@ -140,6 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const parsed = JSON.parse(savedDevUser);
           parsed.displayName = newName;
+          if (data.phone) parsed.phone = data.phone;
           safeLocalStorage.setItem('wnw_dev_user', JSON.stringify(parsed));
         } catch (e) {}
       }
@@ -164,7 +200,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInWithDevAccount = (email: string, displayName?: string) => {
+  const signInWithDevAccount = (email: string, displayName?: string, phone?: string) => {
     const mockUser = {
       uid: 'dev-user-' + Date.now(),
       email: email,
@@ -174,12 +210,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } as unknown as User;
 
     setUser(mockUser);
+    if (phone) {
+      setUserPhone(phone);
+      safeLocalStorage.setItem('wnw_user_phone', phone);
+    }
     safeLocalStorage.setItem(
       'wnw_dev_user',
       JSON.stringify({
         uid: mockUser.uid,
         email: mockUser.email,
         displayName: mockUser.displayName,
+        phone: phone || userPhone || '',
       })
     );
 
@@ -230,6 +271,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         isAdmin,
         userEmail,
+        userPhone,
         showProfileImage,
         setShowProfileImage,
         updateUserProfile,

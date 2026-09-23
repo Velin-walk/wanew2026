@@ -1369,6 +1369,7 @@ export default {
       if (method === 'GET' && path === '/registrations') {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
         const email = url.searchParams.get('email');
+        const phone = url.searchParams.get('phone');
         const hikeNum = url.searchParams.get('hike_number');
         const limitParam = url.searchParams.get('limit');
         const offsetParam = url.searchParams.get('offset');
@@ -1389,10 +1390,19 @@ export default {
           LEFT JOIN bookings_roster b ON b.registration_id = CAST(r.id AS TEXT)
         `;
         let regParams = [];
-        if (email) {
+        if (email && phone) {
+          const cleanEmail = email.trim().toLowerCase();
+          const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
+          regSql += ' WHERE (LOWER(r.email_address) = ? OR LOWER(r.user_email) = ?) OR (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
+          regParams.push(cleanEmail, cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
+        } else if (email) {
           const cleanEmail = email.trim().toLowerCase();
           regSql += ' WHERE LOWER(r.email_address) = ? OR LOWER(r.user_email) = ?';
           regParams.push(cleanEmail, cleanEmail);
+        } else if (phone) {
+          const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
+          regSql += ' WHERE (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
+          regParams.push(`%${cleanPhone}%`, `%${cleanPhone}%`);
         } else if (hikeNum) {
           regSql += ' WHERE r.hike_number = ?';
           regParams.push(hikeNum.trim());

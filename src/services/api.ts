@@ -465,13 +465,17 @@ export async function fetchSingleTrek(idOrHikeNumber: string): Promise<Trek | nu
 
 /**
  * User-specific bookings loader.
- * Queries Cloudflare D1 with a targeted email filter instead of downloading all registrations.
+ * Queries Cloudflare D1 with a targeted email and/or phone filter instead of downloading all registrations.
  */
-export async function fetchUserBookings(email: string, forceFresh = false): Promise<any[]> {
-  if (!email || !email.trim()) return [];
+export async function fetchUserBookings(email?: string, phone?: string, forceFresh = false): Promise<any[]> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanPhone = (phone || '').trim().replace(/[^0-9]/g, '');
+  if (!cleanEmail && !cleanPhone) return [];
   try {
-    const cleanEmail = email.trim().toLowerCase();
-    const res = await apiFetch(`registrations?email=${encodeURIComponent(cleanEmail)}`, {
+    const params = new URLSearchParams();
+    if (cleanEmail) params.set('email', cleanEmail);
+    if (cleanPhone) params.set('phone', cleanPhone);
+    const res = await apiFetch(`registrations?${params.toString()}`, {
       forceFresh,
       cacheTtl: 5 * 60 * 1000, // 5 minutes cache to prevent D1 row reads
     });
@@ -480,7 +484,7 @@ export async function fetchUserBookings(email: string, forceFresh = false): Prom
     const items = Array.isArray(json) ? json : json?.data;
     return Array.isArray(items) ? items : [];
   } catch (e) {
-    console.warn(`Failed to fetch user bookings for ${email}:`, e);
+    console.warn(`Failed to fetch user bookings for ${email}/${phone}:`, e);
     return [];
   }
 }

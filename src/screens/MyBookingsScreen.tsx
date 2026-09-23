@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Booking } from '../types';
+import { HISTORICAL_TREKS } from '../data/historicalTreks';
 import {
   Calendar,
   Phone,
@@ -17,6 +18,9 @@ import {
   HelpCircle,
   MessageCircle,
   Star,
+  Award,
+  Footprints,
+  ArrowRight,
 } from 'lucide-react';
 
 interface MyBookingsScreenProps {
@@ -27,6 +31,7 @@ interface MyBookingsScreenProps {
   onShare: (booking: Booking) => void;
   onLeaveFeedback?: (booking: Booking) => void;
   onViewItinerary?: (booking: Booking) => void;
+  onViewMyHikes?: () => void;
 }
 
 export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
@@ -37,10 +42,41 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   onShare,
   onLeaveFeedback,
   onViewItinerary,
+  onViewMyHikes,
 }) => {
   const [expandedId, setExpandedId] = useState<number | string | null>(null);
   const [cancelingId, setCancelingId] = useState<number | string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<number | string | null>(null);
+
+  // Set of completed hike numbers from historical sheet database
+  const completedHikeNumbers = useMemo(() => {
+    const set = new Set<string>();
+    HISTORICAL_TREKS.forEach((h) => {
+      if (h.hike_number) {
+        set.add(String(h.hike_number).toLowerCase().trim());
+      }
+    });
+    return set;
+  }, []);
+
+  // Filter out bookings that have already been finalized / completed in Google Sheet
+  const { activeBookings, completedCount } = useMemo(() => {
+    let completed = 0;
+    const active: Booking[] = [];
+
+    bookings.forEach((b) => {
+      const hikeNum = String(b.hike_number || b.trek_id || '').toLowerCase().trim();
+      const isPastCompleted = (b.status || '').toLowerCase() === 'completed' || (hikeNum && completedHikeNumbers.has(hikeNum));
+
+      if (isPastCompleted) {
+        completed++;
+      } else {
+        active.push(b);
+      }
+    });
+
+    return { activeBookings: active, completedCount: completed };
+  }, [bookings, completedHikeNumbers]);
 
   const formatGender = (g?: string) => {
     if (!g) return 'Not specified';
@@ -95,43 +131,88 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
     );
   }
 
-  if (bookings.length === 0) {
+  if (activeBookings.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-[#F0EBE5] p-8 text-center max-w-md mx-auto my-4 shadow-xs">
-        <div className="w-14 h-14 bg-[#F9F7F5] rounded-2xl flex items-center justify-center mx-auto mb-3.5 border border-[#E5E1DB]">
-          <Compass className="w-7 h-7 text-[#E08828]" />
+      <div className="space-y-4 max-w-md mx-auto my-4">
+        {completedCount > 0 && (
+          <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 text-left space-y-2.5 shadow-xs">
+            <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{completedCount} Hike{completedCount > 1 ? 's' : ''} Completed &amp; Reconciled</span>
+            </div>
+            <p className="text-[11px] text-emerald-700 leading-relaxed">
+              Your completed hikes have been verified and archived to your permanent record in the community Google Sheet! Check your lifetime stats, KM badges, and completed hike history.
+            </p>
+            {onViewMyHikes && (
+              <button
+                type="button"
+                onClick={onViewMyHikes}
+                className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Footprints className="w-3.5 h-3.5" />
+                <span>View My Hikes &amp; Stats</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl border border-[#F0EBE5] p-8 text-center shadow-xs">
+          <div className="w-14 h-14 bg-[#F9F7F5] rounded-2xl flex items-center justify-center mx-auto mb-3.5 border border-[#E5E1DB]">
+            <Compass className="w-7 h-7 text-[#E08828]" />
+          </div>
+          <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F]">No Active Upcoming Bookings</h3>
+          <p className="text-xs text-[#8B8680] mt-1.5 leading-relaxed">
+            You don't have any pending or upcoming trek reservations. Browse upcoming hikes and claim your spot on the live roster!
+          </p>
+          <button
+            type="button"
+            onClick={onExploreTreks}
+            className="mt-5 w-full min-h-[44px] px-6 py-2.5 bg-[#7ABA42] hover:bg-[#6CA838] text-white text-xs font-bold rounded-xl transition-all shadow-xs active:scale-[0.99] cursor-pointer"
+          >
+            Explore Available Treks
+          </button>
         </div>
-        <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F]">No Active Bookings</h3>
-        <p className="text-xs text-[#8B8680] mt-1.5 leading-relaxed">
-          You haven't reserved spots on any upcoming treks yet. Browse the schedule and claim your spot on the live roster!
-        </p>
-        <button
-          type="button"
-          onClick={onExploreTreks}
-          className="mt-5 w-full min-h-[44px] px-6 py-2.5 bg-[#7ABA42] hover:bg-[#6CA838] text-white text-xs font-bold rounded-xl transition-all shadow-xs active:scale-[0.99]"
-        >
-          Explore Available Treks
-        </button>
       </div>
     );
   }
 
   return (
     <div className="space-y-4 w-full">
+      {completedCount > 0 && (
+        <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-emerald-800">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              <strong>{completedCount} completed hike{completedCount > 1 ? 's' : ''}</strong> moved to your lifetime record in <strong>My Hikes</strong>.
+            </span>
+          </div>
+          {onViewMyHikes && (
+            <button
+              type="button"
+              onClick={onViewMyHikes}
+              className="shrink-0 px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
+            >
+              View My Hikes →
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between px-1">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-[#1F1F1F]">My Registrations</h2>
+          <h2 className="text-lg sm:text-xl font-bold text-[#1F1F1F]">My Active Bookings</h2>
           <p className="text-[11px] text-[#8B8680]">
-            Confirmed Himalayan rosters and team details
+            Confirmed upcoming Himalayan rosters and team details
           </p>
         </div>
         <span className="px-2.5 py-1 bg-white border border-[#E5E1DB] rounded-full text-xs font-bold text-[#5A5551] shadow-xs">
-          {bookings.length} {bookings.length === 1 ? 'Trip' : 'Trips'}
+          {activeBookings.length} Active {activeBookings.length === 1 ? 'Trip' : 'Trips'}
         </span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4">
-        {bookings.map((booking) => {
+        {activeBookings.map((booking) => {
           const isExpanded = expandedId === booking.id;
           const isConfirmingCancel = confirmCancelId === booking.id;
           const totalPeople = Number(booking.pax) > 0 ? Number(booking.pax) : 1 + (booking.team_members?.length || 0);

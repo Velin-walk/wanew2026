@@ -1,7 +1,18 @@
+export interface HikerCompletedEvent {
+  no?: string | number;
+  name?: string;
+  dist?: number;
+  date?: string;
+}
+
 export interface HikerStats {
   n: string; // name
   d: number; // total distance km
   c: number; // total count
+  phone?: string;
+  p?: string;
+  e?: string;
+  hikes?: HikerCompletedEvent[];
   hd?: number; // hike distance km
   hc?: number; // hike count
   td?: number; // trek distance km

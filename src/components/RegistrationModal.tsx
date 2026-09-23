@@ -390,6 +390,9 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       try {
         localStorage.setItem('wnw_user_registration_profile', JSON.stringify(profileToSave));
         localStorage.setItem('wnw_last_registration_data', JSON.stringify(profileToSave));
+        if (payload.phone) {
+          localStorage.setItem('wnw_user_phone', payload.phone.trim());
+        }
       } catch (e) {
         console.warn('Could not save profile to localStorage:', e);
       }
