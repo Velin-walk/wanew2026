@@ -182,6 +182,16 @@ CREATE TABLE IF NOT EXISTS trail_comments (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 10. Trek Participant Summary Table (Precomputed materialized aggregates for zero-quota queries)
+CREATE TABLE IF NOT EXISTS trek_participant_summary (
+  hike_number TEXT PRIMARY KEY,
+  total_pax INTEGER DEFAULT 0,
+  male_pax INTEGER DEFAULT 0,
+  female_pax INTEGER DEFAULT 0,
+  recent_participants TEXT DEFAULT '[]',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 11. System Snapshots Table (Single-row precomputed payloads for leaderboards & analytics)
 CREATE TABLE IF NOT EXISTS system_snapshots (
   key TEXT PRIMARY KEY,

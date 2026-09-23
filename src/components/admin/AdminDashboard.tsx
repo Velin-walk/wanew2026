@@ -333,6 +333,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     }
 
     setRegistrations((prev) => prev.filter((r) => r.id !== id));
+    setRawRegistrations((prev) => prev.filter((r) => String(r.id) !== String(id)));
+    window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
   };
 
   const handleUpdateRegistration = async (id: string, updates: Partial<AdminRegistration>) => {
@@ -350,32 +352,50 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     setRegistrations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
     );
+    setRawRegistrations((prev) =>
+      prev.map((r) => (String(r.id) === String(id) ? { ...r, ...updates } : r))
+    );
+    window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
   };
 
   const handleUpdateTrekExecution = async (
     trekId: string,
     updates: Partial<Trek> & { is_cancelled?: boolean; cancellation_reason?: string }
   ) => {
-    // Update local hikes cache
-    setHikes((prev) =>
-      prev.map((h) => {
+    // Update local hikes cache and persist to localStorage
+    setHikes((prev) => {
+      const next = prev.map((h) => {
         if (h.id === trekId || h.hikeNumber === trekId) {
           const data = h.data || ({} as any);
+          const isCancelled = updates.data?.is_cancelled !== undefined
+            ? updates.data.is_cancelled
+            : (updates.is_cancelled !== undefined ? updates.is_cancelled : data.is_cancelled);
+          const cancelReason = updates.data?.cancellation_reason !== undefined
+            ? updates.data.cancellation_reason
+            : (updates.cancellation_reason !== undefined ? updates.cancellation_reason : data.cancellation_reason);
+
           return {
             ...h,
             data: {
               ...data,
               maxCapacity: updates.capacity ?? data.maxCapacity,
               teamLeader: updates.leader ?? data.teamLeader,
-              is_cancelled: updates.data?.is_cancelled ?? data.is_cancelled,
-              cancellation_reason: updates.data?.cancellation_reason ?? data.cancellation_reason,
+              is_cancelled: isCancelled,
+              cancellation_reason: cancelReason,
               execution_status: updates.data?.execution_status ?? data.execution_status,
             },
           };
         }
         return h;
-      })
-    );
+      });
+
+      try {
+        localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
+      } catch (_) {}
+
+      return next;
+    });
 
     // Save to server
     try {
@@ -384,6 +404,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
+      window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
     } catch (err) {
       console.warn('Network update trek execution:', err);
     }
@@ -710,7 +731,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const fetchPendingTrails = async () => {
     setLoadingTrails(true);
     try {
-      const res = await apiFetch('mapminers/trails');
+      const res = await apiFetch('mapminers/trails', { forceFresh: true });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.data) {
@@ -751,6 +772,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         body: JSON.stringify({ status: 'approved' })
       });
       if (res.ok) {
+        clearApiCache('mapminers');
         setTrails(prev => prev.map(t => t.id === trailId ? { ...t, status: 'approved' } : t));
         setModerationMessage({ text: 'Map approved successfully in Cloudflare D1! It is now live in MapMiners.', type: 'success' });
       } else {
@@ -771,6 +793,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         body: JSON.stringify({ status: 'rejected' })
       });
       if (res.ok) {
+        clearApiCache('mapminers');
         setTrails(prev => prev.map(t => t.id === trailId ? { ...t, status: 'rejected' } : t));
         setModerationMessage({ text: 'Map marked as rejected in Cloudflare D1.', type: 'info' });
       } else {
@@ -789,6 +812,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         method: 'DELETE'
       });
       if (res.ok) {
+        clearApiCache('mapminers');
         setTrails(prev => prev.filter(t => t.id !== trailId));
         setModerationMessage({ text: 'Map file permanently deleted from Cloudflare R2 bucket & D1 database!', type: 'success' });
       } else {

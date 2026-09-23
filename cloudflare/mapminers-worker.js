@@ -126,11 +126,21 @@ export default {
           .bind(status, trailId, trailId)
           .run();
 
+        try {
+          if (typeof caches !== 'undefined' && caches.default) {
+            await caches.default.delete(new Request(new URL('/mapminers/trails', request.url).toString()));
+            await caches.default.delete(new Request(new URL('/community_trails', request.url).toString()));
+            await caches.default.delete(new Request(new URL('/trails', request.url).toString()));
+          }
+        } catch (_) {}
+
         return jsonResponse({
           success: true,
           message: `Trail ${trailId} status updated to ${status}`,
           id: trailId,
           status
+        }, 200, {
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
         });
       }
 
@@ -171,12 +181,22 @@ export default {
           .bind(trailId, trailId)
           .run();
 
+        try {
+          if (typeof caches !== 'undefined' && caches.default) {
+            await caches.default.delete(new Request(new URL('/mapminers/trails', request.url).toString()));
+            await caches.default.delete(new Request(new URL('/community_trails', request.url).toString()));
+            await caches.default.delete(new Request(new URL('/trails', request.url).toString()));
+          }
+        } catch (_) {}
+
         return jsonResponse({
           success: true,
           message: `Trail ${trailId} deleted from D1 and R2`,
           id: trailId,
           fileName,
           r2Deleted
+        }, 200, {
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
         });
       }
 

@@ -378,6 +378,117 @@ async function recomputeLeaderboardSnapshot(env, force = false) {
   }
 }
 
+/**
+ * Syncs aggregated participant statistics into the precomputed trek_participant_summary table.
+ * Keeps total_pax, male_pax, female_pax, and recent_participants immediately fresh and fast.
+ */
+async function updateTrekParticipantSummary(env, hikeNumber) {
+  if (!env || !env.DB) return;
+  try {
+    const hikeNumbers = [];
+    if (hikeNumber) {
+      hikeNumbers.push(String(hikeNumber).trim());
+    } else {
+      const { results: allHikes } = await env.DB.prepare(
+        'SELECT DISTINCT hike_number FROM registrations WHERE hike_number IS NOT NULL AND hike_number != ""'
+      ).all();
+      if (allHikes) {
+        for (const row of allHikes) {
+          if (row.hike_number) hikeNumbers.push(String(row.hike_number).trim());
+        }
+      }
+    }
+
+    for (const hNum of hikeNumbers) {
+      if (!hNum) continue;
+
+      let regList = [];
+      try {
+        const { results } = await env.DB.prepare(`
+          SELECT 
+            r.id, r.hike_number, r.full_name, r.gender, r.pax, r.profession, r.part_of_group, r.timestamp,
+            COALESCE(b.registration_status, 'Confirmed') as active_status
+          FROM registrations r
+          LEFT JOIN bookings_roster b ON CAST(r.id AS TEXT) = b.registration_id
+          WHERE r.hike_number = ?
+          ORDER BY r.id DESC
+        `).bind(hNum).all();
+        regList = results || [];
+      } catch (err) {
+        try {
+          const { results } = await env.DB.prepare(
+            'SELECT id, hike_number, full_name, gender, pax, profession, part_of_group, timestamp FROM registrations WHERE hike_number = ? ORDER BY id DESC'
+          ).bind(hNum).all();
+          regList = results || [];
+        } catch (_) {
+          regList = [];
+        }
+      }
+
+      let totalPax = 0;
+      let malePax = 0;
+      let femalePax = 0;
+      const recentParticipants = [];
+      const seenNames = new Set();
+
+      for (const reg of regList) {
+        const status = String(reg.active_status || 'Confirmed').toLowerCase();
+        if (status === 'cancelled' || status === 'rejected') {
+          continue;
+        }
+
+        const count = Number(reg.pax) || 1;
+        totalPax += count;
+
+        const g = String(reg.gender || '').trim().toLowerCase();
+        if (g.startsWith('m')) {
+          malePax += count;
+        } else if (g.startsWith('f')) {
+          femalePax += count;
+        }
+
+        const rawName = (reg.full_name || '').trim();
+        const lowerName = rawName.toLowerCase();
+        if (rawName && !seenNames.has(lowerName) && recentParticipants.length < 10) {
+          seenNames.add(lowerName);
+          const parts = rawName.split(/\s+/).filter(Boolean);
+          const anonymized = parts.length > 1
+            ? `${parts[0]} ${parts[1].charAt(0)}.`
+            : (parts[0] || 'Hiker');
+          recentParticipants.push({
+            name: anonymized,
+            gender: g.startsWith('f') ? 'f' : 'm',
+            profession: reg.profession || '',
+            part_of_group: reg.part_of_group || '',
+            timestamp: reg.timestamp || ''
+          });
+        }
+      }
+
+      const recentJson = JSON.stringify(recentParticipants);
+
+      await env.DB.prepare(`
+        INSERT INTO trek_participant_summary (hike_number, total_pax, male_pax, female_pax, recent_participants, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(hike_number) DO UPDATE SET
+          total_pax = excluded.total_pax,
+          male_pax = excluded.male_pax,
+          female_pax = excluded.female_pax,
+          recent_participants = excluded.recent_participants,
+          updated_at = CURRENT_TIMESTAMP
+      `).bind(
+        hNum,
+        totalPax,
+        malePax,
+        femalePax,
+        recentJson
+      ).run();
+    }
+  } catch (err) {
+    console.warn('Notice updating trek_participant_summary table:', err);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     // Handle CORS preflight
@@ -657,19 +768,20 @@ export default {
         return resp;
       }
 
-      // POST /admin/sync-all - Trigger community leaderboard recomputation
+      // POST /admin/sync-all - Trigger community leaderboard recomputation and participant summary sync
       if (method === 'POST' && path === '/admin/sync-all') {
         await recomputeLeaderboardSnapshot(env);
+        await updateTrekParticipantSummary(env);
 
         if (ctx && ctx.waitUntil) {
-          ctx.waitUntil(logAdminActivity(env, request, 'SYNC_LEADERBOARD', 'Recomputed community stats and leaderboard from D1 treks table'));
+          ctx.waitUntil(logAdminActivity(env, request, 'SYNC_LEADERBOARD', 'Recomputed community stats, leaderboard, and participant summaries from D1 tables'));
         } else {
-          await logAdminActivity(env, request, 'SYNC_LEADERBOARD', 'Recomputed community stats and leaderboard from D1 treks table');
+          await logAdminActivity(env, request, 'SYNC_LEADERBOARD', 'Recomputed community stats, leaderboard, and participant summaries from D1 tables');
         }
 
         return jsonResponse({
           success: true,
-          message: '🎉 Successfully updated community stats and recomputed leaderboard.'
+          message: '🎉 Successfully updated community stats, recomputed leaderboard, and synchronized participant summaries.'
         });
       }
 
@@ -859,12 +971,8 @@ export default {
         let newStatus = row.status;
         if (body.status) {
           newStatus = body.status;
-        } else if (body.data && body.data.execution_status) {
-          const execStat = String(body.data.execution_status).toLowerCase();
-          if (execStat === 'cancelled') {
-            newStatus = 'draft';
-          }
         }
+        // Note: We preserve 'published' status so the public schedule displays the event with the CANCELLED badge and reason instead of hiding it into drafts.
 
         await env.DB.prepare(`
           UPDATE treks SET
@@ -1342,20 +1450,31 @@ export default {
           console.warn('Could not query registrations table:', regErr);
         }
 
-        // 2. Strict target field mapping for Bookings & Roster edits
-        const status = body.status !== undefined ? body.status : 'Confirmed';
-        const payment_status = body.payment_status !== undefined ? body.payment_status : 'Unpaid';
-        const paid = body.paid_amount !== undefined ? Number(body.paid_amount) : 0;
-        const due = body.due_amount !== undefined ? Number(body.due_amount) : 0;
-        const updates = body.admin_notes !== undefined ? body.admin_notes : '';
-        const pickup_point = body.pickup_point !== undefined ? body.pickup_point : '';
+        // 2. Fetch existing bookings_roster record to preserve unmodified fields
+        let existingRoster = null;
+        try {
+          existingRoster = await env.DB.prepare(
+            'SELECT * FROM bookings_roster WHERE registration_id = ?'
+          ).bind(String(id)).first();
+        } catch (_) {}
+
+        // Strict target field mapping: preserve existing field values when omitted in partial requests
+        const status = body.status !== undefined ? body.status : (existingRoster?.registration_status ?? (regRow?.status || 'Confirmed'));
+        const payment_status = body.payment_status !== undefined ? body.payment_status : (existingRoster?.payment_status ?? 'Unpaid');
+        const paid = body.paid_amount !== undefined ? Number(body.paid_amount) : (existingRoster?.paid_amount !== undefined ? Number(existingRoster.paid_amount) : 0);
+        const due = body.due_amount !== undefined ? Number(body.due_amount) : (existingRoster?.due_amount !== undefined ? Number(existingRoster.due_amount) : 0);
+        const updates = body.admin_notes !== undefined ? body.admin_notes : (existingRoster?.admin_notes ?? '');
+        const pickup_point = body.pickup_point !== undefined ? body.pickup_point : (existingRoster?.pickup_point ?? (regRow?.pickup_point || ''));
+
+        // Keep raw registrations table status in sync if status was explicitly updated
+        if (body.status !== undefined) {
+          try {
+            await env.DB.prepare('UPDATE registrations SET status = ? WHERE id = ?').bind(body.status, String(id)).run();
+          } catch (_) {}
+        }
 
         // 3. Upsert into bookings_roster table
         try {
-          const existingRoster = await env.DB.prepare(
-            'SELECT id FROM bookings_roster WHERE registration_id = ?'
-          ).bind(String(id)).first();
-
           if (existingRoster) {
             await env.DB.prepare(`
               UPDATE bookings_roster SET
@@ -1405,6 +1524,12 @@ export default {
           return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
         }
 
+        // Sync precomputed trek participant summary table for this hike
+        const targetHikeNum = body.hike_number || regRow?.hike_number || existingRoster?.hike_number;
+        if (targetHikeNum) {
+          await updateTrekParticipantSummary(env, targetHikeNum);
+        }
+
         await logAdminActivity(env, request, 'UPDATE_BOOKING', `Updated booking/roster for '${regRow?.full_name || 'Hiker'}' (#${regRow?.hike_number || ''})`, {
           registration_id: id,
           status,
@@ -1426,16 +1551,26 @@ export default {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
         const id = decodeURIComponent(path.replace('/registrations/', ''));
 
+        let regHikeNum = null;
+        try {
+          const rRow = await env.DB.prepare('SELECT hike_number FROM registrations WHERE id = ?').bind(id).first();
+          if (rRow && rRow.hike_number) regHikeNum = rRow.hike_number;
+        } catch (_) {}
+
         try {
           await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(id).run();
+          await env.DB.prepare('DELETE FROM bookings_roster WHERE registration_id = ?').bind(String(id)).run();
           cachedTrekAggMap = null;
+          if (regHikeNum) await updateTrekParticipantSummary(env, regHikeNum);
           await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, { registration_id: id });
           return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully' });
         } catch (dbErr) {
           console.error('Failed to delete registration from D1:', dbErr);
           try {
             await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(Number(id) || id).run();
+            await env.DB.prepare('DELETE FROM bookings_roster WHERE registration_id = ?').bind(String(id)).run();
             cachedTrekAggMap = null;
+            if (regHikeNum) await updateTrekParticipantSummary(env, regHikeNum);
             await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, { registration_id: id });
             return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully (fallback ID type)' });
           } catch (fallbackErr) {
@@ -1526,8 +1661,9 @@ export default {
         }
 
         cachedTrekAggMap = null;
-        // Recomputation of leaderboard is now handled via manual sync from Google Sheets (GAS)
-        // or via the /admin/sync-all endpoint.
+        if (body.hike_number) {
+          await updateTrekParticipantSummary(env, body.hike_number);
+        }
         return jsonResponse({ success: true, message: 'Registration saved successfully', id: insertedId });
       }
 
@@ -1543,6 +1679,7 @@ export default {
 
         const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
         const affectedEmails = new Set();
+        const affectedHikeNumbers = new Set();
         const chunkSize = 25;
 
         for (let i = 0; i < records.length; i += chunkSize) {
@@ -1551,6 +1688,7 @@ export default {
 
           for (const item of chunk) {
             const hikeNum = String(item.hike_number || item.hikeNumber || '').trim();
+            if (hikeNum) affectedHikeNumbers.add(hikeNum);
             const trekName = String(item.trek_name || item.trekName || item.which_hike || '').trim();
             const fullName = String(item.full_name || item.name || 'Anonymous Hiker').trim();
             const email = String(item.email_address || item.email || '').trim().toLowerCase();
@@ -1621,6 +1759,12 @@ export default {
         }
 
         cachedTrekAggMap = null;
+
+        // Synchronize precomputed trek participant summaries for all affected hikes
+        for (const hn of affectedHikeNumbers) {
+          await updateTrekParticipantSummary(env, hn);
+        }
+
         return jsonResponse({
           success: true,
           message: `Successfully batch inserted ${records.length} registrations and bookings`,
@@ -1692,8 +1836,18 @@ export default {
         });
       }
 
-      // POST /admin/sync-leaderboard-sheet - Ingest leaderboard data from Google Sheet GAS URL
-      if (method === 'POST' && path === '/admin/sync-leaderboard-sheet') {
+      // POST /admin/recompute-participant-summary - Trigger participant summary recalculation
+      if (method === 'POST' && (path === '/admin/recompute-participant-summary' || path === '/admin/recompute-summaries')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        await updateTrekParticipantSummary(env);
+        return jsonResponse({
+          success: true,
+          message: 'Trek participant summary table refreshed and synchronized successfully.'
+        });
+      }
+
+      // POST /admin/sync-leaderboard-sheet or POST /leaderboard/sync - Ingest leaderboard data from Google Sheet GAS URL
+      if (method === 'POST' && (path === '/admin/sync-leaderboard-sheet' || path === '/leaderboard/sync')) {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
         
         const body = await request.json();
@@ -1728,6 +1882,7 @@ export default {
           return jsonResponse({
             success: true,
             message: `Successfully synced ${sheetData.hikers.length} hikers from Google Sheets.`,
+            count: sheetData.hikers.length,
             stats: sheetData.stats
           });
         } catch (err) {
