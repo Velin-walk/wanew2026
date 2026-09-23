@@ -427,14 +427,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
                   </button>
 
-                  {isAdmin && (
+                  {(isAdmin || isAdminEmail(userEmail)) && (
                     <button
                       type="button"
                       onClick={() => {
                         setAvatarDropdownOpen(false);
                         onTabChange('admin');
                       }}
-                      className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group"
+                      className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5">
                         <ShieldCheck className="w-4 h-4 text-[#E08828] group-hover:scale-110 transition-transform" />

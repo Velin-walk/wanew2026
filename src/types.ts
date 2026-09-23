@@ -10,7 +10,7 @@ export interface Trek {
   name: string;
   date: string;
   days: string | number;
-  difficulty: 'easy' | 'moderate' | 'difficult';
+  difficulty: 'easy' | 'moderate' | 'difficult' | 'extreme' | string;
   leader?: string;
   capacity: number;
   itinerary?: string;

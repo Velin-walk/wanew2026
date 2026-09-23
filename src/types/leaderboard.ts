@@ -62,6 +62,14 @@ export interface LeaderboardResponse {
     trek_km: number;
     total_km: number;
   }>;
+  growthCurve?: Array<{
+    event_no: string | number;
+    title: string;
+    date: string;
+    hike_km: number;
+    trek_km: number;
+    total_km: number;
+  }>;
   milestones?: Array<{
     km: number;
     trek: string;

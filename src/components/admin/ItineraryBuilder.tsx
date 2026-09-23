@@ -13,9 +13,10 @@ import {
 } from '../../data/defaultItineraryTemplate';
 import { ItineraryPreview } from './ItineraryPreview';
 import { ShareHikeModal } from './ShareHikeModal';
+import { ImageCropperModal } from './ImageCropperModal';
 import { apiFetch } from '../../services/api';
 import { db } from '../../lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+// Firestore methods removed as app now uses Cloudflare D1 for storage
 import {
   Eye,
   Plus,
@@ -86,6 +87,9 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  
+  // Image Cropping States
+  const [croppingImage, setCroppingImage] = useState<string | null>(null);
 
   // Hike Date Interactive Calendar States
   const [datePickerMode, setDatePickerMode] = useState<'single' | 'range' | 'custom'>('single');
@@ -449,17 +453,6 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         });
       } catch (cfErr) {
         console.warn('[ItineraryBuilder] Failed direct Cloudflare save:', cfErr);
-      }
-
-      // Dual-write to Firebase Firestore
-      try {
-        await setDoc(doc(db, 'treks', syncPayload.id), {
-          ...syncPayload,
-          updatedAt: new Date().toISOString()
-        });
-        console.log('[ItineraryBuilder] Dual-write saved to Firestore successfully:', syncPayload.id);
-      } catch (fsErr) {
-        console.warn('[ItineraryBuilder] Dual-write to Firestore failed (non-blocking):', fsErr);
       }
 
       if (res && res.ok) {
@@ -896,44 +889,29 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                       const reader = new FileReader();
                       reader.onload = (event) => {
                         if (event.target?.result) {
-                          const img = new window.Image();
-                          img.onload = () => {
-                            const canvas = document.createElement('canvas');
-                            let width = img.width;
-                            let height = img.height;
-                            const maxDimension = 1200;
-                            if (width > maxDimension || height > maxDimension) {
-                              if (width > height) {
-                                height = Math.round((height * maxDimension) / width);
-                                width = maxDimension;
-                              } else {
-                                width = Math.round((width * maxDimension) / height);
-                                height = maxDimension;
-                              }
-                            }
-                            canvas.width = width;
-                            canvas.height = height;
-                            const ctx = canvas.getContext('2d');
-                            if (ctx) {
-                              ctx.drawImage(img, 0, 0, width, height);
-                              const compressedUrl = canvas.toDataURL('image/jpeg', 0.75);
-                              updateData((prev) => ({
-                                ...prev,
-                                coverImageUrl: compressedUrl,
-                              }));
-                            }
-                          };
-                          img.src = String(event.target?.result);
+                          setCroppingImage(String(event.target.result));
                         }
                       };
                       reader.readAsDataURL(file);
+                      // Reset value so same file can be selected again
+                      e.target.value = '';
                     }
                   }}
                 />
               </label>
 
               {formData.coverImageUrl && (
-                <div className="relative w-14 h-9 rounded-lg overflow-hidden border border-[#E5E1DB] shrink-0 bg-neutral-100 group">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCroppingImage(formData.coverImageUrl)}
+                    className="px-2 py-2 bg-[#FAF8F5] hover:bg-[#F0EBE5] border border-[#E5E1DB] text-[#E08828] rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                    title="Adjust crop"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Adjust Crop</span>
+                  </button>
+                  <div className="relative w-14 h-9 rounded-lg overflow-hidden border border-[#E5E1DB] shrink-0 bg-neutral-100 group">
                   <img
                     src={formData.coverImageUrl}
                     alt="Cover preview"
@@ -953,8 +931,9 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
 
             {/* External Links Subsection */}
             <div className="mt-4 pt-4 border-t border-[#F5F2ED]">
@@ -1338,8 +1317,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
               <label className="text-[11px] font-bold text-[#5A5551] uppercase tracking-wider block mb-1">
                 Difficulty Level
               </label>
-              <input
-                type="text"
+              <select
                 value={formData.overview.difficulty || ''}
                 onChange={(e) =>
                   updateData((prev) => ({
@@ -1347,9 +1325,14 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                     overview: { ...prev.overview, difficulty: e.target.value }
                   }))
                 }
-                placeholder="e.g. Easy / Moderate / Challenging"
                 className="w-full px-3 py-2 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
-              />
+              >
+                <option value="">Select Difficulty</option>
+                <option value="Easy">Easy</option>
+                <option value="Moderate">Moderate</option>
+                <option value="Hard">Hard</option>
+                <option value="Extreme">Extreme</option>
+              </select>
             </div>
 
             {/* Distance & Altitudes */}
@@ -1807,6 +1790,18 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
           onPreview={() => {
             setIsShareModalOpen(false);
             setViewMode('preview');
+          }}
+        />
+      )}
+
+      {/* Image Cropper Modal */}
+      {croppingImage && (
+        <ImageCropperModal
+          image={croppingImage}
+          onClose={() => setCroppingImage(null)}
+          onCropComplete={(croppedImage) => {
+            updateData((prev) => ({ ...prev, coverImageUrl: croppedImage }));
+            setCroppingImage(null);
           }}
         />
       )}

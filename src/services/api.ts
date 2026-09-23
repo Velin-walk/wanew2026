@@ -126,12 +126,6 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
   // If this is a mutation (POST, PUT, DELETE, PATCH), invalidate relevant caches
   if (method !== "GET") {
     clearApiCache(); // Invalidate cached queries on any state mutation
-    if (cleanPath.startsWith("mapminers")) {
-      try {
-        const docRef = doc(db, "metadata", "mapminers");
-        setDoc(docRef, { lastUpdated: Date.now() }, { merge: true }).catch(() => {});
-      } catch (_) {}
-    }
   }
 
   const ttl = options?.cacheTtl ?? DEFAULT_CACHE_TTL;
@@ -322,7 +316,7 @@ export function normalizeTrek(row: any): Trek {
     name: title,
     date: date,
     days: d.overview?.expectedDuration || row.expected_duration || row.days || "1",
-    difficulty: difficulty === "hard" ? "difficult" : difficulty === "moderate" ? "moderate" : "easy",
+    difficulty: (difficulty === "hard" || difficulty === "difficult") ? "difficult" : (difficulty === "moderate" ? "moderate" : (difficulty === "extreme" ? "extreme" : (difficulty === "easy" ? "easy" : difficulty))),
     leader: row.team_leader || row.leader || "Walk Nepal Walk Guide",
     capacity: Number(row.max_capacity || row.capacity) || 25,
     participants: Number(row.participants ?? row.registered_pax) || 0,
@@ -602,66 +596,6 @@ export async function deletePhotoComment(commentId: string): Promise<boolean> {
   } catch (err) {
     console.warn(`Failed to delete comment ${commentId}:`, err);
     return false;
-  }
-}
-
-/**
- * Fetch individual hiker profile (1-row O(1) read).
- */
-export async function fetchHikerProfile(params: { email?: string; uid?: string }, forceFresh = false) {
-  try {
-    const query = new URLSearchParams();
-    if (params.email) query.set('email', params.email);
-    if (params.uid) query.set('uid', params.uid);
-    if (forceFresh) query.set('fresh', '1');
-
-    const res = await apiFetch(`hiker/profile?${query.toString()}`, {
-      forceFresh,
-      cacheTtl: 2 * 60 * 1000 // 2 minutes local cache
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.success ? json.data : null;
-  } catch (err) {
-    console.warn('Failed to fetch hiker profile:', err);
-    return null;
-  }
-}
-
-/**
- * Create or update individual hiker profile.
- */
-export async function saveHikerProfile(profileData: any) {
-  try {
-    const res = await apiFetch('hiker/profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(profileData),
-    });
-    if (!res.ok) return false;
-    const json = await res.json();
-    return json.success;
-  } catch (err) {
-    console.warn('Failed to save hiker profile:', err);
-    return false;
-  }
-}
-
-/**
- * Fetch full hike history for a hiker.
- */
-export async function fetchHikerHistory(email: string) {
-  if (!email) return [];
-  try {
-    const res = await apiFetch(`hiker/history?email=${encodeURIComponent(email)}`, {
-      cacheTtl: 5 * 60 * 1000
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    return Array.isArray(json.data) ? json.data : [];
-  } catch (err) {
-    console.warn('Failed to fetch hiker history:', err);
-    return [];
   }
 }
 

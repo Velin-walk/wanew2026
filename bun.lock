@@ -1,0 +1,1545 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "walk-nepal-walk",
+      "dependencies": {
+        "@tailwindcss/vite": "^4.0.0",
+        "@turf/turf": "^7.4.0",
+        "@types/leaflet": "^1.9.22",
+        "@types/node": "^22.10.1",
+        "@types/react": "^18.3.12",
+        "@types/react-dom": "^18.3.1",
+        "@vitejs/plugin-react": "^4.3.4",
+        "@xmldom/xmldom": "^0.9.12",
+        "cors": "^2.8.5",
+        "express": "^4.21.2",
+        "firebase": "11.1.0",
+        "jspdf": "^4.2.1",
+        "leaflet": "^1.9.4",
+        "lucide-react": "^1.16.0",
+        "motion": "^13.4.0",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "react-easy-crop": "^6.2.3",
+        "react-leaflet": "^4.2.1",
+        "recharts": "^3.10.1",
+        "tailwindcss": "^4.0.0",
+        "togeojson": "^0.16.0",
+        "typescript": "^5.7.2",
+        "vite": "^6.0.7",
+        "vite-plugin-pwa": "^1.3.0",
+      },
+      "devDependencies": {
+        "@types/cors": "^2.8.17",
+        "@types/express": "^4.17.21",
+        "esbuild": "^0.24.2",
+        "tsx": "^4.19.2",
+      },
+    },
+  },
+  "packages": {
+    "@apideck/better-ajv-errors": ["@apideck/better-ajv-errors@0.3.7", "", { "dependencies": { "jsonpointer": "^5.0.1", "leven": "^3.1.0" }, "peerDependencies": { "ajv": ">=8" } }, ""],
+
+    "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, ""],
+
+    "@babel/compat-data": ["@babel/compat-data@7.29.7", "", {}, ""],
+
+    "@babel/core": ["@babel/core@7.29.7", "", { "dependencies": { "@babel/code-frame": "^7.29.7", "@babel/generator": "^7.29.7", "@babel/helper-compilation-targets": "^7.29.7", "@babel/helper-module-transforms": "^7.29.7", "@babel/helpers": "^7.29.7", "@babel/parser": "^7.29.7", "@babel/template": "^7.29.7", "@babel/traverse": "^7.29.7", "@babel/types": "^7.29.7", "@jridgewell/remapping": "^2.3.5", "convert-source-map": "^2.0.0", "debug": "^4.1.0", "gensync": "^1.0.0-beta.2", "json5": "^2.2.3", "semver": "^6.3.1" } }, ""],
+
+    "@babel/generator": ["@babel/generator@7.29.8", "", { "dependencies": { "@babel/parser": "^7.29.8", "@babel/types": "^7.29.8", "@jridgewell/gen-mapping": "^0.3.12", "@jridgewell/trace-mapping": "^0.3.28", "jsesc": "^3.0.2" } }, ""],
+
+    "@babel/helper-annotate-as-pure": ["@babel/helper-annotate-as-pure@7.29.7", "", { "dependencies": { "@babel/types": "^7.29.7" } }, ""],
+
+    "@babel/helper-compilation-targets": ["@babel/helper-compilation-targets@7.29.7", "", { "dependencies": { "@babel/compat-data": "^7.29.7", "@babel/helper-validator-option": "^7.29.7", "browserslist": "^4.24.0", "lru-cache": "^5.1.1", "semver": "^6.3.1" } }, ""],
+
+    "@babel/helper-create-class-features-plugin": ["@babel/helper-create-class-features-plugin@7.29.7", "", { "dependencies": { "@babel/helper-annotate-as-pure": "^7.29.7", "@babel/helper-member-expression-to-functions": "^7.29.7", "@babel/helper-optimise-call-expression": "^7.29.7", "@babel/helper-replace-supers": "^7.29.7", "@babel/helper-skip-transparent-expression-wrappers": "^7.29.7", "@babel/traverse": "^7.29.7", "semver": "^6.3.1" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/helper-create-regexp-features-plugin": ["@babel/helper-create-regexp-features-plugin@7.29.7", "", { "dependencies": { "@babel/helper-annotate-as-pure": "^7.29.7", "regexpu-core": "^6.3.1", "semver": "^6.3.1" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/helper-define-polyfill-provider": ["@babel/helper-define-polyfill-provider@0.6.8", "", { "dependencies": { "@babel/helper-compilation-targets": "^7.28.6", "@babel/helper-plugin-utils": "^7.28.6", "debug": "^4.4.3", "lodash.debounce": "^4.0.8", "resolve": "^1.22.11" }, "peerDependencies": { "@babel/core": "^7.4.0 || ^8.0.0-0 <8.0.0" } }, ""],
+
+    "@babel/helper-globals": ["@babel/helper-globals@7.29.7", "", {}, ""],
+
+    "@babel/helper-member-expression-to-functions": ["@babel/helper-member-expression-to-functions@7.29.7", "", { "dependencies": { "@babel/traverse": "^7.29.7", "@babel/types": "^7.29.7" } }, ""],
+
+    "@babel/helper-module-imports": ["@babel/helper-module-imports@7.29.7", "", { "dependencies": { "@babel/traverse": "^7.29.7", "@babel/types": "^7.29.7" } }, ""],
+
+    "@babel/helper-module-transforms": ["@babel/helper-module-transforms@7.29.7", "", { "dependencies": { "@babel/helper-module-imports": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/helper-optimise-call-expression": ["@babel/helper-optimise-call-expression@7.29.7", "", { "dependencies": { "@babel/types": "^7.29.7" } }, ""],
+
+    "@babel/helper-plugin-utils": ["@babel/helper-plugin-utils@7.29.7", "", {}, ""],
+
+    "@babel/helper-remap-async-to-generator": ["@babel/helper-remap-async-to-generator@7.29.7", "", { "dependencies": { "@babel/helper-annotate-as-pure": "^7.29.7", "@babel/helper-wrap-function": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/helper-replace-supers": ["@babel/helper-replace-supers@7.29.7", "", { "dependencies": { "@babel/helper-member-expression-to-functions": "^7.29.7", "@babel/helper-optimise-call-expression": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/helper-skip-transparent-expression-wrappers": ["@babel/helper-skip-transparent-expression-wrappers@7.29.7", "", { "dependencies": { "@babel/traverse": "^7.29.7", "@babel/types": "^7.29.7" } }, ""],
+
+    "@babel/helper-string-parser": ["@babel/helper-string-parser@7.29.7", "", {}, ""],
+
+    "@babel/helper-validator-identifier": ["@babel/helper-validator-identifier@7.29.7", "", {}, ""],
+
+    "@babel/helper-validator-option": ["@babel/helper-validator-option@7.29.7", "", {}, ""],
+
+    "@babel/helper-wrap-function": ["@babel/helper-wrap-function@7.29.7", "", { "dependencies": { "@babel/template": "^7.29.7", "@babel/traverse": "^7.29.7", "@babel/types": "^7.29.7" } }, ""],
+
+    "@babel/helpers": ["@babel/helpers@7.29.7", "", { "dependencies": { "@babel/template": "^7.29.7", "@babel/types": "^7.29.7" } }, ""],
+
+    "@babel/parser": ["@babel/parser@7.29.8", "", { "dependencies": { "@babel/types": "^7.29.8" }, "bin": { "parser": "bin/babel-parser.js" } }, ""],
+
+    "@babel/plugin-bugfix-firefox-class-in-computed-class-key": ["@babel/plugin-bugfix-firefox-class-in-computed-class-key@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-bugfix-safari-class-field-initializer-scope": ["@babel/plugin-bugfix-safari-class-field-initializer-scope@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-bugfix-safari-id-destructuring-collision-in-function-expression": ["@babel/plugin-bugfix-safari-id-destructuring-collision-in-function-expression@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-bugfix-safari-rest-destructuring-rhs-array": ["@babel/plugin-bugfix-safari-rest-destructuring-rhs-array@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-skip-transparent-expression-wrappers": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-bugfix-v8-spread-parameters-in-optional-chaining": ["@babel/plugin-bugfix-v8-spread-parameters-in-optional-chaining@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-skip-transparent-expression-wrappers": "^7.29.7", "@babel/plugin-transform-optional-chaining": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.13.0" } }, ""],
+
+    "@babel/plugin-bugfix-v8-static-class-fields-redefine-readonly": ["@babel/plugin-bugfix-v8-static-class-fields-redefine-readonly@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-proposal-private-property-in-object": ["@babel/plugin-proposal-private-property-in-object@7.21.0-placeholder-for-preset-env.2", "", { "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-syntax-import-assertions": ["@babel/plugin-syntax-import-assertions@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-syntax-import-attributes": ["@babel/plugin-syntax-import-attributes@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-syntax-unicode-sets-regex": ["@babel/plugin-syntax-unicode-sets-regex@7.18.6", "", { "dependencies": { "@babel/helper-create-regexp-features-plugin": "^7.18.6", "@babel/helper-plugin-utils": "^7.18.6" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-transform-arrow-functions": ["@babel/plugin-transform-arrow-functions@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-async-generator-functions": ["@babel/plugin-transform-async-generator-functions@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-remap-async-to-generator": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-async-to-generator": ["@babel/plugin-transform-async-to-generator@7.29.7", "", { "dependencies": { "@babel/helper-module-imports": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-remap-async-to-generator": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-block-scoped-functions": ["@babel/plugin-transform-block-scoped-functions@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-block-scoping": ["@babel/plugin-transform-block-scoping@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-class-properties": ["@babel/plugin-transform-class-properties@7.29.7", "", { "dependencies": { "@babel/helper-create-class-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-class-static-block": ["@babel/plugin-transform-class-static-block@7.29.7", "", { "dependencies": { "@babel/helper-create-class-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.12.0" } }, ""],
+
+    "@babel/plugin-transform-classes": ["@babel/plugin-transform-classes@7.29.7", "", { "dependencies": { "@babel/helper-annotate-as-pure": "^7.29.7", "@babel/helper-compilation-targets": "^7.29.7", "@babel/helper-globals": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-replace-supers": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-computed-properties": ["@babel/plugin-transform-computed-properties@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/template": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-destructuring": ["@babel/plugin-transform-destructuring@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-dotall-regex": ["@babel/plugin-transform-dotall-regex@7.29.7", "", { "dependencies": { "@babel/helper-create-regexp-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-duplicate-keys": ["@babel/plugin-transform-duplicate-keys@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-duplicate-named-capturing-groups-regex": ["@babel/plugin-transform-duplicate-named-capturing-groups-regex@7.29.7", "", { "dependencies": { "@babel/helper-create-regexp-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-transform-dynamic-import": ["@babel/plugin-transform-dynamic-import@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-explicit-resource-management": ["@babel/plugin-transform-explicit-resource-management@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/plugin-transform-destructuring": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-exponentiation-operator": ["@babel/plugin-transform-exponentiation-operator@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-export-namespace-from": ["@babel/plugin-transform-export-namespace-from@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-for-of": ["@babel/plugin-transform-for-of@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-skip-transparent-expression-wrappers": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-function-name": ["@babel/plugin-transform-function-name@7.29.7", "", { "dependencies": { "@babel/helper-compilation-targets": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-json-strings": ["@babel/plugin-transform-json-strings@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-literals": ["@babel/plugin-transform-literals@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-logical-assignment-operators": ["@babel/plugin-transform-logical-assignment-operators@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-member-expression-literals": ["@babel/plugin-transform-member-expression-literals@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-modules-amd": ["@babel/plugin-transform-modules-amd@7.29.7", "", { "dependencies": { "@babel/helper-module-transforms": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-modules-commonjs": ["@babel/plugin-transform-modules-commonjs@7.29.7", "", { "dependencies": { "@babel/helper-module-transforms": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-modules-systemjs": ["@babel/plugin-transform-modules-systemjs@7.29.8", "", { "dependencies": { "@babel/helper-module-transforms": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7", "@babel/traverse": "^7.29.8" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-modules-umd": ["@babel/plugin-transform-modules-umd@7.29.7", "", { "dependencies": { "@babel/helper-module-transforms": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-named-capturing-groups-regex": ["@babel/plugin-transform-named-capturing-groups-regex@7.29.7", "", { "dependencies": { "@babel/helper-create-regexp-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-transform-new-target": ["@babel/plugin-transform-new-target@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-nullish-coalescing-operator": ["@babel/plugin-transform-nullish-coalescing-operator@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-numeric-separator": ["@babel/plugin-transform-numeric-separator@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-object-rest-spread": ["@babel/plugin-transform-object-rest-spread@7.29.7", "", { "dependencies": { "@babel/helper-compilation-targets": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7", "@babel/plugin-transform-destructuring": "^7.29.7", "@babel/plugin-transform-parameters": "^7.29.7", "@babel/traverse": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-object-super": ["@babel/plugin-transform-object-super@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-replace-supers": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-optional-catch-binding": ["@babel/plugin-transform-optional-catch-binding@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-optional-chaining": ["@babel/plugin-transform-optional-chaining@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-skip-transparent-expression-wrappers": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-parameters": ["@babel/plugin-transform-parameters@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-private-methods": ["@babel/plugin-transform-private-methods@7.29.7", "", { "dependencies": { "@babel/helper-create-class-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-private-property-in-object": ["@babel/plugin-transform-private-property-in-object@7.29.7", "", { "dependencies": { "@babel/helper-annotate-as-pure": "^7.29.7", "@babel/helper-create-class-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-property-literals": ["@babel/plugin-transform-property-literals@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-react-jsx-self": ["@babel/plugin-transform-react-jsx-self@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-react-jsx-source": ["@babel/plugin-transform-react-jsx-source@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-regenerator": ["@babel/plugin-transform-regenerator@7.29.8", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-regexp-modifiers": ["@babel/plugin-transform-regexp-modifiers@7.29.7", "", { "dependencies": { "@babel/helper-create-regexp-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/plugin-transform-reserved-words": ["@babel/plugin-transform-reserved-words@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-shorthand-properties": ["@babel/plugin-transform-shorthand-properties@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-spread": ["@babel/plugin-transform-spread@7.29.8", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-skip-transparent-expression-wrappers": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-sticky-regex": ["@babel/plugin-transform-sticky-regex@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-template-literals": ["@babel/plugin-transform-template-literals@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-typeof-symbol": ["@babel/plugin-transform-typeof-symbol@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-unicode-escapes": ["@babel/plugin-transform-unicode-escapes@7.29.7", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-unicode-property-regex": ["@babel/plugin-transform-unicode-property-regex@7.29.7", "", { "dependencies": { "@babel/helper-create-regexp-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-unicode-regex": ["@babel/plugin-transform-unicode-regex@7.29.7", "", { "dependencies": { "@babel/helper-create-regexp-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/plugin-transform-unicode-sets-regex": ["@babel/plugin-transform-unicode-sets-regex@7.29.7", "", { "dependencies": { "@babel/helper-create-regexp-features-plugin": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7" }, "peerDependencies": { "@babel/core": "^7.0.0" } }, ""],
+
+    "@babel/preset-env": ["@babel/preset-env@7.29.7", "", { "dependencies": { "@babel/compat-data": "^7.29.7", "@babel/helper-compilation-targets": "^7.29.7", "@babel/helper-plugin-utils": "^7.29.7", "@babel/helper-validator-option": "^7.29.7", "@babel/plugin-bugfix-firefox-class-in-computed-class-key": "^7.29.7", "@babel/plugin-bugfix-safari-class-field-initializer-scope": "^7.29.7", "@babel/plugin-bugfix-safari-id-destructuring-collision-in-function-expression": "^7.29.7", "@babel/plugin-bugfix-safari-rest-destructuring-rhs-array": "^7.29.7", "@babel/plugin-bugfix-v8-spread-parameters-in-optional-chaining": "^7.29.7", "@babel/plugin-bugfix-v8-static-class-fields-redefine-readonly": "^7.29.7", "@babel/plugin-proposal-private-property-in-object": "7.21.0-placeholder-for-preset-env.2", "@babel/plugin-syntax-import-assertions": "^7.29.7", "@babel/plugin-syntax-import-attributes": "^7.29.7", "@babel/plugin-syntax-unicode-sets-regex": "^7.18.6", "@babel/plugin-transform-arrow-functions": "^7.29.7", "@babel/plugin-transform-async-generator-functions": "^7.29.7", "@babel/plugin-transform-async-to-generator": "^7.29.7", "@babel/plugin-transform-block-scoped-functions": "^7.29.7", "@babel/plugin-transform-block-scoping": "^7.29.7", "@babel/plugin-transform-class-properties": "^7.29.7", "@babel/plugin-transform-class-static-block": "^7.29.7", "@babel/plugin-transform-classes": "^7.29.7", "@babel/plugin-transform-computed-properties": "^7.29.7", "@babel/plugin-transform-destructuring": "^7.29.7", "@babel/plugin-transform-dotall-regex": "^7.29.7", "@babel/plugin-transform-duplicate-keys": "^7.29.7", "@babel/plugin-transform-duplicate-named-capturing-groups-regex": "^7.29.7", "@babel/plugin-transform-dynamic-import": "^7.29.7", "@babel/plugin-transform-explicit-resource-management": "^7.29.7", "@babel/plugin-transform-exponentiation-operator": "^7.29.7", "@babel/plugin-transform-export-namespace-from": "^7.29.7", "@babel/plugin-transform-for-of": "^7.29.7", "@babel/plugin-transform-function-name": "^7.29.7", "@babel/plugin-transform-json-strings": "^7.29.7", "@babel/plugin-transform-literals": "^7.29.7", "@babel/plugin-transform-logical-assignment-operators": "^7.29.7", "@babel/plugin-transform-member-expression-literals": "^7.29.7", "@babel/plugin-transform-modules-amd": "^7.29.7", "@babel/plugin-transform-modules-commonjs": "^7.29.7", "@babel/plugin-transform-modules-systemjs": "^7.29.7", "@babel/plugin-transform-modules-umd": "^7.29.7", "@babel/plugin-transform-named-capturing-groups-regex": "^7.29.7", "@babel/plugin-transform-new-target": "^7.29.7", "@babel/plugin-transform-nullish-coalescing-operator": "^7.29.7", "@babel/plugin-transform-numeric-separator": "^7.29.7", "@babel/plugin-transform-object-rest-spread": "^7.29.7", "@babel/plugin-transform-object-super": "^7.29.7", "@babel/plugin-transform-optional-catch-binding": "^7.29.7", "@babel/plugin-transform-optional-chaining": "^7.29.7", "@babel/plugin-transform-parameters": "^7.29.7", "@babel/plugin-transform-private-methods": "^7.29.7", "@babel/plugin-transform-private-property-in-object": "^7.29.7", "@babel/plugin-transform-property-literals": "^7.29.7", "@babel/plugin-transform-regenerator": "^7.29.7", "@babel/plugin-transform-regexp-modifiers": "^7.29.7", "@babel/plugin-transform-reserved-words": "^7.29.7", "@babel/plugin-transform-shorthand-properties": "^7.29.7", "@babel/plugin-transform-spread": "^7.29.7", "@babel/plugin-transform-sticky-regex": "^7.29.7", "@babel/plugin-transform-template-literals": "^7.29.7", "@babel/plugin-transform-typeof-symbol": "^7.29.7", "@babel/plugin-transform-unicode-escapes": "^7.29.7", "@babel/plugin-transform-unicode-property-regex": "^7.29.7", "@babel/plugin-transform-unicode-regex": "^7.29.7", "@babel/plugin-transform-unicode-sets-regex": "^7.29.7", "@babel/preset-modules": "0.1.6-no-external-plugins", "babel-plugin-polyfill-corejs2": "^0.4.15", "babel-plugin-polyfill-corejs3": "^0.14.0", "babel-plugin-polyfill-regenerator": "^0.6.6", "core-js-compat": "^3.48.0", "semver": "^6.3.1" }, "peerDependencies": { "@babel/core": "^7.0.0-0" } }, ""],
+
+    "@babel/preset-modules": ["@babel/preset-modules@0.1.6-no-external-plugins", "", { "dependencies": { "@babel/helper-plugin-utils": "^7.0.0", "@babel/types": "^7.4.4", "esutils": "^2.0.2" }, "peerDependencies": { "@babel/core": "^7.0.0-0 || ^8.0.0-0 <8.0.0" } }, ""],
+
+    "@babel/runtime": ["@babel/runtime@7.29.7", "", {}, ""],
+
+    "@babel/template": ["@babel/template@7.29.7", "", { "dependencies": { "@babel/code-frame": "^7.29.7", "@babel/parser": "^7.29.7", "@babel/types": "^7.29.7" } }, ""],
+
+    "@babel/traverse": ["@babel/traverse@7.29.8", "", { "dependencies": { "@babel/code-frame": "^7.29.7", "@babel/generator": "^7.29.8", "@babel/helper-globals": "^7.29.7", "@babel/parser": "^7.29.8", "@babel/template": "^7.29.7", "@babel/types": "^7.29.8", "debug": "^4.3.1" } }, ""],
+
+    "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, ""],
+
+    "@esbuild/linux-x64": ["@esbuild/linux-x64@0.24.2", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "@firebase/analytics": ["@firebase/analytics@0.10.10", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/installations": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-Psdo7c9g2SLAYh6u1XRA+RZ7ab2JfBVuAt/kLzXkhKZL/gS2cQUCMsOW5p0RIlDPRKqpdNSmvujd2TeRWLKOkQ=="],
+
+    "@firebase/analytics-compat": ["@firebase/analytics-compat@0.2.16", "", { "dependencies": { "@firebase/analytics": "0.10.10", "@firebase/analytics-types": "0.8.3", "@firebase/component": "0.6.11", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-Q/s+u/TEMSb2EDJFQMGsOzpSosybBl8HuoSEMyGZ99+0Pu7SIR9MPDGUjc8PKiCFQWDJ3QXxgqh1d/rujyAMbA=="],
+
+    "@firebase/analytics-types": ["@firebase/analytics-types@0.8.3", "", {}, "sha512-VrIp/d8iq2g501qO46uGz3hjbDb8xzYMrbu8Tp0ovzIzrvJZ2fvmj649gTjge/b7cCCcjT0H37g1gVtlNhnkbg=="],
+
+    "@firebase/app": ["@firebase/app@0.10.17", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "idb": "7.1.1", "tslib": "^2.1.0" } }, "sha512-53sIYyAnYEPIZdaxuyq5OST7j4KBc2pqmktz+tEb1BIUSbXh8Gp4k/o6qzLelLpm4ngrBz7SRN0PZJqNRAyPog=="],
+
+    "@firebase/app-check": ["@firebase/app-check@0.8.10", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-DWFfxxif/t+Ow4MmRUevDX+A3hVxm1rUf6y5ZP4sIomfnVCO1NNahqtsv9rb1/tKGkTeoVT40weiTS/WjQG1mA=="],
+
+    "@firebase/app-check-compat": ["@firebase/app-check-compat@0.3.17", "", { "dependencies": { "@firebase/app-check": "0.8.10", "@firebase/app-check-types": "0.5.3", "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-a/eadrGsY0MVCBPhrNbKUhoYpms4UKTYLKO7nswwSFVsm3Rw6NslQQCNLfvljcDqP4E7alQDRGJXjkxd/5gJ+Q=="],
+
+    "@firebase/app-check-interop-types": ["@firebase/app-check-interop-types@0.3.3", "", {}, "sha512-gAlxfPLT2j8bTI/qfe3ahl2I2YcBQ8cFIBdhAQA4I2f3TndcO+22YizyGYuttLHPQEpWkhmpFW60VCFEPg4g5A=="],
+
+    "@firebase/app-check-types": ["@firebase/app-check-types@0.5.3", "", {}, "sha512-hyl5rKSj0QmwPdsAxrI5x1otDlByQ7bvNvVt8G/XPO2CSwE++rmSVf3VEhaeOR4J8ZFaF0Z0NDSmLejPweZ3ng=="],
+
+    "@firebase/app-compat": ["@firebase/app-compat@0.2.47", "", { "dependencies": { "@firebase/app": "0.10.17", "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" } }, "sha512-TdEWGDp6kSwuO1mxiM2Fe39eLWygfyzqTZcoU3aPV0viqqphPCbBBnVjPbFJErZ4+yaS7uCWXEbFEP9m5/COKA=="],
+
+    "@firebase/app-types": ["@firebase/app-types@0.9.3", "", {}, "sha512-kRVpIl4vVGJ4baogMDINbyrIOtOxqhkZQg4jTq3l8Lw6WSk0xfpEYzezFu+Kl4ve4fbPl79dvwRtaFqAC/ucCw=="],
+
+    "@firebase/auth": ["@firebase/auth@1.8.1", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x", "@react-native-async-storage/async-storage": "^1.18.1" }, "optionalPeers": ["@react-native-async-storage/async-storage"] }, "sha512-LX9N/Cf5Z35r5yqm2+5M3+2bRRe/+RFaa/+u4HDni7TA27C/Xm4XHLKcWcLg1BzjrS4zngSaBEOSODvp6RFOqQ=="],
+
+    "@firebase/auth-compat": ["@firebase/auth-compat@0.5.16", "", { "dependencies": { "@firebase/auth": "1.8.1", "@firebase/auth-types": "0.12.3", "@firebase/component": "0.6.11", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-YlYwJMBqAyv0ESy3jDUyshMhZlbUiwAm6B6+uUmigNDHU+uq7j4SFiDJEZlFFIz397yBzKn06SUdqutdQzGnCA=="],
+
+    "@firebase/auth-interop-types": ["@firebase/auth-interop-types@0.2.4", "", {}, "sha512-JPgcXKCuO+CWqGDnigBtvo09HeBs5u/Ktc2GaFj2m01hLarbxthLNm7Fk8iOP1aqAtXV+fnnGj7U28xmk7IwVA=="],
+
+    "@firebase/auth-types": ["@firebase/auth-types@0.12.3", "", { "peerDependencies": { "@firebase/app-types": "0.x", "@firebase/util": "1.x" } }, "sha512-Zq9zI0o5hqXDtKg6yDkSnvMCMuLU6qAVS51PANQx+ZZX5xnzyNLEBO3GZgBUPsV5qIMFhjhqmLDxUqCbnAYy2A=="],
+
+    "@firebase/component": ["@firebase/component@0.6.11", "", { "dependencies": { "@firebase/util": "1.10.2", "tslib": "^2.1.0" } }, "sha512-eQbeCgPukLgsKD0Kw5wQgsMDX5LeoI1MIrziNDjmc6XDq5ZQnuUymANQgAb2wp1tSF9zDSXyxJmIUXaKgN58Ug=="],
+
+    "@firebase/data-connect": ["@firebase/data-connect@0.1.3", "", { "dependencies": { "@firebase/auth-interop-types": "0.2.4", "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-FbAQpWNHownJx1VTCQI4ydbWGOZmSWXoFlirQn3ItHqsLJYSywqxSgDafzvyooifFh3J/2WqaM8y9hInnPcsTw=="],
+
+    "@firebase/database": ["@firebase/database@1.0.10", "", { "dependencies": { "@firebase/app-check-interop-types": "0.3.3", "@firebase/auth-interop-types": "0.2.4", "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "faye-websocket": "0.11.4", "tslib": "^2.1.0" } }, "sha512-sWp2g92u7xT4BojGbTXZ80iaSIaL6GAL0pwvM0CO/hb0nHSnABAqsH7AhnWGsGvXuEvbPr7blZylPaR9J+GSuQ=="],
+
+    "@firebase/database-compat": ["@firebase/database-compat@2.0.1", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/database": "1.0.10", "@firebase/database-types": "1.0.7", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" } }, "sha512-IsFivOjdE1GrjTeKoBU/ZMenESKDXidFDzZzHBPQ/4P20ptGdrl3oLlWrV/QJqJ9lND4IidE3z4Xr5JyfUW1vg=="],
+
+    "@firebase/database-types": ["@firebase/database-types@1.0.7", "", { "dependencies": { "@firebase/app-types": "0.9.3", "@firebase/util": "1.10.2" } }, "sha512-I7zcLfJXrM0WM+ksFmFdAMdlq/DFmpeMNa+/GNsLyFo5u/lX5zzkPzGe3srVWqaBQBY5KprylDGxOsP6ETfL0A=="],
+
+    "@firebase/firestore": ["@firebase/firestore@4.7.5", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "@firebase/webchannel-wrapper": "1.0.3", "@grpc/grpc-js": "~1.9.0", "@grpc/proto-loader": "^0.7.8", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-OO3rHvjC07jL2ITN255xH/UzCVSvh6xG8oTzQdFScQvFbcm1fjCL1hgAdpDZcx3vVcKMV+6ktr8wbllkB8r+FQ=="],
+
+    "@firebase/firestore-compat": ["@firebase/firestore-compat@0.3.40", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/firestore": "4.7.5", "@firebase/firestore-types": "3.0.3", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-18HopMN811KYBc9Ptpr1Rewwio0XF09FF3jc5wtV6rGyAs815SlFFw5vW7ZeLd43zv9tlEc2FzM0H+5Vr9ZRxw=="],
+
+    "@firebase/firestore-types": ["@firebase/firestore-types@3.0.3", "", { "peerDependencies": { "@firebase/app-types": "0.x", "@firebase/util": "1.x" } }, "sha512-hD2jGdiWRxB/eZWF89xcK9gF8wvENDJkzpVFb4aGkzfEaKxVRD1kjz1t1Wj8VZEp2LCB53Yx1zD8mrhQu87R6Q=="],
+
+    "@firebase/functions": ["@firebase/functions@0.12.0", "", { "dependencies": { "@firebase/app-check-interop-types": "0.3.3", "@firebase/auth-interop-types": "0.2.4", "@firebase/component": "0.6.11", "@firebase/messaging-interop-types": "0.2.3", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-plTtzY/nT0jOgHzT0vB9qch4FpHFOhCnR8HhYBqqdArG6GOQMIruKZbiTyLybO8bcaaNgQ6kSm9yohGUwxHcIw=="],
+
+    "@firebase/functions-compat": ["@firebase/functions-compat@0.3.17", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/functions": "0.12.0", "@firebase/functions-types": "0.6.3", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-oj2XV8YsJYutyPCRYUfbN6swmfrL6zar0/qtqZsKT7P7btOiYRl+lD6fxtQaT+pKE5YgOBGZW//kLPZfY0jWhw=="],
+
+    "@firebase/functions-types": ["@firebase/functions-types@0.6.3", "", {}, "sha512-EZoDKQLUHFKNx6VLipQwrSMh01A1SaL3Wg6Hpi//x6/fJ6Ee4hrAeswK99I5Ht8roiniKHw4iO0B1Oxj5I4plg=="],
+
+    "@firebase/installations": ["@firebase/installations@0.6.11", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/util": "1.10.2", "idb": "7.1.1", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-w8fY8mw6fxJzsZM2ufmTtomopXl1+bn/syYon+Gpn+0p0nO1cIUEVEFrFazTLaaL9q1CaVhc3HmseRTsI3igAA=="],
+
+    "@firebase/installations-compat": ["@firebase/installations-compat@0.2.11", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/installations": "0.6.11", "@firebase/installations-types": "0.5.3", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-SHRgw5LTa6v8LubmJZxcOCwEd1MfWQPUtKdiuCx2VMWnapX54skZd1PkQg0K4l3k+4ujbI2cn7FE6Li9hbChBw=="],
+
+    "@firebase/installations-types": ["@firebase/installations-types@0.5.3", "", { "peerDependencies": { "@firebase/app-types": "0.x" } }, "sha512-2FJI7gkLqIE0iYsNQ1P751lO3hER+Umykel+TkLwHj6plzWVxqvfclPUZhcKFVQObqloEBTmpi2Ozn7EkCABAA=="],
+
+    "@firebase/logger": ["@firebase/logger@0.4.4", "", { "dependencies": { "tslib": "^2.1.0" } }, "sha512-mH0PEh1zoXGnaR8gD1DeGeNZtWFKbnz9hDO91dIml3iou1gpOnLqXQ2dJfB71dj6dpmUjcQ6phY3ZZJbjErr9g=="],
+
+    "@firebase/messaging": ["@firebase/messaging@0.12.15", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/installations": "0.6.11", "@firebase/messaging-interop-types": "0.2.3", "@firebase/util": "1.10.2", "idb": "7.1.1", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-Bz+qvWNEwEWAbYtG4An8hgcNco6NWNoNLuLbGVwPL2fAoCF1zz+dcaBp+iTR2+K199JyRyDT9yDPAXhNHNDaKQ=="],
+
+    "@firebase/messaging-compat": ["@firebase/messaging-compat@0.2.15", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/messaging": "0.12.15", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-mEKKASRvRWq1aBNHgioGsOYR2c5nBZpO7k90K794zjKe0WkGNf0k7PLs5SlCf8FKnzumEkhTAp/SjYxovuxa8A=="],
+
+    "@firebase/messaging-interop-types": ["@firebase/messaging-interop-types@0.2.3", "", {}, "sha512-xfzFaJpzcmtDjycpDeCUj0Ge10ATFi/VHVIvEEjDNc3hodVBQADZ7BWQU7CuFpjSHE+eLuBI13z5F/9xOoGX8Q=="],
+
+    "@firebase/performance": ["@firebase/performance@0.6.11", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/installations": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-FlkJFeqLlIeh5T4Am3uE38HVzggliDIEFy/fErEc1faINOUFCb6vQBEoNZGaXvRnTR8lh3X/hP7tv37C7BsK9g=="],
+
+    "@firebase/performance-compat": ["@firebase/performance-compat@0.2.11", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/performance": "0.6.11", "@firebase/performance-types": "0.2.3", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-DqeNBy51W2xzlklyC7Ht9JQ94HhTA08PCcM4MDeyG/ol3fqum/+YgtHWQ2IQuduqH9afETthZqLwCZiSgY7hiA=="],
+
+    "@firebase/performance-types": ["@firebase/performance-types@0.2.3", "", {}, "sha512-IgkyTz6QZVPAq8GSkLYJvwSLr3LS9+V6vNPQr0x4YozZJiLF5jYixj0amDtATf1X0EtYHqoPO48a9ija8GocxQ=="],
+
+    "@firebase/remote-config": ["@firebase/remote-config@0.4.11", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/installations": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-9z0rgKuws2nj+7cdiqF+NY1QR4na6KnuOvP+jQvgilDOhGtKOcCMq5XHiu66i73A9kFhyU6QQ2pHXxcmaq1pBw=="],
+
+    "@firebase/remote-config-compat": ["@firebase/remote-config-compat@0.2.11", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/remote-config": "0.4.11", "@firebase/remote-config-types": "0.3.3", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-zfIjpwPrGuIOZDmduukN086qjhZ1LnbJi/iYzgua+2qeTlO0XdlE1v66gJPwygGB3TOhT0yb9EiUZ3nBNttMqg=="],
+
+    "@firebase/remote-config-types": ["@firebase/remote-config-types@0.3.3", "", {}, "sha512-YlRI9CHxrk3lpQuFup9N1eohpwdWayKZUNZ/YeQ0PZoncJ66P32UsKUKqVXOaieTjJIOh7yH8JEzRdht5s+d6g=="],
+
+    "@firebase/storage": ["@firebase/storage@0.13.4", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x" } }, "sha512-b1KaTTRiMupFurIhpGIbReaWev0k5O3ouTHkAPcEssT+FvU3q/1JwzvkX4+ZdB60Fc43Mbp8qQ1gWfT0Z2FP9Q=="],
+
+    "@firebase/storage-compat": ["@firebase/storage-compat@0.3.14", "", { "dependencies": { "@firebase/component": "0.6.11", "@firebase/storage": "0.13.4", "@firebase/storage-types": "0.8.3", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app-compat": "0.x" } }, "sha512-Ok5FmXJiapaNAOQ8W8qppnfwgP8540jw2B8M0c4TFZqF4BD+CoKBxW0dRtOuLNGadLhzqqkDZZZtkexxrveQqA=="],
+
+    "@firebase/storage-types": ["@firebase/storage-types@0.8.3", "", { "peerDependencies": { "@firebase/app-types": "0.x", "@firebase/util": "1.x" } }, "sha512-+Muk7g9uwngTpd8xn9OdF/D48uiQ7I1Fae7ULsWPuKoCH3HU7bfFPhxtJYzyhjdniowhuDpQcfPmuNRAqZEfvg=="],
+
+    "@firebase/util": ["@firebase/util@1.10.2", "", { "dependencies": { "tslib": "^2.1.0" } }, "sha512-qnSHIoE9FK+HYnNhTI8q14evyqbc/vHRivfB4TgCIUOl4tosmKSQlp7ltymOlMP4xVIJTg5wrkfcZ60X4nUf7Q=="],
+
+    "@firebase/vertexai": ["@firebase/vertexai@1.0.2", "", { "dependencies": { "@firebase/app-check-interop-types": "0.3.3", "@firebase/component": "0.6.11", "@firebase/logger": "0.4.4", "@firebase/util": "1.10.2", "tslib": "^2.1.0" }, "peerDependencies": { "@firebase/app": "0.x", "@firebase/app-types": "0.x" } }, "sha512-4dC9m2nD0tkfKJT5v+i27tELrmUePjFXW3CDAxhVHUEv647B2R7kqpGQnyPkNEeaXkCr76THe7GGg35EWn4lDw=="],
+
+    "@firebase/webchannel-wrapper": ["@firebase/webchannel-wrapper@1.0.3", "", {}, "sha512-2xCRM9q9FlzGZCdgDMJwc0gyUkWFtkosy7Xxr6sFgQwn+wMNIWd7xIvYNauU1r64B5L5rsGKy/n9TKJ0aAFeqQ=="],
+
+    "@grpc/grpc-js": ["@grpc/grpc-js@1.9.16", "", { "dependencies": { "@grpc/proto-loader": "^0.7.8", "@types/node": ">=12.12.47" } }, ""],
+
+    "@grpc/proto-loader": ["@grpc/proto-loader@0.7.15", "", { "dependencies": { "lodash.camelcase": "^4.3.0", "long": "^5.0.0", "protobufjs": "^7.2.5", "yargs": "^17.7.2" }, "bin": { "proto-loader-gen-types": "build/bin/proto-loader-gen-types.js" } }, ""],
+
+    "@isaacs/cliui": ["@isaacs/cliui@9.0.0", "", {}, ""],
+
+    "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, ""],
+
+    "@jridgewell/remapping": ["@jridgewell/remapping@2.3.5", "", { "dependencies": { "@jridgewell/gen-mapping": "^0.3.5", "@jridgewell/trace-mapping": "^0.3.24" } }, ""],
+
+    "@jridgewell/resolve-uri": ["@jridgewell/resolve-uri@3.1.2", "", {}, ""],
+
+    "@jridgewell/source-map": ["@jridgewell/source-map@0.3.11", "", { "dependencies": { "@jridgewell/gen-mapping": "^0.3.5", "@jridgewell/trace-mapping": "^0.3.25" } }, ""],
+
+    "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.6.0", "", {}, ""],
+
+    "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, ""],
+
+    "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "@protobufjs/aspromise": ["@protobufjs/aspromise@1.1.2", "", {}, ""],
+
+    "@protobufjs/base64": ["@protobufjs/base64@1.1.2", "", {}, ""],
+
+    "@protobufjs/codegen": ["@protobufjs/codegen@2.0.5", "", {}, ""],
+
+    "@protobufjs/eventemitter": ["@protobufjs/eventemitter@1.1.1", "", {}, ""],
+
+    "@protobufjs/fetch": ["@protobufjs/fetch@1.1.1", "", { "dependencies": { "@protobufjs/aspromise": "^1.1.1" } }, ""],
+
+    "@protobufjs/float": ["@protobufjs/float@1.0.2", "", {}, ""],
+
+    "@protobufjs/path": ["@protobufjs/path@1.1.2", "", {}, ""],
+
+    "@protobufjs/pool": ["@protobufjs/pool@1.1.0", "", {}, ""],
+
+    "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, ""],
+
+    "@react-leaflet/core": ["@react-leaflet/core@2.1.0", "", { "peerDependencies": { "leaflet": "^1.9.0", "react": "^18.0.0", "react-dom": "^18.0.0" } }, ""],
+
+    "@reduxjs/toolkit": ["@reduxjs/toolkit@2.12.0", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "@standard-schema/utils": "^0.3.0", "immer": "^11.0.0", "redux": "^5.0.1", "redux-thunk": "^3.1.0", "reselect": "^5.1.0" }, "peerDependencies": { "react": "^16.9.0 || ^17.0.0 || ^18 || ^19", "react-redux": "^7.2.1 || ^8.1.3 || ^9.0.0" }, "optionalPeers": ["react", "react-redux"] }, ""],
+
+    "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-beta.27", "", {}, ""],
+
+    "@rollup/plugin-babel": ["@rollup/plugin-babel@6.1.0", "", { "dependencies": { "@babel/helper-module-imports": "^7.18.6", "@rollup/pluginutils": "^5.0.1" }, "peerDependencies": { "@babel/core": "^7.0.0", "@types/babel__core": "^7.1.9", "rollup": "^1.20.0||^2.0.0||^3.0.0||^4.0.0" }, "optionalPeers": ["@types/babel__core", "rollup"] }, ""],
+
+    "@rollup/plugin-node-resolve": ["@rollup/plugin-node-resolve@16.0.3", "", { "dependencies": { "@rollup/pluginutils": "^5.0.1", "@types/resolve": "1.20.2", "deepmerge": "^4.2.2", "is-module": "^1.0.0", "resolve": "^1.22.1" }, "peerDependencies": { "rollup": "^2.78.0||^3.0.0||^4.0.0" }, "optionalPeers": ["rollup"] }, ""],
+
+    "@rollup/plugin-replace": ["@rollup/plugin-replace@6.0.3", "", { "dependencies": { "@rollup/pluginutils": "^5.0.1", "magic-string": "^0.30.3" }, "peerDependencies": { "rollup": "^1.20.0||^2.0.0||^3.0.0||^4.0.0" }, "optionalPeers": ["rollup"] }, ""],
+
+    "@rollup/plugin-terser": ["@rollup/plugin-terser@1.0.0", "", { "dependencies": { "serialize-javascript": "^7.0.3", "smob": "^1.0.0", "terser": "^5.17.4" }, "peerDependencies": { "rollup": "^2.0.0||^3.0.0||^4.0.0" }, "optionalPeers": ["rollup"] }, ""],
+
+    "@rollup/pluginutils": ["@rollup/pluginutils@5.4.0", "", { "dependencies": { "@types/estree": "^1.0.0", "estree-walker": "^2.0.2", "picomatch": "^4.0.2" }, "peerDependencies": { "rollup": "^1.20.0||^2.0.0||^3.0.0||^4.0.0" }, "optionalPeers": ["rollup"] }, ""],
+
+    "@rollup/rollup-linux-x64-gnu": ["@rollup/rollup-linux-x64-gnu@4.63.3", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "@rollup/rollup-linux-x64-musl": ["@rollup/rollup-linux-x64-musl@4.63.3", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, ""],
+
+    "@standard-schema/utils": ["@standard-schema/utils@0.3.0", "", {}, ""],
+
+    "@tailwindcss/node": ["@tailwindcss/node@4.3.3", "", { "dependencies": { "@jridgewell/remapping": "^2.3.5", "enhanced-resolve": "^5.24.1", "jiti": "^2.7.0", "lightningcss": "1.32.0", "magic-string": "^0.30.21", "source-map-js": "^1.2.1", "tailwindcss": "4.3.3" } }, ""],
+
+    "@tailwindcss/oxide": ["@tailwindcss/oxide@4.3.3", "", { "optionalDependencies": { "@tailwindcss/oxide-android-arm64": "4.3.3", "@tailwindcss/oxide-darwin-arm64": "4.3.3", "@tailwindcss/oxide-darwin-x64": "4.3.3", "@tailwindcss/oxide-freebsd-x64": "4.3.3", "@tailwindcss/oxide-linux-arm-gnueabihf": "4.3.3", "@tailwindcss/oxide-linux-arm64-gnu": "4.3.3", "@tailwindcss/oxide-linux-arm64-musl": "4.3.3", "@tailwindcss/oxide-linux-x64-gnu": "4.3.3", "@tailwindcss/oxide-linux-x64-musl": "4.3.3", "@tailwindcss/oxide-wasm32-wasi": "4.3.3", "@tailwindcss/oxide-win32-arm64-msvc": "4.3.3", "@tailwindcss/oxide-win32-x64-msvc": "4.3.3" } }, ""],
+
+    "@tailwindcss/oxide-linux-x64-gnu": ["@tailwindcss/oxide-linux-x64-gnu@4.3.3", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "@tailwindcss/oxide-linux-x64-musl": ["@tailwindcss/oxide-linux-x64-musl@4.3.3", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "@tailwindcss/vite": ["@tailwindcss/vite@4.3.3", "", { "dependencies": { "@tailwindcss/node": "4.3.3", "@tailwindcss/oxide": "4.3.3", "tailwindcss": "4.3.3" }, "peerDependencies": { "vite": "^5.2.0 || ^6 || ^7 || ^8" } }, ""],
+
+    "@trickfilm400/rollup-plugin-off-main-thread": ["@trickfilm400/rollup-plugin-off-main-thread@3.0.0-pre1", "", { "dependencies": { "ejs": "^3.1.10", "json5": "^2.2.3", "magic-string": "^0.30.21", "string.prototype.matchall": "^4.0.12" } }, ""],
+
+    "@turf/along": ["@turf/along@7.4.0", "", { "dependencies": { "@turf/bearing": "7.4.0", "@turf/destination": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/angle": ["@turf/angle@7.4.0", "", { "dependencies": { "@turf/bearing": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/rhumb-bearing": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/area": ["@turf/area@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/bbox": ["@turf/bbox@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/bbox-clip": ["@turf/bbox-clip@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/bbox-polygon": ["@turf/bbox-polygon@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/bearing": ["@turf/bearing@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/bezier-spline": ["@turf/bezier-spline@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-clockwise": ["@turf/boolean-clockwise@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-concave": ["@turf/boolean-concave@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-contains": ["@turf/boolean-contains@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/boolean-point-in-polygon": "7.4.0", "@turf/boolean-point-on-line": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/line-split": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-crosses": ["@turf/boolean-crosses@7.4.0", "", { "dependencies": { "@turf/boolean-equal": "7.4.0", "@turf/boolean-point-in-polygon": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/line-intersect": "7.4.0", "@turf/polygon-to-line": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-disjoint": ["@turf/boolean-disjoint@7.4.0", "", { "dependencies": { "@turf/boolean-point-in-polygon": "7.4.0", "@turf/helpers": "7.4.0", "@turf/line-intersect": "7.4.0", "@turf/meta": "7.4.0", "@turf/polygon-to-line": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-equal": ["@turf/boolean-equal@7.4.0", "", { "dependencies": { "@turf/clean-coords": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "geojson-equality-ts": "^1.0.2", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-intersects": ["@turf/boolean-intersects@7.4.0", "", { "dependencies": { "@turf/boolean-disjoint": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-overlap": ["@turf/boolean-overlap@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/line-intersect": "7.4.0", "@turf/line-overlap": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "geojson-equality-ts": "^1.0.2", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-parallel": ["@turf/boolean-parallel@7.4.0", "", { "dependencies": { "@turf/clean-coords": "7.4.0", "@turf/helpers": "7.4.0", "@turf/line-segment": "7.4.0", "@turf/rhumb-bearing": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-point-in-polygon": ["@turf/boolean-point-in-polygon@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "point-in-polygon-hao": "^1.1.0", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-point-on-line": ["@turf/boolean-point-on-line@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-touches": ["@turf/boolean-touches@7.4.0", "", { "dependencies": { "@turf/boolean-point-in-polygon": "7.4.0", "@turf/boolean-point-on-line": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-valid": ["@turf/boolean-valid@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/boolean-crosses": "7.4.0", "@turf/boolean-disjoint": "7.4.0", "@turf/boolean-overlap": "7.4.0", "@turf/boolean-point-in-polygon": "7.4.0", "@turf/boolean-point-on-line": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/line-intersect": "7.4.0", "@types/geojson": "^7946.0.10", "geojson-polygon-self-intersections": "^1.2.1", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/boolean-within": ["@turf/boolean-within@7.4.0", "", { "dependencies": { "@turf/boolean-contains": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/buffer": ["@turf/buffer@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/center": "7.4.0", "@turf/helpers": "7.4.0", "@turf/jsts": "^2.7.1", "@turf/meta": "7.4.0", "@turf/projection": "7.4.0", "@types/geojson": "^7946.0.10", "d3-geo": "^2.0.2", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/center": ["@turf/center@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/center-mean": ["@turf/center-mean@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/center-median": ["@turf/center-median@7.4.0", "", { "dependencies": { "@turf/center-mean": "7.4.0", "@turf/centroid": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/center-of-mass": ["@turf/center-of-mass@7.4.0", "", { "dependencies": { "@turf/centroid": "7.4.0", "@turf/convex": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/centroid": ["@turf/centroid@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/circle": ["@turf/circle@7.4.0", "", { "dependencies": { "@turf/destination": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/clean-coords": ["@turf/clean-coords@7.4.0", "", { "dependencies": { "@turf/boolean-point-on-line": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/clone": ["@turf/clone@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/clusters": ["@turf/clusters@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/clusters-dbscan": ["@turf/clusters-dbscan@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "rbush": "^3.0.1", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/clusters-kmeans": ["@turf/clusters-kmeans@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "skmeans": "0.9.7", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/collect": ["@turf/collect@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/boolean-point-in-polygon": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "rbush": "^3.0.1", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/combine": ["@turf/combine@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/concave": ["@turf/concave@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/tin": "7.4.0", "@types/geojson": "^7946.0.10", "topojson-client": "3.x", "topojson-server": "3.x", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/convex": ["@turf/convex@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "concaveman": "^1.2.1", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/destination": ["@turf/destination@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/difference": ["@turf/difference@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "polyclip-ts": "^0.16.8", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/directional-mean": ["@turf/directional-mean@7.4.0", "", { "dependencies": { "@turf/bearing": "7.4.0", "@turf/centroid": "7.4.0", "@turf/destination": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/length": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/dissolve": ["@turf/dissolve@7.4.0", "", { "dependencies": { "@turf/flatten": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "polyclip-ts": "^0.16.8", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/distance": ["@turf/distance@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/distance-weight": ["@turf/distance-weight@7.4.0", "", { "dependencies": { "@turf/centroid": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/ellipse": ["@turf/ellipse@7.4.0", "", { "dependencies": { "@turf/destination": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/transform-rotate": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/envelope": ["@turf/envelope@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/bbox-polygon": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/explode": ["@turf/explode@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/flatten": ["@turf/flatten@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/flip": ["@turf/flip@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/geojson-rbush": ["@turf/geojson-rbush@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "rbush": "^3.0.1", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/great-circle": ["@turf/great-circle@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "arc": "^0.2.0", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/helpers": ["@turf/helpers@7.4.0", "", { "dependencies": { "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/hex-grid": ["@turf/hex-grid@7.4.0", "", { "dependencies": { "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/intersect": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/interpolate": ["@turf/interpolate@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/centroid": "7.4.0", "@turf/clone": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/hex-grid": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/point-grid": "7.4.0", "@turf/square-grid": "7.4.0", "@turf/triangle-grid": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/intersect": ["@turf/intersect@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "polyclip-ts": "^0.16.8", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/invariant": ["@turf/invariant@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/isobands": ["@turf/isobands@7.4.0", "", { "dependencies": { "@turf/area": "7.4.0", "@turf/bbox": "7.4.0", "@turf/boolean-point-in-polygon": "7.4.0", "@turf/explode": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/isolines": ["@turf/isolines@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/jsts": ["@turf/jsts@2.7.2", "", { "dependencies": { "jsts": "2.7.1" } }, ""],
+
+    "@turf/kinks": ["@turf/kinks@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/length": ["@turf/length@7.4.0", "", { "dependencies": { "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-arc": ["@turf/line-arc@7.4.0", "", { "dependencies": { "@turf/circle": "7.4.0", "@turf/destination": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-chunk": ["@turf/line-chunk@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/length": "7.4.0", "@turf/line-slice-along": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-intersect": ["@turf/line-intersect@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "robust-predicates": "^2.0.4", "tinyqueue": "^2.0.3", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-offset": ["@turf/line-offset@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-overlap": ["@turf/line-overlap@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/boolean-point-on-line": "7.4.0", "@turf/geojson-rbush": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/line-segment": "7.4.0", "@turf/meta": "7.4.0", "@turf/nearest-point-on-line": "7.4.0", "@types/geojson": "^7946.0.10", "fast-deep-equal": "^3.1.3", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-segment": ["@turf/line-segment@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-slice": ["@turf/line-slice@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/nearest-point-on-line": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-slice-along": ["@turf/line-slice-along@7.4.0", "", { "dependencies": { "@turf/bearing": "7.4.0", "@turf/destination": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-split": ["@turf/line-split@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/geojson-rbush": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/line-intersect": "7.4.0", "@turf/line-segment": "7.4.0", "@turf/meta": "7.4.0", "@turf/nearest-point-on-line": "7.4.0", "@turf/truncate": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/line-to-polygon": ["@turf/line-to-polygon@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/mask": ["@turf/mask@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "polyclip-ts": "^0.16.8", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/meta": ["@turf/meta@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/midpoint": ["@turf/midpoint@7.4.0", "", { "dependencies": { "@turf/bearing": "7.4.0", "@turf/destination": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/moran-index": ["@turf/moran-index@7.4.0", "", { "dependencies": { "@turf/distance-weight": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/nearest-neighbor-analysis": ["@turf/nearest-neighbor-analysis@7.4.0", "", { "dependencies": { "@turf/area": "7.4.0", "@turf/bbox": "7.4.0", "@turf/bbox-polygon": "7.4.0", "@turf/centroid": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@turf/nearest-point": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/nearest-point": ["@turf/nearest-point@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/nearest-point-on-line": ["@turf/nearest-point-on-line@7.4.0", "", { "dependencies": { "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/nearest-point-to-line": ["@turf/nearest-point-to-line@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/point-to-line-distance": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/planepoint": ["@turf/planepoint@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/point-grid": ["@turf/point-grid@7.4.0", "", { "dependencies": { "@turf/boolean-within": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/point-on-feature": ["@turf/point-on-feature@7.4.0", "", { "dependencies": { "@turf/boolean-point-in-polygon": "7.4.0", "@turf/center": "7.4.0", "@turf/explode": "7.4.0", "@turf/helpers": "7.4.0", "@turf/nearest-point": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/point-to-line-distance": ["@turf/point-to-line-distance@7.4.0", "", { "dependencies": { "@turf/bearing": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/nearest-point-on-line": "7.4.0", "@turf/projection": "7.4.0", "@turf/rhumb-bearing": "7.4.0", "@turf/rhumb-distance": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/point-to-polygon-distance": ["@turf/point-to-polygon-distance@7.4.0", "", { "dependencies": { "@turf/boolean-point-in-polygon": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/point-to-line-distance": "7.4.0", "@turf/polygon-to-line": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/points-within-polygon": ["@turf/points-within-polygon@7.4.0", "", { "dependencies": { "@turf/boolean-point-in-polygon": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/polygon-smooth": ["@turf/polygon-smooth@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/polygon-tangents": ["@turf/polygon-tangents@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/boolean-within": "7.4.0", "@turf/explode": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/nearest-point": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/polygon-to-line": ["@turf/polygon-to-line@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/polygonize": ["@turf/polygonize@7.4.0", "", { "dependencies": { "@turf/boolean-point-in-polygon": "7.4.0", "@turf/envelope": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/projection": ["@turf/projection@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/quadrat-analysis": ["@turf/quadrat-analysis@7.4.0", "", { "dependencies": { "@turf/area": "7.4.0", "@turf/bbox": "7.4.0", "@turf/bbox-polygon": "7.4.0", "@turf/centroid": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/point-grid": "7.4.0", "@turf/random": "7.4.0", "@turf/square-grid": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/random": ["@turf/random@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/rectangle-grid": ["@turf/rectangle-grid@7.4.0", "", { "dependencies": { "@turf/boolean-intersects": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/rewind": ["@turf/rewind@7.4.0", "", { "dependencies": { "@turf/boolean-clockwise": "7.4.0", "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/rhumb-bearing": ["@turf/rhumb-bearing@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/rhumb-destination": ["@turf/rhumb-destination@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/rhumb-distance": ["@turf/rhumb-distance@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/sample": ["@turf/sample@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/sector": ["@turf/sector@7.4.0", "", { "dependencies": { "@turf/circle": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/line-arc": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/shortest-path": ["@turf/shortest-path@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/bbox-polygon": "7.4.0", "@turf/boolean-point-in-polygon": "7.4.0", "@turf/clean-coords": "7.4.0", "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/transform-scale": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/simplify": ["@turf/simplify@7.4.0", "", { "dependencies": { "@turf/clean-coords": "7.4.0", "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/square": ["@turf/square@7.4.0", "", { "dependencies": { "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/square-grid": ["@turf/square-grid@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/rectangle-grid": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/standard-deviational-ellipse": ["@turf/standard-deviational-ellipse@7.4.0", "", { "dependencies": { "@turf/center-mean": "7.4.0", "@turf/ellipse": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/points-within-polygon": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/tag": ["@turf/tag@7.4.0", "", { "dependencies": { "@turf/boolean-point-in-polygon": "7.4.0", "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/tesselate": ["@turf/tesselate@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/earcut": "^2.1.4", "@types/geojson": "^7946.0.10", "earcut": "^2.2.4", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/tin": ["@turf/tin@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/transform-rotate": ["@turf/transform-rotate@7.4.0", "", { "dependencies": { "@turf/centroid": "7.4.0", "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/rhumb-bearing": "7.4.0", "@turf/rhumb-destination": "7.4.0", "@turf/rhumb-distance": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/transform-scale": ["@turf/transform-scale@7.4.0", "", { "dependencies": { "@turf/bbox": "7.4.0", "@turf/center": "7.4.0", "@turf/centroid": "7.4.0", "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/rhumb-bearing": "7.4.0", "@turf/rhumb-destination": "7.4.0", "@turf/rhumb-distance": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/transform-translate": ["@turf/transform-translate@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@turf/meta": "7.4.0", "@turf/rhumb-destination": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/triangle-grid": ["@turf/triangle-grid@7.4.0", "", { "dependencies": { "@turf/distance": "7.4.0", "@turf/helpers": "7.4.0", "@turf/intersect": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/truncate": ["@turf/truncate@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/turf": ["@turf/turf@7.4.0", "", { "dependencies": { "@turf/along": "7.4.0", "@turf/angle": "7.4.0", "@turf/area": "7.4.0", "@turf/bbox": "7.4.0", "@turf/bbox-clip": "7.4.0", "@turf/bbox-polygon": "7.4.0", "@turf/bearing": "7.4.0", "@turf/bezier-spline": "7.4.0", "@turf/boolean-clockwise": "7.4.0", "@turf/boolean-concave": "7.4.0", "@turf/boolean-contains": "7.4.0", "@turf/boolean-crosses": "7.4.0", "@turf/boolean-disjoint": "7.4.0", "@turf/boolean-equal": "7.4.0", "@turf/boolean-intersects": "7.4.0", "@turf/boolean-overlap": "7.4.0", "@turf/boolean-parallel": "7.4.0", "@turf/boolean-point-in-polygon": "7.4.0", "@turf/boolean-point-on-line": "7.4.0", "@turf/boolean-touches": "7.4.0", "@turf/boolean-valid": "7.4.0", "@turf/boolean-within": "7.4.0", "@turf/buffer": "7.4.0", "@turf/center": "7.4.0", "@turf/center-mean": "7.4.0", "@turf/center-median": "7.4.0", "@turf/center-of-mass": "7.4.0", "@turf/centroid": "7.4.0", "@turf/circle": "7.4.0", "@turf/clean-coords": "7.4.0", "@turf/clone": "7.4.0", "@turf/clusters": "7.4.0", "@turf/clusters-dbscan": "7.4.0", "@turf/clusters-kmeans": "7.4.0", "@turf/collect": "7.4.0", "@turf/combine": "7.4.0", "@turf/concave": "7.4.0", "@turf/convex": "7.4.0", "@turf/destination": "7.4.0", "@turf/difference": "7.4.0", "@turf/directional-mean": "7.4.0", "@turf/dissolve": "7.4.0", "@turf/distance": "7.4.0", "@turf/distance-weight": "7.4.0", "@turf/ellipse": "7.4.0", "@turf/envelope": "7.4.0", "@turf/explode": "7.4.0", "@turf/flatten": "7.4.0", "@turf/flip": "7.4.0", "@turf/geojson-rbush": "7.4.0", "@turf/great-circle": "7.4.0", "@turf/helpers": "7.4.0", "@turf/hex-grid": "7.4.0", "@turf/interpolate": "7.4.0", "@turf/intersect": "7.4.0", "@turf/invariant": "7.4.0", "@turf/isobands": "7.4.0", "@turf/isolines": "7.4.0", "@turf/kinks": "7.4.0", "@turf/length": "7.4.0", "@turf/line-arc": "7.4.0", "@turf/line-chunk": "7.4.0", "@turf/line-intersect": "7.4.0", "@turf/line-offset": "7.4.0", "@turf/line-overlap": "7.4.0", "@turf/line-segment": "7.4.0", "@turf/line-slice": "7.4.0", "@turf/line-slice-along": "7.4.0", "@turf/line-split": "7.4.0", "@turf/line-to-polygon": "7.4.0", "@turf/mask": "7.4.0", "@turf/meta": "7.4.0", "@turf/midpoint": "7.4.0", "@turf/moran-index": "7.4.0", "@turf/nearest-neighbor-analysis": "7.4.0", "@turf/nearest-point": "7.4.0", "@turf/nearest-point-on-line": "7.4.0", "@turf/nearest-point-to-line": "7.4.0", "@turf/planepoint": "7.4.0", "@turf/point-grid": "7.4.0", "@turf/point-on-feature": "7.4.0", "@turf/point-to-line-distance": "7.4.0", "@turf/point-to-polygon-distance": "7.4.0", "@turf/points-within-polygon": "7.4.0", "@turf/polygon-smooth": "7.4.0", "@turf/polygon-tangents": "7.4.0", "@turf/polygon-to-line": "7.4.0", "@turf/polygonize": "7.4.0", "@turf/projection": "7.4.0", "@turf/quadrat-analysis": "7.4.0", "@turf/random": "7.4.0", "@turf/rectangle-grid": "7.4.0", "@turf/rewind": "7.4.0", "@turf/rhumb-bearing": "7.4.0", "@turf/rhumb-destination": "7.4.0", "@turf/rhumb-distance": "7.4.0", "@turf/sample": "7.4.0", "@turf/sector": "7.4.0", "@turf/shortest-path": "7.4.0", "@turf/simplify": "7.4.0", "@turf/square": "7.4.0", "@turf/square-grid": "7.4.0", "@turf/standard-deviational-ellipse": "7.4.0", "@turf/tag": "7.4.0", "@turf/tesselate": "7.4.0", "@turf/tin": "7.4.0", "@turf/transform-rotate": "7.4.0", "@turf/transform-scale": "7.4.0", "@turf/transform-translate": "7.4.0", "@turf/triangle-grid": "7.4.0", "@turf/truncate": "7.4.0", "@turf/union": "7.4.0", "@turf/unkink-polygon": "7.4.0", "@turf/voronoi": "7.4.0", "@types/geojson": "^7946.0.10", "@types/kdbush": "^3.0.5", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/union": ["@turf/union@7.4.0", "", { "dependencies": { "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "polyclip-ts": "^0.16.8", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/unkink-polygon": ["@turf/unkink-polygon@7.4.0", "", { "dependencies": { "@turf/area": "7.4.0", "@turf/boolean-point-in-polygon": "7.4.0", "@turf/helpers": "7.4.0", "@turf/meta": "7.4.0", "@types/geojson": "^7946.0.10", "rbush": "^3.0.1", "tslib": "^2.8.1" } }, ""],
+
+    "@turf/voronoi": ["@turf/voronoi@7.4.0", "", { "dependencies": { "@turf/clone": "7.4.0", "@turf/helpers": "7.4.0", "@turf/invariant": "7.4.0", "@types/d3-voronoi": "^1.1.12", "@types/geojson": "^7946.0.10", "d3-voronoi": "1.1.2", "tslib": "^2.8.1" } }, ""],
+
+    "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, ""],
+
+    "@types/babel__generator": ["@types/babel__generator@7.27.0", "", { "dependencies": { "@babel/types": "^7.0.0" } }, ""],
+
+    "@types/babel__template": ["@types/babel__template@7.4.4", "", { "dependencies": { "@babel/parser": "^7.1.0", "@babel/types": "^7.0.0" } }, ""],
+
+    "@types/babel__traverse": ["@types/babel__traverse@7.28.0", "", { "dependencies": { "@babel/types": "^7.28.2" } }, ""],
+
+    "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, ""],
+
+    "@types/connect": ["@types/connect@3.4.38", "", { "dependencies": { "@types/node": "*" } }, ""],
+
+    "@types/cors": ["@types/cors@2.8.19", "", { "dependencies": { "@types/node": "*" } }, ""],
+
+    "@types/d3-array": ["@types/d3-array@3.2.2", "", {}, ""],
+
+    "@types/d3-color": ["@types/d3-color@3.1.3", "", {}, ""],
+
+    "@types/d3-ease": ["@types/d3-ease@3.0.2", "", {}, ""],
+
+    "@types/d3-interpolate": ["@types/d3-interpolate@3.0.4", "", { "dependencies": { "@types/d3-color": "*" } }, ""],
+
+    "@types/d3-path": ["@types/d3-path@3.1.1", "", {}, ""],
+
+    "@types/d3-scale": ["@types/d3-scale@4.0.9", "", { "dependencies": { "@types/d3-time": "*" } }, ""],
+
+    "@types/d3-shape": ["@types/d3-shape@3.2.0", "", { "dependencies": { "@types/d3-path": "*" } }, ""],
+
+    "@types/d3-time": ["@types/d3-time@3.0.4", "", {}, ""],
+
+    "@types/d3-timer": ["@types/d3-timer@3.0.2", "", {}, ""],
+
+    "@types/d3-voronoi": ["@types/d3-voronoi@1.1.12", "", {}, ""],
+
+    "@types/earcut": ["@types/earcut@2.1.4", "", {}, ""],
+
+    "@types/estree": ["@types/estree@1.0.9", "", {}, ""],
+
+    "@types/express": ["@types/express@4.17.25", "", { "dependencies": { "@types/body-parser": "*", "@types/express-serve-static-core": "^4.17.33", "@types/qs": "*", "@types/serve-static": "^1" } }, ""],
+
+    "@types/express-serve-static-core": ["@types/express-serve-static-core@4.19.9", "", { "dependencies": { "@types/node": "*", "@types/qs": "*", "@types/range-parser": "*", "@types/send": "*" } }, ""],
+
+    "@types/geojson": ["@types/geojson@7946.0.16", "", {}, ""],
+
+    "@types/http-errors": ["@types/http-errors@2.0.5", "", {}, ""],
+
+    "@types/kdbush": ["@types/kdbush@3.0.5", "", {}, ""],
+
+    "@types/leaflet": ["@types/leaflet@1.9.22", "", { "dependencies": { "@types/geojson": "*" } }, ""],
+
+    "@types/mime": ["@types/mime@1.3.5", "", {}, ""],
+
+    "@types/node": ["@types/node@22.20.3", "", { "dependencies": { "undici-types": "~6.21.0" } }, ""],
+
+    "@types/pako": ["@types/pako@2.0.4", "", {}, ""],
+
+    "@types/prop-types": ["@types/prop-types@15.7.15", "", {}, ""],
+
+    "@types/qs": ["@types/qs@6.15.1", "", {}, ""],
+
+    "@types/raf": ["@types/raf@3.4.3", "", {}, ""],
+
+    "@types/range-parser": ["@types/range-parser@1.2.7", "", {}, ""],
+
+    "@types/react": ["@types/react@18.3.31", "", { "dependencies": { "@types/prop-types": "*", "csstype": "^3.2.2" } }, ""],
+
+    "@types/react-dom": ["@types/react-dom@18.3.7", "", { "peerDependencies": { "@types/react": "^18.0.0" } }, ""],
+
+    "@types/resolve": ["@types/resolve@1.20.2", "", {}, ""],
+
+    "@types/send": ["@types/send@1.2.1", "", { "dependencies": { "@types/node": "*" } }, ""],
+
+    "@types/serve-static": ["@types/serve-static@1.15.10", "", { "dependencies": { "@types/http-errors": "*", "@types/node": "*", "@types/send": "<1" } }, ""],
+
+    "@types/trusted-types": ["@types/trusted-types@2.0.7", "", {}, ""],
+
+    "@types/use-sync-external-store": ["@types/use-sync-external-store@0.0.6", "", {}, ""],
+
+    "@vitejs/plugin-react": ["@vitejs/plugin-react@4.7.0", "", { "dependencies": { "@babel/core": "^7.28.0", "@babel/plugin-transform-react-jsx-self": "^7.27.1", "@babel/plugin-transform-react-jsx-source": "^7.27.1", "@rolldown/pluginutils": "1.0.0-beta.27", "@types/babel__core": "^7.20.5", "react-refresh": "^0.17.0" }, "peerDependencies": { "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" } }, ""],
+
+    "@xmldom/xmldom": ["@xmldom/xmldom@0.9.12", "", {}, ""],
+
+    "accepts": ["accepts@1.3.8", "", { "dependencies": { "mime-types": "~2.1.34", "negotiator": "0.6.3" } }, ""],
+
+    "acorn": ["acorn@8.18.0", "", { "bin": "bin/acorn" }, ""],
+
+    "ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, ""],
+
+    "ansi-regex": ["ansi-regex@5.0.1", "", {}, ""],
+
+    "ansi-styles": ["ansi-styles@4.3.0", "", { "dependencies": { "color-convert": "^2.0.1" } }, ""],
+
+    "arc": ["arc@0.2.0", "", {}, ""],
+
+    "array-buffer-byte-length": ["array-buffer-byte-length@1.0.2", "", { "dependencies": { "call-bound": "^1.0.3", "is-array-buffer": "^3.0.5" } }, ""],
+
+    "array-flatten": ["array-flatten@1.1.1", "", {}, ""],
+
+    "arraybuffer.prototype.slice": ["arraybuffer.prototype.slice@1.0.4", "", { "dependencies": { "array-buffer-byte-length": "^1.0.1", "call-bind": "^1.0.8", "define-properties": "^1.2.1", "es-abstract": "^1.23.5", "es-errors": "^1.3.0", "get-intrinsic": "^1.2.6", "is-array-buffer": "^3.0.4" } }, ""],
+
+    "async": ["async@3.2.6", "", {}, ""],
+
+    "async-function": ["async-function@1.0.0", "", {}, ""],
+
+    "at-least-node": ["at-least-node@1.0.0", "", {}, ""],
+
+    "available-typed-arrays": ["available-typed-arrays@1.0.7", "", { "dependencies": { "possible-typed-array-names": "^1.0.0" } }, ""],
+
+    "babel-plugin-polyfill-corejs2": ["babel-plugin-polyfill-corejs2@0.4.17", "", { "dependencies": { "@babel/compat-data": "^7.28.6", "@babel/helper-define-polyfill-provider": "^0.6.8", "semver": "^6.3.1" }, "peerDependencies": { "@babel/core": "^7.4.0 || ^8.0.0-0 <8.0.0" } }, ""],
+
+    "babel-plugin-polyfill-corejs3": ["babel-plugin-polyfill-corejs3@0.14.2", "", { "dependencies": { "@babel/helper-define-polyfill-provider": "^0.6.8", "core-js-compat": "^3.48.0" }, "peerDependencies": { "@babel/core": "^7.4.0 || ^8.0.0-0 <8.0.0" } }, ""],
+
+    "babel-plugin-polyfill-regenerator": ["babel-plugin-polyfill-regenerator@0.6.8", "", { "dependencies": { "@babel/helper-define-polyfill-provider": "^0.6.8" }, "peerDependencies": { "@babel/core": "^7.4.0 || ^8.0.0-0 <8.0.0" } }, ""],
+
+    "balanced-match": ["balanced-match@4.0.4", "", {}, ""],
+
+    "base64-arraybuffer": ["base64-arraybuffer@1.0.2", "", {}, ""],
+
+    "baseline-browser-mapping": ["baseline-browser-mapping@2.11.24", "", { "bin": "dist/cli.cjs" }, ""],
+
+    "bignumber.js": ["bignumber.js@9.3.1", "", {}, ""],
+
+    "body-parser": ["body-parser@1.20.8", "", { "dependencies": { "bytes": "~3.1.2", "content-type": "~1.0.5", "debug": "2.6.9", "depd": "2.0.0", "destroy": "~1.2.0", "http-errors": "~2.0.1", "iconv-lite": "~0.4.24", "on-finished": "~2.4.1", "qs": "~6.16.0", "raw-body": "~2.5.3", "type-is": "~1.6.18", "unpipe": "~1.0.0" } }, ""],
+
+    "brace-expansion": ["brace-expansion@5.0.12", "", { "dependencies": { "balanced-match": "^4.0.2" } }, ""],
+
+    "browserslist": ["browserslist@4.29.0", "", { "dependencies": { "baseline-browser-mapping": "^2.11.23", "caniuse-lite": "^1.0.30001810", "electron-to-chromium": "^1.5.427", "node-releases": "^2.0.55", "update-browserslist-db": "^1.3.3" }, "bin": "cli.js" }, ""],
+
+    "buffer-from": ["buffer-from@1.1.2", "", {}, ""],
+
+    "bytes": ["bytes@3.1.2", "", {}, ""],
+
+    "call-bind": ["call-bind@1.0.9", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.2", "es-define-property": "^1.0.1", "get-intrinsic": "^1.3.0", "set-function-length": "^1.2.2" } }, ""],
+
+    "call-bind-apply-helpers": ["call-bind-apply-helpers@1.0.2", "", { "dependencies": { "es-errors": "^1.3.0", "function-bind": "^1.1.2" } }, ""],
+
+    "call-bound": ["call-bound@1.0.4", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.2", "get-intrinsic": "^1.3.0" } }, ""],
+
+    "caniuse-lite": ["caniuse-lite@1.0.30001810", "", {}, ""],
+
+    "canvg": ["canvg@3.0.11", "", { "dependencies": { "@babel/runtime": "^7.12.5", "@types/raf": "^3.4.0", "core-js": "^3.8.3", "raf": "^3.4.1", "regenerator-runtime": "^0.13.7", "rgbcolor": "^1.0.1", "stackblur-canvas": "^2.0.0", "svg-pathdata": "^6.0.3" } }, ""],
+
+    "cliui": ["cliui@8.0.1", "", { "dependencies": { "string-width": "^4.2.0", "strip-ansi": "^6.0.1", "wrap-ansi": "^7.0.0" } }, ""],
+
+    "clsx": ["clsx@2.1.1", "", {}, ""],
+
+    "color-convert": ["color-convert@2.0.1", "", { "dependencies": { "color-name": "~1.1.4" } }, ""],
+
+    "color-name": ["color-name@1.1.4", "", {}, ""],
+
+    "commander": ["commander@2.20.3", "", {}, ""],
+
+    "common-tags": ["common-tags@1.8.2", "", {}, ""],
+
+    "concat-stream": ["concat-stream@1.5.2", "", { "dependencies": { "inherits": "~2.0.1", "readable-stream": "~2.0.0", "typedarray": "~0.0.5" } }, ""],
+
+    "concaveman": ["concaveman@1.2.1", "", { "dependencies": { "point-in-polygon": "^1.1.0", "rbush": "^3.0.1", "robust-predicates": "^2.0.4", "tinyqueue": "^2.0.3" } }, ""],
+
+    "content-disposition": ["content-disposition@0.5.4", "", { "dependencies": { "safe-buffer": "5.2.1" } }, ""],
+
+    "content-type": ["content-type@1.0.5", "", {}, ""],
+
+    "convert-source-map": ["convert-source-map@2.0.0", "", {}, ""],
+
+    "cookie": ["cookie@0.7.2", "", {}, ""],
+
+    "cookie-signature": ["cookie-signature@1.0.7", "", {}, ""],
+
+    "core-js": ["core-js@3.50.0", "", {}, ""],
+
+    "core-js-compat": ["core-js-compat@3.50.0", "", { "dependencies": { "browserslist": "^4.28.7" } }, ""],
+
+    "core-util-is": ["core-util-is@1.0.3", "", {}, ""],
+
+    "cors": ["cors@2.8.6", "", { "dependencies": { "object-assign": "^4", "vary": "^1" } }, ""],
+
+    "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, ""],
+
+    "crypto-random-string": ["crypto-random-string@2.0.0", "", {}, ""],
+
+    "css-line-break": ["css-line-break@2.1.0", "", { "dependencies": { "utrie": "^1.0.2" } }, ""],
+
+    "csstype": ["csstype@3.2.3", "", {}, ""],
+
+    "d3-array": ["d3-array@3.2.4", "", { "dependencies": { "internmap": "1 - 2" } }, ""],
+
+    "d3-color": ["d3-color@3.1.0", "", {}, ""],
+
+    "d3-ease": ["d3-ease@3.0.1", "", {}, ""],
+
+    "d3-format": ["d3-format@3.1.2", "", {}, ""],
+
+    "d3-geo": ["d3-geo@2.0.2", "", { "dependencies": { "d3-array": "^2.5.0" } }, ""],
+
+    "d3-interpolate": ["d3-interpolate@3.0.1", "", { "dependencies": { "d3-color": "1 - 3" } }, ""],
+
+    "d3-path": ["d3-path@3.1.0", "", {}, ""],
+
+    "d3-scale": ["d3-scale@4.0.2", "", { "dependencies": { "d3-array": "2.10.0 - 3", "d3-format": "1 - 3", "d3-interpolate": "1.2.0 - 3", "d3-time": "2.1.1 - 3", "d3-time-format": "2 - 4" } }, ""],
+
+    "d3-shape": ["d3-shape@3.2.0", "", { "dependencies": { "d3-path": "^3.1.0" } }, ""],
+
+    "d3-time": ["d3-time@3.1.0", "", { "dependencies": { "d3-array": "2 - 3" } }, ""],
+
+    "d3-time-format": ["d3-time-format@4.1.0", "", { "dependencies": { "d3-time": "1 - 3" } }, ""],
+
+    "d3-timer": ["d3-timer@3.0.1", "", {}, ""],
+
+    "d3-voronoi": ["d3-voronoi@1.1.2", "", {}, ""],
+
+    "data-view-buffer": ["data-view-buffer@1.0.2", "", { "dependencies": { "call-bound": "^1.0.3", "es-errors": "^1.3.0", "is-data-view": "^1.0.2" } }, ""],
+
+    "data-view-byte-length": ["data-view-byte-length@1.0.2", "", { "dependencies": { "call-bound": "^1.0.3", "es-errors": "^1.3.0", "is-data-view": "^1.0.2" } }, ""],
+
+    "data-view-byte-offset": ["data-view-byte-offset@1.0.1", "", { "dependencies": { "call-bound": "^1.0.2", "es-errors": "^1.3.0", "is-data-view": "^1.0.1" } }, ""],
+
+    "debug": ["debug@2.6.9", "", { "dependencies": { "ms": "2.0.0" } }, ""],
+
+    "decimal.js-light": ["decimal.js-light@2.5.1", "", {}, ""],
+
+    "deepmerge": ["deepmerge@4.3.1", "", {}, ""],
+
+    "define-data-property": ["define-data-property@1.1.4", "", { "dependencies": { "es-define-property": "^1.0.0", "es-errors": "^1.3.0", "gopd": "^1.0.1" } }, ""],
+
+    "define-properties": ["define-properties@1.2.1", "", { "dependencies": { "define-data-property": "^1.0.1", "has-property-descriptors": "^1.0.0", "object-keys": "^1.1.1" } }, ""],
+
+    "depd": ["depd@2.0.0", "", {}, ""],
+
+    "destroy": ["destroy@1.2.0", "", {}, ""],
+
+    "detect-libc": ["detect-libc@2.1.2", "", {}, ""],
+
+    "dompurify": ["dompurify@3.4.15", "", { "optionalDependencies": { "@types/trusted-types": "^2.0.7" } }, ""],
+
+    "dunder-proto": ["dunder-proto@1.0.1", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.1", "es-errors": "^1.3.0", "gopd": "^1.2.0" } }, ""],
+
+    "earcut": ["earcut@2.2.4", "", {}, ""],
+
+    "ee-first": ["ee-first@1.1.1", "", {}, ""],
+
+    "ejs": ["ejs@3.1.10", "", { "dependencies": { "jake": "^10.8.5" }, "bin": "bin/cli.js" }, ""],
+
+    "electron-to-chromium": ["electron-to-chromium@1.5.430", "", {}, ""],
+
+    "emoji-regex": ["emoji-regex@8.0.0", "", {}, ""],
+
+    "encodeurl": ["encodeurl@2.0.0", "", {}, ""],
+
+    "enhanced-resolve": ["enhanced-resolve@5.25.1", "", { "dependencies": { "graceful-fs": "^4.2.4", "tapable": "^2.3.3" } }, ""],
+
+    "es-abstract": ["es-abstract@1.24.2", "", { "dependencies": { "array-buffer-byte-length": "^1.0.2", "arraybuffer.prototype.slice": "^1.0.4", "available-typed-arrays": "^1.0.7", "call-bind": "^1.0.8", "call-bound": "^1.0.4", "data-view-buffer": "^1.0.2", "data-view-byte-length": "^1.0.2", "data-view-byte-offset": "^1.0.1", "es-define-property": "^1.0.1", "es-errors": "^1.3.0", "es-object-atoms": "^1.1.1", "es-set-tostringtag": "^2.1.0", "es-to-primitive": "^1.3.0", "function.prototype.name": "^1.1.8", "get-intrinsic": "^1.3.0", "get-proto": "^1.0.1", "get-symbol-description": "^1.1.0", "globalthis": "^1.0.4", "gopd": "^1.2.0", "has-property-descriptors": "^1.0.2", "has-proto": "^1.2.0", "has-symbols": "^1.1.0", "hasown": "^2.0.2", "internal-slot": "^1.1.0", "is-array-buffer": "^3.0.5", "is-callable": "^1.2.7", "is-data-view": "^1.0.2", "is-negative-zero": "^2.0.3", "is-regex": "^1.2.1", "is-set": "^2.0.3", "is-shared-array-buffer": "^1.0.4", "is-string": "^1.1.1", "is-typed-array": "^1.1.15", "is-weakref": "^1.1.1", "math-intrinsics": "^1.1.0", "object-inspect": "^1.13.4", "object-keys": "^1.1.1", "object.assign": "^4.1.7", "own-keys": "^1.0.1", "regexp.prototype.flags": "^1.5.4", "safe-array-concat": "^1.1.3", "safe-push-apply": "^1.0.0", "safe-regex-test": "^1.1.0", "set-proto": "^1.0.0", "stop-iteration-iterator": "^1.1.0", "string.prototype.trim": "^1.2.10", "string.prototype.trimend": "^1.0.9", "string.prototype.trimstart": "^1.0.8", "typed-array-buffer": "^1.0.3", "typed-array-byte-length": "^1.0.3", "typed-array-byte-offset": "^1.0.4", "typed-array-length": "^1.0.7", "unbox-primitive": "^1.1.0", "which-typed-array": "^1.1.19" } }, ""],
+
+    "es-abstract-get": ["es-abstract-get@1.0.0", "", { "dependencies": { "es-errors": "^1.3.0", "es-object-atoms": "^1.1.2", "is-callable": "^1.2.7", "object-inspect": "^1.13.4" } }, ""],
+
+    "es-define-property": ["es-define-property@1.0.1", "", {}, ""],
+
+    "es-errors": ["es-errors@1.3.0", "", {}, ""],
+
+    "es-object-atoms": ["es-object-atoms@1.1.2", "", { "dependencies": { "es-errors": "^1.3.0" } }, ""],
+
+    "es-set-tostringtag": ["es-set-tostringtag@2.1.0", "", { "dependencies": { "es-errors": "^1.3.0", "get-intrinsic": "^1.2.6", "has-tostringtag": "^1.0.2", "hasown": "^2.0.2" } }, ""],
+
+    "es-to-primitive": ["es-to-primitive@1.3.4", "", { "dependencies": { "es-abstract-get": "^1.0.0", "es-define-property": "^1.0.1", "es-errors": "^1.3.0", "is-callable": "^1.2.7", "is-date-object": "^1.1.0", "is-symbol": "^1.1.1" } }, ""],
+
+    "es-toolkit": ["es-toolkit@1.52.0", "", {}, ""],
+
+    "esbuild": ["esbuild@0.24.2", "", { "optionalDependencies": { "@esbuild/aix-ppc64": "0.24.2", "@esbuild/android-arm": "0.24.2", "@esbuild/android-arm64": "0.24.2", "@esbuild/android-x64": "0.24.2", "@esbuild/darwin-arm64": "0.24.2", "@esbuild/darwin-x64": "0.24.2", "@esbuild/freebsd-arm64": "0.24.2", "@esbuild/freebsd-x64": "0.24.2", "@esbuild/linux-arm": "0.24.2", "@esbuild/linux-arm64": "0.24.2", "@esbuild/linux-ia32": "0.24.2", "@esbuild/linux-loong64": "0.24.2", "@esbuild/linux-mips64el": "0.24.2", "@esbuild/linux-ppc64": "0.24.2", "@esbuild/linux-riscv64": "0.24.2", "@esbuild/linux-s390x": "0.24.2", "@esbuild/linux-x64": "0.24.2", "@esbuild/netbsd-arm64": "0.24.2", "@esbuild/netbsd-x64": "0.24.2", "@esbuild/openbsd-arm64": "0.24.2", "@esbuild/openbsd-x64": "0.24.2", "@esbuild/sunos-x64": "0.24.2", "@esbuild/win32-arm64": "0.24.2", "@esbuild/win32-ia32": "0.24.2", "@esbuild/win32-x64": "0.24.2" }, "bin": "bin/esbuild" }, ""],
+
+    "escalade": ["escalade@3.2.0", "", {}, ""],
+
+    "escape-html": ["escape-html@1.0.3", "", {}, ""],
+
+    "estree-walker": ["estree-walker@2.0.2", "", {}, ""],
+
+    "esutils": ["esutils@2.0.3", "", {}, ""],
+
+    "eta": ["eta@4.6.0", "", {}, ""],
+
+    "etag": ["etag@1.8.1", "", {}, ""],
+
+    "eventemitter3": ["eventemitter3@5.0.4", "", {}, ""],
+
+    "express": ["express@4.22.3", "", { "dependencies": { "accepts": "~1.3.8", "array-flatten": "1.1.1", "body-parser": "~1.20.5", "content-disposition": "~0.5.4", "content-type": "~1.0.4", "cookie": "~0.7.1", "cookie-signature": "~1.0.6", "debug": "2.6.9", "depd": "2.0.0", "encodeurl": "~2.0.0", "escape-html": "~1.0.3", "etag": "~1.8.1", "finalhandler": "~1.3.1", "fresh": "~0.5.2", "http-errors": "~2.0.0", "merge-descriptors": "1.0.3", "methods": "~1.1.2", "on-finished": "~2.4.1", "parseurl": "~1.3.3", "path-to-regexp": "~0.1.13", "proxy-addr": "~2.0.7", "qs": "~6.16.0", "range-parser": "~1.2.1", "safe-buffer": "5.2.1", "send": "~0.19.0", "serve-static": "~1.16.2", "setprototypeof": "1.2.0", "statuses": "~2.0.1", "type-is": "~1.6.18", "utils-merge": "1.0.1", "vary": "~1.1.2" } }, ""],
+
+    "fast-deep-equal": ["fast-deep-equal@3.1.3", "", {}, ""],
+
+    "fast-json-stable-stringify": ["fast-json-stable-stringify@2.1.0", "", {}, ""],
+
+    "fast-png": ["fast-png@6.4.0", "", { "dependencies": { "@types/pako": "^2.0.3", "iobuffer": "^5.3.2", "pako": "^2.1.0" } }, ""],
+
+    "fast-uri": ["fast-uri@3.1.8", "", {}, ""],
+
+    "faye-websocket": ["faye-websocket@0.11.4", "", { "dependencies": { "websocket-driver": ">=0.5.1" } }, ""],
+
+    "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, ""],
+
+    "fflate": ["fflate@0.8.3", "", {}, ""],
+
+    "filelist": ["filelist@1.0.6", "", { "dependencies": { "minimatch": "^5.0.1" } }, ""],
+
+    "finalhandler": ["finalhandler@1.3.2", "", { "dependencies": { "debug": "2.6.9", "encodeurl": "~2.0.0", "escape-html": "~1.0.3", "on-finished": "~2.4.1", "parseurl": "~1.3.3", "statuses": "~2.0.2", "unpipe": "~1.0.0" } }, ""],
+
+    "firebase": ["firebase@11.1.0", "", { "dependencies": { "@firebase/analytics": "0.10.10", "@firebase/analytics-compat": "0.2.16", "@firebase/app": "0.10.17", "@firebase/app-check": "0.8.10", "@firebase/app-check-compat": "0.3.17", "@firebase/app-compat": "0.2.47", "@firebase/app-types": "0.9.3", "@firebase/auth": "1.8.1", "@firebase/auth-compat": "0.5.16", "@firebase/data-connect": "0.1.3", "@firebase/database": "1.0.10", "@firebase/database-compat": "2.0.1", "@firebase/firestore": "4.7.5", "@firebase/firestore-compat": "0.3.40", "@firebase/functions": "0.12.0", "@firebase/functions-compat": "0.3.17", "@firebase/installations": "0.6.11", "@firebase/installations-compat": "0.2.11", "@firebase/messaging": "0.12.15", "@firebase/messaging-compat": "0.2.15", "@firebase/performance": "0.6.11", "@firebase/performance-compat": "0.2.11", "@firebase/remote-config": "0.4.11", "@firebase/remote-config-compat": "0.2.11", "@firebase/storage": "0.13.4", "@firebase/storage-compat": "0.3.14", "@firebase/util": "1.10.2", "@firebase/vertexai": "1.0.2" } }, "sha512-3OoNW3vBXmBLYJvcwbPCwfluptbDVp2zZYjrfHPVFAXfPgmyy/LWjidt+Sw2WNvRelsG0v++WN2Wor6J3OwDRg=="],
+
+    "for-each": ["for-each@0.3.5", "", { "dependencies": { "is-callable": "^1.2.7" } }, ""],
+
+    "foreground-child": ["foreground-child@3.3.1", "", { "dependencies": { "cross-spawn": "^7.0.6", "signal-exit": "^4.0.1" } }, ""],
+
+    "forwarded": ["forwarded@0.2.0", "", {}, ""],
+
+    "framer-motion": ["framer-motion@13.4.0", "", { "dependencies": { "motion-dom": "^13.3.0", "motion-utils": "^13.3.0", "tslib": "^2.4.0" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" }, "optionalPeers": ["react", "react-dom"] }, ""],
+
+    "fresh": ["fresh@0.5.2", "", {}, ""],
+
+    "fs-extra": ["fs-extra@9.1.0", "", { "dependencies": { "at-least-node": "^1.0.0", "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, ""],
+
+    "function-bind": ["function-bind@1.1.2", "", {}, ""],
+
+    "function.prototype.name": ["function.prototype.name@1.2.0", "", { "dependencies": { "call-bind": "^1.0.9", "call-bound": "^1.0.4", "es-define-property": "^1.0.1", "es-errors": "^1.3.0", "functions-have-names": "^1.2.3", "has-property-descriptors": "^1.0.2", "hasown": "^2.0.4", "is-callable": "^1.2.7", "is-document.all": "^1.0.0" } }, ""],
+
+    "functions-have-names": ["functions-have-names@1.2.3", "", {}, ""],
+
+    "generator-function": ["generator-function@2.0.1", "", {}, ""],
+
+    "gensync": ["gensync@1.0.0-beta.2", "", {}, ""],
+
+    "geojson-equality-ts": ["geojson-equality-ts@1.0.2", "", { "dependencies": { "@types/geojson": "^7946.0.14" } }, ""],
+
+    "geojson-polygon-self-intersections": ["geojson-polygon-self-intersections@1.2.2", "", { "dependencies": { "rbush": "^2.0.1" } }, ""],
+
+    "get-caller-file": ["get-caller-file@2.0.5", "", {}, ""],
+
+    "get-intrinsic": ["get-intrinsic@1.3.0", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.2", "es-define-property": "^1.0.1", "es-errors": "^1.3.0", "es-object-atoms": "^1.1.1", "function-bind": "^1.1.2", "get-proto": "^1.0.1", "gopd": "^1.2.0", "has-symbols": "^1.1.0", "hasown": "^2.0.2", "math-intrinsics": "^1.1.0" } }, ""],
+
+    "get-own-enumerable-property-symbols": ["get-own-enumerable-property-symbols@3.0.2", "", {}, ""],
+
+    "get-proto": ["get-proto@1.0.1", "", { "dependencies": { "dunder-proto": "^1.0.1", "es-object-atoms": "^1.0.0" } }, ""],
+
+    "get-symbol-description": ["get-symbol-description@1.1.0", "", { "dependencies": { "call-bound": "^1.0.3", "es-errors": "^1.3.0", "get-intrinsic": "^1.2.6" } }, ""],
+
+    "glob": ["glob@11.1.0", "", { "dependencies": { "foreground-child": "^3.3.1", "jackspeak": "^4.1.1", "minimatch": "^10.1.1", "minipass": "^7.1.2", "package-json-from-dist": "^1.0.0", "path-scurry": "^2.0.0" }, "bin": "dist/esm/bin.mjs" }, ""],
+
+    "globalthis": ["globalthis@1.0.4", "", { "dependencies": { "define-properties": "^1.2.1", "gopd": "^1.0.1" } }, ""],
+
+    "gopd": ["gopd@1.2.0", "", {}, ""],
+
+    "graceful-fs": ["graceful-fs@4.2.11", "", {}, ""],
+
+    "has-bigints": ["has-bigints@1.1.0", "", {}, ""],
+
+    "has-property-descriptors": ["has-property-descriptors@1.0.2", "", { "dependencies": { "es-define-property": "^1.0.0" } }, ""],
+
+    "has-proto": ["has-proto@1.2.0", "", { "dependencies": { "dunder-proto": "^1.0.0" } }, ""],
+
+    "has-symbols": ["has-symbols@1.1.0", "", {}, ""],
+
+    "has-tostringtag": ["has-tostringtag@1.0.2", "", { "dependencies": { "has-symbols": "^1.0.3" } }, ""],
+
+    "hasown": ["hasown@2.0.4", "", { "dependencies": { "function-bind": "^1.1.2" } }, ""],
+
+    "html2canvas": ["html2canvas@1.4.1", "", { "dependencies": { "css-line-break": "^2.1.0", "text-segmentation": "^1.0.3" } }, ""],
+
+    "http-errors": ["http-errors@2.0.1", "", { "dependencies": { "depd": "~2.0.0", "inherits": "~2.0.4", "setprototypeof": "~1.2.0", "statuses": "~2.0.2", "toidentifier": "~1.0.1" } }, ""],
+
+    "http-parser-js": ["http-parser-js@0.5.10", "", {}, ""],
+
+    "iconv-lite": ["iconv-lite@0.4.24", "", { "dependencies": { "safer-buffer": ">= 2.1.2 < 3" } }, ""],
+
+    "idb": ["idb@7.1.1", "", {}, ""],
+
+    "immer": ["immer@11.1.18", "", {}, ""],
+
+    "inherits": ["inherits@2.0.4", "", {}, ""],
+
+    "internal-slot": ["internal-slot@1.1.0", "", { "dependencies": { "es-errors": "^1.3.0", "hasown": "^2.0.2", "side-channel": "^1.1.0" } }, ""],
+
+    "internmap": ["internmap@2.0.3", "", {}, ""],
+
+    "iobuffer": ["iobuffer@5.4.0", "", {}, ""],
+
+    "ipaddr.js": ["ipaddr.js@1.9.1", "", {}, ""],
+
+    "is-array-buffer": ["is-array-buffer@3.0.5", "", { "dependencies": { "call-bind": "^1.0.8", "call-bound": "^1.0.3", "get-intrinsic": "^1.2.6" } }, ""],
+
+    "is-async-function": ["is-async-function@2.1.1", "", { "dependencies": { "async-function": "^1.0.0", "call-bound": "^1.0.3", "get-proto": "^1.0.1", "has-tostringtag": "^1.0.2", "safe-regex-test": "^1.1.0" } }, ""],
+
+    "is-bigint": ["is-bigint@1.1.0", "", { "dependencies": { "has-bigints": "^1.0.2" } }, ""],
+
+    "is-boolean-object": ["is-boolean-object@1.2.2", "", { "dependencies": { "call-bound": "^1.0.3", "has-tostringtag": "^1.0.2" } }, ""],
+
+    "is-callable": ["is-callable@1.2.7", "", {}, ""],
+
+    "is-core-module": ["is-core-module@2.17.0", "", { "dependencies": { "hasown": "^2.0.4" } }, ""],
+
+    "is-data-view": ["is-data-view@1.0.2", "", { "dependencies": { "call-bound": "^1.0.2", "get-intrinsic": "^1.2.6", "is-typed-array": "^1.1.13" } }, ""],
+
+    "is-date-object": ["is-date-object@1.1.0", "", { "dependencies": { "call-bound": "^1.0.2", "has-tostringtag": "^1.0.2" } }, ""],
+
+    "is-document.all": ["is-document.all@1.0.0", "", { "dependencies": { "call-bound": "^1.0.4" } }, ""],
+
+    "is-finalizationregistry": ["is-finalizationregistry@1.1.1", "", { "dependencies": { "call-bound": "^1.0.3" } }, ""],
+
+    "is-fullwidth-code-point": ["is-fullwidth-code-point@3.0.0", "", {}, ""],
+
+    "is-generator-function": ["is-generator-function@1.1.2", "", { "dependencies": { "call-bound": "^1.0.4", "generator-function": "^2.0.0", "get-proto": "^1.0.1", "has-tostringtag": "^1.0.2", "safe-regex-test": "^1.1.0" } }, ""],
+
+    "is-map": ["is-map@2.0.3", "", {}, ""],
+
+    "is-module": ["is-module@1.0.0", "", {}, ""],
+
+    "is-negative-zero": ["is-negative-zero@2.0.3", "", {}, ""],
+
+    "is-number-object": ["is-number-object@1.1.1", "", { "dependencies": { "call-bound": "^1.0.3", "has-tostringtag": "^1.0.2" } }, ""],
+
+    "is-obj": ["is-obj@1.0.1", "", {}, ""],
+
+    "is-regex": ["is-regex@1.2.1", "", { "dependencies": { "call-bound": "^1.0.2", "gopd": "^1.2.0", "has-tostringtag": "^1.0.2", "hasown": "^2.0.2" } }, ""],
+
+    "is-regexp": ["is-regexp@1.0.0", "", {}, ""],
+
+    "is-set": ["is-set@2.0.3", "", {}, ""],
+
+    "is-shared-array-buffer": ["is-shared-array-buffer@1.0.4", "", { "dependencies": { "call-bound": "^1.0.3" } }, ""],
+
+    "is-stream": ["is-stream@2.0.1", "", {}, ""],
+
+    "is-string": ["is-string@1.1.1", "", { "dependencies": { "call-bound": "^1.0.3", "has-tostringtag": "^1.0.2" } }, ""],
+
+    "is-symbol": ["is-symbol@1.1.1", "", { "dependencies": { "call-bound": "^1.0.2", "has-symbols": "^1.1.0", "safe-regex-test": "^1.1.0" } }, ""],
+
+    "is-typed-array": ["is-typed-array@1.1.15", "", { "dependencies": { "which-typed-array": "^1.1.16" } }, ""],
+
+    "is-weakmap": ["is-weakmap@2.0.2", "", {}, ""],
+
+    "is-weakref": ["is-weakref@1.1.1", "", { "dependencies": { "call-bound": "^1.0.3" } }, ""],
+
+    "is-weakset": ["is-weakset@2.0.4", "", { "dependencies": { "call-bound": "^1.0.3", "get-intrinsic": "^1.2.6" } }, ""],
+
+    "isarray": ["isarray@1.0.0", "", {}, ""],
+
+    "isexe": ["isexe@2.0.0", "", {}, ""],
+
+    "jackspeak": ["jackspeak@4.2.3", "", { "dependencies": { "@isaacs/cliui": "^9.0.0" } }, ""],
+
+    "jake": ["jake@10.9.4", "", { "dependencies": { "async": "^3.2.6", "filelist": "^1.0.4", "picocolors": "^1.1.1" }, "bin": "bin/cli.js" }, ""],
+
+    "jiti": ["jiti@2.7.0", "", { "bin": "lib/jiti-cli.mjs" }, ""],
+
+    "js-tokens": ["js-tokens@4.0.0", "", {}, ""],
+
+    "jsesc": ["jsesc@3.1.0", "", { "bin": "bin/jsesc" }, ""],
+
+    "json-schema-traverse": ["json-schema-traverse@1.0.0", "", {}, ""],
+
+    "json5": ["json5@2.2.3", "", { "bin": "lib/cli.js" }, ""],
+
+    "jsonfile": ["jsonfile@6.2.1", "", { "dependencies": { "universalify": "^2.0.0" }, "optionalDependencies": { "graceful-fs": "^4.1.6" } }, ""],
+
+    "jsonpointer": ["jsonpointer@5.0.1", "", {}, ""],
+
+    "jspdf": ["jspdf@4.2.1", "", { "dependencies": { "@babel/runtime": "^7.28.6", "fast-png": "^6.2.0", "fflate": "^0.8.1" }, "optionalDependencies": { "canvg": "^3.0.11", "core-js": "^3.6.0", "dompurify": "^3.3.1", "html2canvas": "^1.0.0-rc.5" } }, ""],
+
+    "jsts": ["jsts@2.7.1", "", {}, ""],
+
+    "leaflet": ["leaflet@1.9.4", "", {}, ""],
+
+    "leven": ["leven@3.1.0", "", {}, ""],
+
+    "lightningcss": ["lightningcss@1.32.0", "", { "dependencies": { "detect-libc": "^2.0.3" }, "optionalDependencies": { "lightningcss-android-arm64": "1.32.0", "lightningcss-darwin-arm64": "1.32.0", "lightningcss-darwin-x64": "1.32.0", "lightningcss-freebsd-x64": "1.32.0", "lightningcss-linux-arm-gnueabihf": "1.32.0", "lightningcss-linux-arm64-gnu": "1.32.0", "lightningcss-linux-arm64-musl": "1.32.0", "lightningcss-linux-x64-gnu": "1.32.0", "lightningcss-linux-x64-musl": "1.32.0", "lightningcss-win32-arm64-msvc": "1.32.0", "lightningcss-win32-x64-msvc": "1.32.0" } }, ""],
+
+    "lightningcss-linux-x64-gnu": ["lightningcss-linux-x64-gnu@1.32.0", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "lightningcss-linux-x64-musl": ["lightningcss-linux-x64-musl@1.32.0", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "lodash.camelcase": ["lodash.camelcase@4.3.0", "", {}, ""],
+
+    "lodash.debounce": ["lodash.debounce@4.0.8", "", {}, ""],
+
+    "long": ["long@5.3.2", "", {}, ""],
+
+    "loose-envify": ["loose-envify@1.4.0", "", { "dependencies": { "js-tokens": "^3.0.0 || ^4.0.0" }, "bin": "cli.js" }, ""],
+
+    "lru-cache": ["lru-cache@5.1.1", "", { "dependencies": { "yallist": "^3.0.2" } }, ""],
+
+    "lucide-react": ["lucide-react@1.46.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, ""],
+
+    "magic-string": ["magic-string@0.30.21", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, ""],
+
+    "math-intrinsics": ["math-intrinsics@1.1.0", "", {}, ""],
+
+    "media-typer": ["media-typer@0.3.0", "", {}, ""],
+
+    "merge-descriptors": ["merge-descriptors@1.0.3", "", {}, ""],
+
+    "methods": ["methods@1.1.2", "", {}, ""],
+
+    "mime": ["mime@1.6.0", "", { "bin": "cli.js" }, ""],
+
+    "mime-db": ["mime-db@1.52.0", "", {}, ""],
+
+    "mime-types": ["mime-types@2.1.35", "", { "dependencies": { "mime-db": "1.52.0" } }, ""],
+
+    "minimatch": ["minimatch@10.2.6", "", { "dependencies": { "brace-expansion": "^5.0.8" } }, ""],
+
+    "minimist": ["minimist@1.2.0", "", {}, ""],
+
+    "minipass": ["minipass@7.1.3", "", {}, ""],
+
+    "motion": ["motion@13.4.0", "", { "dependencies": { "framer-motion": "^13.4.0", "tslib": "^2.4.0" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" }, "optionalPeers": ["react", "react-dom"] }, ""],
+
+    "motion-dom": ["motion-dom@13.3.0", "", { "dependencies": { "motion-utils": "^13.3.0" } }, ""],
+
+    "motion-utils": ["motion-utils@13.3.0", "", {}, ""],
+
+    "ms": ["ms@2.0.0", "", {}, ""],
+
+    "nanoid": ["nanoid@3.3.19", "", { "bin": "bin/nanoid.cjs" }, ""],
+
+    "negotiator": ["negotiator@0.6.3", "", {}, ""],
+
+    "node-releases": ["node-releases@2.0.55", "", {}, ""],
+
+    "normalize-wheel": ["normalize-wheel@1.0.1", "", {}, "sha512-1OnlAPZ3zgrk8B91HyRj+eVv+kS5u+Z0SCsak6Xil/kmgEia50ga7zfkumayonZrImffAxPU/5WcyGhzetHNPA=="],
+
+    "object-assign": ["object-assign@4.1.1", "", {}, ""],
+
+    "object-inspect": ["object-inspect@1.13.4", "", {}, ""],
+
+    "object-keys": ["object-keys@1.1.1", "", {}, ""],
+
+    "object.assign": ["object.assign@4.1.7", "", { "dependencies": { "call-bind": "^1.0.8", "call-bound": "^1.0.3", "define-properties": "^1.2.1", "es-object-atoms": "^1.0.0", "has-symbols": "^1.1.0", "object-keys": "^1.1.1" } }, ""],
+
+    "on-finished": ["on-finished@2.4.1", "", { "dependencies": { "ee-first": "1.1.1" } }, ""],
+
+    "own-keys": ["own-keys@1.0.2", "", { "dependencies": { "call-bound": "^1.0.4", "get-intrinsic": "^1.3.0", "object-keys": "^1.1.1", "safe-push-apply": "^1.0.0" } }, ""],
+
+    "package-json-from-dist": ["package-json-from-dist@1.0.1", "", {}, ""],
+
+    "pako": ["pako@2.2.0", "", {}, ""],
+
+    "parseurl": ["parseurl@1.3.3", "", {}, ""],
+
+    "path-key": ["path-key@3.1.1", "", {}, ""],
+
+    "path-parse": ["path-parse@1.0.7", "", {}, ""],
+
+    "path-scurry": ["path-scurry@2.0.2", "", { "dependencies": { "lru-cache": "^11.0.0", "minipass": "^7.1.2" } }, ""],
+
+    "path-to-regexp": ["path-to-regexp@0.1.13", "", {}, ""],
+
+    "performance-now": ["performance-now@2.1.0", "", {}, ""],
+
+    "picocolors": ["picocolors@1.1.1", "", {}, ""],
+
+    "picomatch": ["picomatch@4.0.7", "", {}, ""],
+
+    "point-in-polygon": ["point-in-polygon@1.1.0", "", {}, ""],
+
+    "point-in-polygon-hao": ["point-in-polygon-hao@1.2.4", "", { "dependencies": { "robust-predicates": "^3.0.2" } }, ""],
+
+    "polyclip-ts": ["polyclip-ts@0.16.8", "", { "dependencies": { "bignumber.js": "^9.1.0", "splaytree-ts": "^1.0.2" } }, ""],
+
+    "possible-typed-array-names": ["possible-typed-array-names@1.1.0", "", {}, ""],
+
+    "postcss": ["postcss@8.5.28", "", { "dependencies": { "nanoid": "^3.3.18", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, ""],
+
+    "pretty-bytes": ["pretty-bytes@6.1.1", "", {}, ""],
+
+    "process-nextick-args": ["process-nextick-args@1.0.7", "", {}, ""],
+
+    "protobufjs": ["protobufjs@7.6.6", "", { "dependencies": { "@protobufjs/aspromise": "^1.1.2", "@protobufjs/base64": "^1.1.2", "@protobufjs/codegen": "^2.0.5", "@protobufjs/eventemitter": "^1.1.1", "@protobufjs/fetch": "^1.1.1", "@protobufjs/float": "^1.0.2", "@protobufjs/path": "^1.1.2", "@protobufjs/pool": "^1.1.0", "@protobufjs/utf8": "^1.1.1", "@types/node": ">=13.7.0", "long": "^5.3.2" } }, ""],
+
+    "proxy-addr": ["proxy-addr@2.0.8", "", { "dependencies": { "forwarded": "0.2.0", "ipaddr.js": "1.9.1" } }, ""],
+
+    "qs": ["qs@6.16.0", "", { "dependencies": { "es-define-property": "^1.0.1", "side-channel": "^1.1.1" } }, ""],
+
+    "quickselect": ["quickselect@2.0.0", "", {}, ""],
+
+    "raf": ["raf@3.4.1", "", { "dependencies": { "performance-now": "^2.1.0" } }, ""],
+
+    "range-parser": ["range-parser@1.2.1", "", {}, ""],
+
+    "raw-body": ["raw-body@2.5.3", "", { "dependencies": { "bytes": "~3.1.2", "http-errors": "~2.0.1", "iconv-lite": "~0.4.24", "unpipe": "~1.0.0" } }, ""],
+
+    "rbush": ["rbush@3.0.1", "", { "dependencies": { "quickselect": "^2.0.0" } }, ""],
+
+    "react": ["react@18.3.1", "", { "dependencies": { "loose-envify": "^1.1.0" } }, ""],
+
+    "react-dom": ["react-dom@18.3.1", "", { "dependencies": { "loose-envify": "^1.1.0", "scheduler": "^0.23.2" }, "peerDependencies": { "react": "^18.3.1" } }, ""],
+
+    "react-easy-crop": ["react-easy-crop@6.2.3", "", { "dependencies": { "normalize-wheel": "^1.0.1" }, "peerDependencies": { "react": ">=16.4.0", "react-dom": ">=16.4.0" } }, "sha512-ebimG3OGlzizjxEZ77Cj9CVLcg5vDZ6QVz8ud1rx4WmsCDWHIROEhgMi0GpJ/jKAuwHrH0M+QZUK4hyvxbYhOA=="],
+
+    "react-is": ["react-is@19.3.0", "", {}, ""],
+
+    "react-leaflet": ["react-leaflet@4.2.1", "", { "dependencies": { "@react-leaflet/core": "^2.1.0" }, "peerDependencies": { "leaflet": "^1.9.0", "react": "^18.0.0", "react-dom": "^18.0.0" } }, ""],
+
+    "react-redux": ["react-redux@9.3.0", "", { "dependencies": { "@types/use-sync-external-store": "^0.0.6", "use-sync-external-store": "^1.4.0" }, "peerDependencies": { "@types/react": "^18.2.25 || ^19", "react": "^18.0 || ^19", "redux": "^5.0.0" }, "optionalPeers": ["@types/react", "redux"] }, ""],
+
+    "react-refresh": ["react-refresh@0.17.0", "", {}, ""],
+
+    "readable-stream": ["readable-stream@2.0.6", "", { "dependencies": { "core-util-is": "~1.0.0", "inherits": "~2.0.1", "isarray": "~1.0.0", "process-nextick-args": "~1.0.6", "string_decoder": "~0.10.x", "util-deprecate": "~1.0.1" } }, ""],
+
+    "recharts": ["recharts@3.10.1", "", { "dependencies": { "@reduxjs/toolkit": "^1.9.0 || 2.x.x", "clsx": "^2.1.1", "decimal.js-light": "^2.5.1", "es-toolkit": "^1.39.3", "eventemitter3": "^5.0.1", "immer": "^11.1.8", "react-redux": "8.x.x || 9.x.x", "reselect": "5.2.0", "tiny-invariant": "^1.3.3", "use-sync-external-store": "^1.2.2", "victory-vendor": "^37.0.2" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-is": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, ""],
+
+    "redux": ["redux@5.0.1", "", {}, ""],
+
+    "redux-thunk": ["redux-thunk@3.1.0", "", { "peerDependencies": { "redux": "^5.0.0" } }, ""],
+
+    "reflect.getprototypeof": ["reflect.getprototypeof@1.0.10", "", { "dependencies": { "call-bind": "^1.0.8", "define-properties": "^1.2.1", "es-abstract": "^1.23.9", "es-errors": "^1.3.0", "es-object-atoms": "^1.0.0", "get-intrinsic": "^1.2.7", "get-proto": "^1.0.1", "which-builtin-type": "^1.2.1" } }, ""],
+
+    "regenerate": ["regenerate@1.4.2", "", {}, ""],
+
+    "regenerate-unicode-properties": ["regenerate-unicode-properties@10.2.2", "", { "dependencies": { "regenerate": "^1.4.2" } }, ""],
+
+    "regenerator-runtime": ["regenerator-runtime@0.13.11", "", {}, ""],
+
+    "regexp.prototype.flags": ["regexp.prototype.flags@1.5.4", "", { "dependencies": { "call-bind": "^1.0.8", "define-properties": "^1.2.1", "es-errors": "^1.3.0", "get-proto": "^1.0.1", "gopd": "^1.2.0", "set-function-name": "^2.0.2" } }, ""],
+
+    "regexpu-core": ["regexpu-core@6.4.0", "", { "dependencies": { "regenerate": "^1.4.2", "regenerate-unicode-properties": "^10.2.2", "regjsgen": "^0.8.0", "regjsparser": "^0.13.0", "unicode-match-property-ecmascript": "^2.0.0", "unicode-match-property-value-ecmascript": "^2.2.1" } }, ""],
+
+    "regjsgen": ["regjsgen@0.8.0", "", {}, ""],
+
+    "regjsparser": ["regjsparser@0.13.2", "", { "dependencies": { "jsesc": "~3.1.0" }, "bin": "bin/parser" }, ""],
+
+    "require-directory": ["require-directory@2.1.1", "", {}, ""],
+
+    "require-from-string": ["require-from-string@2.0.2", "", {}, ""],
+
+    "reselect": ["reselect@5.2.0", "", {}, ""],
+
+    "resolve": ["resolve@1.22.12", "", { "dependencies": { "es-errors": "^1.3.0", "is-core-module": "^2.16.1", "path-parse": "^1.0.7", "supports-preserve-symlinks-flag": "^1.0.0" }, "bin": "bin/resolve" }, ""],
+
+    "rgbcolor": ["rgbcolor@1.0.1", "", {}, ""],
+
+    "robust-predicates": ["robust-predicates@2.0.4", "", {}, ""],
+
+    "rollup": ["rollup@4.63.3", "", { "dependencies": { "@types/estree": "1.0.9" }, "optionalDependencies": { "@napi-rs/lzma-linux-x64-gnu": "1.5.1", "@rollup/rollup-android-arm-eabi": "4.63.3", "@rollup/rollup-android-arm64": "4.63.3", "@rollup/rollup-darwin-arm64": "4.63.3", "@rollup/rollup-darwin-x64": "4.63.3", "@rollup/rollup-freebsd-arm64": "4.63.3", "@rollup/rollup-freebsd-x64": "4.63.3", "@rollup/rollup-linux-arm-gnueabihf": "4.63.3", "@rollup/rollup-linux-arm-musleabihf": "4.63.3", "@rollup/rollup-linux-arm64-gnu": "4.63.3", "@rollup/rollup-linux-arm64-musl": "4.63.3", "@rollup/rollup-linux-loong64-gnu": "4.63.3", "@rollup/rollup-linux-loong64-musl": "4.63.3", "@rollup/rollup-linux-ppc64-gnu": "4.63.3", "@rollup/rollup-linux-ppc64-musl": "4.63.3", "@rollup/rollup-linux-riscv64-gnu": "4.63.3", "@rollup/rollup-linux-riscv64-musl": "4.63.3", "@rollup/rollup-linux-s390x-gnu": "4.63.3", "@rollup/rollup-linux-x64-gnu": "4.63.3", "@rollup/rollup-linux-x64-musl": "4.63.3", "@rollup/rollup-openbsd-x64": "4.63.3", "@rollup/rollup-openharmony-arm64": "4.63.3", "@rollup/rollup-win32-arm64-msvc": "4.63.3", "@rollup/rollup-win32-ia32-msvc": "4.63.3", "@rollup/rollup-win32-x64-gnu": "4.63.3", "@rollup/rollup-win32-x64-msvc": "4.63.3", "fsevents": "~2.3.2" }, "bin": "dist/bin/rollup" }, ""],
+
+    "safe-array-concat": ["safe-array-concat@1.1.4", "", { "dependencies": { "call-bind": "^1.0.9", "call-bound": "^1.0.4", "get-intrinsic": "^1.3.0", "has-symbols": "^1.1.0", "isarray": "^2.0.5" } }, ""],
+
+    "safe-buffer": ["safe-buffer@5.2.1", "", {}, ""],
+
+    "safe-push-apply": ["safe-push-apply@1.0.0", "", { "dependencies": { "es-errors": "^1.3.0", "isarray": "^2.0.5" } }, ""],
+
+    "safe-regex-test": ["safe-regex-test@1.1.0", "", { "dependencies": { "call-bound": "^1.0.2", "es-errors": "^1.3.0", "is-regex": "^1.2.1" } }, ""],
+
+    "safer-buffer": ["safer-buffer@2.1.2", "", {}, ""],
+
+    "scheduler": ["scheduler@0.23.2", "", { "dependencies": { "loose-envify": "^1.1.0" } }, ""],
+
+    "semver": ["semver@6.3.1", "", { "bin": "bin/semver.js" }, ""],
+
+    "send": ["send@0.19.2", "", { "dependencies": { "debug": "2.6.9", "depd": "2.0.0", "destroy": "1.2.0", "encodeurl": "~2.0.0", "escape-html": "~1.0.3", "etag": "~1.8.1", "fresh": "~0.5.2", "http-errors": "~2.0.1", "mime": "1.6.0", "ms": "2.1.3", "on-finished": "~2.4.1", "range-parser": "~1.2.1", "statuses": "~2.0.2" } }, ""],
+
+    "serialize-javascript": ["serialize-javascript@7.1.1", "", {}, ""],
+
+    "serve-static": ["serve-static@1.16.3", "", { "dependencies": { "encodeurl": "~2.0.0", "escape-html": "~1.0.3", "parseurl": "~1.3.3", "send": "~0.19.1" } }, ""],
+
+    "set-function-length": ["set-function-length@1.2.2", "", { "dependencies": { "define-data-property": "^1.1.4", "es-errors": "^1.3.0", "function-bind": "^1.1.2", "get-intrinsic": "^1.2.4", "gopd": "^1.0.1", "has-property-descriptors": "^1.0.2" } }, ""],
+
+    "set-function-name": ["set-function-name@2.0.2", "", { "dependencies": { "define-data-property": "^1.1.4", "es-errors": "^1.3.0", "functions-have-names": "^1.2.3", "has-property-descriptors": "^1.0.2" } }, ""],
+
+    "set-proto": ["set-proto@1.0.0", "", { "dependencies": { "dunder-proto": "^1.0.1", "es-errors": "^1.3.0", "es-object-atoms": "^1.0.0" } }, ""],
+
+    "setprototypeof": ["setprototypeof@1.2.0", "", {}, ""],
+
+    "shebang-command": ["shebang-command@2.0.0", "", { "dependencies": { "shebang-regex": "^3.0.0" } }, ""],
+
+    "shebang-regex": ["shebang-regex@3.0.0", "", {}, ""],
+
+    "side-channel": ["side-channel@1.1.1", "", { "dependencies": { "es-errors": "^1.3.0", "object-inspect": "^1.13.4", "side-channel-list": "^1.0.1", "side-channel-map": "^1.0.1", "side-channel-weakmap": "^1.0.2" } }, ""],
+
+    "side-channel-list": ["side-channel-list@1.0.1", "", { "dependencies": { "es-errors": "^1.3.0", "object-inspect": "^1.13.4" } }, ""],
+
+    "side-channel-map": ["side-channel-map@1.0.1", "", { "dependencies": { "call-bound": "^1.0.2", "es-errors": "^1.3.0", "get-intrinsic": "^1.2.5", "object-inspect": "^1.13.3" } }, ""],
+
+    "side-channel-weakmap": ["side-channel-weakmap@1.0.2", "", { "dependencies": { "call-bound": "^1.0.2", "es-errors": "^1.3.0", "get-intrinsic": "^1.2.5", "object-inspect": "^1.13.3", "side-channel-map": "^1.0.1" } }, ""],
+
+    "signal-exit": ["signal-exit@4.1.0", "", {}, ""],
+
+    "skmeans": ["skmeans@0.9.7", "", {}, ""],
+
+    "smob": ["smob@1.6.2", "", {}, ""],
+
+    "source-map": ["source-map@0.8.0", "", {}, ""],
+
+    "source-map-js": ["source-map-js@1.2.1", "", {}, ""],
+
+    "source-map-support": ["source-map-support@0.5.21", "", { "dependencies": { "buffer-from": "^1.0.0", "source-map": "^0.6.0" } }, ""],
+
+    "splaytree-ts": ["splaytree-ts@1.0.2", "", {}, ""],
+
+    "stackblur-canvas": ["stackblur-canvas@2.7.0", "", {}, ""],
+
+    "statuses": ["statuses@2.0.2", "", {}, ""],
+
+    "stop-iteration-iterator": ["stop-iteration-iterator@1.1.0", "", { "dependencies": { "es-errors": "^1.3.0", "internal-slot": "^1.1.0" } }, ""],
+
+    "string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, ""],
+
+    "string.prototype.matchall": ["string.prototype.matchall@4.1.0", "", { "dependencies": { "call-bind": "^1.0.9", "call-bound": "^1.0.4", "define-properties": "^1.2.1", "es-abstract": "^1.24.2", "es-errors": "^1.3.0", "es-object-atoms": "^1.1.2", "get-intrinsic": "^1.3.0", "gopd": "^1.2.0", "has-symbols": "^1.1.0", "internal-slot": "^1.1.0", "regexp.prototype.flags": "^1.5.4", "set-function-name": "^2.0.2", "side-channel": "^1.1.1" } }, ""],
+
+    "string.prototype.trim": ["string.prototype.trim@1.2.11", "", { "dependencies": { "call-bind": "^1.0.9", "call-bound": "^1.0.4", "define-data-property": "^1.1.4", "define-properties": "^1.2.1", "es-abstract": "^1.24.2", "es-object-atoms": "^1.1.2", "has-property-descriptors": "^1.0.2", "safe-regex-test": "^1.1.0" } }, ""],
+
+    "string.prototype.trimend": ["string.prototype.trimend@1.0.10", "", { "dependencies": { "call-bind": "^1.0.9", "call-bound": "^1.0.4", "define-properties": "^1.2.1", "es-object-atoms": "^1.1.2" } }, ""],
+
+    "string.prototype.trimstart": ["string.prototype.trimstart@1.0.8", "", { "dependencies": { "call-bind": "^1.0.7", "define-properties": "^1.2.1", "es-object-atoms": "^1.0.0" } }, ""],
+
+    "string_decoder": ["string_decoder@0.10.31", "", {}, ""],
+
+    "stringify-object": ["stringify-object@3.3.0", "", { "dependencies": { "get-own-enumerable-property-symbols": "^3.0.0", "is-obj": "^1.0.1", "is-regexp": "^1.0.0" } }, ""],
+
+    "strip-ansi": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, ""],
+
+    "strip-comments": ["strip-comments@2.0.1", "", {}, ""],
+
+    "supports-preserve-symlinks-flag": ["supports-preserve-symlinks-flag@1.0.0", "", {}, ""],
+
+    "svg-pathdata": ["svg-pathdata@6.0.3", "", {}, ""],
+
+    "tailwindcss": ["tailwindcss@4.3.3", "", {}, ""],
+
+    "tapable": ["tapable@2.3.3", "", {}, ""],
+
+    "temp-dir": ["temp-dir@2.0.0", "", {}, ""],
+
+    "tempy": ["tempy@0.6.0", "", { "dependencies": { "is-stream": "^2.0.0", "temp-dir": "^2.0.0", "type-fest": "^0.16.0", "unique-string": "^2.0.0" } }, ""],
+
+    "terser": ["terser@5.51.2", "", { "dependencies": { "@jridgewell/source-map": "^0.3.3", "acorn": "^8.15.0", "commander": "^2.20.0", "source-map-support": "~0.5.20" }, "bin": "bin/terser" }, ""],
+
+    "text-segmentation": ["text-segmentation@1.0.3", "", { "dependencies": { "utrie": "^1.0.2" } }, ""],
+
+    "tiny-invariant": ["tiny-invariant@1.3.3", "", {}, ""],
+
+    "tinyglobby": ["tinyglobby@0.2.17", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, ""],
+
+    "tinyqueue": ["tinyqueue@2.0.3", "", {}, ""],
+
+    "togeojson": ["togeojson@0.16.0", "", { "dependencies": { "concat-stream": "~1.5.1", "minimist": "1.2.0", "xmldom": "~0.1.19" }, "bin": "togeojson" }, ""],
+
+    "toidentifier": ["toidentifier@1.0.1", "", {}, ""],
+
+    "topojson-client": ["topojson-client@3.1.0", "", { "dependencies": { "commander": "2" }, "bin": { "topo2geo": "bin/topo2geo", "topomerge": "bin/topomerge", "topoquantize": "bin/topoquantize" } }, ""],
+
+    "topojson-server": ["topojson-server@3.0.1", "", { "dependencies": { "commander": "2" }, "bin": { "geo2topo": "bin/geo2topo" } }, ""],
+
+    "tslib": ["tslib@2.8.1", "", {}, ""],
+
+    "tsx": ["tsx@4.23.13", "", { "dependencies": { "esbuild": "~0.28.0" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "bin": "dist/cli.mjs" }, ""],
+
+    "type-fest": ["type-fest@0.16.0", "", {}, ""],
+
+    "type-is": ["type-is@1.6.18", "", { "dependencies": { "media-typer": "0.3.0", "mime-types": "~2.1.24" } }, ""],
+
+    "typed-array-buffer": ["typed-array-buffer@1.0.3", "", { "dependencies": { "call-bound": "^1.0.3", "es-errors": "^1.3.0", "is-typed-array": "^1.1.14" } }, ""],
+
+    "typed-array-byte-length": ["typed-array-byte-length@1.0.3", "", { "dependencies": { "call-bind": "^1.0.8", "for-each": "^0.3.3", "gopd": "^1.2.0", "has-proto": "^1.2.0", "is-typed-array": "^1.1.14" } }, ""],
+
+    "typed-array-byte-offset": ["typed-array-byte-offset@1.0.5", "", { "dependencies": { "available-typed-arrays": "^1.0.7", "call-bind": "^1.0.9", "for-each": "^0.3.5", "gopd": "^1.2.0", "is-typed-array": "^1.1.15", "reflect.getprototypeof": "^1.0.10" } }, ""],
+
+    "typed-array-length": ["typed-array-length@1.0.8", "", { "dependencies": { "call-bind": "^1.0.9", "for-each": "^0.3.5", "gopd": "^1.2.0", "is-typed-array": "^1.1.15", "possible-typed-array-names": "^1.1.0", "reflect.getprototypeof": "^1.0.10" } }, ""],
+
+    "typedarray": ["typedarray@0.0.7", "", {}, ""],
+
+    "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, ""],
+
+    "unbox-primitive": ["unbox-primitive@1.1.0", "", { "dependencies": { "call-bound": "^1.0.3", "has-bigints": "^1.0.2", "has-symbols": "^1.1.0", "which-boxed-primitive": "^1.1.1" } }, ""],
+
+    "undici-types": ["undici-types@6.21.0", "", {}, ""],
+
+    "unicode-canonical-property-names-ecmascript": ["unicode-canonical-property-names-ecmascript@2.0.1", "", {}, ""],
+
+    "unicode-match-property-ecmascript": ["unicode-match-property-ecmascript@2.0.0", "", { "dependencies": { "unicode-canonical-property-names-ecmascript": "^2.0.0", "unicode-property-aliases-ecmascript": "^2.0.0" } }, ""],
+
+    "unicode-match-property-value-ecmascript": ["unicode-match-property-value-ecmascript@2.2.1", "", {}, ""],
+
+    "unicode-property-aliases-ecmascript": ["unicode-property-aliases-ecmascript@2.2.0", "", {}, ""],
+
+    "unique-string": ["unique-string@2.0.0", "", { "dependencies": { "crypto-random-string": "^2.0.0" } }, ""],
+
+    "universalify": ["universalify@2.0.1", "", {}, ""],
+
+    "unpipe": ["unpipe@1.0.0", "", {}, ""],
+
+    "upath": ["upath@1.2.0", "", {}, ""],
+
+    "update-browserslist-db": ["update-browserslist-db@1.3.3", "", { "dependencies": { "escalade": "^3.2.0", "picocolors": "^1.1.1" }, "peerDependencies": { "browserslist": ">= 4.21.0" }, "bin": "cli.js" }, ""],
+
+    "use-sync-external-store": ["use-sync-external-store@1.7.0", "", { "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, ""],
+
+    "util-deprecate": ["util-deprecate@1.0.2", "", {}, ""],
+
+    "utils-merge": ["utils-merge@1.0.1", "", {}, ""],
+
+    "utrie": ["utrie@1.0.2", "", { "dependencies": { "base64-arraybuffer": "^1.0.2" } }, ""],
+
+    "vary": ["vary@1.1.2", "", {}, ""],
+
+    "victory-vendor": ["victory-vendor@37.3.6", "", { "dependencies": { "@types/d3-array": "^3.0.3", "@types/d3-ease": "^3.0.0", "@types/d3-interpolate": "^3.0.1", "@types/d3-scale": "^4.0.2", "@types/d3-shape": "^3.1.0", "@types/d3-time": "^3.0.0", "@types/d3-timer": "^3.0.0", "d3-array": "^3.1.6", "d3-ease": "^3.0.1", "d3-interpolate": "^3.0.1", "d3-scale": "^4.0.2", "d3-shape": "^3.1.0", "d3-time": "^3.0.0", "d3-timer": "^3.0.1" } }, ""],
+
+    "vite": ["vite@6.4.3", "", { "dependencies": { "esbuild": "^0.25.0", "fdir": "^6.4.4", "picomatch": "^4.0.2", "postcss": "^8.5.3", "rollup": "^4.34.9", "tinyglobby": "^0.2.13" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0", "jiti": ">=1.21.0", "less": "*", "lightningcss": "^1.21.0", "sass": "*", "sass-embedded": "*", "stylus": "*", "sugarss": "*", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": "bin/vite.js" }, ""],
+
+    "vite-plugin-pwa": ["vite-plugin-pwa@1.3.0", "", { "dependencies": { "debug": "^4.3.6", "pretty-bytes": "^6.1.1", "tinyglobby": "^0.2.10", "workbox-build": "^7.4.1", "workbox-window": "^7.4.1" }, "peerDependencies": { "@vite-pwa/assets-generator": "^1.0.0", "vite": "^3.1.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" }, "optionalPeers": ["@vite-pwa/assets-generator"] }, ""],
+
+    "websocket-driver": ["websocket-driver@0.7.5", "", { "dependencies": { "http-parser-js": ">=0.5.1", "safe-buffer": ">=5.1.0", "websocket-extensions": ">=0.1.1" } }, ""],
+
+    "websocket-extensions": ["websocket-extensions@0.1.4", "", {}, ""],
+
+    "which": ["which@2.0.2", "", { "dependencies": { "isexe": "^2.0.0" }, "bin": { "node-which": "bin/node-which" } }, ""],
+
+    "which-boxed-primitive": ["which-boxed-primitive@1.1.1", "", { "dependencies": { "is-bigint": "^1.1.0", "is-boolean-object": "^1.2.1", "is-number-object": "^1.1.1", "is-string": "^1.1.1", "is-symbol": "^1.1.1" } }, ""],
+
+    "which-builtin-type": ["which-builtin-type@1.2.1", "", { "dependencies": { "call-bound": "^1.0.2", "function.prototype.name": "^1.1.6", "has-tostringtag": "^1.0.2", "is-async-function": "^2.0.0", "is-date-object": "^1.1.0", "is-finalizationregistry": "^1.1.0", "is-generator-function": "^1.0.10", "is-regex": "^1.2.1", "is-weakref": "^1.0.2", "isarray": "^2.0.5", "which-boxed-primitive": "^1.1.0", "which-collection": "^1.0.2", "which-typed-array": "^1.1.16" } }, ""],
+
+    "which-collection": ["which-collection@1.0.2", "", { "dependencies": { "is-map": "^2.0.3", "is-set": "^2.0.3", "is-weakmap": "^2.0.2", "is-weakset": "^2.0.3" } }, ""],
+
+    "which-typed-array": ["which-typed-array@1.1.23", "", { "dependencies": { "available-typed-arrays": "^1.0.7", "call-bind": "^1.0.9", "call-bound": "^1.0.4", "for-each": "^0.3.5", "get-proto": "^1.0.1", "gopd": "^1.2.0", "has-tostringtag": "^1.0.2" } }, ""],
+
+    "workbox-background-sync": ["workbox-background-sync@7.4.1", "", { "dependencies": { "idb": "^7.0.1", "workbox-core": "7.4.1" } }, ""],
+
+    "workbox-broadcast-update": ["workbox-broadcast-update@7.4.1", "", { "dependencies": { "workbox-core": "7.4.1" } }, ""],
+
+    "workbox-build": ["workbox-build@7.4.1", "", { "dependencies": { "@apideck/better-ajv-errors": "^0.3.1", "@babel/core": "^7.24.4", "@babel/preset-env": "^7.11.0", "@babel/runtime": "^7.11.2", "@rollup/plugin-babel": "^6.1.0", "@rollup/plugin-node-resolve": "^16.0.3", "@rollup/plugin-replace": "^6.0.3", "@rollup/plugin-terser": "^1.0.0", "@trickfilm400/rollup-plugin-off-main-thread": "^3.0.0-pre1", "ajv": "^8.6.0", "common-tags": "^1.8.0", "eta": "^4.5.1", "fast-json-stable-stringify": "^2.1.0", "fs-extra": "^9.0.1", "glob": "^11.0.1", "pretty-bytes": "^5.3.0", "rollup": "^4.53.3", "source-map": "^0.8.0-beta.0", "stringify-object": "^3.3.0", "strip-comments": "^2.0.1", "tempy": "^0.6.0", "upath": "^1.2.0", "workbox-background-sync": "7.4.1", "workbox-broadcast-update": "7.4.1", "workbox-cacheable-response": "7.4.1", "workbox-core": "7.4.1", "workbox-expiration": "7.4.1", "workbox-google-analytics": "7.4.1", "workbox-navigation-preload": "7.4.1", "workbox-precaching": "7.4.1", "workbox-range-requests": "7.4.1", "workbox-recipes": "7.4.1", "workbox-routing": "7.4.1", "workbox-strategies": "7.4.1", "workbox-streams": "7.4.1", "workbox-sw": "7.4.1", "workbox-window": "7.4.1" } }, ""],
+
+    "workbox-cacheable-response": ["workbox-cacheable-response@7.4.1", "", { "dependencies": { "workbox-core": "7.4.1" } }, ""],
+
+    "workbox-core": ["workbox-core@7.4.1", "", {}, ""],
+
+    "workbox-expiration": ["workbox-expiration@7.4.1", "", { "dependencies": { "idb": "^7.0.1", "workbox-core": "7.4.1" } }, ""],
+
+    "workbox-google-analytics": ["workbox-google-analytics@7.4.1", "", { "dependencies": { "workbox-background-sync": "7.4.1", "workbox-core": "7.4.1", "workbox-routing": "7.4.1", "workbox-strategies": "7.4.1" } }, ""],
+
+    "workbox-navigation-preload": ["workbox-navigation-preload@7.4.1", "", { "dependencies": { "workbox-core": "7.4.1" } }, ""],
+
+    "workbox-precaching": ["workbox-precaching@7.4.1", "", { "dependencies": { "workbox-core": "7.4.1", "workbox-routing": "7.4.1", "workbox-strategies": "7.4.1" } }, ""],
+
+    "workbox-range-requests": ["workbox-range-requests@7.4.1", "", { "dependencies": { "workbox-core": "7.4.1" } }, ""],
+
+    "workbox-recipes": ["workbox-recipes@7.4.1", "", { "dependencies": { "workbox-cacheable-response": "7.4.1", "workbox-core": "7.4.1", "workbox-expiration": "7.4.1", "workbox-precaching": "7.4.1", "workbox-routing": "7.4.1", "workbox-strategies": "7.4.1" } }, ""],
+
+    "workbox-routing": ["workbox-routing@7.4.1", "", { "dependencies": { "workbox-core": "7.4.1" } }, ""],
+
+    "workbox-strategies": ["workbox-strategies@7.4.1", "", { "dependencies": { "workbox-core": "7.4.1" } }, ""],
+
+    "workbox-streams": ["workbox-streams@7.4.1", "", { "dependencies": { "workbox-core": "7.4.1", "workbox-routing": "7.4.1" } }, ""],
+
+    "workbox-sw": ["workbox-sw@7.4.1", "", {}, ""],
+
+    "workbox-window": ["workbox-window@7.4.1", "", { "dependencies": { "@types/trusted-types": "^2.0.2", "workbox-core": "7.4.1" } }, ""],
+
+    "wrap-ansi": ["wrap-ansi@7.0.0", "", { "dependencies": { "ansi-styles": "^4.0.0", "string-width": "^4.1.0", "strip-ansi": "^6.0.0" } }, ""],
+
+    "xmldom": ["xmldom@0.1.31", "", {}, ""],
+
+    "y18n": ["y18n@5.0.8", "", {}, ""],
+
+    "yallist": ["yallist@3.1.1", "", {}, ""],
+
+    "yargs": ["yargs@17.7.3", "", { "dependencies": { "cliui": "^8.0.1", "escalade": "^3.1.1", "get-caller-file": "^2.0.5", "require-directory": "^2.1.1", "string-width": "^4.2.3", "y18n": "^5.0.5", "yargs-parser": "^21.1.1" } }, ""],
+
+    "yargs-parser": ["yargs-parser@21.1.1", "", {}, ""],
+
+    "@babel/core/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
+
+    "@babel/helper-define-polyfill-provider/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
+
+    "@babel/traverse/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
+
+    "@types/serve-static/@types/send": ["@types/send@0.17.6", "", { "dependencies": { "@types/mime": "^1", "@types/node": "*" } }, ""],
+
+    "d3-geo/d3-array": ["d3-array@2.12.1", "", { "dependencies": { "internmap": "^1.0.0" } }, ""],
+
+    "filelist/minimatch": ["minimatch@5.1.9", "", { "dependencies": { "brace-expansion": "^2.0.1" } }, ""],
+
+    "geojson-polygon-self-intersections/rbush": ["rbush@2.0.2", "", { "dependencies": { "quickselect": "^1.0.1" } }, ""],
+
+    "path-scurry/lru-cache": ["lru-cache@11.5.2", "", {}, ""],
+
+    "point-in-polygon-hao/robust-predicates": ["robust-predicates@3.0.3", "", {}, ""],
+
+    "safe-array-concat/isarray": ["isarray@2.0.5", "", {}, ""],
+
+    "safe-push-apply/isarray": ["isarray@2.0.5", "", {}, ""],
+
+    "send/ms": ["ms@2.1.3", "", {}, ""],
+
+    "source-map-support/source-map": ["source-map@0.6.1", "", {}, ""],
+
+    "tsx/esbuild": ["esbuild@0.28.2", "", { "optionalDependencies": { "@esbuild/aix-ppc64": "0.28.2", "@esbuild/android-arm": "0.28.2", "@esbuild/android-arm64": "0.28.2", "@esbuild/android-x64": "0.28.2", "@esbuild/darwin-arm64": "0.28.2", "@esbuild/darwin-x64": "0.28.2", "@esbuild/freebsd-arm64": "0.28.2", "@esbuild/freebsd-x64": "0.28.2", "@esbuild/linux-arm": "0.28.2", "@esbuild/linux-arm64": "0.28.2", "@esbuild/linux-ia32": "0.28.2", "@esbuild/linux-loong64": "0.28.2", "@esbuild/linux-mips64el": "0.28.2", "@esbuild/linux-ppc64": "0.28.2", "@esbuild/linux-riscv64": "0.28.2", "@esbuild/linux-s390x": "0.28.2", "@esbuild/linux-x64": "0.28.2", "@esbuild/netbsd-arm64": "0.28.2", "@esbuild/netbsd-x64": "0.28.2", "@esbuild/openbsd-arm64": "0.28.2", "@esbuild/openbsd-x64": "0.28.2", "@esbuild/openharmony-arm64": "0.28.2", "@esbuild/sunos-x64": "0.28.2", "@esbuild/win32-arm64": "0.28.2", "@esbuild/win32-ia32": "0.28.2", "@esbuild/win32-x64": "0.28.2" }, "bin": "bin/esbuild" }, ""],
+
+    "vite/esbuild": ["esbuild@0.25.12", "", { "optionalDependencies": { "@esbuild/aix-ppc64": "0.25.12", "@esbuild/android-arm": "0.25.12", "@esbuild/android-arm64": "0.25.12", "@esbuild/android-x64": "0.25.12", "@esbuild/darwin-arm64": "0.25.12", "@esbuild/darwin-x64": "0.25.12", "@esbuild/freebsd-arm64": "0.25.12", "@esbuild/freebsd-x64": "0.25.12", "@esbuild/linux-arm": "0.25.12", "@esbuild/linux-arm64": "0.25.12", "@esbuild/linux-ia32": "0.25.12", "@esbuild/linux-loong64": "0.25.12", "@esbuild/linux-mips64el": "0.25.12", "@esbuild/linux-ppc64": "0.25.12", "@esbuild/linux-riscv64": "0.25.12", "@esbuild/linux-s390x": "0.25.12", "@esbuild/linux-x64": "0.25.12", "@esbuild/netbsd-arm64": "0.25.12", "@esbuild/netbsd-x64": "0.25.12", "@esbuild/openbsd-arm64": "0.25.12", "@esbuild/openbsd-x64": "0.25.12", "@esbuild/openharmony-arm64": "0.25.12", "@esbuild/sunos-x64": "0.25.12", "@esbuild/win32-arm64": "0.25.12", "@esbuild/win32-ia32": "0.25.12", "@esbuild/win32-x64": "0.25.12" }, "bin": "bin/esbuild" }, ""],
+
+    "vite-plugin-pwa/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
+
+    "which-builtin-type/isarray": ["isarray@2.0.5", "", {}, ""],
+
+    "workbox-build/pretty-bytes": ["pretty-bytes@5.6.0", "", {}, ""],
+
+    "@babel/core/debug/ms": ["ms@2.1.3", "", {}, ""],
+
+    "@babel/helper-define-polyfill-provider/debug/ms": ["ms@2.1.3", "", {}, ""],
+
+    "@babel/traverse/debug/ms": ["ms@2.1.3", "", {}, ""],
+
+    "d3-geo/d3-array/internmap": ["internmap@1.0.1", "", {}, ""],
+
+    "filelist/minimatch/brace-expansion": ["brace-expansion@2.1.7", "", { "dependencies": { "balanced-match": "^1.0.0" } }, ""],
+
+    "geojson-polygon-self-intersections/rbush/quickselect": ["quickselect@1.1.1", "", {}, ""],
+
+    "tsx/esbuild/@esbuild/linux-x64": ["@esbuild/linux-x64@0.28.2", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "vite-plugin-pwa/debug/ms": ["ms@2.1.3", "", {}, ""],
+
+    "vite/esbuild/@esbuild/linux-x64": ["@esbuild/linux-x64@0.25.12", "", { "os": "linux", "cpu": "x64" }, ""],
+
+    "filelist/minimatch/brace-expansion/balanced-match": ["balanced-match@1.0.2", "", {}, ""],
+  }
+}

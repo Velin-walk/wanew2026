@@ -205,11 +205,6 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
               >
                 <ClipboardList className={`w-4 h-4 shrink-0 transition-transform ${activeTab === 'logistics' ? 'text-white scale-110' : 'text-[#8B8680]'}`} />
                 <span className="whitespace-nowrap">Logistics & Booking</span>
-                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
-                  activeTab === 'logistics' ? 'bg-white/20 text-white' : 'bg-[#E08828]/15 text-[#E08828]'
-                }`}>
-                  Cost & Guide
-                </span>
               </button>
             </div>
 
@@ -236,15 +231,7 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20" />
-            <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between text-white">
-              <span className="text-[10px] sm:text-xs font-bold tracking-wider uppercase bg-black/50 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20">
-                Walk Nepal Walk Official Itinerary
-              </span>
-              <span className="text-xs font-black bg-[#E08828] px-3 py-1 rounded-lg">
-                {dbData?.overview?.difficulty || trek.difficulty || 'Moderate'}
-              </span>
-            </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/20" />
           </div>
 
           {/* Render Itinerary Experience Tab */}
@@ -308,7 +295,21 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                     <span className="text-[10px] text-[#8B8680] font-bold flex items-center gap-1">
                       <Mountain className="w-3.5 h-3.5 text-[#7ABA42]" /> Difficulty
                     </span>
-                    <p className="text-xs font-extrabold text-[#1F1F1F] mt-1 capitalize">{dbData?.overview?.difficulty || trek.difficulty || 'Moderate'}</p>
+                    <div className="mt-1">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide border ${
+                        (dbData?.overview?.difficulty || trek.difficulty || '').toLowerCase().trim() === 'easy'
+                          ? 'bg-emerald-600 text-white border-emerald-700'
+                          : (dbData?.overview?.difficulty || trek.difficulty || '').toLowerCase().trim() === 'moderate'
+                          ? 'bg-amber-400 text-amber-950 border-amber-500'
+                          : (dbData?.overview?.difficulty || trek.difficulty || '').toLowerCase().trim() === 'hard' || (dbData?.overview?.difficulty || trek.difficulty || '').toLowerCase().trim() === 'difficult'
+                          ? 'bg-orange-600 text-white border-orange-700'
+                          : (dbData?.overview?.difficulty || trek.difficulty || '').toLowerCase().trim() === 'extreme'
+                          ? 'bg-red-600 text-white border-red-700'
+                          : 'bg-neutral-100 text-neutral-600 border-neutral-200'
+                      }`}>
+                        {dbData?.overview?.difficulty || trek.difficulty || 'Moderate'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E5E1DB]">

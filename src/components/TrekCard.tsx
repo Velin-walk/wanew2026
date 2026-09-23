@@ -116,51 +116,67 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   };
 
   const getDifficultyBadge = (difficulty?: string) => {
-    switch (difficulty?.toLowerCase()) {
+    switch (difficulty?.toLowerCase()?.trim()) {
       case 'easy':
         return {
-          bg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+          bg: 'bg-emerald-600 text-white border-emerald-700',
+          text: 'text-emerald-600',
           label: 'Easy',
         };
       case 'moderate':
         return {
-          bg: 'bg-amber-50 text-amber-700 border-amber-200',
+          bg: 'bg-amber-400 text-amber-950 border-amber-500',
+          text: 'text-amber-600',
           label: 'Moderate',
         };
-      case 'difficult':
       case 'hard':
+      case 'difficult':
         return {
-          bg: 'bg-rose-50 text-rose-700 border-rose-200',
-          label: 'Difficult',
+          bg: 'bg-orange-600 text-white border-orange-700',
+          text: 'text-orange-600',
+          label: difficulty?.toLowerCase() === 'hard' ? 'Hard' : 'Difficult',
+        };
+      case 'extreme':
+        return {
+          bg: 'bg-red-600 text-white border-red-700',
+          text: 'text-red-600',
+          label: 'Extreme',
         };
       default:
         return {
           bg: 'bg-neutral-100 text-neutral-600 border-neutral-200',
+          text: 'text-neutral-600',
           label: difficulty || 'General',
         };
     }
   };
 
-  const badge = getDifficultyBadge(trek.difficulty);
+  const hasDbCustomData = trek.data && typeof trek.data === 'object' && (trek.data as any).title;
+  const dbData = hasDbCustomData ? (trek.data as any) : null;
+  const effectiveDifficulty = dbData?.overview?.difficulty || trek.difficulty;
+
+  const badge = getDifficultyBadge(effectiveDifficulty);
   const currentParticipants = trek.participants || 0;
   const isFull = currentParticipants >= trek.capacity;
   const fillPercentage = Math.min(100, Math.round((currentParticipants / trek.capacity) * 100));
 
   const getBorderColor = (difficulty?: string) => {
-    switch (difficulty?.toLowerCase()) {
+    switch (difficulty?.toLowerCase()?.trim()) {
       case 'easy':
         return 'border-[#7ABA42]/75 hover:border-[#7ABA42]';
       case 'moderate':
-        return 'border-[#E08828]/75 hover:border-[#E08828]';
-      case 'difficult':
+        return 'border-yellow-400/75 hover:border-yellow-500';
       case 'hard':
-        return 'border-rose-500/75 hover:border-rose-500';
+      case 'difficult':
+        return 'border-orange-500/75 hover:border-orange-600';
+      case 'extreme':
+        return 'border-red-600/75 hover:border-red-700';
       default:
         return 'border-[#D8D2C9] hover:border-[#8B8680]';
     }
   };
 
-  const borderClass = getBorderColor(trek.difficulty);
+  const borderClass = getBorderColor(effectiveDifficulty);
 
   return (
     <div className={`bg-white rounded-2xl border-2 ${borderClass} shadow-[0_6px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.11)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between w-full max-w-full overflow-hidden`}>
@@ -270,8 +286,8 @@ export const TrekCard: React.FC<TrekCardProps> = ({
             <span className="text-[9px] font-bold uppercase text-[#8B8680] tracking-wider block">
               Grade
             </span>
-            <span className="text-xs font-bold capitalize text-[#1F1F1F] mt-0.5 block truncate">
-              {trek.difficulty}
+            <span className={`text-xs font-black capitalize mt-0.5 block truncate ${badge.text}`}>
+              {badge.label}
             </span>
           </div>
 

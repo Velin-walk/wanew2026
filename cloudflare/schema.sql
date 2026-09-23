@@ -182,52 +182,6 @@ CREATE TABLE IF NOT EXISTS trail_comments (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. Individual Hiker Profiles (Pre-aggregated Single-Row Document: 1-row O(1) read access)
-CREATE TABLE IF NOT EXISTS hiker_profiles (
-  -- 1. PRIMARY KEY & AUTHENTICATION
-  email TEXT PRIMARY KEY,
-  user_uid TEXT,
-
-  -- 2. IDENTITY & CONTACT (From Registrations)
-  full_name TEXT NOT NULL,
-  phone TEXT,
-  whatsapp TEXT,
-  gender TEXT,
-  age_group TEXT,
-  profession TEXT,
-  city TEXT,
-  avatar_url TEXT,
-
-  -- 3. MEDICAL & SAFETY (From Registrations)
-  emergency_contact_name TEXT,
-  emergency_contact_phone TEXT,
-  blood_group TEXT,
-  fitness_level TEXT,
-  medical_conditions TEXT,
-
-  -- 4. PRE-COMPUTED AGGREGATES (Instant Numbers)
-  total_hikes INTEGER DEFAULT 0,
-  total_paid_amount REAL DEFAULT 0,
-  total_due_amount REAL DEFAULT 0,
-  total_distance_km REAL DEFAULT 0,
-  total_trails_contributed INTEGER DEFAULT 0,
-  total_photos_uploaded INTEGER DEFAULT 0,
-  total_comments_made INTEGER DEFAULT 0,
-  highest_altitude_m INTEGER DEFAULT 0,
-  rank_title TEXT DEFAULT 'Trail Explorer',
-
-  -- 5. NESTED ARRAYS & DEEP DATA (Zero Data Loss)
-  badges_json TEXT DEFAULT '[]',          -- e.g. ["first_hike", "5_hikes_milestone"]
-  hikes_json TEXT DEFAULT '[]',           -- Complete lifecycle of all registrations & bookings
-  contributions_json TEXT DEFAULT '{}',   -- Trails uploaded, photos shared, comments made
-
-  -- 6. METADATA
-  first_hike_date TEXT,
-  last_hike_date TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
 -- 11. System Snapshots Table (Single-row precomputed payloads for leaderboards & analytics)
 CREATE TABLE IF NOT EXISTS system_snapshots (
   key TEXT PRIMARY KEY,
@@ -262,10 +216,6 @@ CREATE INDEX IF NOT EXISTS idx_treks_hike_number ON treks (hike_number);
 CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_number);
 CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id);
 CREATE INDEX IF NOT EXISTS idx_community_trails_status ON community_trails (status);
-CREATE INDEX IF NOT EXISTS idx_hiker_email_lower ON hiker_profiles (LOWER(email));
-CREATE INDEX IF NOT EXISTS idx_hiker_profiles_email ON hiker_profiles (email);
-CREATE INDEX IF NOT EXISTS idx_hiker_total_hikes ON hiker_profiles (total_hikes DESC);
-CREATE INDEX IF NOT EXISTS idx_hiker_uid ON hiker_profiles (user_uid);
 CREATE INDEX IF NOT EXISTS idx_system_snapshots_key ON system_snapshots (key);
 CREATE INDEX IF NOT EXISTS idx_regs_hike_timestamp ON registrations (hike_number, timestamp DESC);
 

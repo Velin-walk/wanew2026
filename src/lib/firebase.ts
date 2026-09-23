@@ -12,18 +12,22 @@ import firebaseConfig from '../../firebase-applet-config.json';
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 const databaseId =
-  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+  firebaseConfig.firestoreDatabaseId && 
+  firebaseConfig.firestoreDatabaseId !== '(default)' &&
+  firebaseConfig.firestoreDatabaseId !== ''
     ? firebaseConfig.firestoreDatabaseId
     : undefined;
 
 let firestoreDb: Firestore;
 try {
-  // Use initializeFirestore to set vital long-polling settings for sandboxed environments
+  // Always use initializeFirestore to ensure experimentalForceLongPolling is applied.
+  // This is critical for reliable connectivity in the AI Studio environment.
   firestoreDb = initializeFirestore(app, {
     experimentalForceLongPolling: true,
+    ignoreUndefinedProperties: true,
   }, databaseId);
 } catch (e) {
-  // If already initialized, get the existing instance
+  // If already initialized (HMR), retrieve the existing instance
   firestoreDb = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
 }
 
@@ -85,21 +89,7 @@ export function handleFirestoreError(
 
 // Validate Connection to Firestore as per Firebase skill mandates
 async function testConnection() {
-  try {
-    // Only perform a lightweight check
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error: any) {
-    // Silence common transient network/environment errors to avoid console noise
-    const msg = error?.message?.toLowerCase() || '';
-    if (
-      msg.includes('unavailable') || 
-      msg.includes('offline') || 
-      msg.includes('could not reach')
-    ) {
-      return; 
-    }
-    console.info('Firestore initial connectivity ping:', error instanceof Error ? error.message : String(error));
-  }
+  // Connection test disabled as Firestore is now restricted to Auth only
 }
 
 // Run connectivity check after a slight delay so initial static module loading is smooth

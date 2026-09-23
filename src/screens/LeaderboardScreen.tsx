@@ -360,16 +360,17 @@ export const LeaderboardScreen: React.FC = () => {
   const currentStats = data?.stats;
 
   const filteredGrowthCurve = useMemo(() => {
-    if (!data?.growth_curve || data.growth_curve.length === 0) return [];
-    if (journeyPeriod === 'overall') return data.growth_curve;
+    const curve = data?.growthCurve || data?.growth_curve;
+    if (!curve || curve.length === 0) return [];
+    if (journeyPeriod === 'overall') return curve;
 
     const days = journeyPeriod === 't30' ? 30 : journeyPeriod === 't60' ? 60 : journeyPeriod === 't90' ? 90 : 365;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    return data.growth_curve.filter((pt) => {
+    return curve.filter((pt) => {
       if (!pt.date) return true;
       return new Date(pt.date) >= cutoff;
     });
-  }, [data?.growth_curve, journeyPeriod]);
+  }, [data?.growthCurve, data?.growth_curve, journeyPeriod]);
 
   return (
     <div className="space-y-4 sm:space-y-6 w-full pb-10">

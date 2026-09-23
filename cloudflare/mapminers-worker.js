@@ -297,8 +297,8 @@ export default {
       }
 
       // GET /images/:fileName - Serve trail preview images from TRAILS_BUCKET only
-      if (method === 'GET' && path.startsWith('/images/')) {
-        const fileName = decodeURIComponent(path.replace('/images/', ''));
+      if (method === 'GET' && (path.startsWith('/images/') || path.startsWith('/mapminers/images/') || path.startsWith('/community_trails/images/'))) {
+        const fileName = decodeURIComponent(path.replace(/^\/(mapminers|community_trails)?\/?images\//, ''));
         const bucket = env.TRAILS_BUCKET;
         if (!bucket) return errorResponse('R2 Storage binding TRAILS_BUCKET missing', 500);
 
@@ -454,40 +454,6 @@ export default {
             contributor_email,
             status
           ).run();
-        }
-
-        // Auto-sync trail contribution into hiker_profiles
-        if (contributor_email) {
-          try {
-            const cleanEmail = String(contributor_email).trim().toLowerCase();
-            const profile = await env.DB.prepare('SELECT email, total_trails_contributed, contributions_json FROM hiker_profiles WHERE email = ?').bind(cleanEmail).first();
-            if (profile) {
-              let contribs = { trails: [], photos: [] };
-              try {
-                contribs = typeof profile.contributions_json === 'string' ? JSON.parse(profile.contributions_json) : (profile.contributions_json || { trails: [], photos: [] });
-              } catch (_) {}
-              contribs.trails = contribs.trails || [];
-              contribs.trails.unshift({
-                id: trailId,
-                file_name: fileName,
-                name: trailName,
-                distance,
-                elevation_gain,
-                difficulty,
-                uploaded_at: new Date().toISOString()
-              });
-              const newTrailsCount = (Number(profile.total_trails_contributed) || 0) + 1;
-              await env.DB.prepare(`
-                UPDATE hiker_profiles
-                SET contributions_json = ?,
-                    total_trails_contributed = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE email = ?
-              `).bind(JSON.stringify(contribs), newTrailsCount, cleanEmail).run();
-            }
-          } catch (tSyncErr) {
-            console.warn('Notice syncing trail contribution to hiker profile:', tSyncErr);
-          }
         }
 
         return jsonResponse({ success: true, message: 'Trail uploaded successfully to D1', id: trailId, fileName });

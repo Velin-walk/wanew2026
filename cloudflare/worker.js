@@ -192,7 +192,7 @@ async function logAdminActivity(env, request, actionType, description, metadata 
 }
 
 /**
- * Recomputes the unified Leaderboard Master Snapshot from hiker_profiles and treks.
+ * Recomputes the unified Leaderboard Master Snapshot from D1 registration data and treks.
  * Stored in system_snapshots table for O(1) single-read and Edge-cached delivery.
  */
 async function recomputeLeaderboardSnapshot(env, force = false) {
@@ -312,156 +312,39 @@ async function recomputeLeaderboardSnapshot(env, force = false) {
       });
     }
 
-    // 3. Query all active hiker profiles and pre-parse JSON once
-    let rawHikerRows = [];
-    try {
-      const { results } = await env.DB.prepare(`
-        SELECT email, full_name, avatar_url, city, total_hikes, total_distance_km, rank_title, badges_json, hikes_json
-        FROM hiker_profiles
-        WHERE total_hikes > 0
-      `).all();
-      rawHikerRows = results || [];
-    } catch (hErr) {
-      console.warn('Notice querying hiker_profiles for leaderboard snapshot:', hErr);
-    }
-
-    // Pre-parse JSON in a single batch pass before processing
-    const hikerRows = rawHikerRows.map((row) => {
-      let hikes = [];
-      try {
-        hikes = typeof row.hikes_json === 'string' ? JSON.parse(row.hikes_json) : (row.hikes_json || []);
-      } catch (_) {
-        hikes = [];
-      }
-      return {
-        ...row,
-        parsedHikes: Array.isArray(hikes) ? hikes : []
-      };
-    });
-
-    const t30Cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const t60Cutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-    const t90Cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const t365Cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-
-    let uniqueHikeWalkers = new Set();
-    let uniqueTrekWalkers = new Set();
-
-    const formattedHikers = hikerRows.map((row) => {
-      const hikes = row.parsedHikes;
-      const displayName = formatDisplayName(row.full_name, row.rank_title);
-
-      let d = 0, c = 0;
-      let hd = 0, hc = 0;
-      let td = 0, tc = 0;
-
-      let t30d = 0, t30c = 0;
-      let t60d = 0, t60c = 0;
-      let t90d = 0, t90c = 0;
-      let t365d = 0, t365c = 0;
-
-      let ht30d = 0, ht30c = 0;
-      let ht60d = 0, ht60c = 0;
-      let ht90d = 0, ht90c = 0;
-      let ht365d = 0, ht365c = 0;
-
-      let tt30d = 0, tt30c = 0;
-      let tt60d = 0, tt60c = 0;
-      let tt90d = 0, tt90c = 0;
-      let tt365d = 0, tt365c = 0;
-
-      const fallbackDistPerHike = (Number(row.total_distance_km) > 0 && hikes.length > 0)
-        ? Math.round(Number(row.total_distance_km) / hikes.length)
-        : 18;
-
-      for (const h of hikes) {
-        const hn = String(h.hike_number || '').trim();
-        const trekInfo = trekLookup.get(hn);
-
-        const hikeDist = Number(h.distance_km) || (trekInfo ? trekInfo.dist : fallbackDistPerHike);
-        const isTrek = trekInfo
-          ? trekInfo.isMultiDayTrek
-          : (String(h.trek_name || '').toLowerCase().includes('trek') || Number(h.duration_days) > 2);
-
-        const dateStr = h.trek_date || (trekInfo ? trekInfo.date : null);
-        const hDate = dateStr ? new Date(dateStr) : null;
-
-        d += hikeDist;
-        c += 1;
-
-        if (isTrek) {
-          td += hikeDist;
-          tc += 1;
-          uniqueTrekWalkers.add(row.email);
-        } else {
-          hd += hikeDist;
-          hc += 1;
-          uniqueHikeWalkers.add(row.email);
-        }
-
-        if (hDate) {
-          if (hDate >= t30Cutoff) {
-            t30d += hikeDist; t30c += 1;
-            if (isTrek) { tt30d += hikeDist; tt30c += 1; }
-            else { ht30d += hikeDist; ht30c += 1; }
-          }
-          if (hDate >= t60Cutoff) {
-            t60d += hikeDist; t60c += 1;
-            if (isTrek) { tt60d += hikeDist; tt60c += 1; }
-            else { ht60d += hikeDist; ht60c += 1; }
-          }
-          if (hDate >= t90Cutoff) {
-            t90d += hikeDist; t90c += 1;
-            if (isTrek) { tt90d += hikeDist; tt90c += 1; }
-            else { ht90d += hikeDist; ht90c += 1; }
-          }
-          if (hDate >= t365Cutoff) {
-            t365d += hikeDist; t365c += 1;
-            if (isTrek) { tt365d += hikeDist; tt365c += 1; }
-            else { ht365d += hikeDist; ht365c += 1; }
-          }
-        }
-      }
-
-      // If user had total_distance_km or total_hikes pre-calculated, use them if higher
-      if (Number(row.total_distance_km) > d) d = Number(row.total_distance_km);
-      if (Number(row.total_hikes) > c) c = Number(row.total_hikes);
-
-      return {
-        n: displayName,
-        d: Math.round(d),
-        c,
-        hd: Math.round(hd),
-        hc,
-        td: Math.round(td),
-        tc,
-        t30d: Math.round(t30d), t30c,
-        t60d: Math.round(t60d), t60c,
-        t90d: Math.round(t90d), t90c,
-        t365d: Math.round(t365d), t365c,
-        ht30d: Math.round(ht30d), ht30c,
-        ht60d: Math.round(ht60d), ht60c,
-        ht90d: Math.round(ht90d), ht90c,
-        ht365d: Math.round(ht365d), ht365c,
-        tt30d: Math.round(tt30d), tt30c,
-        tt60d: Math.round(tt60d), tt60c,
-        tt90d: Math.round(tt90d), tt90c,
-        tt365d: Math.round(tt365d), tt365c,
-      };
-    });
-
+    // 3. Leaderboard Stats aggregation
     const totalEvents = hikeEventsCount + trekEventsCount;
     const avgDist = totalEvents > 0 ? Math.round(totalCommunityKm / totalEvents) : 25;
 
-    const stats = {
-      totalHikers: hikerRows.length,
+    // Use existing snapshot as a base for hikers and stats if available
+    // Since the user stated the leaderboard is entirely served from Google Sheet GAS,
+    // we preserve the 'stats', 'hikers', 'growthCurve' and 'milestones' fields from the existing snapshot if they exist.
+    let existingHikers = [];
+    let existingStats = null;
+    let existingGrowthCurve = null;
+    let existingMilestones = null;
+    try {
+      const lastSnap = await env.DB.prepare(`
+        SELECT data_json FROM system_snapshots WHERE key = 'leaderboard_master'
+      `).first();
+      if (lastSnap && lastSnap.data_json) {
+        const snap = typeof lastSnap.data_json === 'string' ? JSON.parse(lastSnap.data_json) : lastSnap.data_json;
+        existingHikers = snap.hikers || [];
+        existingStats = snap.stats || null;
+        existingGrowthCurve = snap.growthCurve || snap.growth_curve || null;
+        existingMilestones = snap.milestones || null;
+      }
+    } catch (_) {}
+
+    const stats = existingStats || {
+      totalHikers: existingHikers.length,
       totalEvents: totalEvents || completedTreks.length,
       totalDistance: totalCommunityKm,
       hikesLast30,
-      uniqueHikeParticip: uniqueHikeWalkers.size || Math.round(hikerRows.length * 0.94),
+      uniqueHikeParticip: Math.round(existingHikers.length * 0.94),
       hikeEvents: hikeEventsCount || completedTreks.length,
       totalHikeDist: totalHikeKm,
-      uniqueTrekParticip: uniqueTrekWalkers.size || Math.round(hikerRows.length * 0.08),
+      uniqueTrekParticip: Math.round(existingHikers.length * 0.08),
       trekEvents: trekEventsCount || 16,
       totalTrekDist: totalTrekKm,
       avgDistPerEvent: avgDist,
@@ -473,9 +356,10 @@ async function recomputeLeaderboardSnapshot(env, force = false) {
       ts: Date.now(),
       updated_at: new Date().toISOString(),
       stats,
-      hikers: formattedHikers,
-      growth_curve: growthCurve,
-      milestones: milestones
+      hikers: existingHikers,
+      growthCurve: existingGrowthCurve || growthCurve,
+      growth_curve: existingGrowthCurve || growthCurve, // Alias for backward compatibility
+      milestones: existingMilestones || milestones
     };
 
     // 4. Save directly into system_snapshots
@@ -513,6 +397,37 @@ export default {
           status: 'ok',
           service: 'Walk Nepal Walk Cloudflare API',
           timestamp: new Date().toISOString(),
+        });
+      }
+
+      // GET /images/:fileName - Serve R2 uploaded trek cover images
+      if (method === 'GET' && path.startsWith('/images/')) {
+        const fileName = decodeURIComponent(path.replace('/images/', ''));
+        const bucket = env.BUCKET;
+        if (!bucket) return errorResponse('R2 Storage binding BUCKET missing', 500);
+
+        const object = await bucket.get(fileName);
+        if (!object) {
+          return errorResponse('Image not found in R2 storage', 404);
+        }
+
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set('etag', object.httpEtag);
+        
+        let contentType = 'image/jpeg';
+        if (fileName.endsWith('.png')) contentType = 'image/png';
+        else if (fileName.endsWith('.webp')) contentType = 'image/webp';
+        else if (fileName.endsWith('.gif')) contentType = 'image/gif';
+        
+        headers.set('Content-Type', contentType);
+        headers.set('Cache-Control', 'public, max-age=2592000'); // Cache for 30 days
+        
+        return new Response(object.body, {
+          headers: {
+            ...Object.fromEntries(headers),
+            ...corsHeaders
+          }
         });
       }
 
@@ -742,127 +657,19 @@ export default {
         return resp;
       }
 
-      // POST /admin/sync-all - Bulk sync trigger: syncs itineraries, forwards registrations to hiker_profiles, and recomputes leaderboard
+      // POST /admin/sync-all - Trigger community leaderboard recomputation
       if (method === 'POST' && path === '/admin/sync-all') {
-        let profileCount = 0;
-        const isFullSync = url.searchParams.has('full') || url.searchParams.has('all');
-        if (env.DB) {
-          try {
-            let syncQuery = `
-              SELECT r.*, b.payment_status as roster_pay_status, b.paid_amount as roster_paid, b.due_amount as roster_due, b.admin_notes as roster_notes, b.pickup_point as roster_pickup
-              FROM registrations r
-              LEFT JOIN bookings_roster b ON b.registration_id = r.id
-            `;
-            
-            // Incremental optimization: by default, sync registrations from the last 48 hours for speed
-            if (!isFullSync) {
-              syncQuery += ` WHERE r.timestamp >= datetime('now', '-48 hours') OR b.updated_at >= datetime('now', '-48 hours') `;
-            }
-
-            let regs = await env.DB.prepare(syncQuery).all();
-            
-            // Fallback to full sync if incremental returned no records
-            if (!isFullSync && (!regs.results || regs.results.length === 0)) {
-              syncQuery = `
-                SELECT r.*, b.payment_status as roster_pay_status, b.paid_amount as roster_paid, b.due_amount as roster_due, b.admin_notes as roster_notes, b.pickup_point as roster_pickup
-                FROM registrations r
-                LEFT JOIN bookings_roster b ON b.registration_id = r.id
-              `;
-              regs = await env.DB.prepare(syncQuery).all();
-            }
-
-            const rows = regs.results || [];
-            const hikerMap = new Map();
-            for (const r of rows) {
-              let email = String(r.email_address || '').trim().toLowerCase();
-              if (!email && r.phone) {
-                const phoneClean = String(r.phone).trim().replace(/[^0-9+]/g, '');
-                if (phoneClean) {
-                  email = `${phoneClean}@phone.walknepal.org`;
-                }
-              }
-              if (!email) continue;
-              let profile = hikerMap.get(email);
-              if (!profile) {
-                profile = {
-                  email,
-                  full_name: r.full_name || 'Hiker',
-                  phone: r.phone || '',
-                  whatsapp: r.whatsapp_number || r.whatsapp || '',
-                  gender: r.gender || '',
-                  age_group: r.age_group || '',
-                  profession: r.profession || '',
-                  emergency_contact_phone: r.emergency_backup_contact || '',
-                  fitness_level: r.fitness || '',
-                  medical_conditions: r.medical_condition || '',
-                  city: r.city || '',
-                  total_hikes: 0,
-                  total_paid_amount: 0,
-                  total_due_amount: 0
-                };
-                hikerMap.set(email, profile);
-              }
-              profile.total_hikes += 1;
-              profile.total_paid_amount += Number(r.roster_paid || r.paid || 0);
-              profile.total_due_amount += Number(r.roster_due || r.due || 0);
-            }
-
-            const hikersToUpsert = Array.from(hikerMap.values());
-            const CHUNK_SIZE = 25;
-            for (let i = 0; i < hikersToUpsert.length; i += CHUNK_SIZE) {
-              const chunk = hikersToUpsert.slice(i, i + CHUNK_SIZE);
-              const stmts = chunk.map(p => {
-                let rankTitle = 'Trail Explorer';
-                if (p.total_hikes >= 25) rankTitle = 'Himalayan Veteran';
-                else if (p.total_hikes >= 10) rankTitle = 'Summit Seeker';
-                else if (p.total_hikes >= 5) rankTitle = 'Pathfinder';
-
-                const badges = ['first_hike'];
-                if (p.total_hikes >= 5) badges.push('5_hikes_milestone');
-                if (p.total_hikes >= 10) badges.push('10_hikes_milestone');
-                if (p.total_hikes >= 25) badges.push('25_hikes_milestone');
-
-                return env.DB.prepare(`
-                  INSERT INTO hiker_profiles (
-                    email, full_name, phone, whatsapp, gender, age_group, profession,
-                    emergency_contact_phone, fitness_level, medical_conditions, city,
-                    total_hikes, total_paid_amount, total_due_amount, rank_title,
-                    badges_json, updated_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                  ON CONFLICT(email) DO UPDATE SET
-                    full_name = COALESCE(NULLIF(excluded.full_name, ''), hiker_profiles.full_name),
-                    total_hikes = excluded.total_hikes,
-                    total_paid_amount = excluded.total_paid_amount,
-                    total_due_amount = excluded.total_due_amount,
-                    rank_title = excluded.rank_title,
-                    badges_json = excluded.badges_json,
-                    updated_at = CURRENT_TIMESTAMP
-                `).bind(
-                  p.email, p.full_name, p.phone, p.whatsapp, p.gender, p.age_group, p.profession,
-                  p.emergency_contact_phone, p.fitness_level, p.medical_conditions, p.city,
-                  p.total_hikes, p.total_paid_amount, p.total_due_amount, rankTitle,
-                  JSON.stringify(badges)
-                );
-              });
-              await env.DB.batch(stmts);
-            }
-            profileCount = hikersToUpsert.length;
-            await recomputeLeaderboardSnapshot(env);
-          } catch (err) {
-            console.warn('Sync-all profile aggregation warning:', err);
-          }
-        }
+        await recomputeLeaderboardSnapshot(env);
 
         if (ctx && ctx.waitUntil) {
-          ctx.waitUntil(logAdminActivity(env, request, 'SYNC_ALL_PROFILES', `Synced ${profileCount} hiker profiles and recomputed leaderboard`, { profileCount }));
+          ctx.waitUntil(logAdminActivity(env, request, 'SYNC_LEADERBOARD', 'Recomputed community stats and leaderboard from D1 treks table'));
         } else {
-          await logAdminActivity(env, request, 'SYNC_ALL_PROFILES', `Synced ${profileCount} hiker profiles and recomputed leaderboard`, { profileCount });
+          await logAdminActivity(env, request, 'SYNC_LEADERBOARD', 'Recomputed community stats and leaderboard from D1 treks table');
         }
 
         return jsonResponse({
           success: true,
-          message: `🎉 Successfully synced database! Forwarded ${profileCount} hiker profiles and updated leaderboard.`,
-          profileCount
+          message: '🎉 Successfully updated community stats and recomputed leaderboard.'
         });
       }
 
@@ -1573,74 +1380,6 @@ export default {
             ).run();
           }
 
-          // 4. Synchronize into unified hiker_profiles (Single-Row Document)
-          let profileEmail = String(regRow ? (regRow.email_address || '') : '').trim().toLowerCase();
-          if (!profileEmail && regRow && regRow.phone) {
-            const phoneClean = String(regRow.phone).trim().replace(/[^0-9+]/g, '');
-            if (phoneClean) {
-              profileEmail = `${phoneClean}@phone.walknepal.org`;
-            }
-          }
-
-          if (profileEmail) {
-            try {
-              const cleanEmail = profileEmail;
-              const profile = await env.DB.prepare('SELECT hikes_json FROM hiker_profiles WHERE email = ?').bind(cleanEmail).first();
-              if (profile) {
-                let hikes = [];
-                try {
-                  hikes = typeof profile.hikes_json === 'string' ? JSON.parse(profile.hikes_json) : (profile.hikes_json || []);
-                } catch (_) {}
-
-                const targetHikeNum = String(regRow.hike_number || '').trim();
-                let matched = false;
-                hikes = hikes.map(h => {
-                  if (String(h.hike_number || '').trim() === targetHikeNum) {
-                    matched = true;
-                    return {
-                      ...h,
-                      registration_status: status,
-                      payment_status: payment_status,
-                      paid_amount: paid,
-                      due_amount: due,
-                      pickup_point: pickup_point || h.pickup_point,
-                      admin_notes: updates || h.admin_notes
-                    };
-                  }
-                  return h;
-                });
-
-                if (!matched && targetHikeNum) {
-                  hikes.unshift({
-                    hike_number: targetHikeNum,
-                    trek_name: regRow.trek_name || '',
-                    trek_date: regRow.trek_date || regRow.timestamp || '',
-                    pax: Number(regRow.pax) || 1,
-                    pickup_point: pickup_point || '',
-                    registration_status: status,
-                    payment_status: payment_status,
-                    paid_amount: paid,
-                    due_amount: due,
-                    admin_notes: updates || ''
-                  });
-                }
-
-                const totalPaid = hikes.reduce((acc, h) => acc + (Number(h.paid_amount) || 0), 0);
-                const totalDue = hikes.reduce((acc, h) => acc + (Number(h.due_amount) || 0), 0);
-
-                await env.DB.prepare(`
-                  UPDATE hiker_profiles
-                  SET hikes_json = ?,
-                      total_paid_amount = ?,
-                      total_due_amount = ?,
-                      updated_at = CURRENT_TIMESTAMP
-                  WHERE email = ?
-                `).bind(JSON.stringify(hikes), totalPaid, totalDue, cleanEmail).run();
-              }
-            } catch (syncErr) {
-              console.warn('Notice syncing hiker_profiles hikes_json from roster:', syncErr);
-            }
-          }
         } catch (rosterErr) {
           console.error('Error syncing bookings_roster table:', rosterErr);
           return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
@@ -1766,119 +1505,9 @@ export default {
           }
         }
 
-        // Auto-upsert into unified hiker_profiles (Single-Row Document Pattern)
-        if (body.email_address) {
-          try {
-            const cleanEmail = String(body.email_address).trim().toLowerCase();
-            const existing = await env.DB.prepare('SELECT hikes_json FROM hiker_profiles WHERE email = ?').bind(cleanEmail).first();
-            let hikes = [];
-            if (existing && existing.hikes_json) {
-              try { hikes = typeof existing.hikes_json === 'string' ? JSON.parse(existing.hikes_json) : (existing.hikes_json || []); } catch (_) {}
-            }
-
-            const hikeNumberStr = String(body.hike_number || '').trim();
-            const hikeEntry = {
-              hike_number: hikeNumberStr,
-              trek_name: body.trek_name || '',
-              trek_date: body.hike_date || body.trek_date || '',
-              pax: Number(body.pax) || 1,
-              pickup_point: body.pickup_point || body.pickupPoint || body.pickup || '',
-              registration_status: body.registration_status || 'Confirmed',
-              payment_status: payStatus,
-              paid_amount: paid,
-              due_amount: due,
-              companions: body.list_name || body.part_of_group || '',
-              transport_mode: body.transport_mode || '',
-              guide_mode: body.guide_mode || '',
-              admin_notes: body.admin_notes || '',
-              registered_at: new Date().toISOString()
-            };
-
-            const idx = hikes.findIndex(h => String(h.hike_number).trim() === hikeNumberStr);
-            if (idx >= 0) {
-              hikes[idx] = { ...hikes[idx], ...hikeEntry };
-            } else {
-              hikes.unshift(hikeEntry);
-            }
-
-            const totalHikes = hikes.length;
-            const totalPaid = hikes.reduce((acc, h) => acc + (Number(h.paid_amount) || 0), 0);
-            const totalDue = hikes.reduce((acc, h) => acc + (Number(h.due_amount) || 0), 0);
-
-            let rankTitle = 'Trail Explorer';
-            if (totalHikes >= 25) rankTitle = 'Himalayan Veteran';
-            else if (totalHikes >= 10) rankTitle = 'Summit Seeker';
-            else if (totalHikes >= 5) rankTitle = 'Pathfinder';
-
-            let badges = [];
-            if (existing && existing.badges_json) {
-              try { badges = typeof existing.badges_json === 'string' ? JSON.parse(existing.badges_json) : []; } catch (_) {}
-            }
-            const badgeSet = new Set(badges);
-            badgeSet.add('first_hike');
-            if (totalHikes >= 5) badgeSet.add('5_hikes_milestone');
-            if (totalHikes >= 10) badgeSet.add('10_hikes_milestone');
-            if (totalHikes >= 25) badgeSet.add('25_hikes_milestone');
-
-            const firstDate = existing?.first_hike_date || hikeEntry.trek_date || new Date().toISOString().slice(0, 10);
-            const lastDate = hikeEntry.trek_date || new Date().toISOString().slice(0, 10);
-
-            await env.DB.prepare(`
-              INSERT INTO hiker_profiles (
-                email, full_name, phone, whatsapp, gender, age_group, profession,
-                emergency_contact_phone, fitness_level, medical_conditions, city,
-                total_hikes, total_paid_amount, total_due_amount, rank_title,
-                badges_json, hikes_json, first_hike_date, last_hike_date, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-              ON CONFLICT(email) DO UPDATE SET
-                full_name = COALESCE(NULLIF(excluded.full_name, ''), hiker_profiles.full_name),
-                phone = COALESCE(NULLIF(excluded.phone, ''), hiker_profiles.phone),
-                whatsapp = COALESCE(NULLIF(excluded.whatsapp, ''), hiker_profiles.whatsapp),
-                gender = COALESCE(NULLIF(excluded.gender, ''), hiker_profiles.gender),
-                age_group = COALESCE(NULLIF(excluded.age_group, ''), hiker_profiles.age_group),
-                profession = COALESCE(NULLIF(excluded.profession, ''), hiker_profiles.profession),
-                emergency_contact_phone = COALESCE(NULLIF(excluded.emergency_contact_phone, ''), hiker_profiles.emergency_contact_phone),
-                fitness_level = COALESCE(NULLIF(excluded.fitness_level, ''), hiker_profiles.fitness_level),
-                medical_conditions = COALESCE(NULLIF(excluded.medical_conditions, ''), hiker_profiles.medical_conditions),
-                city = COALESCE(NULLIF(excluded.city, ''), hiker_profiles.city),
-                total_hikes = excluded.total_hikes,
-                total_paid_amount = excluded.total_paid_amount,
-                total_due_amount = excluded.total_due_amount,
-                rank_title = excluded.rank_title,
-                badges_json = excluded.badges_json,
-                hikes_json = excluded.hikes_json,
-                last_hike_date = excluded.last_hike_date,
-                updated_at = CURRENT_TIMESTAMP
-            `).bind(
-              cleanEmail,
-              body.full_name || '',
-              body.phone || '',
-              whatsappVal || '',
-              body.gender || '',
-              body.age_group || '',
-              body.profession || '',
-              body.emergency_backup_contact || '',
-              body.fitness || '',
-              body.medical_condition || '',
-              body.city || '',
-              totalHikes,
-              totalPaid,
-              totalDue,
-              rankTitle,
-              JSON.stringify(Array.from(badgeSet)),
-              JSON.stringify(hikes),
-              firstDate,
-              lastDate
-            ).run();
-          } catch (pErr) {
-            console.warn('Error auto-syncing unified hiker_profile:', pErr);
-          }
-        }
-
         cachedTrekAggMap = null;
-        if (ctx && ctx.waitUntil) {
-          ctx.waitUntil(recomputeLeaderboardSnapshot(env, false));
-        }
+        // Recomputation of leaderboard is now handled via manual sync from Google Sheets (GAS)
+        // or via the /admin/sync-all endpoint.
         return jsonResponse({ success: true, message: 'Registration saved successfully', id: insertedId });
       }
 
@@ -1971,65 +1600,6 @@ export default {
           }
         }
 
-        // Background sync: update hiker_profiles and recompute leaderboard snapshot
-        if (affectedEmails.size > 0) {
-          const runSync = async () => {
-            try {
-              for (const email of affectedEmails) {
-                const regs = await env.DB.prepare(
-                  'SELECT * FROM registrations WHERE LOWER(email_address) = ? ORDER BY timestamp DESC'
-                ).bind(email).all();
-                const rows = regs.results || [];
-                if (rows.length === 0) continue;
-
-                const first = rows[0];
-                const totalHikes = rows.length;
-                let rankTitle = 'Trail Explorer';
-                if (totalHikes >= 25) rankTitle = 'Himalayan Veteran';
-                else if (totalHikes >= 10) rankTitle = 'Summit Seeker';
-                else if (totalHikes >= 5) rankTitle = 'Pathfinder';
-
-                const badges = ['first_hike'];
-                if (totalHikes >= 5) badges.push('5_hikes_milestone');
-                if (totalHikes >= 10) badges.push('10_hikes_milestone');
-                if (totalHikes >= 25) badges.push('25_hikes_milestone');
-
-                await env.DB.prepare(`
-                  INSERT INTO hiker_profiles (
-                    email, full_name, phone, whatsapp, gender, age_group, profession,
-                    total_hikes, rank_title, badges_json, updated_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                  ON CONFLICT(email) DO UPDATE SET
-                    total_hikes = excluded.total_hikes,
-                    rank_title = excluded.rank_title,
-                    badges_json = excluded.badges_json,
-                    updated_at = CURRENT_TIMESTAMP
-                `).bind(
-                  email,
-                  first.full_name || 'Hiker',
-                  first.phone || '',
-                  first.whatsapp_number || '',
-                  first.gender || '',
-                  first.age_group || '',
-                  first.profession || '',
-                  totalHikes,
-                  rankTitle,
-                  JSON.stringify(badges)
-                ).run();
-              }
-              await recomputeLeaderboardSnapshot(env, false);
-            } catch (syncErr) {
-              console.warn('Batch registration post-sync background error:', syncErr);
-            }
-          };
-
-          if (ctx && ctx.waitUntil) {
-            ctx.waitUntil(runSync());
-          } else {
-            runSync().catch(e => console.warn('Background sync error:', e));
-          }
-        }
-
         cachedTrekAggMap = null;
         return jsonResponse({
           success: true,
@@ -2041,263 +1611,13 @@ export default {
 
       // ===== HIKER PROFILE & LEADERBOARD ENDPOINTS =====
 
-      // GET /hiker/profile - Get individual hiker profile with 1-row O(1) lookup
-      if (method === 'GET' && path === '/hiker/profile') {
-        if (!env.DB) return jsonResponse({ success: false, error: 'Database not bound' }, 500);
+      // GET /hiker/profile - REMOVED
 
-        const email = (url.searchParams.get('email') || '').trim().toLowerCase();
-        const uid = (url.searchParams.get('uid') || '').trim();
+      // POST or PUT /hiker/profile - REMOVED
 
-        if (!email && !uid) {
-          return errorResponse('Email or uid is required to fetch hiker profile', 400);
-        }
+      // GET /hiker/history - REMOVED
 
-        let profile = null;
-        if (email) {
-          profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE email = ?').bind(email).first();
-        } else if (uid) {
-          profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE user_uid = ?').bind(uid).first();
-        }
-
-        if (!profile) {
-          // If no profile yet, return an empty template with defaults
-          return jsonResponse({
-            success: true,
-            data: {
-              email: email || '',
-              user_uid: uid || '',
-              full_name: '',
-              total_hikes: 0,
-              total_distance_km: 0,
-              highest_altitude_m: 0,
-              total_paid_amount: 0,
-              total_due_amount: 0,
-              total_trails_contributed: 0,
-              total_photos_uploaded: 0,
-              total_comments_made: 0,
-              rank_title: 'Trail Explorer',
-              badges: [],
-              hikes: [],
-              contributions: { trails: [], photos: [] },
-              isNew: true
-            }
-          });
-        }
-
-        let badges = [];
-        try {
-          badges = typeof profile.badges_json === 'string' ? JSON.parse(profile.badges_json) : (profile.badges_json || []);
-        } catch (_) {}
-
-        let hikes = [];
-        try {
-          hikes = typeof profile.hikes_json === 'string' ? JSON.parse(profile.hikes_json) : (profile.hikes_json || []);
-        } catch (_) {}
-
-        let contributions = { trails: [], photos: [] };
-        try {
-          contributions = typeof profile.contributions_json === 'string' ? JSON.parse(profile.contributions_json) : (profile.contributions_json || { trails: [], photos: [] });
-        } catch (_) {}
-
-        return jsonResponse({
-          success: true,
-          data: {
-            ...profile,
-            badges,
-            hikes,
-            contributions,
-            isNew: false
-          }
-        }, 200, {
-          'Cache-Control': 'private, max-age=60'
-        });
-      }
-
-      // POST or PUT /hiker/profile - Create or update personal hiker profile
-      if ((method === 'POST' || method === 'PUT') && path === '/hiker/profile') {
-        if (!env.DB) return errorResponse('Database binding DB missing', 500);
-
-        const body = await request.json();
-        const email = (body.email || body.email_address || '').trim().toLowerCase();
-        if (!email) return errorResponse('Email is required', 400);
-
-        const fullName = body.full_name || body.name || 'Hiker';
-        const userUid = body.user_uid || body.uid || null;
-        const phone = body.phone || '';
-        const whatsapp = body.whatsapp || body.whatsapp_number || '';
-        const gender = body.gender || '';
-        const ageGroup = body.age_group || body.ageGroup || '';
-        const profession = body.profession || '';
-        const emergencyName = body.emergency_contact_name || '';
-        const emergencyPhone = body.emergency_contact_phone || '';
-        const bloodGroup = body.blood_group || '';
-        const fitnessLevel = body.fitness_level || '';
-        const medicalConditions = body.medical_conditions || '';
-        const city = body.city || '';
-        const avatarUrl = body.avatar_url || '';
-
-        await env.DB.prepare(`
-          INSERT INTO hiker_profiles (
-            email, user_uid, full_name, phone, whatsapp, gender, age_group, profession,
-            emergency_contact_name, emergency_contact_phone, blood_group, fitness_level,
-            medical_conditions, city, avatar_url, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          ON CONFLICT(email) DO UPDATE SET
-            user_uid = COALESCE(NULLIF(excluded.user_uid, ''), hiker_profiles.user_uid),
-            full_name = COALESCE(NULLIF(excluded.full_name, ''), hiker_profiles.full_name),
-            phone = COALESCE(NULLIF(excluded.phone, ''), hiker_profiles.phone),
-            whatsapp = COALESCE(NULLIF(excluded.whatsapp, ''), hiker_profiles.whatsapp),
-            gender = COALESCE(NULLIF(excluded.gender, ''), hiker_profiles.gender),
-            age_group = COALESCE(NULLIF(excluded.age_group, ''), hiker_profiles.age_group),
-            profession = COALESCE(NULLIF(excluded.profession, ''), hiker_profiles.profession),
-            emergency_contact_name = COALESCE(NULLIF(excluded.emergency_contact_name, ''), hiker_profiles.emergency_contact_name),
-            emergency_contact_phone = COALESCE(NULLIF(excluded.emergency_contact_phone, ''), hiker_profiles.emergency_contact_phone),
-            blood_group = COALESCE(NULLIF(excluded.blood_group, ''), hiker_profiles.blood_group),
-            fitness_level = COALESCE(NULLIF(excluded.fitness_level, ''), hiker_profiles.fitness_level),
-            medical_conditions = COALESCE(NULLIF(excluded.medical_conditions, ''), hiker_profiles.medical_conditions),
-            city = COALESCE(NULLIF(excluded.city, ''), hiker_profiles.city),
-            avatar_url = COALESCE(NULLIF(excluded.avatar_url, ''), hiker_profiles.avatar_url),
-            updated_at = CURRENT_TIMESTAMP
-        `).bind(
-          email, userUid, fullName, phone, whatsapp, gender, ageGroup, profession,
-          emergencyName, emergencyPhone, bloodGroup, fitnessLevel, medicalConditions, city, avatarUrl
-        ).run();
-
-        return jsonResponse({
-          success: true,
-          message: 'Hiker profile saved successfully',
-          email
-        });
-      }
-
-      // GET /hiker/history - Full completed hikes history from single-row hikes_json
-      if (method === 'GET' && path === '/hiker/history') {
-        if (!env.DB) return jsonResponse({ success: true, data: [] });
-        const email = (url.searchParams.get('email') || '').trim().toLowerCase();
-        if (!email) return errorResponse('Email is required', 400);
-
-        const profile = await env.DB.prepare('SELECT hikes_json FROM hiker_profiles WHERE email = ?').bind(email).first();
-        let hikes = [];
-        if (profile && profile.hikes_json) {
-          try {
-            hikes = typeof profile.hikes_json === 'string' ? JSON.parse(profile.hikes_json) : (profile.hikes_json || []);
-          } catch (_) {}
-        }
-
-        return jsonResponse({ success: true, data: hikes });
-      }
-
-      // POST /hiker/history - Record completed hike into single-row hikes_json and increment statistics
-      if (method === 'POST' && path === '/hiker/history') {
-        if (!env.DB) return errorResponse('Database binding DB missing', 500);
-
-        const body = await request.json();
-        const email = (body.email || '').trim().toLowerCase();
-        const hikeNumber = String(body.hike_number || '').trim();
-        const trekName = body.trek_name || '';
-        const hikeDate = body.hike_date || new Date().toISOString().slice(0, 10);
-        const distanceKm = Number(body.distance_km) || 0;
-        const altitudeM = Number(body.altitude_m) || 0;
-        const role = body.role || 'participant';
-
-        if (!email || !hikeNumber) {
-          return errorResponse('Email and hike_number are required', 400);
-        }
-
-        let profile = await env.DB.prepare('SELECT * FROM hiker_profiles WHERE email = ?').bind(email).first();
-        let hikes = [];
-        if (profile && profile.hikes_json) {
-          try {
-            hikes = typeof profile.hikes_json === 'string' ? JSON.parse(profile.hikes_json) : (profile.hikes_json || []);
-          } catch (_) {}
-        }
-
-        const newHikeItem = {
-          hike_number: hikeNumber,
-          trek_name: trekName,
-          trek_date: hikeDate,
-          distance_km: distanceKm,
-          altitude_m: altitudeM,
-          role,
-          registration_status: 'Attended',
-          payment_status: 'Paid',
-          completed_at: new Date().toISOString()
-        };
-
-        const existingIdx = hikes.findIndex(h => String(h.hike_number).trim() === hikeNumber);
-        if (existingIdx >= 0) {
-          hikes[existingIdx] = { ...hikes[existingIdx], ...newHikeItem };
-        } else {
-          hikes.unshift(newHikeItem);
-        }
-
-        const newTotalHikes = hikes.length;
-        const newDistance = (Number(profile?.total_distance_km) || 0) + distanceKm;
-        const newAltitude = Math.max(Number(profile?.highest_altitude_m) || 0, altitudeM);
-
-        let rankTitle = 'Trail Explorer';
-        if (newTotalHikes >= 25) rankTitle = 'Himalayan Veteran';
-        else if (newTotalHikes >= 10) rankTitle = 'Summit Seeker';
-        else if (newTotalHikes >= 5) rankTitle = 'Pathfinder';
-
-        let badges = [];
-        if (profile && profile.badges_json) {
-          try {
-            badges = typeof profile.badges_json === 'string' ? JSON.parse(profile.badges_json) : (profile.badges_json || []);
-          } catch (_) {}
-        }
-
-        const badgeSet = new Set(badges);
-        badgeSet.add('first_hike');
-        if (newTotalHikes >= 5) badgeSet.add('5_hikes_milestone');
-        if (newTotalHikes >= 10) badgeSet.add('10_hikes_milestone');
-        if (newTotalHikes >= 25) badgeSet.add('25_hikes_milestone');
-        if (newAltitude >= 4000) badgeSet.add('high_altitude_4000m');
-
-        if (!profile) {
-          await env.DB.prepare(`
-            INSERT INTO hiker_profiles (
-              email, full_name, total_hikes, total_distance_km, highest_altitude_m,
-              rank_title, badges_json, hikes_json, first_hike_date, last_hike_date, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `).bind(
-            email,
-            body.full_name || 'Hiker',
-            newTotalHikes,
-            newDistance,
-            newAltitude,
-            rankTitle,
-            JSON.stringify(Array.from(badgeSet)),
-            JSON.stringify(hikes),
-            hikeDate,
-            hikeDate
-          ).run();
-        } else {
-          await env.DB.prepare(`
-            UPDATE hiker_profiles
-            SET total_hikes = ?,
-                total_distance_km = ?,
-                highest_altitude_m = ?,
-                rank_title = ?,
-                badges_json = ?,
-                hikes_json = ?,
-                last_hike_date = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE email = ?
-          `).bind(
-            newTotalHikes,
-            newDistance,
-            newAltitude,
-            rankTitle,
-            JSON.stringify(Array.from(badgeSet)),
-            JSON.stringify(hikes),
-            hikeDate,
-            email
-          ).run();
-        }
-
-        return jsonResponse({ success: true, message: `Completed hike #${hikeNumber} recorded for ${email}` });
-      }
+      // POST /hiker/history - REMOVED
 
       // GET /leaderboard or GET /leaderboard/master - Returns the single pre-computed snapshot
       if (method === 'GET' && (path === '/leaderboard' || path === '/leaderboard/master')) {
@@ -2319,11 +1639,10 @@ export default {
           }
         } catch (_) {}
 
-        if (!snapshot || isFresh) {
-          snapshot = await recomputeLeaderboardSnapshot(env, isFresh);
-        }
-
         if (!snapshot) {
+          // If no snapshot exists and we can't build one, return defaults.
+          // Note: recomputeLeaderboardSnapshot is now primarily for merging D1 milestones/growth curve
+          // into existing Sheet data, not for bootstrapping a full leaderboard.
           snapshot = { ok: true, stats: {}, hikers: [] };
         }
 
@@ -2351,6 +1670,49 @@ export default {
           stats: snapshot?.stats,
           hikersCount: snapshot?.hikers?.length || 0
         });
+      }
+
+      // POST /admin/sync-leaderboard-sheet - Ingest leaderboard data from Google Sheet GAS URL
+      if (method === 'POST' && path === '/admin/sync-leaderboard-sheet') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        
+        const body = await request.json();
+        const gasUrl = body.gasUrl;
+        
+        if (!gasUrl) return errorResponse('Missing gasUrl in request body', 400);
+
+        try {
+          const res = await fetch(gasUrl);
+          if (!res.ok) throw new Error(`Google Sheets API returned ${res.status}`);
+          
+          const sheetData = await res.json();
+          if (!sheetData || (sheetData.ok === false) || !Array.isArray(sheetData.hikers)) {
+            throw new Error(sheetData.error || 'Invalid data format from Google Sheets');
+          }
+
+          // Force update the system snapshot
+          await env.DB.prepare(
+            "INSERT OR REPLACE INTO system_snapshots (key, data_json, updated_at) VALUES (?, ?, ?)"
+          ).bind('leaderboard_master', JSON.stringify(sheetData), new Date().toISOString()).run();
+
+          // Log the action
+          await env.DB.prepare(
+            "INSERT INTO admin_activity_logs (admin_email, action_type, description, created_at) VALUES (?, ?, ?, ?)"
+          ).bind(
+            body.adminEmail || 'admin@walknepalwalk.com', 
+            'SYNC_LEADERBOARD', 
+            `Leaderboard synced from Google Sheets. ${sheetData.hikers.length} hikers, ${sheetData.growthCurve?.length || 0} events updated.`,
+            new Date().toISOString()
+          ).run();
+
+          return jsonResponse({
+            success: true,
+            message: `Successfully synced ${sheetData.hikers.length} hikers from Google Sheets.`,
+            stats: sheetData.stats
+          });
+        } catch (err) {
+          return errorResponse('Failed to sync from Google Sheets: ' + err.message, 500);
+        }
       }
 
       // GET /admin/logs - Query activity logs with pagination and filters
@@ -2406,246 +1768,6 @@ export default {
         } catch (err) {
           return errorResponse('Failed to fetch activity logs: ' + err.message, 500);
         }
-      }
-
-      // POST /admin/migrate-profiles - Ingest bulk old hiker data or backfill from existing tables
-      if (method === 'POST' && path === '/admin/migrate-profiles') {
-        if (!env.DB) return errorResponse('Database binding DB missing', 500);
-
-        const body = await request.json();
-        let migratedCount = 0;
-
-        // Mode A: Backfill from existing registrations & bookings_roster tables
-        if (body.backfillFromTables) {
-          try {
-            const regs = await env.DB.prepare(`
-              SELECT r.*, b.payment_status as roster_pay_status, b.paid_amount as roster_paid, b.due_amount as roster_due, b.admin_notes as roster_notes, b.pickup_point as roster_pickup
-              FROM registrations r
-              LEFT JOIN bookings_roster b ON b.registration_id = r.id
-              WHERE r.email_address IS NOT NULL AND TRIM(r.email_address) != ''
-            `).all();
-
-            const rows = regs.results || [];
-            const hikerMap = new Map();
-
-            for (const r of rows) {
-              const email = String(r.email_address).trim().toLowerCase();
-              if (!email) continue;
-
-              let profile = hikerMap.get(email);
-              if (!profile) {
-                profile = {
-                  email,
-                  full_name: r.full_name || 'Hiker',
-                  phone: r.phone || '',
-                  whatsapp: r.whatsapp_number || r.whatsapp || '',
-                  gender: r.gender || '',
-                  age_group: r.age_group || '',
-                  profession: r.profession || '',
-                  emergency_contact_phone: r.emergency_backup_contact || '',
-                  fitness_level: r.fitness || '',
-                  medical_conditions: r.medical_condition || '',
-                  city: r.city || '',
-                  hikes: []
-                };
-                hikerMap.set(email, profile);
-              }
-
-              const hikeNum = String(r.hike_number || '').trim();
-              const existingHike = profile.hikes.find(h => String(h.hike_number).trim() === hikeNum);
-              if (!existingHike) {
-                profile.hikes.push({
-                  hike_number: hikeNum,
-                  trek_name: r.trek_name || '',
-                  trek_date: r.timestamp ? r.timestamp.slice(0, 10) : '',
-                  pax: Number(r.pax) || 1,
-                  pickup_point: r.roster_pickup || '',
-                  registration_status: 'Confirmed',
-                  payment_status: r.roster_pay_status || 'Unpaid',
-                  paid_amount: Number(r.roster_paid) || 0,
-                  due_amount: Number(r.roster_due) || 0,
-                  companions: r.list_name || r.part_of_group || '',
-                  transport_mode: r.transport_mode || '',
-                  guide_mode: r.guide_mode || '',
-                  admin_notes: r.roster_notes || ''
-                });
-              }
-            }
-
-            const allStmts = [];
-            for (const profile of hikerMap.values()) {
-              const totalHikes = profile.hikes.length;
-              const totalPaid = profile.hikes.reduce((a, h) => a + (Number(h.paid_amount) || 0), 0);
-              const totalDue = profile.hikes.reduce((a, h) => a + (Number(h.due_amount) || 0), 0);
-
-              let rankTitle = 'Trail Explorer';
-              if (totalHikes >= 25) rankTitle = 'Himalayan Veteran';
-              else if (totalHikes >= 10) rankTitle = 'Summit Seeker';
-              else if (totalHikes >= 5) rankTitle = 'Pathfinder';
-
-              const badges = ['first_hike'];
-              if (totalHikes >= 5) badges.push('5_hikes_milestone');
-              if (totalHikes >= 10) badges.push('10_hikes_milestone');
-              if (totalHikes >= 25) badges.push('25_hikes_milestone');
-
-              allStmts.push(env.DB.prepare(`
-                INSERT INTO hiker_profiles (
-                  email, full_name, phone, whatsapp, gender, age_group, profession,
-                  emergency_contact_phone, fitness_level, medical_conditions, city,
-                  total_hikes, total_paid_amount, total_due_amount, rank_title,
-                  badges_json, hikes_json, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(email) DO UPDATE SET
-                  total_hikes = excluded.total_hikes,
-                  total_paid_amount = excluded.total_paid_amount,
-                  total_due_amount = excluded.total_due_amount,
-                  rank_title = excluded.rank_title,
-                  badges_json = excluded.badges_json,
-                  hikes_json = excluded.hikes_json,
-                  updated_at = CURRENT_TIMESTAMP
-              `).bind(
-                profile.email,
-                profile.full_name,
-                profile.phone,
-                profile.whatsapp,
-                profile.gender,
-                profile.age_group,
-                profile.profession,
-                profile.emergency_contact_phone,
-                profile.fitness_level,
-                profile.medical_conditions,
-                profile.city,
-                totalHikes,
-                totalPaid,
-                totalDue,
-                rankTitle,
-                JSON.stringify(badges),
-                JSON.stringify(profile.hikes)
-              ));
-
-              migratedCount++;
-            }
-
-            // Execute in batches of 50
-            const CHUNK_SIZE = 50;
-            for (let i = 0; i < allStmts.length; i += CHUNK_SIZE) {
-              const chunk = allStmts.slice(i, i + CHUNK_SIZE);
-              if (chunk.length > 0) {
-                await env.DB.batch(chunk);
-              }
-            }
-
-            return jsonResponse({
-              success: true,
-              message: `Successfully backfilled ${migratedCount} hiker profiles from existing table records.`,
-              migratedCount
-            });
-          } catch (bErr) {
-            console.error('Backfill error:', bErr);
-            return errorResponse(`Backfill failed: ${bErr.message}`, 500);
-          }
-        }
-
-        // Mode B: Direct bulk ingestion of custom hikers array
-        const hikers = Array.isArray(body.hikers) ? body.hikers : [];
-        for (const h of hikers) {
-          const email = String(h.email || h.email_address || '').trim().toLowerCase();
-          if (!email) continue;
-
-          const hikes = Array.isArray(h.hikes) ? h.hikes : [];
-          const totalHikes = h.total_hikes !== undefined ? Number(h.total_hikes) : hikes.length;
-          const totalPaid = h.total_paid_amount !== undefined ? Number(h.total_paid_amount) : hikes.reduce((a, x) => a + (Number(x.paid_amount) || 0), 0);
-          const totalDue = h.total_due_amount !== undefined ? Number(h.total_due_amount) : hikes.reduce((a, x) => a + (Number(x.due_amount) || 0), 0);
-          const totalDist = Number(h.total_distance_km) || 0;
-          const highestAlt = Number(h.highest_altitude_m) || 0;
-
-          let rankTitle = h.rank_title || 'Trail Explorer';
-          if (totalHikes >= 25) rankTitle = 'Himalayan Veteran';
-          else if (totalHikes >= 10) rankTitle = 'Summit Seeker';
-          else if (totalHikes >= 5) rankTitle = 'Pathfinder';
-
-          let badges = Array.isArray(h.badges) ? h.badges : [];
-          if (badges.length === 0 && totalHikes > 0) {
-            badges.push('first_hike');
-            if (totalHikes >= 5) badges.push('5_hikes_milestone');
-            if (totalHikes >= 10) badges.push('10_hikes_milestone');
-            if (totalHikes >= 25) badges.push('25_hikes_milestone');
-          }
-
-          const contribs = h.contributions || { trails: [], photos: [] };
-
-          await env.DB.prepare(`
-            INSERT INTO hiker_profiles (
-              email, user_uid, full_name, phone, whatsapp, gender, age_group, profession,
-              emergency_contact_name, emergency_contact_phone, blood_group, fitness_level,
-              medical_conditions, city, avatar_url, total_hikes, total_paid_amount, total_due_amount,
-              total_distance_km, highest_altitude_m, total_trails_contributed, total_photos_uploaded,
-              total_comments_made, rank_title, badges_json, hikes_json, contributions_json,
-              first_hike_date, last_hike_date, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(email) DO UPDATE SET
-              full_name = COALESCE(NULLIF(excluded.full_name, ''), hiker_profiles.full_name),
-              phone = COALESCE(NULLIF(excluded.phone, ''), hiker_profiles.phone),
-              whatsapp = COALESCE(NULLIF(excluded.whatsapp, ''), hiker_profiles.whatsapp),
-              gender = COALESCE(NULLIF(excluded.gender, ''), hiker_profiles.gender),
-              age_group = COALESCE(NULLIF(excluded.age_group, ''), hiker_profiles.age_group),
-              profession = COALESCE(NULLIF(excluded.profession, ''), hiker_profiles.profession),
-              city = COALESCE(NULLIF(excluded.city, ''), hiker_profiles.city),
-              total_hikes = excluded.total_hikes,
-              total_paid_amount = excluded.total_paid_amount,
-              total_due_amount = excluded.total_due_amount,
-              total_distance_km = excluded.total_distance_km,
-              highest_altitude_m = excluded.highest_altitude_m,
-              total_trails_contributed = excluded.total_trails_contributed,
-              total_photos_uploaded = excluded.total_photos_uploaded,
-              total_comments_made = excluded.total_comments_made,
-              rank_title = excluded.rank_title,
-              badges_json = excluded.badges_json,
-              hikes_json = excluded.hikes_json,
-              contributions_json = excluded.contributions_json,
-              first_hike_date = COALESCE(excluded.first_hike_date, hiker_profiles.first_hike_date),
-              last_hike_date = COALESCE(excluded.last_hike_date, hiker_profiles.last_hike_date),
-              updated_at = CURRENT_TIMESTAMP
-          `).bind(
-            email,
-            h.user_uid || h.uid || null,
-            h.full_name || 'Hiker',
-            h.phone || '',
-            h.whatsapp || '',
-            h.gender || '',
-            h.age_group || '',
-            h.profession || '',
-            h.emergency_contact_name || '',
-            h.emergency_contact_phone || '',
-            h.blood_group || '',
-            h.fitness_level || '',
-            h.medical_conditions || '',
-            h.city || '',
-            h.avatar_url || '',
-            totalHikes,
-            totalPaid,
-            totalDue,
-            totalDist,
-            highestAlt,
-            Number(h.total_trails_contributed) || 0,
-            Number(h.total_photos_uploaded) || 0,
-            Number(h.total_comments_made) || 0,
-            rankTitle,
-            JSON.stringify(badges),
-            JSON.stringify(hikes),
-            JSON.stringify(contribs),
-            h.first_hike_date || null,
-            h.last_hike_date || null
-          ).run();
-
-          migratedCount++;
-        }
-
-        return jsonResponse({
-          success: true,
-          message: `Successfully ingested/updated ${migratedCount} hiker profiles into single-row document model.`,
-          migratedCount
-        });
       }
 
       // ===== FEEDBACK ENDPOINTS =====
@@ -2765,44 +1887,6 @@ export default {
             body.caption || ''
           ).run();
 
-          // Auto-sync photo contribution into hiker_profiles
-          const userIdentifier = (body.email || body.userEmail || '').trim().toLowerCase();
-          const userUid = body.userUid || body.user_uid || '';
-          if (userIdentifier || userUid) {
-            try {
-              let profile = null;
-              if (userIdentifier) {
-                profile = await env.DB.prepare('SELECT email, total_photos_uploaded, contributions_json FROM hiker_profiles WHERE email = ?').bind(userIdentifier.toLowerCase()).first();
-              } else if (userUid) {
-                profile = await env.DB.prepare('SELECT email, total_photos_uploaded, contributions_json FROM hiker_profiles WHERE user_uid = ?').bind(userUid).first();
-              }
-              if (profile) {
-                let contribs = { trails: [], photos: [] };
-                try {
-                  contribs = typeof profile.contributions_json === 'string' ? JSON.parse(profile.contributions_json) : (profile.contributions_json || { trails: [], photos: [] });
-                } catch (_) {}
-                contribs.photos = contribs.photos || [];
-                contribs.photos.unshift({
-                  id: photoId,
-                  url: body.url || '',
-                  caption: body.caption || '',
-                  trek_name: body.trekName || body.trek_name || '',
-                  uploaded_at: currentTimestamp
-                });
-                const newPhotoCount = (Number(profile.total_photos_uploaded) || 0) + 1;
-                await env.DB.prepare(`
-                  UPDATE hiker_profiles
-                  SET contributions_json = ?,
-                      total_photos_uploaded = ?,
-                      updated_at = CURRENT_TIMESTAMP
-                  WHERE email = ?
-                `).bind(JSON.stringify(contribs), newPhotoCount, profile.email).run();
-              }
-            } catch (pSyncErr) {
-              console.warn('Notice syncing photo contribution to hiker profile:', pSyncErr);
-            }
-          }
-
           return jsonResponse({
             success: true,
             message: 'Photo index saved to Cloudflare D1 successfully',
@@ -2889,31 +1973,6 @@ export default {
             body.commentText || body.comment_text || '',
             currentTimestamp
           ).run();
-
-          // Auto-sync comment count into hiker_profiles
-          const commentUid = body.userUid || body.user_uid || '';
-          const commentEmail = (body.email || '').trim().toLowerCase();
-          if (commentUid || commentEmail) {
-            try {
-              let profile = null;
-              if (commentEmail) {
-                profile = await env.DB.prepare('SELECT email, total_comments_made FROM hiker_profiles WHERE email = ?').bind(commentEmail).first();
-              } else if (commentUid) {
-                profile = await env.DB.prepare('SELECT email, total_comments_made FROM hiker_profiles WHERE user_uid = ?').bind(commentUid).first();
-              }
-              if (profile) {
-                const newCount = (Number(profile.total_comments_made) || 0) + 1;
-                await env.DB.prepare(`
-                  UPDATE hiker_profiles
-                  SET total_comments_made = ?,
-                      updated_at = CURRENT_TIMESTAMP
-                  WHERE email = ?
-                `).bind(newCount, profile.email).run();
-              }
-            } catch (cSyncErr) {
-              console.warn('Notice syncing comments count to hiker profile:', cSyncErr);
-            }
-          }
 
           return jsonResponse({
             success: true,

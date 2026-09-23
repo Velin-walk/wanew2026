@@ -54,14 +54,16 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
   };
 
   const getDifficultyBadge = (difficulty?: string) => {
-    switch (difficulty?.toLowerCase()) {
+    switch (difficulty?.toLowerCase()?.trim()) {
       case 'easy':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        return 'bg-emerald-600 text-white border-emerald-700';
       case 'moderate':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
+        return 'bg-amber-400 text-amber-950 border-amber-500';
       case 'difficult':
       case 'hard':
-        return 'bg-rose-50 text-rose-700 border-rose-200';
+        return 'bg-orange-600 text-white border-orange-700';
+      case 'extreme':
+        return 'bg-red-600 text-white border-red-700';
       default:
         return 'bg-neutral-100 text-neutral-600 border-neutral-200';
     }

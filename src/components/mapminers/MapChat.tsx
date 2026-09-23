@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../../lib/firebase';
-import { collection, addDoc, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
-import { Send, MessageSquare, Compass, Calendar, Sparkles } from 'lucide-react';
+import { Send, MessageSquare, Compass, Calendar, Sparkles, RotateCcw } from 'lucide-react';
 
 interface MapChatProps {
   currentUserEmail?: string;
@@ -17,10 +15,36 @@ interface ChatMessage {
   timestamp: number;
 }
 
+const INITIAL_TRAIL_POSTS: ChatMessage[] = [
+  {
+    id: 'seed-1',
+    text: 'Welcome to MapMiners Trail Chat! Share real-time conditions, trail blockages, or questions with fellow hikers.',
+    senderEmail: 'walknepalwalk@gmail.com',
+    senderName: 'Coordinator (WNW)',
+    timestamp: Date.now() - 1000 * 60 * 60 * 3,
+  },
+  {
+    id: 'seed-2',
+    text: 'Sundarijal to Chisapani route is clear today. Spring water point near the army checkpost is flowing well.',
+    senderEmail: 'biraj@seekscape.com',
+    senderName: 'Trail Scout',
+    timestamp: Date.now() - 1000 * 60 * 45,
+  }
+];
+
 export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('wnw_mapchat_messages');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_TRAIL_POSTS;
+  });
   const [inputText, setInputText] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline'>('online');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [guestName, setGuestName] = useState(() => {
@@ -39,76 +63,6 @@ export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProp
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-
-    const startStream = (useOrderBy: boolean) => {
-      try {
-        const q = useOrderBy
-          ? query(
-              collection(db, 'map_chats'),
-              orderBy('timestamp', 'desc'),
-              limit(100)
-            )
-          : query(
-              collection(db, 'map_chats'),
-              limit(100)
-            );
-
-        unsubscribe = onSnapshot(q, (snapshot) => {
-          setConnectionStatus('online');
-          const msgs: ChatMessage[] = [];
-          
-          // If server-sorted in desc order, reverse once to show oldest-to-newest chronologically
-          const docs = useOrderBy ? [...snapshot.docs].reverse() : snapshot.docs;
-          
-          docs.forEach((doc) => {
-            const data = doc.data();
-            msgs.push({
-              id: doc.id,
-              text: data.text || '',
-              senderEmail: data.senderEmail || '',
-              senderName: data.senderName || 'Hiker',
-              guestSessionId: data.guestSessionId || null,
-              timestamp: data.timestamp || Date.now()
-            });
-          });
-
-          // Fallback manual sort if database returned unordered list
-          if (!useOrderBy) {
-            msgs.sort((a, b) => a.timestamp - b.timestamp);
-          }
-
-          setMessages(msgs);
-          setLoading(false);
-        }, (error) => {
-          console.warn(`Firestore chat stream warning (useOrderBy=${useOrderBy}):`, error);
-          if (useOrderBy) {
-            // Fall back to no-index query to guarantee instant operation
-            console.log("Attempting fallback chat query without orderBy...");
-            if (unsubscribe) unsubscribe();
-            startStream(false);
-          } else {
-            setConnectionStatus('offline');
-            setErrorMessage(error.message || String(error));
-            setLoading(false);
-          }
-        });
-      } catch (err) {
-        console.error("Failed to construct query:", err);
-        setConnectionStatus('offline');
-        setErrorMessage(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-      }
-    };
-
-    startStream(true);
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, []);
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -140,8 +94,17 @@ export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProp
     const textToSubmit = inputText;
     setInputText('');
 
+    const commentId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newMsg: ChatMessage = { id: commentId, ...payload };
+
     try {
-      await addDoc(collection(db, 'map_chats'), payload);
+      setMessages(prev => {
+        const updated = [...prev, newMsg];
+        try {
+          localStorage.setItem('wnw_mapchat_messages', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
     } catch (err) {
       console.error('Failed to post live chat:', err);
       setInputText(textToSubmit); // Restore text on failure so message isn't lost

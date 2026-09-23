@@ -14,7 +14,7 @@ import { InfoPagesModal, SubPageType } from './components/InfoPagesModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { FALLBACK_TREKS } from './data/fallbackTreks';
-import { CheckCircle2, AlertCircle, Mountain, Heart, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Mountain, Heart, RefreshCw, ShieldCheck } from 'lucide-react';
 import MapMinersDashboard from './components/mapminers/MapMinersDashboard';
 import {
   apiFetch,
@@ -30,7 +30,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
 import { db } from './lib/firebase';
-import { doc, setDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
+// Firestore methods removed as app now uses Cloudflare D1 for storage
 
 function MainApp() {
   const { user, userEmail, isAdmin, openAuthModal } = useAuth();
@@ -174,25 +174,6 @@ function MainApp() {
         }
       }
 
-      // C. Query Firestore if Admin explicitly switched to Firebase OR if Cloudflare returned 0 treks
-      if (currentSource === 'firebase' || trekMap.size === 0) {
-        try {
-          const querySnapshot = await getDocs(collection(db, 'treks'));
-          querySnapshot.forEach((docSnap) => {
-            const norm = normalizeTrek({ id: docSnap.id, ...docSnap.data() });
-            const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
-            // Live Firestore data takes precedence according to ARCHITECTURE.md
-            trekMap.set(key, norm);
-          });
-        } catch (fsErr: any) {
-          if (fsErr?.code === 'resource-exhausted') {
-            console.warn('[Firestore] Quota limit reached; continuing with local and cached trek data.');
-          } else {
-            console.warn('[Firestore] Notice fetching treks:', fsErr);
-          }
-        }
-      }
-
       let baseTreks = Array.from(trekMap.values());
       if (baseTreks.length > 0) {
         try {
@@ -295,37 +276,7 @@ function MainApp() {
         }
       }
 
-      // 3. Fetch from Firestore for candidate emails or user UID
-      try {
-        const fsPromises: Promise<any>[] = [];
-
-        for (const email of candidateEmails) {
-          fsPromises.push(
-            getDocs(query(collection(db, 'registrations'), where('email_address', '==', email))),
-            getDocs(query(collection(db, 'registrations'), where('email', '==', email)))
-          );
-        }
-
-        if (user?.uid) {
-          fsPromises.push(
-            getDocs(query(collection(db, 'registrations'), where('userId', '==', user.uid)))
-          );
-        }
-
-        if (fsPromises.length > 0) {
-          const snapshots = await Promise.all(fsPromises);
-          snapshots.forEach((snap) => {
-            snap.forEach((docSnap: any) => {
-              const data = docSnap.data();
-              const id = data.id || docSnap.id;
-              const key = String(id || `${data.hike_number || data.trekId}_${data.email_address || data.email}_${data.trek_date || data.timestamp}`);
-              mergedMap.set(key, { ...data, id });
-            });
-          });
-        }
-      } catch (fsErr) {
-        console.warn('Could not query Firestore registrations:', fsErr);
-      }
+      // 3. (Firestore registrations querying removed - now using Cloudflare D1 exclusively)
 
       // 4. Normalize & enrich each booking with trek details
       const cancelledIds = new Set<string>();
@@ -421,11 +372,17 @@ function MainApp() {
   const fetchTreks = refreshData;
   const fetchBookings = refreshData;
 
-  // On mount: Check if URL targets a specific shared trek (?trek=..., ?hike=..., or #itinerary-...)
+  // On mount: Check if URL targets a specific shared trek (?trek=..., ?hike=..., or #itinerary-...) or tab (?tab=admin or #admin)
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
       const hash = window.location.hash || '';
+
+      const tabParam = searchParams.get('tab');
+      if (tabParam === 'admin' || hash === '#admin') {
+        setCurrentTab('admin');
+      }
+
       let targetTrekId = searchParams.get('trek') || searchParams.get('hike') || searchParams.get('id') || '';
 
       if (!targetTrekId && hash) {
@@ -607,34 +564,7 @@ function MainApp() {
         primaryId = String(data.id);
       }
     } catch (err) {
-      console.warn('[Registration Engine] Cloudflare down/failed, writing directly to Firestore:', err);
-      isCloudflareDown = true;
-    }
-
-    // Always write primary registration to Firestore
-    try {
-      await setDoc(doc(db, 'registrations', primaryId), {
-        id: primaryId,
-        userId: user?.uid || 'anonymous',
-        trekId: String(trek.id || trek.hike_number || ''),
-        trekTitle: trek.name,
-        trek_date: trek.date || '',
-        hikerName: primaryPayload.full_name,
-        phone: primaryPayload.phone,
-        email: primaryPayload.email_address,
-        pickupPoint: primaryPayload.pickup_point || '',
-        paxCount: primaryPayload.pax,
-        registeredAt: new Date().toISOString(),
-        backupStatus: isCloudflareDown ? 'Pending Sync' : 'Synced',
-        ...primaryPayload
-      });
-      console.log('Dual-wrote primary registration to Firestore:', primaryId);
-    } catch (fsErr) {
-      console.warn('Dual-write primary registration to Firestore failed:', fsErr);
-      // If BOTH main server and backup Firestore fail, only then bubble the exception
-      if (isCloudflareDown) {
-        throw new Error('Registration failed: Both main database and backup storage are currently offline. Please try again shortly.');
-      }
+      console.warn('[Registration Engine] Cloudflare registration error:', err);
     }
 
     // Submit team members separately to D1 / Firestore
@@ -692,30 +622,8 @@ function MainApp() {
                 isCompCloudflareDown = true;
               }
             } catch (cErr) {
-              isCompCloudflareDown = true;
+              console.warn('Companion registration error:', cErr);
             }
-          }
-
-          // Dual-write companion registration to Firestore
-          try {
-            await setDoc(doc(db, 'registrations', companionId), {
-              id: companionId,
-              userId: user?.uid || 'anonymous',
-              trekId: String(trek.id || trek.hike_number || ''),
-              trekTitle: trek.name,
-              trek_date: trek.date || '',
-              hikerName: tm.full_name,
-              phone: tm.phone || '',
-              email: formData.email || activeUserEmail,
-              pickupPoint: '',
-              paxCount: 1,
-              registeredAt: new Date().toISOString(),
-              backupStatus: isCompCloudflareDown ? 'Pending Sync' : 'Synced',
-              ...companionPayload
-            });
-            console.log('Dual-wrote companion registration to Firestore:', companionId);
-          } catch (fsErr) {
-            console.warn('Dual-write companion registration to Firestore failed (non-blocking):', fsErr);
           }
         }
       }
@@ -841,13 +749,7 @@ function MainApp() {
         cfDeleted = true;
       }
     } catch (e) {
-      console.warn('Cloudflare delete failed, proceeding with Firestore deletion:', e);
-    }
-
-    try {
-      await deleteDoc(doc(db, 'registrations', String(bookingId)));
-    } catch (fsErr) {
-      console.warn('Firestore registration delete error:', fsErr);
+      console.warn('Cloudflare delete failed:', e);
     }
 
     showToast('Registration cancelled successfully', 'success');
@@ -1004,8 +906,41 @@ function MainApp() {
             />
           )}
 
-          {currentTab === 'admin' && (isAdmin || isAdminEmail(activeUserEmail)) && (
-            <AdminDashboard currentUserEmail={activeUserEmail} />
+          {currentTab === 'admin' && (
+            isAdmin || isAdminEmail(activeUserEmail) ? (
+              <AdminDashboard currentUserEmail={activeUserEmail} />
+            ) : (
+              <div className="max-w-md mx-auto my-12 p-8 bg-white border border-[#E5E1DB] rounded-3xl shadow-xl text-center space-y-5 animate-in fade-in zoom-in-95">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-[#FFF3E6] border border-[#FFE0BA] flex items-center justify-center text-[#E08828] shadow-xs">
+                  <ShieldCheck className="w-8 h-8" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-black text-[#1F1F1F] tracking-tight">
+                    Admin Operations Portal
+                  </h2>
+                  <p className="text-xs text-[#8B8680] leading-relaxed max-w-sm mx-auto">
+                    This area is restricted to authorized Walk Nepal Walk hike coordinators. Please authenticate with an authorized administrator account (<span className="font-semibold text-[#1F1F1F]">walknepalwalk@gmail.com</span>).
+                  </p>
+                </div>
+                <div className="pt-2 space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => openAuthModal('Sign in with Admin email (walknepalwalk@gmail.com) to access the Admin Panel', () => setCurrentTab('admin'))}
+                    className="w-full py-3 px-5 bg-[#E08828] hover:bg-[#cc781f] text-white font-extrabold text-sm rounded-2xl shadow-md active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Sign In to Admin Portal</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentTab('treks')}
+                    className="w-full py-2.5 px-4 bg-[#F9F7F5] hover:bg-[#EFEAE4] text-[#5A5551] font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    Return to Treks Home
+                  </button>
+                </div>
+              </div>
+            )
           )}
 
           {currentTab === 'mapminers' && (

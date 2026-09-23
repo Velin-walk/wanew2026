@@ -3,7 +3,7 @@ import { X, TrendingUp, TrendingDown, Download, MapPin, Flag, Share2, Check, Che
 import ElevationChart from './ElevationChart';
 import { routeToGPX } from './kmlParser';
 import { db } from '../../lib/firebase';
-import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+// Firestore methods removed as app now uses Cloudflare D1 for storage
 import { apiFetch } from '../../services/api';
 
 interface RouteDetailProps {
@@ -158,57 +158,12 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
         console.info('[MapMiners] Cloudflare comments query notice:', cfErr?.message || cfErr);
       });
 
-    // 2. Resilient Firestore sync listener (gracefully handles free tier quota limits)
-    let unsubscribe: (() => void) | null = null;
-    try {
-      const q = query(
-        collection(db, 'trail_comments'),
-        where('trailId', '==', trailIdStr)
-      );
-
-      unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          if (!isMounted) return;
-          const list: TrailComment[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            list.push({
-              id: docSnap.id,
-              trailId: data.trailId || '',
-              text: data.text || '',
-              authorName: data.authorName || 'Anonymous',
-              authorEmail: data.authorEmail || '',
-              guestSessionId: data.guestSessionId || null,
-              timestamp: data.timestamp || Date.now()
-            });
-          });
-          setComments((prev) => {
-            const merged = mergeComments(prev, list);
-            saveLocalComments(trailIdStr, merged);
-            return merged;
-          });
-          setLoadingComments(false);
-        },
-        (err) => {
-          // Gracefully absorb Firestore quota / offline limits without throwing console.error
-          const isQuota = err?.code === 'resource-exhausted' || String(err?.message || '').toLowerCase().includes('quota');
-          if (isQuota) {
-            console.info('[MapMiners] Firestore comment read quota reached; using Cloudflare & local storage cache.');
-          } else {
-            console.info('[MapMiners] Firestore comments listener notice:', err?.message || err);
-          }
-          if (isMounted) setLoadingComments(false);
-        }
-      );
-    } catch (fsInitErr) {
-      console.info('[MapMiners] Firestore comments listener init notice:', fsInitErr);
-      if (isMounted) setLoadingComments(false);
-    }
+    // 2. Resilient sync listener (Cloudflare only now)
+    // Firestore listener removed to use authentication only
+    setLoadingComments(false);
 
     return () => {
       isMounted = false;
-      if (unsubscribe) unsubscribe();
     };
   }, [activeTab, route.id]);
 
@@ -287,20 +242,6 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
     } catch (cfErr) {
       console.info('[MapMiners] Cloudflare comment post notice:', cfErr);
     }
-
-    // 3. Resiliently sync to Firestore if quota permits, ignoring quota errors
-    try {
-      await addDoc(collection(db, 'trail_comments'), {
-        trailId: newComment.trailId,
-        text: newComment.text,
-        authorName: newComment.authorName,
-        authorEmail: newComment.authorEmail,
-        guestSessionId: newComment.guestSessionId,
-        timestamp: newComment.timestamp
-      });
-    } catch (fsErr: any) {
-      console.info('[MapMiners] Note: Comment saved locally; Firestore sync was deferred (quota/offline).');
-    }
   };
 
   const handleDeleteComment = async (commentId: string) => {
@@ -319,13 +260,6 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
         method: 'DELETE'
       });
     } catch (_) {}
-
-    // 3. Resiliently delete from Firestore
-    try {
-      await deleteDoc(doc(db, 'trail_comments', commentId));
-    } catch (err) {
-      console.info('[MapMiners] Firestore delete notice:', err);
-    }
   };
 
   // Fallback scenic nature banner image

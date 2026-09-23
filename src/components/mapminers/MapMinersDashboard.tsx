@@ -8,7 +8,7 @@ import { resolveAssetUrl } from './assetUrl';
 import { generateDemoRoutes } from './demoData';
 import { apiFetch, clearApiCache } from '../../services/api';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+// Firestore methods removed as app now uses Cloudflare D1 for storage
 import MapChat from './MapChat';
 
 interface MapMinersDashboardProps {
@@ -147,66 +147,9 @@ export default function MapMinersDashboard({
 
       // 2. Fetch Firestore Fallback/Resilient Trails
       let firestoreRoutes: any[] = [];
-      try {
-        const querySnapshot = await getDocs(collection(db, 'community_trails_firestore'));
-        querySnapshot.forEach((docSnap) => {
-          const docData = docSnap.data();
-          
-          let parsedBounds = docData.bounds;
-          if (typeof docData.bounds === 'string') {
-            try {
-              parsedBounds = JSON.parse(docData.bounds);
-            } catch (_) {}
-          }
-          let parsedStartPos = docData.startPos;
-          if (typeof docData.startPos === 'string') {
-            try {
-              parsedStartPos = JSON.parse(docData.startPos);
-            } catch (_) {}
-          }
-          const startPosObj = parseStartPos(parsedStartPos || docData.start_pos);
-
-          firestoreRoutes.push({
-            ...docData,
-            id: docSnap.id,
-            fileName: docData.fileName || docData.file_name || `${docSnap.id}.gpx`,
-            name: docData.name || docData.title || 'Untitled Trail',
-            description: docData.description || '',
-            difficulty: docData.difficulty || 'Moderate',
-            stats: {
-              distance: Number(docData.distance || 0),
-              elevationGain: Number(docData.elevationGain || docData.elevation_gain || 0),
-              elevationLoss: Number(docData.elevationLoss || docData.elevation_loss || 0),
-              minElevation: Number(docData.minElevation || docData.min_elevation || 0),
-              maxElevation: Number(docData.maxElevation || docData.max_elevation || 0),
-              estimatedHours: Number(docData.estimatedHours || docData.estimated_hours || 0)
-            },
-            province: docData.province || 'Bagmati',
-            district: docData.district || 'Kathmandu',
-            nearbyCity: docData.nearbyCity || 'Kathmandu',
-            highlights: docData.highlights || '',
-            uploadedAt: docData.uploadedAt || docData.uploaded_at || new Date().toISOString(),
-            contributorEmail: docData.contributorEmail || docData.contributor_email || '',
-            contributorName: docData.contributorName || docData.contributor_name || 'Community Member',
-            bounds: parsedBounds,
-            coordinates: startPosObj ? [startPosObj, startPosObj] : [],
-            isLazyLoaded: false,
-            isCommunityTrail: true,
-            isFirestoreTrail: true,
-            fileContent: docData.fileContent || docData.file_content || '',
-            moderationStatus: (docData.status || 'approved').toLowerCase()
-          });
-        });
-      } catch (fsErr) {
-        console.warn('Failed to load community trails from Firestore:', fsErr);
-      }
-
-      // 3. Merge and Deduplicate by trail ID (preferring Cloudflare metadata if present)
+      // 2. Merge and Deduplicate by trail ID
       const mergedMap = new Map<string, any>();
       
-      firestoreRoutes.forEach(r => {
-        mergedMap.set(r.id, r);
-      });
       cloudflareRoutes.forEach(r => {
         mergedMap.set(r.id, r);
       });
@@ -253,7 +196,7 @@ export default function MapMinersDashboard({
         });
         setLoadingState({ status: 'done', errors: [] });
       } else {
-        console.warn('No community trails found in Cloudflare or Firestore. Loading offline demo trails.');
+        console.warn('No community trails found in Cloudflare. Loading offline demo trails.');
         setRoutes(generateDemoRoutes());
         setLoadingState({ status: 'done', errors: [] });
       }
@@ -268,30 +211,6 @@ export default function MapMinersDashboard({
 
   useEffect(() => {
     loadKMLFolder();
-  }, [loadKMLFolder]);
-
-  useEffect(() => {
-    // Real-time Firestore metadata subscription to synchronize trail list updates across users/tabs
-    const docRef = doc(db, 'metadata', 'mapminers');
-    const unsubscribe = onSnapshot(docRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        const lastUpdated = data.lastUpdated;
-        const localLastUpdated = sessionStorage.getItem('wnw_mapminers_last_updated');
-        if (localLastUpdated && lastUpdated && Number(localLastUpdated) !== lastUpdated) {
-          console.info('[MapMiners] External updates detected! Invalidation of static cache triggered.');
-          sessionStorage.setItem('wnw_mapminers_last_updated', String(lastUpdated));
-          clearApiCache('mapminers');
-          loadKMLFolder();
-        } else if (lastUpdated) {
-          sessionStorage.setItem('wnw_mapminers_last_updated', String(lastUpdated));
-        }
-      }
-    }, (error) => {
-      console.info('[MapMiners] Firestore subscription inactive or silent offline state:', error);
-    });
-
-    return () => unsubscribe();
   }, [loadKMLFolder]);
 
   const handleRouteClick = useCallback(async (route: any) => {
@@ -395,20 +314,6 @@ export default function MapMinersDashboard({
     } catch (err) {
       console.warn('Could not delete trail from Cloudflare R2 / D1:', err);
     }
-
-    // Attempt delete from Firestore
-    try {
-      await deleteDoc(doc(db, 'community_trails_firestore', id));
-      // Trigger sync signal metadata update to sync other tabs
-      try {
-        await setDoc(doc(db, 'metadata', 'mapminers'), {
-          lastUpdated: Date.now()
-        }, { merge: true });
-      } catch (_) {}
-      console.log(`Successfully deleted trail ${id} from Firestore`);
-    } catch (fsErr) {
-      console.warn('Could not delete trail from Firestore:', fsErr);
-    }
   }, []);
 
   const processFile = (file: File) => {
@@ -496,13 +401,8 @@ export default function MapMinersDashboard({
         throw new Error(uploadResult.error || 'The server rejected this file.');
       }
 
-      // Signal cache invalidation and trigger sync signal metadata update in Firestore to sync other tabs
+      // Signal cache invalidation
       clearApiCache('mapminers');
-      try {
-        await setDoc(doc(db, 'metadata', 'mapminers'), {
-          lastUpdated: Date.now()
-        }, { merge: true });
-      } catch (_) {}
 
       const sessionRoute = {
         ...parsedRoute,

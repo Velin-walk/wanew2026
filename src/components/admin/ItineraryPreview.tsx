@@ -321,15 +321,7 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
                     'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80';
                 }}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20" />
-              <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between text-white">
-                <span className="text-xs font-bold tracking-wider uppercase bg-black/50 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20">
-                  Walk Nepal Walk Official Itinerary
-                </span>
-                <span className="text-xs font-black bg-[#E08828] px-3 py-1 rounded-lg">
-                  {data.overview.difficulty || 'Moderate'}
-                </span>
-              </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/20" />
             </div>
           )}
 
@@ -422,7 +414,21 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
               <span className="text-[11px] text-[#8B8680] font-semibold flex items-center gap-1">
                 <Mountain className="w-3.5 h-3.5 text-[#7ABA42]" /> Difficulty
               </span>
-              <p className="text-sm font-bold text-[#1F1F1F] mt-1">{data.overview.difficulty || '---'}</p>
+              <div className="mt-1">
+                <span className={`px-2 py-0.5 rounded-md text-xs font-black uppercase tracking-wide border ${
+                  (data.overview.difficulty || '').toLowerCase() === 'easy'
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                    : (data.overview.difficulty || '').toLowerCase() === 'moderate'
+                    ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                    : (data.overview.difficulty || '').toLowerCase() === 'hard' || (data.overview.difficulty || '').toLowerCase() === 'difficult'
+                    ? 'bg-orange-100 text-orange-800 border-orange-200'
+                    : (data.overview.difficulty || '').toLowerCase() === 'extreme'
+                    ? 'bg-red-100 text-red-800 border-red-200'
+                    : 'bg-neutral-100 text-neutral-600 border-neutral-200'
+                }`}>
+                  {data.overview.difficulty || '---'}
+                </span>
+              </div>
             </div>
 
             <div className="p-3.5 bg-[#FAF8F5] rounded-2xl border border-[#EFEAE4]">
