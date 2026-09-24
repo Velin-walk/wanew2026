@@ -430,28 +430,33 @@ export const NepaliPrayerFlags: React.FC<{
     return list;
   }, [flagCount]);
 
-  // Subtle scroll reactivity
-  const [scrollSpeed, setScrollSpeed] = useState(0);
-  const [scrollDir, setScrollDir] = useState<number>(1);
+  // Physics-based scroll reactivity & waving animation
+  const flagElementsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const ropeSvgRef = useRef<SVGSVGElement | null>(null);
   const lastScrollY = useRef(0);
   const lastTime = useRef(Date.now());
   const rafRef = useRef<number | null>(null);
-  const targetSpeed = useRef(0);
-  const currentSpeed = useRef(0);
 
   useEffect(() => {
     let decayTimer: any;
+    let idleAngle = 0;
+    let currentVel = 0;
+    let targetVel = 0;
+    let currentDirection = 1;
+    let currentOpacity = 1;
 
     const handleScroll = () => {
-      const now = Date.now();
+      const now = performance.now();
       const currentY = window.scrollY || document.documentElement.scrollTop || 0;
       const deltaY = currentY - lastScrollY.current;
       const dt = Math.max(now - lastTime.current, 16);
 
-      const velocity = Math.abs(deltaY) / dt;
-      targetSpeed.current = Math.min(velocity * 1.6, 2.2);
-      if (Math.abs(deltaY) > 2) {
-        setScrollDir(deltaY > 0 ? 1 : -0.8);
+      const instantaneousVel = Math.abs(deltaY) / dt;
+      // Cap max velocity to avoid excessive spinning, reduced by 80% (20% of original)
+      targetVel = Math.min(instantaneousVel * 0.56, 0.7);
+
+      if (Math.abs(deltaY) > 1) {
+        currentDirection = deltaY > 0 ? 1 : -1;
       }
 
       lastScrollY.current = currentY;
@@ -459,17 +464,64 @@ export const NepaliPrayerFlags: React.FC<{
 
       clearTimeout(decayTimer);
       decayTimer = setTimeout(() => {
-        targetSpeed.current = 0;
-      }, 140);
+        targetVel = 0;
+      }, 180);
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
 
     const animate = () => {
-      currentSpeed.current += (targetSpeed.current - currentSpeed.current) * 0.1;
-      if (Math.abs(currentSpeed.current - scrollSpeed) > 0.02) {
-        setScrollSpeed(Number(currentSpeed.current.toFixed(2)));
+      // Smooth velocity interpolation (inertia decay)
+      currentVel += (targetVel - currentVel) * 0.08;
+
+      // Gentle continuous ambient Himalayan breeze when idle (speed reduced by 80%)
+      idleAngle += 0.0076 + currentVel * 0.016;
+
+      const currentY = window.scrollY || document.documentElement.scrollTop || 0;
+      // Direct scroll displacement wave (speed reduced by 80%)
+      const scrollWavePhase = (currentY * 0.009) + idleAngle;
+
+      // Update each flag with high performance direct transform
+      const count = flagElementsRef.current.length;
+      for (let i = 0; i < count; i++) {
+        const el = flagElementsRef.current[i];
+        if (!el) continue;
+
+        // Wave phase offset along the garland from left to right
+        const flagPhase = scrollWavePhase + (i * 0.44);
+        const naturalTilt = flags[i]?.naturalTilt || 0;
+
+        // Dynamic wave physics:
+        // 1. Lateral flutter (rotateZ): waves side to side, amplified by scroll velocity and direction
+        const waveZ = Math.sin(flagPhase);
+        const rotZ = naturalTilt + (waveZ * (3.8 + currentVel * 16) * currentDirection);
+
+        // 2. Vertical fabric lift (rotateX): wind lifts the bottom edge outward toward viewer
+        const waveX = (Math.cos(flagPhase * 1.1) + 1) * 0.5; // 0 to 1
+        const rotX = 6 + (waveX * (11 + currentVel * 30)) + (currentVel * 14);
+
+        // 3. Fabric wrinkle & shear (skewX): realistic ripple of fabric along hem
+        const skew = Math.sin(flagPhase * 0.95) * (2 + currentVel * 7) * currentDirection;
+
+        // 4. Subtle vertical lift (translateY)
+        const transY = Math.sin(flagPhase * 1.2) * (0.8 + currentVel * 3);
+
+        el.style.transform = `perspective(500px) rotateX(${rotX.toFixed(1)}deg) rotateZ(${rotZ.toFixed(1)}deg) skewX(${skew.toFixed(1)}deg) translateY(${transY.toFixed(1)}px)`;
       }
+
+      // Dynamic sway on the arched hanging rope
+      if (ropeSvgRef.current) {
+        const ropeSway = Math.sin(scrollWavePhase * 0.7) * (0.6 + currentVel * 2.2);
+        ropeSvgRef.current.style.transform = `translateY(${ropeSway.toFixed(1)}px)`;
+      }
+
+      // Smooth transparency transition: 100% (1.0) when in original place at top, reduced to 1/3 when page is scrolled
+      const targetOpacity = currentY > 20 ? (1 / 3) : 1;
+      currentOpacity += (targetOpacity - currentOpacity) * 0.08;
+      if (containerRef.current) {
+        containerRef.current.style.opacity = currentOpacity.toFixed(3);
+      }
+
       rafRef.current = requestAnimationFrame(animate);
     };
 
@@ -480,206 +532,26 @@ export const NepaliPrayerFlags: React.FC<{
       clearTimeout(decayTimer);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [scrollSpeed]);
-
-  const windFactor = (1.0 + scrollSpeed * 1.5).toFixed(2);
-  const windDuration = `${Math.max(2.6 - scrollSpeed * 0.9, 0.8).toFixed(2)}s`;
+  }, [flags]);
 
   return (
     <div
       ref={containerRef}
-      className={`relative w-full overflow-hidden select-none py-1 ${className}`}
+      className={`relative w-full overflow-hidden select-none py-1 pointer-events-none will-change-opacity ${className}`}
       style={{
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
+        opacity: 1,
       }}
     >
-      {/* Dynamic Keyframes for Subtle Mountain Wind Flutter */}
-      <style>{`
-        @keyframes subtleFlagFlutter {
-          0% {
-            transform: perspective(500px) rotateX(calc(4deg * var(--wind-factor, 1))) rotateZ(calc(-1.5deg * var(--scroll-dir, 1))) skewX(calc(-1deg * var(--scroll-dir, 1)));
-          }
-          50% {
-            transform: perspective(500px) rotateX(calc(15deg * var(--wind-factor, 1))) rotateZ(calc(2deg * var(--scroll-dir, 1))) skewX(calc(1.8deg * var(--scroll-dir, 1)));
-          }
-          100% {
-            transform: perspective(500px) rotateX(calc(4deg * var(--wind-factor, 1))) rotateZ(calc(-1.5deg * var(--scroll-dir, 1))) skewX(calc(-1deg * var(--scroll-dir, 1)));
-          }
-        }
-
-        @keyframes ropeSway {
-          0%, 100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(calc(1.5px * var(--wind-factor, 1)));
-          }
-        }
-      `}</style>
-
       {/* Garland container (no scrollbars, flex fits dynamically across full width) */}
-      <div
-        className="relative w-full h-[68px] xs:h-[76px] sm:h-[86px] md:h-[94px] flex items-start justify-center"
-        style={{
-          ['--wind-factor' as any]: windFactor,
-          ['--scroll-dir' as any]: scrollDir,
-          ['--wind-duration' as any]: windDuration,
-        }}
-      >
-        {/* Majestic Far Distance Himalayan Mountain Range */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none">
-          {/* Subtle soft atmospheric sky glow blending into open background */}
-          <div className="absolute inset-0 bg-gradient-to-b from-sky-200/25 via-sky-100/10 to-transparent" />
-
-          {/* Panoramic Mountain Range Silhouette & Snow Peaks */}
-          <svg
-            className="absolute bottom-0 left-0 w-full h-[90%] pointer-events-none opacity-85 transition-transform duration-200 ease-out"
-            preserveAspectRatio="none"
-            viewBox="0 0 1200 120"
-            style={{
-              transform: `translateY(${Math.min(scrollSpeed * 1.8, 3.5)}px)`,
-            }}
-          >
-            <defs>
-              <linearGradient id="farSnowPeakGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#94A3B8" stopOpacity="0.75" />
-                <stop offset="45%" stopColor="#CBD5E1" stopOpacity="0.55" />
-                <stop offset="100%" stopColor="#94A3B8" stopOpacity="0.1" />
-              </linearGradient>
-              <linearGradient id="snowHighlightGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
-                <stop offset="70%" stopColor="#F8FAFC" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.25" />
-              </linearGradient>
-              <linearGradient id="midRidgeGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#A8A29E" stopOpacity="0.45" />
-                <stop offset="60%" stopColor="#D6D3D1" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#D6D3D1" stopOpacity="0" />
-              </linearGradient>
-              <linearGradient id="valleyHazeGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#F2ECE5" stopOpacity="0" />
-                <stop offset="100%" stopColor="#F2ECE5" stopOpacity="0.65" />
-              </linearGradient>
-            </defs>
-
-            {/* Far Distant High Himalayan Peaks */}
-            {/* Peak 1: Ganesh / Langtang Massif (Far Left) */}
-            <path
-              d="M -30,120 L -30,68 L 60,42 L 125,20 L 165,36 L 220,68 L 290,120 Z"
-              fill="url(#farSnowPeakGrad)"
-            />
-            {/* Peak 1 Snowcap */}
-            <path
-              d="M 102,30 L 125,20 L 148,30 L 136,36 L 125,32 L 114,37 Z"
-              fill="url(#snowHighlightGrad)"
-            />
-            <path
-              d="M 125,20 L 127,38 L 138,55"
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth="0.9"
-              opacity="0.8"
-            />
-
-            {/* Peak 2: Machapuchare / Ama Dablam Sharp Horn */}
-            <path
-              d="M 230,120 L 310,64 L 375,32 L 412,14 L 442,32 L 505,68 L 565,120 Z"
-              fill="url(#farSnowPeakGrad)"
-            />
-            {/* Peak 2 Snowcap & Ridge */}
-            <path
-              d="M 390,24 L 412,14 L 432,25 L 422,32 L 412,28 L 402,33 Z"
-              fill="url(#snowHighlightGrad)"
-            />
-            <path
-              d="M 412,14 L 414,35 L 424,58"
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth="1.1"
-              opacity="0.85"
-            />
-
-            {/* Peak 3: Central High Everest / Lhotse Massive Pyramid */}
-            <path
-              d="M 480,120 L 555,54 L 610,26 L 642,10 L 678,24 L 735,54 L 795,120 Z"
-              fill="url(#farSnowPeakGrad)"
-            />
-            {/* Peak 3 Snowcap & Iconic Pyramid Ridges */}
-            <path
-              d="M 618,20 L 642,10 L 666,20 L 654,28 L 642,23 L 630,29 Z"
-              fill="url(#snowHighlightGrad)"
-            />
-            <path
-              d="M 642,10 L 644,32 L 656,58"
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth="1.3"
-              opacity="0.9"
-            />
-            <path
-              d="M 642,10 L 626,35 L 605,62"
-              fill="none"
-              stroke="#F8FAFC"
-              strokeWidth="0.8"
-              opacity="0.75"
-            />
-
-            {/* Peak 4: Annapurna / Dhaulagiri Ridge (Center-Right) */}
-            <path
-              d="M 710,120 L 775,60 L 828,32 L 864,16 L 902,34 L 960,66 L 1020,120 Z"
-              fill="url(#farSnowPeakGrad)"
-            />
-            {/* Peak 4 Snowcap */}
-            <path
-              d="M 844,24 L 864,16 L 886,27 L 876,33 L 864,29 L 854,34 Z"
-              fill="url(#snowHighlightGrad)"
-            />
-            <path
-              d="M 864,16 L 866,35 L 878,56"
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth="1"
-              opacity="0.85"
-            />
-
-            {/* Peak 5: Manaslu / Kanchenjunga (Far Right) */}
-            <path
-              d="M 930,120 L 995,56 L 1055,22 L 1098,38 L 1158,68 L 1230,120 Z"
-              fill="url(#farSnowPeakGrad)"
-            />
-            {/* Peak 5 Snowcap */}
-            <path
-              d="M 1034,31 L 1055,22 L 1080,33 L 1068,39 L 1055,34 L 1044,40 Z"
-              fill="url(#snowHighlightGrad)"
-            />
-            <path
-              d="M 1055,22 L 1057,40 L 1068,58"
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth="1"
-              opacity="0.8"
-            />
-
-            {/* Mid-Distance Mountain Ridge Layer */}
-            <path
-              d="M -30,120 L -30,82 Q 130,64 260,82 Q 400,66 540,84 Q 690,64 830,82 Q 990,66 1130,80 L 1230,76 L 1230,120 Z"
-              fill="url(#midRidgeGrad)"
-            />
-
-            {/* Atmospheric Valley Mist Layer at Bottom */}
-            <rect x="0" y="75" width="1200" height="45" fill="url(#valleyHazeGrad)" />
-          </svg>
-        </div>
-
+      <div className="relative w-full h-[68px] xs:h-[76px] sm:h-[86px] md:h-[94px] flex items-start justify-center">
         {/* Arched Hanging Rope SVG */}
         <svg
-          className="absolute top-1 left-0 w-full h-8 pointer-events-none z-10 overflow-visible"
+          ref={ropeSvgRef}
+          className="absolute top-1 left-0 w-full h-8 pointer-events-none z-10 overflow-visible will-change-transform"
           preserveAspectRatio="none"
           viewBox="0 0 1000 36"
-          style={{
-            animation: `ropeSway var(--wind-duration, 2.6s) ease-in-out infinite`,
-          }}
         >
           {/* Subtle rope drop shadow */}
           <path
@@ -718,19 +590,20 @@ export const NepaliPrayerFlags: React.FC<{
                   marginTop: `${flag.sagY}px`,
                   transformOrigin: 'top center',
                   transform: `rotateZ(${flag.naturalTilt}deg)`,
-                  transition: 'margin-top 0.2s ease, transform 0.2s ease',
+                  transition: 'margin-top 0.2s ease',
                 }}
               >
                 {/* Small white stitch loop at rope */}
                 <div className="w-2 h-1 bg-white/95 rounded-full shadow-2xs -mb-0.5 z-30 border border-stone-300" />
 
-                {/* The Flag with dynamic flutter animation */}
+                {/* The Flag with dynamic scroll waving physics */}
                 <div
-                  className="w-[26px] xs:w-[32px] sm:w-[38px] md:w-[44px] lg:w-[48px] h-[34px] xs:h-[42px] sm:h-[50px] md:h-[58px] lg:h-[62px] transition-transform duration-150"
+                  ref={(el) => {
+                    flagElementsRef.current[flag.index] = el;
+                  }}
+                  className="w-[26px] xs:w-[32px] sm:w-[38px] md:w-[44px] lg:w-[48px] h-[34px] xs:h-[42px] sm:h-[50px] md:h-[58px] lg:h-[62px] will-change-transform"
                   style={{
                     transformOrigin: 'top center',
-                    animation: `subtleFlagFlutter var(--wind-duration, 2.6s) ease-in-out infinite`,
-                    animationDelay: `calc(${flag.index} * 0.08s)`,
                   }}
                 >
                   {flag.type === 'syllable' ? (

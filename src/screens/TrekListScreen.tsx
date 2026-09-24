@@ -182,9 +182,9 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Authentic Nepali Lungta Prayer Flags Garland */}
+      {/* Authentic Nepali Lungta Prayer Flags Garland (Sticky Top) */}
       {!savedOnly && (
-        <div className="w-full py-1 overflow-hidden select-none">
+        <div className="sticky top-14 sm:top-16 z-30 w-full overflow-hidden select-none pointer-events-none">
           <NepaliPrayerFlags />
         </div>
       )}
