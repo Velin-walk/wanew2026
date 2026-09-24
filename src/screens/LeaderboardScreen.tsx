@@ -137,12 +137,12 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
         </div>
 
         {/* Time Window Pills & Metric Toggle */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-extrabold text-stone-700 mr-1 shrink-0 flex items-center gap-1.5 w-full sm:w-auto mb-1 sm:mb-0 uppercase tracking-wider">
-              <Calendar className="w-3.5 h-3.5 text-[#E08828]" /> Period:
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full lg:w-auto">
+            <span className="text-[10px] sm:text-[11px] font-extrabold text-stone-700 shrink-0 flex items-center gap-1 uppercase tracking-wider">
+              <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#E08828]" /> Period:
             </span>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="grid grid-cols-5 gap-1 sm:gap-1.5 w-full sm:w-auto">
               {(
                 [
                   { id: 't30', label: '30 Days' },
@@ -156,9 +156,9 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   key={t.id}
                   type="button"
                   onClick={() => { setPeriod(t.id); setLimit(20); }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all active:scale-95 cursor-pointer select-none border ${
+                  className={`px-1 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all active:scale-95 cursor-pointer select-none border text-center whitespace-nowrap ${
                     period === t.id
-                      ? 'bg-stone-900 text-white border-stone-900 shadow-md ring-2 ring-stone-900/20'
+                      ? 'bg-stone-900 text-white border-stone-900 shadow-md ring-1 sm:ring-2 ring-stone-900/20'
                       : 'bg-white text-stone-700 border-stone-300 hover:border-[#E08828] hover:text-[#E08828] hover:bg-amber-50/50 shadow-2xs'
                   }`}
                 >

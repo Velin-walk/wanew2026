@@ -142,7 +142,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
               <span>{completedCount} Hike{completedCount > 1 ? 's' : ''} Completed &amp; Reconciled</span>
             </div>
             <p className="text-[11px] text-emerald-700 leading-relaxed">
-              Your completed hikes have been verified and archived to your permanent record in the community Google Sheet! Check your lifetime stats, KM badges, and completed hike history.
+              Your completed hikes have been verified and archived to your permanent record in the community ledger! Check your lifetime stats, KM badges, and completed hike history.
             </p>
             {onViewMyHikes && (
               <button

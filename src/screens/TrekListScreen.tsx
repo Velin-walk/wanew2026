@@ -191,33 +191,37 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
       {/* Quick Roster Stats Bar */}
       {!savedOnly && (
-        <div className="relative grid grid-cols-3 gap-2 bg-white rounded-2xl p-3 border border-[#E5E1DB] shadow-2xs text-[11px] sm:text-xs overflow-hidden">
+        <div className="relative grid grid-cols-3 gap-1 sm:gap-2 bg-white rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#E5E1DB] shadow-2xs overflow-hidden">
           {/* Subtle miniature prayer flags draped across top-right of stats bar */}
           <div className="absolute -top-1 right-2 sm:right-6 w-24 xs:w-32 sm:w-36 pointer-events-none z-10 opacity-80 hidden xs:block">
             <MiniPrayerFlags variant="draped" count={5} />
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-[#E08828]/10 text-[#E08828]">
-              <Sparkles className="w-4 h-4 shrink-0" />
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-[#E08828]/10 text-[#E08828] shrink-0">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             </div>
-            <span className="truncate text-stone-600 font-medium">
-              <strong className="text-[#1F1F1F] font-black text-xs sm:text-sm">{upcomingTreks.length}</strong> Upcoming
+            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-medium whitespace-nowrap leading-none">
+              <strong className="text-[#1F1F1F] font-black text-[10.5px] xs:text-xs sm:text-sm">{upcomingTreks.length}</strong> Upcoming
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-[#7ABA42]/10 text-[#7ABA42]">
-              <History className="w-4 h-4 shrink-0" />
+
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-[#7ABA42]/10 text-[#7ABA42] shrink-0">
+              <History className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             </div>
-            <span className="truncate text-stone-600 font-medium">
-              <strong className="text-[#1F1F1F] font-black text-xs sm:text-sm">{pastTreks.length}</strong> Completed
+            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-medium whitespace-nowrap leading-none">
+              <strong className="text-[#1F1F1F] font-black text-[10.5px] xs:text-xs sm:text-sm">{pastTreks.length}</strong> Completed
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
-              <Users className="w-4 h-4 shrink-0" />
+
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             </div>
-            <span className="truncate text-stone-600 font-semibold">Friendly Team</span>
+            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-semibold whitespace-nowrap leading-none">
+              Friendly Team
+            </span>
           </div>
         </div>
       )}
@@ -261,7 +265,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
         {/* Trip Type Pills - Fully Optimized for Mobile Views */}
         <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-          <span className="text-[#8B8680] font-bold text-[11px] flex items-center gap-1 mr-1 shrink-0 w-full sm:w-auto mb-1 sm:mb-0">
+          <span className="text-[#8B8680] font-bold text-[10px] sm:text-[11px] flex items-center gap-1 mr-1 shrink-0 w-full sm:w-auto mb-0.5 sm:mb-0">
             Trip Category:
           </span>
           <div className="flex flex-wrap gap-1 w-full sm:w-auto">
@@ -277,9 +281,9 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => setTripTypeFilter(item.id)}
-                className={`flex-1 sm:flex-initial text-center px-2.5 py-2 sm:py-1 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
+                className={`flex-1 sm:flex-initial text-center px-1.5 sm:px-2.5 py-1 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
                   tripTypeFilter === item.id
-                    ? 'bg-[#7ABA42] text-white shadow-sm ring-2 ring-[#7ABA42]/30 font-black'
+                    ? 'bg-[#7ABA42] text-white shadow-sm ring-1 sm:ring-2 ring-[#7ABA42]/30 font-black'
                     : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'
                 }`}
               >
@@ -290,10 +294,10 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
 
         {/* Grade / Difficulty Tags - Fully Optimized for Mobile Views */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#F0EBE5] text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-[#F0EBE5] text-xs">
           <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-            <span className="text-[#8B8680] font-bold text-[11px] flex items-center gap-1 mr-1 shrink-0 w-full sm:w-auto mb-1 sm:mb-0">
-              <SlidersHorizontal className="w-3.5 h-3.5" /> Difficulty Grade:
+            <span className="text-[#8B8680] font-bold text-[10px] sm:text-[11px] flex items-center gap-1 mr-1 shrink-0 w-full sm:w-auto mb-0.5 sm:mb-0">
+              <SlidersHorizontal className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Difficulty Grade:
             </span>
             <div className="flex flex-wrap gap-1 w-full sm:w-auto">
               {(['all', 'easy', 'moderate', 'difficult'] as const).map((diff) => (
@@ -301,7 +305,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                   key={diff}
                   type="button"
                   onClick={() => setDifficultyFilter(diff)}
-                  className={`flex-1 sm:flex-initial text-center px-2.5 py-2 sm:py-1 rounded-xl text-xs font-bold capitalize transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
+                  className={`flex-1 sm:flex-initial text-center px-1.5 sm:px-2.5 py-1 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold capitalize transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
                     difficultyFilter === diff
                       ? 'bg-[#1F1F1F] text-white shadow-xs font-black'
                       : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'

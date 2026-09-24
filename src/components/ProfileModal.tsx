@@ -439,7 +439,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         phone: syncPhoneInput.trim(),
       });
       setEditPhone(syncPhoneInput.trim());
-      setSyncSuccessMsg('Phone linked! Google Sheet profile synchronized.');
+      setSyncSuccessMsg('Phone linked! Community record synchronized.');
       setSyncPhoneInput('');
       setTimeout(() => setSyncSuccessMsg(null), 3500);
     } catch (err) {
@@ -493,20 +493,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         </div>
 
         {/* Profile Tabs */}
-        <div className="flex border-b border-[#EFEAE4] bg-[#FAF8F5] p-1.5 gap-1 px-3 sm:px-4 overflow-x-auto no-scrollbar">
+        <div className="flex border-b border-[#EFEAE4] bg-[#FAF8F5] p-1 sm:p-1.5 gap-1 px-2 sm:px-4 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveProfileTab('hikes')}
-            className={`flex-1 min-w-[95px] flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 min-w-[70px] sm:min-w-[95px] flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeProfileTab === 'hikes'
                 ? 'bg-white text-[#7ABA42] shadow-xs ring-1 ring-black/5 font-black'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
             }`}
           >
-            <Footprints className="w-3.5 h-3.5 text-[#7ABA42]" />
+            <Footprints className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#7ABA42] shrink-0" />
             <span>My Hikes</span>
             {lifetimeEventCount > 0 && (
-              <span className="px-1.5 py-0.2 bg-[#7ABA42]/15 text-[#5A922E] rounded-full text-[10px] font-black">
+              <span className="px-1 sm:px-1.5 py-0.2 bg-[#7ABA42]/15 text-[#5A922E] rounded-full text-[9px] sm:text-[10px] font-black shrink-0">
                 {lifetimeEventCount}
               </span>
             )}
@@ -515,16 +515,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveProfileTab('bookings')}
-            className={`flex-1 min-w-[105px] flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 min-w-[80px] sm:min-w-[105px] flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeProfileTab === 'bookings'
                 ? 'bg-white text-[#E08828] shadow-xs ring-1 ring-black/5 font-black'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
             }`}
           >
-            <BookmarkCheck className="w-3.5 h-3.5 text-[#E08828]" />
+            <BookmarkCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#E08828] shrink-0" />
             <span>My Bookings</span>
             {activeBookings.length > 0 && (
-              <span className="px-1.5 py-0.2 bg-[#E08828]/15 text-[#E08828] rounded-full text-[10px] font-black">
+              <span className="px-1 sm:px-1.5 py-0.2 bg-[#E08828]/15 text-[#E08828] rounded-full text-[9px] sm:text-[10px] font-black shrink-0">
                 {activeBookings.length}
               </span>
             )}
@@ -533,26 +533,26 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveProfileTab('saved')}
-            className={`flex-1 min-w-[80px] flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 min-w-[65px] sm:min-w-[80px] flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeProfileTab === 'saved'
                 ? 'bg-white text-rose-600 shadow-xs ring-1 ring-black/5 font-black'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
             }`}
           >
-            <Heart className={`w-3.5 h-3.5 ${activeProfileTab === 'saved' ? 'fill-rose-500 text-rose-500' : 'text-rose-400'}`} />
+            <Heart className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${activeProfileTab === 'saved' ? 'fill-rose-500 text-rose-500' : 'text-rose-400'}`} />
             <span>Saved ({savedTreksList.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveProfileTab('settings')}
-            className={`flex-1 min-w-[85px] flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 min-w-[65px] sm:min-w-[85px] flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeProfileTab === 'settings'
                 ? 'bg-white text-[#5A5551] shadow-xs ring-1 ring-black/5 font-black'
                 : 'text-[#6A645D] hover:text-[#1F1F1F]'
             }`}
           >
-            <Settings className="w-3.5 h-3.5 text-[#5A5551]" />
+            <Settings className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#5A5551] shrink-0" />
             <span>Settings</span>
           </button>
         </div>
@@ -571,7 +571,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs font-black text-emerald-950 truncate">
-                        Google Sheet Community Ledger Synced
+                        Community Ledger Synced
                       </p>
                       <p className="text-[11px] text-emerald-800 font-medium">
                         Linked via {matchedHikerStats.matchSource} • #{matchedHikerStats.rank} on Leaderboard
@@ -589,7 +589,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     <span className="text-xs font-black text-[#1F1F1F]">Auto-Sync Past Hikes &amp; KM</span>
                   </div>
                   <p className="text-[11px] text-[#8B8680] leading-relaxed">
-                    Have you hiked with Walk Nepal Walk before? Enter the phone number used during registration to link your Google Sheet record and badges!
+                    Have you hiked with Walk Nepal Walk before? Enter the phone number used during registration to link your community record and badges!
                   </p>
                   <form onSubmit={handleQuickPhoneSync} className="flex gap-2 pt-1">
                     <div className="relative flex-1">
@@ -800,7 +800,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                               <p className="text-[11px] text-stone-400 mt-1 max-w-sm mx-auto leading-relaxed">
                                 {matchedHikerStats.stats ? (
                                   <>
-                                    Your verified lifetime total of <strong>{lifetimeEventCount} events ({formattedDistance} KM)</strong> is safely synced from the Google Sheet ledger. As new hikes are attended and marked complete, each specific itinerary will be detailed here!
+                                    Your verified lifetime total of <strong>{lifetimeEventCount} events ({formattedDistance} KM)</strong> is safely synced from the community ledger. As new hikes are attended and marked complete, each specific itinerary will be detailed here!
                                   </>
                                 ) : (
                                   'Once you attend a trek and it is completed, your personal trek details, dates, and distances will be archived here.'
@@ -869,7 +869,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     </span>
                     {matchedHikerStats.stats?.c ? (
                       <span className="font-bold text-emerald-700">
-                        {matchedHikerStats.stats.c} Total Events in Google Sheet Ledger
+                        {matchedHikerStats.stats.c} Total Events in Community Ledger
                       </span>
                     ) : (
                       <span className="font-bold text-[#1B5E20]">

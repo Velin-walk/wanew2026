@@ -1651,7 +1651,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                       </div>
                       <div>
                         <h2 className="text-xl font-black text-[#1F1F1F]">Leaderboard Manager</h2>
-                        <p className="text-sm text-[#8B8680] font-medium">Synchronize community rankings directly from Google Sheets</p>
+                        <p className="text-sm text-[#8B8680] font-medium">Synchronize community rankings directly from external master ledger</p>
                       </div>
                     </div>
 
@@ -1687,7 +1687,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                           ) : (
                             <RefreshCw className="w-4 h-4" />
                           )}
-                          {syncingLeaderboard ? 'Synchronizing...' : 'Sync Now from Google Sheet'}
+                          {syncingLeaderboard ? 'Synchronizing...' : 'Sync Now from Master Ledger'}
                         </button>
                       </div>
 
@@ -1706,7 +1706,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                       <div className="p-5 bg-white border border-[#E5E1DB] rounded-2xl space-y-2">
                         <h4 className="text-xs font-black text-[#1F1F1F] uppercase tracking-wider">How it works</h4>
                         <ul className="text-xs text-[#5A5551] space-y-2 list-disc pl-4">
-                          <li>Data is fetched from your Google Sheet on demand.</li>
+                          <li>Data is fetched from your external ledger on demand.</li>
                           <li><strong>Phone number</strong> is used as the unique key for every hiker.</li>
                           <li>Hikers with the same phone number are merged, summing their distance and trip counts.</li>
                           <li>The result is saved as a <strong>Snapshot</strong> in the database.</li>
