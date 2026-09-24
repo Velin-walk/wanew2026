@@ -13,6 +13,7 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  Users,
 } from 'lucide-react';
 
 interface TrekListScreenProps {
@@ -180,62 +181,30 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Hero Banner with Plain Orange Card inside Depth Frame */}
+      {/* Quick Roster Stats Bar */}
       {!savedOnly && (
-        <div className="bg-[#542000] rounded-3xl p-2.5 sm:p-3.5 shadow-md border border-[#3D1700] w-full">
-          {/* Recessed Inset Plain Orange Inner Card */}
-          <div className="bg-[#E06800] rounded-2xl p-4 sm:p-5 shadow-[inset_0_6px_16px_rgba(0,0,0,0.45)] border border-[#B84E00] relative overflow-hidden text-white w-full">
-            <div className="absolute -right-6 -bottom-6 opacity-20 pointer-events-none w-44 h-44 sm:w-52 sm:h-52 overflow-hidden rounded-full flex items-center justify-center">
-              <img 
-                src="/logo.png" 
-                className="w-full h-full object-contain filter brightness-125 saturate-100" 
-                alt="Walk Nepal Walk Logo" 
-                referrerPolicy="no-referrer" 
-              />
+        <div className="grid grid-cols-3 gap-2 bg-white rounded-2xl p-3 border border-[#E5E1DB] shadow-2xs text-[11px] sm:text-xs">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-[#E08828]/10 text-[#E08828]">
+              <Sparkles className="w-4 h-4 shrink-0" />
             </div>
-
-            <div className="relative z-10 w-full">
-              {/* Top Pill Tag matching depth theme */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/25 border border-white/20 text-[#FFF3E0] text-[10px] sm:text-xs font-extrabold uppercase tracking-wider mb-2.5 shadow-3xs">
-                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                <span>All Season Himalayan Treks &amp; Hikes</span>
-              </div>
-
-              <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                Trek Schedule &amp; Archive
-              </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-xs sm:text-sm font-bold tracking-wider text-[#FFE8D1]">
-                  Fitness • Fun • Friendship — Follow schedule to secure your spot on the trail
-                </p>
-              </div>
-
-              {/* Quick Mobile Roster Stats */}
-              <div className="grid grid-cols-3 gap-2 mt-3.5 pt-3 border-t border-white/20 bg-black/20 rounded-xl p-2.5 sm:p-3 text-[11px] shadow-[inset_0_2px_6px_rgba(0,0,0,0.3)] border border-white/10">
-                <div className="flex items-center gap-1.5">
-                  <div className="p-1 rounded-md bg-white/20">
-                    <Sparkles className="w-3.5 h-3.5 text-white shrink-0" />
-                  </div>
-                  <span className="truncate text-stone-100">
-                    <strong className="text-white font-extrabold">{upcomingTreks.length}</strong> Upcoming
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="p-1 rounded-md bg-white/20">
-                    <History className="w-3.5 h-3.5 text-white shrink-0" />
-                  </div>
-                  <span className="truncate text-stone-100">
-                    <strong className="text-white font-extrabold">{pastTreks.length}</strong> Completed
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="p-1 rounded-md bg-white/20">
-                    <ShieldCheck className="w-3.5 h-3.5 text-white shrink-0" />
-                  </div>
-                  <span className="truncate text-stone-100 font-medium">Official Guides</span>
-                </div>
-              </div>
+            <span className="truncate text-stone-600 font-medium">
+              <strong className="text-[#1F1F1F] font-black text-xs sm:text-sm">{upcomingTreks.length}</strong> Upcoming
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-[#7ABA42]/10 text-[#7ABA42]">
+              <History className="w-4 h-4 shrink-0" />
             </div>
+            <span className="truncate text-stone-600 font-medium">
+              <strong className="text-[#1F1F1F] font-black text-xs sm:text-sm">{pastTreks.length}</strong> Completed
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+              <Users className="w-4 h-4 shrink-0" />
+            </div>
+            <span className="truncate text-stone-600 font-semibold">Friendly Team</span>
           </div>
         </div>
       )}
