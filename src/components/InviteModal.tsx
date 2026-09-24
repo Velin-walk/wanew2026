@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Trek } from '../types';
+import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import { X, Share2, Copy, Check, MessageCircle } from 'lucide-react';
 
 interface InviteModalProps {
@@ -118,7 +119,11 @@ export const InviteModal: React.FC<InviteModalProps> = ({
 
         <div className="overflow-y-auto no-scrollbar space-y-4 py-3">
           {selectedTrek && (
-            <div className="p-3.5 bg-[#F9F7F5] rounded-2xl border border-[#F0EBE5]">
+            <div className="relative p-3.5 bg-[#F9F7F5] rounded-2xl border border-[#F0EBE5] overflow-hidden">
+              {/* Miniature prayer flags draped over shared trek details */}
+              <div className="absolute -top-1 right-2 sm:right-4 w-24 xs:w-28 pointer-events-none drop-shadow-2xs opacity-85">
+                <MiniPrayerFlags variant="draped" count={5} />
+              </div>
               <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block mb-1">
                 Trek Details:
               </span>

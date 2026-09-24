@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Trek } from '../types';
 import { TrekCard } from '../components/TrekCard';
 import { PastEventListItem } from '../components/PastEventListItem';
+import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFlags';
 import {
   Search,
   Mountain,
@@ -181,9 +182,21 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
   return (
     <div className="space-y-4 w-full">
+      {/* Authentic Nepali Lungta Prayer Flags Garland */}
+      {!savedOnly && (
+        <div className="w-full py-1 overflow-hidden select-none">
+          <NepaliPrayerFlags />
+        </div>
+      )}
+
       {/* Quick Roster Stats Bar */}
       {!savedOnly && (
-        <div className="grid grid-cols-3 gap-2 bg-white rounded-2xl p-3 border border-[#E5E1DB] shadow-2xs text-[11px] sm:text-xs">
+        <div className="relative grid grid-cols-3 gap-2 bg-white rounded-2xl p-3 border border-[#E5E1DB] shadow-2xs text-[11px] sm:text-xs overflow-hidden">
+          {/* Subtle miniature prayer flags draped across top-right of stats bar */}
+          <div className="absolute -top-1 right-2 sm:right-6 w-24 xs:w-32 sm:w-36 pointer-events-none z-10 opacity-80 hidden xs:block">
+            <MiniPrayerFlags variant="draped" count={5} />
+          </div>
+
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-[#E08828]/10 text-[#E08828]">
               <Sparkles className="w-4 h-4 shrink-0" />
@@ -211,7 +224,12 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
       {/* Saved header if in saved mode */}
       {savedOnly && (
-        <div className="bg-white rounded-xl border border-[#F0EBE5] p-4 flex items-center justify-between shadow-xs">
+        <div className="relative bg-white rounded-xl border border-[#F0EBE5] p-4 flex items-center justify-between shadow-xs overflow-hidden">
+          {/* Subtle miniature prayer flags draped across corner of saved header */}
+          <div className="absolute -top-1 right-2 sm:right-6 w-24 xs:w-32 sm:w-36 pointer-events-none z-10 opacity-80 hidden xs:block">
+            <MiniPrayerFlags variant="draped" count={5} />
+          </div>
+
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
               <Heart className="w-4 h-4 fill-rose-500" />
@@ -384,6 +402,11 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
             const isArchiveOpen = showPastEvents || upcomingTreks.length === 0;
             return (
               <div className="pt-3 border-t border-[#F0EBE5]">
+                {/* Subtle miniature Himalayan prayer flag strip divider */}
+                <div className="mb-2 max-w-sm sm:max-w-md opacity-85">
+                  <MiniPrayerFlags variant="card" count={7} withMountain={true} />
+                </div>
+
                 <div className="flex items-center justify-between">
                   <button
                     type="button"

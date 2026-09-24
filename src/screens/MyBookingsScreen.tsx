@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Booking } from '../types';
 import { HISTORICAL_TREKS } from '../data/historicalTreks';
+import { MiniPrayerFlags } from '../components/NepaliPrayerFlags';
 import {
   Calendar,
   Phone,
@@ -220,8 +221,13 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
           return (
             <div
               key={booking.id}
-              className="bg-white rounded-2xl border border-[#EFEAE4] shadow-xs overflow-hidden transition-all duration-200"
+              className="relative bg-white rounded-2xl border border-[#EFEAE4] shadow-xs overflow-hidden transition-all duration-200"
             >
+              {/* Auspicious miniature prayer flag garland draped over booking ticket */}
+              <div className="absolute -top-1 right-2 sm:right-5 w-24 xs:w-28 sm:w-32 z-20 pointer-events-none drop-shadow-2xs opacity-85">
+                <MiniPrayerFlags variant="draped" count={5} />
+              </div>
+
               {/* Card Header (Tap to toggle) */}
               <div
                 role="button"

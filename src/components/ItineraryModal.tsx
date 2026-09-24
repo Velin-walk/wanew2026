@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Trek } from '../types';
 import { TrekItineraryData } from '../data/defaultItineraryTemplate';
+import { MiniPrayerFlags } from './NepaliPrayerFlags';
 
 interface ItineraryModalProps {
   isOpen: boolean;
@@ -232,6 +233,11 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
               referrerPolicy="no-referrer"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/20" />
+
+            {/* Auspicious miniature prayer flag garland draped over cover */}
+            <div className="absolute -top-1 left-3 sm:left-6 w-32 xs:w-36 sm:w-44 z-20 pointer-events-none drop-shadow-md">
+              <MiniPrayerFlags variant="draped" count={6} />
+            </div>
           </div>
 
           {/* Render Itinerary Experience Tab */}

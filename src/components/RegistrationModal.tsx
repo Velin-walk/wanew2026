@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Trek, TeamMember, BookingFormData } from '../types';
+import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import {
   X,
   MapPin,
@@ -508,7 +509,11 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
             /* ===== COMPACT FORM VIEW ===== */
             <form onSubmit={handleProceedToReview} className="space-y-3.5">
               {/* 1. Trek Selector Banner */}
-              <div className="bg-white border border-[#EBE7E1] rounded-xl p-3 shadow-2xs space-y-2">
+              <div className="relative bg-white border border-[#EBE7E1] rounded-xl p-3 shadow-2xs space-y-2 overflow-hidden">
+                {/* Miniature prayer flags draped over booking banner */}
+                <div className="absolute -top-1 right-2 sm:right-4 w-24 xs:w-28 sm:w-32 z-20 pointer-events-none drop-shadow-2xs opacity-85">
+                  <MiniPrayerFlags variant="draped" count={5} />
+                </div>
                 <div className="flex items-center justify-between text-[11px] text-[#78716C] font-semibold border-b border-[#F5F2EC] pb-1.5">
                   <span className="flex items-center gap-1 text-[#2B6CB0]">
                     <Compass className="w-3.5 h-3.5" /> Event Selection

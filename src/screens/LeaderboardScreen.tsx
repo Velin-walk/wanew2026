@@ -25,6 +25,7 @@ import {
 import { HikerStats, LeaderboardResponse } from '../types/leaderboard';
 import { fetchLeaderboardData } from '../services/api';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
+import { Himalayan3DBackground } from '../components/3d/Himalayan3DBackground';
 
 type TimePeriod = 't30' | 't60' | 't90' | 't365' | 'overall';
 type SortMetric = 'dist' | 'count';
@@ -117,7 +118,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
   }[category];
 
   return (
-    <div className="rounded-3xl border border-[#E5E1DB] bg-white shadow-xs overflow-hidden">
+    <div className="rounded-3xl border border-[#E5E1DB]/80 bg-white/40 backdrop-blur-md shadow-md overflow-hidden transition-all">
       {/* Board Header & Controls */}
       <div className="p-5 border-b border-[#F0EBE5] space-y-4">
         <div className="flex items-center justify-between gap-3">
@@ -213,14 +214,14 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
         </div>
       ) : (
         <div>
-          <div className="grid grid-cols-12 px-4 py-3 bg-[#FAF8F5] border-b border-[#EFEAE4] text-[11px] font-black uppercase tracking-wider text-[#6A645D]">
+          <div className="grid grid-cols-12 px-4 py-3 bg-stone-900/10 backdrop-blur-xs border-b border-[#EFEAE4]/60 text-[11px] font-black uppercase tracking-wider text-[#3D3A36]">
             <div className="col-span-2 sm:col-span-1 text-center">Rank</div>
             <div className="col-span-5 sm:col-span-6">Hiker</div>
             <div className="col-span-3 sm:col-span-3 text-right">Distance</div>
             <div className="col-span-2 sm:col-span-2 text-right">Trips</div>
           </div>
 
-          <div className="divide-y divide-[#F4EFEA]">
+          <div className="divide-y divide-[#F4EFEA]/60">
             {visibleHikers.map((hiker, idx) => {
               const { d: distKey, c: countKey } = getKeys(category, period);
               const distanceVal = ((hiker as any)[distKey] as number) || 0;
@@ -230,7 +231,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                 <div
                   key={`${hiker.n}-${idx}`}
                   onClick={() => setSelectedHiker(hiker)}
-                  className="grid grid-cols-12 items-center px-4 py-3 hover:bg-[#FFFDF9] transition-colors cursor-pointer group"
+                  className="grid grid-cols-12 items-center px-4 py-3 bg-white/20 hover:bg-white/50 transition-colors cursor-pointer group"
                 >
                   <div className="col-span-2 sm:col-span-1 flex items-center justify-center">
                     {idx === 0 ? (
@@ -379,9 +380,11 @@ export const LeaderboardScreen: React.FC = () => {
   }, [data?.growthCurve, data?.growth_curve, journeyPeriod]);
 
   return (
-    <div className="space-y-4 sm:space-y-6 w-full pb-10">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-3xl p-5 sm:p-7 shadow-md relative overflow-hidden border border-[#F5A844]/30">
+    <div className="space-y-4 sm:space-y-6 w-full pb-10 relative">
+      {/* Main Foreground Content */}
+      <div className="relative z-10 space-y-4 sm:space-y-6">
+        {/* Header Banner */}
+        <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-3xl p-5 sm:p-7 shadow-md relative overflow-hidden border border-[#F5A844]/40">
         {/* Glow & ambient accent */}
         <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
         <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#FED7AA]">
@@ -454,9 +457,12 @@ export const LeaderboardScreen: React.FC = () => {
         </div>
       </div>
 
+      {/* Standalone 3D Himalayan Environment Resources Bar */}
+      <Himalayan3DBackground mode="contained" />
+
       {/* Community KM Journey (Pre-computed Curve & Milestones) */}
       {data && (
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#E5E1DB] shadow-xs space-y-4">
+        <div className="bg-white/40 backdrop-blur-md rounded-3xl p-5 sm:p-6 border border-[#E5E1DB]/80 shadow-md space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F0EBE5]">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-[#1B361D] text-[#A8E063]">
@@ -715,7 +721,7 @@ export const LeaderboardScreen: React.FC = () => {
 
       {/* Clubs & Milestones Showcase */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-2xl border border-purple-200 text-center shadow-xs">
+        <div className="p-4 bg-gradient-to-br from-purple-50/40 to-purple-100/30 backdrop-blur-md rounded-2xl border border-purple-200/80 text-center shadow-xs">
           <Crown className="w-6 h-6 text-purple-600 mx-auto mb-1" />
           <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider">500KM Ultra Club</h4>
           <p className="text-[11px] text-purple-700 font-medium mt-1">
@@ -723,7 +729,7 @@ export const LeaderboardScreen: React.FC = () => {
           </p>
         </div>
 
-        <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl border border-blue-200 text-center shadow-xs">
+        <div className="p-4 bg-gradient-to-br from-blue-50/40 to-blue-100/30 backdrop-blur-md rounded-2xl border border-blue-200/80 text-center shadow-xs">
           <Gem className="w-6 h-6 text-blue-600 mx-auto mb-1" />
           <h4 className="text-xs font-black text-blue-900 uppercase tracking-wider">200KM Summit Club</h4>
           <p className="text-[11px] text-blue-700 font-medium mt-1">
@@ -731,7 +737,7 @@ export const LeaderboardScreen: React.FC = () => {
           </p>
         </div>
 
-        <div className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-2xl border border-emerald-200 text-center shadow-xs">
+        <div className="p-4 bg-gradient-to-br from-emerald-50/40 to-emerald-100/30 backdrop-blur-md rounded-2xl border border-emerald-200/80 text-center shadow-xs">
           <Sparkles className="w-6 h-6 text-emerald-600 mx-auto mb-1" />
           <h4 className="text-xs font-black text-emerald-900 uppercase tracking-wider">100KM Century Club</h4>
           <p className="text-[11px] text-emerald-700 font-medium mt-1">
@@ -842,6 +848,7 @@ export const LeaderboardScreen: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

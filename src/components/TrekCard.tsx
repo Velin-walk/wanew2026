@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Trek } from '../types';
 import { ParticipantStack } from './ParticipantStack';
 import { useAuth } from '../context/AuthContext';
 import { TrekPhotosModal } from './TrekPhotosModal';
+import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import {
   Calendar,
   Clock,
@@ -189,6 +190,11 @@ export const TrekCard: React.FC<TrekCardProps> = ({
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
+
+        {/* Auspicious miniature prayer flag garland draped over card */}
+        <div className="absolute -top-1 left-2 sm:left-3 w-28 xs:w-32 sm:w-36 z-20 pointer-events-none drop-shadow-md">
+          <MiniPrayerFlags variant="draped" count={5} />
+        </div>
         
         {/* Price Tag */}
         {trek.price && (
