@@ -4,6 +4,17 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+
+    // PWA installations telemetry & metrics
+    match /pwa_installs/{installId} {
+      allow create: if true;
+      allow read: if request.auth != null;
+    }
+    match /pwa_metrics/{metricId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

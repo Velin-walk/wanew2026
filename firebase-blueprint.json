@@ -155,6 +155,34 @@
         "timestamp": { "type": "number" }
       },
       "required": ["trailId", "text", "authorName", "authorEmail", "timestamp"]
+    },
+    "pwa_install_event": {
+      "title": "PWA Install Event",
+      "description": "Logged event when a user installs or launches the PWA",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "method": { "type": "string", "maxLength": 64 },
+        "platform": { "type": "string", "maxLength": 128 },
+        "userAgent": { "type": "string", "maxLength": 512 },
+        "deviceType": { "type": "string", "maxLength": 64 },
+        "installedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["method", "installedAt"]
+    },
+    "pwa_install_metrics": {
+      "title": "PWA Install Metrics",
+      "description": "Aggregated metrics for PWA installations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "totalInstalls": { "type": "number" },
+        "lastInstalledAt": { "type": "string", "maxLength": 64 },
+        "iosInstalls": { "type": "number" },
+        "androidInstalls": { "type": "number" },
+        "desktopInstalls": { "type": "number" }
+      },
+      "required": ["totalInstalls"]
     }
   },
   "firestore": {
@@ -193,6 +221,14 @@
     "/trail_comments/{commentId}": {
       "schema": { "$ref": "#/entities/trail_comment" },
       "description": "Trail/route reviews and notes comments"
+    },
+    "/pwa_installs/{installId}": {
+      "schema": { "$ref": "#/entities/pwa_install_event" },
+      "description": "Individual PWA installation and launch telemetry events"
+    },
+    "/pwa_metrics/{metricId}": {
+      "schema": { "$ref": "#/entities/pwa_install_metrics" },
+      "description": "Aggregated PWA installation counters"
     }
   }
 }

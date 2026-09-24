@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../services/api';
+import { db } from '../lib/firebase';
+import { collection, addDoc, doc, setDoc, increment, serverTimestamp } from 'firebase/firestore';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -38,6 +40,33 @@ export function usePWAInstall() {
           timestamp: now
         })
       }).catch(() => {});
+
+      // Record persistently to Firestore for Admin Dashboard System Zone metrics
+      const userAgent = window.navigator.userAgent || '';
+      const platform = window.navigator.platform || '';
+      const isIOSDevice = /iphone|ipad|ipod/.test(userAgent.toLowerCase());
+      const isAndroidDevice = /android/.test(userAgent.toLowerCase());
+      const deviceType = isIOSDevice ? 'ios' : isAndroidDevice ? 'android' : 'desktop';
+
+      addDoc(collection(db, 'pwa_installs'), {
+        method,
+        platform,
+        userAgent,
+        deviceType,
+        installedAt: now,
+        timestamp: serverTimestamp()
+      }).catch(() => {});
+
+      setDoc(
+        doc(db, 'pwa_metrics', 'summary'),
+        {
+          totalInstalls: increment(1),
+          lastInstalledAt: now,
+          [`${deviceType}Installs`]: increment(1),
+          [`${method}Count`]: increment(1)
+        },
+        { merge: true }
+      ).catch(() => {});
     } catch {}
   };
 
@@ -57,6 +86,15 @@ export function usePWAInstall() {
         }
       } catch {}
     }
+
+    // Backfill sync if this device was previously installed but not yet synced to Firestore
+    try {
+      const curCount = Number(localStorage.getItem('wnw_pwa_install_count')) || 0;
+      if (curCount > 0 && !localStorage.getItem('wnw_pwa_firestore_synced')) {
+        localStorage.setItem('wnw_pwa_firestore_synced', new Date().toISOString());
+        recordInstall(isStandalone ? 'standalone_active' : 'previous_install_sync');
+      }
+    } catch {}
 
     // Detect iOS devices
     const userAgent = window.navigator.userAgent.toLowerCase();

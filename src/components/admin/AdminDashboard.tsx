@@ -24,7 +24,8 @@ import {
   Flame,
   FileSpreadsheet,
   Link2,
-  AlertCircle
+  AlertCircle,
+  Smartphone
 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -38,6 +39,7 @@ import { SalesAnalyticsManager } from './SalesAnalyticsManager';
 import { CoordinatorHub } from './CoordinatorHub';
 import { CloudflareRegistrationsTable } from './CloudflareRegistrationsTable';
 import { AdminActivityLogs } from './AdminActivityLogs';
+import { PWAInstallStats } from './PWAInstallStats';
 import {
   SavedHikeRecord,
   DEFAULT_SAVED_HIKES,
@@ -56,7 +58,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const [activeTab, setActiveTab] = useState<
     'bookings' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps' | 'system'
   >('bookings');
-  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard'>('applications');
+  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa'>('applications');
   const [hikes, setHikes] = useState<SavedHikeRecord[]>(DEFAULT_SAVED_HIKES);
   const [loadingHikes, setLoadingHikes] = useState(true);
   const [editingHike, setEditingHike] = useState<SavedHikeRecord | null>(null);
@@ -1614,6 +1616,17 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               >
                 Leaderboard Manager
               </button>
+              <button
+                onClick={() => setSystemSubTab('pwa')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'pwa'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>PWA Installations</span>
+              </button>
             </div>
 
             <div className="mt-6">
@@ -1713,6 +1726,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                     </div>
                   </div>
                 </div>
+              )}
+
+              {systemSubTab === 'pwa' && (
+                <PWAInstallStats />
               )}
             </div>
           </div>
