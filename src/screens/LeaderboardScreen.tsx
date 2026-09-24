@@ -17,7 +17,10 @@ import {
   ExternalLink,
   ShieldCheck,
   CheckCircle2,
-  X
+  X,
+  Medal,
+  Gem,
+  Tent
 } from 'lucide-react';
 import { HikerStats, LeaderboardResponse } from '../types/leaderboard';
 import { fetchLeaderboardData } from '../services/api';
@@ -174,7 +177,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   : 'bg-white/80 hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-200/80 shadow-2xs'
               }`}
             >
-              <span>🏃</span>
+              <Footprints className="w-4 h-4" />
               <span>By KM</span>
             </button>
             <button
@@ -186,7 +189,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   : 'bg-white/80 hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-200/80 shadow-2xs'
               }`}
             >
-              <span>⛰️</span>
+              <Mountain className="w-4 h-4" />
               <span>By Trips</span>
             </button>
           </div>
@@ -231,16 +234,16 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                 >
                   <div className="col-span-2 sm:col-span-1 flex items-center justify-center">
                     {idx === 0 ? (
-                      <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 font-black text-xs flex items-center justify-center shadow-3xs border border-amber-300">
-                        👑 1
+                      <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
+                        <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
                       </span>
                     ) : idx === 1 ? (
-                      <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center shadow-3xs border border-slate-300">
-                        🥈 2
+                      <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
+                        <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
                       </span>
                     ) : idx === 2 ? (
-                      <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-800 font-black text-xs flex items-center justify-center shadow-3xs border border-amber-200">
-                        🥉 3
+                      <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-200">
+                        <Award className="w-3.5 h-3.5 text-amber-700" /> 3
                       </span>
                     ) : (
                       <span className="text-xs font-black text-[#8B8680]">#{idx + 1}</span>
@@ -257,12 +260,12 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                       </span>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {hiker.d >= 500 ? (
-                          <span className="px-1.5 py-0.2 rounded-md bg-purple-50 text-purple-700 text-[9px] font-bold border border-purple-200">
-                            500KM Legend 💎
+                          <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[9px] font-bold border border-purple-200 flex items-center gap-1">
+                            500KM Legend <Gem className="w-3 h-3 text-purple-600" />
                           </span>
                         ) : hiker.d >= 100 ? (
-                          <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 text-[9px] font-bold border border-emerald-200">
-                            100KM Century 💯
+                          <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[9px] font-bold border border-emerald-200 flex items-center gap-1">
+                            100KM Century <Sparkles className="w-3 h-3 text-emerald-600" />
                           </span>
                         ) : (
                           <span className="text-[10px] text-[#8B8680]">Trail Walker</span>
@@ -668,7 +671,7 @@ export const LeaderboardScreen: React.FC = () => {
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                 {data.milestones.map((m, idx) => (
                   <div key={idx} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
-                    <span>🏆</span>
+                    <Trophy className="w-3.5 h-3.5 text-amber-600" />
                     <span>{m.km.toLocaleString()} km</span>
                     <span className="text-[10px] text-amber-700/80 font-medium">({m.trek})</span>
                   </div>
@@ -713,7 +716,7 @@ export const LeaderboardScreen: React.FC = () => {
       {/* Clubs & Milestones Showcase */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-2xl border border-purple-200 text-center shadow-xs">
-          <div className="text-2xl mb-1">👑</div>
+          <Crown className="w-6 h-6 text-purple-600 mx-auto mb-1" />
           <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider">500KM Ultra Club</h4>
           <p className="text-[11px] text-purple-700 font-medium mt-1">
             {data?.hikers ? data.hikers.filter((h) => h.d >= 500).length : 0} Legends Registered
@@ -721,7 +724,7 @@ export const LeaderboardScreen: React.FC = () => {
         </div>
 
         <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl border border-blue-200 text-center shadow-xs">
-          <div className="text-2xl mb-1">💎</div>
+          <Gem className="w-6 h-6 text-blue-600 mx-auto mb-1" />
           <h4 className="text-xs font-black text-blue-900 uppercase tracking-wider">200KM Summit Club</h4>
           <p className="text-[11px] text-blue-700 font-medium mt-1">
             {data?.hikers ? data.hikers.filter((h) => h.d >= 200 && h.d < 500).length : 0} Elite Trekkers
@@ -729,7 +732,7 @@ export const LeaderboardScreen: React.FC = () => {
         </div>
 
         <div className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-2xl border border-emerald-200 text-center shadow-xs">
-          <div className="text-2xl mb-1">💯</div>
+          <Sparkles className="w-6 h-6 text-emerald-600 mx-auto mb-1" />
           <h4 className="text-xs font-black text-emerald-900 uppercase tracking-wider">100KM Century Club</h4>
           <p className="text-[11px] text-emerald-700 font-medium mt-1">
             {data?.hikers ? data.hikers.filter((h) => h.d >= 100 && h.d < 200).length : 0} Century Walkers
@@ -780,8 +783,8 @@ export const LeaderboardScreen: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-center">
-                  <span className="text-lg font-black text-[#2E7D32] block">
-                    🥾 {selectedHiker.hc || 0}
+                  <span className="text-lg font-black text-[#2E7D32] flex items-center justify-center gap-1">
+                    <Compass className="w-4 h-4 text-emerald-700" /> {selectedHiker.hc || 0}
                   </span>
                   <span className="text-[10px] font-bold uppercase text-emerald-800 tracking-wider">
                     Day Hikes
@@ -792,8 +795,8 @@ export const LeaderboardScreen: React.FC = () => {
                 </div>
 
                 <div className="p-3.5 bg-purple-50 rounded-2xl border border-purple-200 text-center">
-                  <span className="text-lg font-black text-[#4527A0] block">
-                    🏕 {selectedHiker.tc || 0}
+                  <span className="text-lg font-black text-[#4527A0] flex items-center justify-center gap-1">
+                    <Tent className="w-4 h-4 text-purple-700" /> {selectedHiker.tc || 0}
                   </span>
                   <span className="text-[10px] font-bold uppercase text-purple-800 tracking-wider">
                     Treks

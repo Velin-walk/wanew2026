@@ -90,7 +90,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      console.log('🔄 TrekPhotosModal opened, trekId:', trek?.id);
+      console.log('[TrekPhotosModal] opened, trekId:', trek?.id);
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -370,7 +370,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
       // Update daily counter
       safeSetItem(uploadCountKey, String(currentCount + uploadedThisBatch));
 
-      setUploadSuccessMsg(`✓ Post Shared Successfully! ${uploadedThisBatch} photo(s) added to live gallery.`);
+      setUploadSuccessMsg(`Post Shared Successfully! ${uploadedThisBatch} photo(s) added to live gallery.`);
     } catch (err: any) {
       console.error('Upload error:', err);
       setUploadError(err.message || 'An error occurred during photo upload.');

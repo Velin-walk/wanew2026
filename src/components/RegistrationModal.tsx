@@ -1138,8 +1138,16 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
                       Safety Rules Agreement
                     </span>
-                    <span className={`font-semibold ${agreeRules === 'Yes' ? 'text-[#5C942D]' : 'text-rose-600'}`}>
-                      {agreeRules === 'Yes' ? '✓ Accepted Safety Rules' : '✗ Not Accepted'}
+                    <span className={`font-semibold inline-flex items-center gap-1.5 ${agreeRules === 'Yes' ? 'text-[#5C942D]' : 'text-rose-600'}`}>
+                      {agreeRules === 'Yes' ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-[#5C942D]" /> Accepted Safety Rules
+                        </>
+                      ) : (
+                        <>
+                          <X className="w-4 h-4 text-rose-600" /> Not Accepted
+                        </>
+                      )}
                     </span>
                   </div>
 

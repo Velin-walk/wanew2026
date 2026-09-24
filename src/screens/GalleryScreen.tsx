@@ -378,7 +378,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       setPhotos((prev) => [...newPhotosToAppend, ...prev]);
       localStorage.setItem(uploadCountKey, String(currentCount + uploadedThisBatch));
 
-      setUploadSuccessMsg(`✓ Post Shared Successfully! ${uploadedThisBatch} photo(s) published.`);
+      setUploadSuccessMsg(`Post Shared Successfully! ${uploadedThisBatch} photo(s) published.`);
       setTimeout(() => {
         setUploadModalOpen(false);
       }, 1500);
@@ -597,31 +597,32 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* Hero Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] rounded-3xl p-6 sm:p-10 text-white shadow-xl border border-[#F5A844]/30">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-white/10 blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/25 border border-white/15 text-xs font-extrabold text-[#FFE8D1]">
-              <Camera className="w-3.5 h-3.5 shrink-0" />
-              <span>Walk Nepal Walk Community Wall</span>
+      {/* Hero Header with Plain Orange Card inside Depth Frame */}
+      <div className="bg-[#542000] rounded-3xl p-2.5 sm:p-3.5 shadow-md border border-[#3D1700] w-full">
+        <div className="bg-[#E06800] rounded-2xl p-5 sm:p-7 shadow-[inset_0_6px_16px_rgba(0,0,0,0.45)] border border-[#B84E00] text-white relative overflow-hidden w-full">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/25 border border-white/20 text-[#FFF3E0] text-[10px] sm:text-xs font-extrabold uppercase tracking-wider shadow-3xs">
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                <span>Walk Nepal Walk Community Wall</span>
+              </div>
+              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight">
+                Community Trail Gallery
+              </h1>
+              <p className="text-xs sm:text-sm text-[#FFE8D1] font-medium leading-relaxed">
+                Explore photo memories captured by hikers along Nepal's rivers, ridges, and mountain trails.
+              </p>
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight">
-              Community Trail Gallery
-            </h1>
-            <p className="text-xs sm:text-sm text-stone-300 font-medium leading-relaxed">
-              Explore photo memories captured by hikers along Nepal's rivers, ridges, and mountain trails.
-            </p>
-          </div>
 
-          <button
-            type="button"
-            onClick={handleOpenUploadModal}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-[#7ABA42] hover:bg-[#6AA437] text-white text-xs sm:text-sm font-extrabold rounded-2xl shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer shrink-0"
-          >
-            <Camera className="w-4 h-4 shrink-0" />
-            <span>Upload Hike Photo</span>
-          </button>
+            <button
+              type="button"
+              onClick={handleOpenUploadModal}
+              className="flex items-center justify-center gap-2 px-5 py-3 bg-[#7ABA42] hover:bg-[#6AA437] text-white text-xs sm:text-sm font-extrabold rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer shrink-0 border border-black/15"
+            >
+              <Camera className="w-4 h-4 shrink-0" />
+              <span>Upload Hike Photo</span>
+            </button>
+          </div>
         </div>
       </div>
 

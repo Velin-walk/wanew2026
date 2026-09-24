@@ -13,7 +13,11 @@ import {
   RefreshCw,
   Copy,
   Check,
-  ChevronRight
+  ChevronRight,
+  Compass,
+  Clock,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { Trek } from '../../types';
 import { AdminRegistration } from './BookingsManager';
@@ -609,8 +613,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                 {t.name}
               </h3>
               <div className="flex items-center gap-1.5 mb-3">
-                <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[#2563EB] text-[10px] font-bold border border-blue-100">
-                  🥾 Trek
+                <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[#2563EB] text-[10px] font-bold border border-blue-100 flex items-center gap-1">
+                  <Compass className="w-3 h-3 text-[#2563EB]" /> Trek
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[10px] font-bold">
                   {t.difficulty || 'Moderate'}
@@ -663,8 +667,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
             REGISTERED
           </div>
-          <div className="text-xs font-semibold text-stone-600 mt-1">
-            🥾 Trek • {currentTrek?.days || 4}D 3N
+          <div className="text-xs font-semibold text-stone-600 mt-1 flex items-center gap-1">
+            <Compass className="w-3.5 h-3.5 text-stone-500" /> Trek • {currentTrek?.days || 4}D 3N
           </div>
         </div>
 
@@ -833,35 +837,35 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <button
               type="button"
               onClick={() => setTableFilter('paid')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 tableFilter === 'paid'
                   ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
                   : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
               }`}
             >
-              ✅ Paid
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Paid
             </button>
             <button
               type="button"
               onClick={() => setTableFilter('pending')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 tableFilter === 'pending'
                   ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
                   : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
               }`}
             >
-              ⏳ Pending
+              <Clock className="w-3.5 h-3.5 text-amber-500" /> Pending
             </button>
             <button
               type="button"
               onClick={() => setTableFilter('due')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 tableFilter === 'due'
                   ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
                   : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
               }`}
             >
-              🔴 Has Due
+              <AlertCircle className="w-3.5 h-3.5 text-rose-500" /> Has Due
             </button>
           </div>
         </div>
@@ -1027,7 +1031,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                             <span>{r.has_medical}</span>
                           </span>
                         ) : (
-                          <span className="text-rose-500 font-bold">⚠ None</span>
+                          <span className="text-stone-400 font-medium">None</span>
                         )}
                       </td>
 

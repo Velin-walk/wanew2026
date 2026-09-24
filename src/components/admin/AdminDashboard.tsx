@@ -105,7 +105,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       }
       const data = await res.json();
       setLeaderboardSyncMsg({
-        text: `✓ Successfully synchronized ${data.count || ''} records to the Leaderboard!`,
+        text: `Successfully synchronized ${data.count || ''} records to the Leaderboard!`,
         type: 'success'
       });
     } catch (err: any) {
@@ -158,14 +158,14 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     try {
       const res = await apiFetch('leaderboard', { forceFresh: true });
       if (res.ok) {
-        setSyncMessage('✓ Master Leaderboard aggregated & CDN Edge cache successfully rebuilt!');
+        setSyncMessage('Master Leaderboard aggregated & CDN Edge cache successfully rebuilt!');
         setTimeout(() => setSyncMessage(''), 6000);
       } else {
         throw new Error('Sync endpoint returned non-200');
       }
     } catch (err) {
       console.warn('Leaderboard sync bypass:', err);
-      setSyncMessage('✓ Master Leaderboard sync forced! CDN Cache flushed and rebuilt.');
+      setSyncMessage('Master Leaderboard sync forced! CDN Cache flushed and rebuilt.');
       setTimeout(() => setSyncMessage(''), 6000);
     } finally {
       setSyncingLeaderboard(false);
@@ -810,12 +810,12 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const res = await apiFetch('admin/sync-all', { method: 'POST' });
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
-        setSyncMessage(json.message || `🎉 Successfully synced all itineraries to database!`);
+        setSyncMessage(json.message || `Successfully synced all itineraries to database!`);
       } else {
-        setSyncMessage(`🎉 Uploaded itineraries to database successfully!`);
+        setSyncMessage(`Uploaded itineraries to database successfully!`);
       }
     } catch (e: any) {
-      setSyncMessage(`🎉 Uploaded itineraries to database!`);
+      setSyncMessage(`Uploaded itineraries to database!`);
     } finally {
       await fetchItineraries();
       setIsSyncingAll(false);

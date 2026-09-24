@@ -93,7 +93,7 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
         // Also trigger leaderboard recompute
         await apiFetch('admin/recompute-leaderboard', { method: 'POST' }).catch(() => {});
         setSyncFeedback({
-          text: `🎉 Forwarded ${data.migratedCount || 0} hikers into Hiker Profiles & refreshed Leaderboard!`,
+          text: `Forwarded ${data.migratedCount || 0} hikers into Hiker Profiles & refreshed Leaderboard!`,
           success: true,
         });
         if (onRefresh) onRefresh();

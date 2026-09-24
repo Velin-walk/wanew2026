@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../services/api';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -9,6 +10,36 @@ export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [installCount, setInstallCount] = useState<number>(() => {
+    try {
+      return Number(localStorage.getItem('wnw_pwa_install_count')) || 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const recordInstall = (method: string) => {
+    try {
+      const cur = Number(localStorage.getItem('wnw_pwa_install_count')) || 0;
+      const next = cur + 1;
+      const now = new Date().toISOString();
+      localStorage.setItem('wnw_pwa_install_count', String(next));
+      localStorage.setItem('wnw_pwa_last_installed_at', now);
+      setInstallCount(next);
+
+      // Send telemetry ping to backend API
+      apiFetch('pwa-analytics/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method,
+          platform: window.navigator.platform,
+          userAgent: window.navigator.userAgent,
+          timestamp: now
+        })
+      }).catch(() => {});
+    } catch {}
+  };
 
   useEffect(() => {
     // Detect standalone mode (already installed)
@@ -16,6 +47,16 @@ export function usePWAInstall() {
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
     setIsInstalled(isStandalone);
+
+    // Track standalone launch if not logged on device yet
+    if (isStandalone) {
+      try {
+        if (!localStorage.getItem('wnw_pwa_standalone_logged')) {
+          localStorage.setItem('wnw_pwa_standalone_logged', new Date().toISOString());
+          recordInstall('standalone_launch');
+        }
+      } catch {}
+    }
 
     // Detect iOS devices
     const userAgent = window.navigator.userAgent.toLowerCase();
@@ -30,6 +71,7 @@ export function usePWAInstall() {
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      recordInstall('appinstalled_event');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -48,6 +90,7 @@ export function usePWAInstall() {
     if (outcome === 'accepted') {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      recordInstall('user_accepted_prompt');
       return true;
     }
     return false;
@@ -58,5 +101,6 @@ export function usePWAInstall() {
     isInstalled,
     isIOS,
     install,
+    installCount,
   };
 }

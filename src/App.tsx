@@ -741,8 +741,8 @@ function MainApp() {
     setBookings((prev) => [newBooking, ...prev.filter(b => String(b.id) !== String(primaryId))]);
 
     const toastMsg = isCloudflareDown
-      ? `✓ Booking recorded for ${trek.name}! (Backup mode)`
-      : `🎉 Registered for ${trek.name}! See you on the trail!`;
+      ? `Booking recorded for ${trek.name}! (Backup mode)`
+      : `Registered for ${trek.name}! See you on the trail!`;
     showToast(toastMsg, 'success');
     setSelectedTrekForRegister(null);
     // Background refresh

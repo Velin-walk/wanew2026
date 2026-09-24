@@ -180,60 +180,60 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Hero Banner with Nepal Himalayan warm orange vibe - mobile optimized */}
+      {/* Hero Banner with Plain Orange Card inside Depth Frame */}
       {!savedOnly && (
-        <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-2xl p-4 sm:p-5 shadow-md relative overflow-hidden border border-[#F5A844]/30">
-          {/* Ambient Warm Sunset Orange Glow */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-          
-          <div className="absolute -right-4 -bottom-4 opacity-20 pointer-events-none w-44 h-44 sm:w-52 sm:h-52 overflow-hidden rounded-full flex items-center justify-center">
-            <img 
-              src="/logo.png" 
-              className="w-full h-full object-contain filter brightness-125 saturate-100" 
-              alt="Walk Nepal Walk Logo" 
-              referrerPolicy="no-referrer" 
-            />
-          </div>
-
-          <div className="relative z-10 w-full">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/25 border border-white/20 text-[#FED7AA] text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2.5 shadow-3xs">
-              <Flame className="w-3.5 h-3.5 text-[#F5A844] shrink-0" />
-              <span>All Season Himalayan Treks & Hikes</span>
+        <div className="bg-[#542000] rounded-3xl p-2.5 sm:p-3.5 shadow-md border border-[#3D1700] w-full">
+          {/* Recessed Inset Plain Orange Inner Card */}
+          <div className="bg-[#E06800] rounded-2xl p-4 sm:p-5 shadow-[inset_0_6px_16px_rgba(0,0,0,0.45)] border border-[#B84E00] relative overflow-hidden text-white w-full">
+            <div className="absolute -right-6 -bottom-6 opacity-20 pointer-events-none w-44 h-44 sm:w-52 sm:h-52 overflow-hidden rounded-full flex items-center justify-center">
+              <img 
+                src="/logo.png" 
+                className="w-full h-full object-contain filter brightness-125 saturate-100" 
+                alt="Walk Nepal Walk Logo" 
+                referrerPolicy="no-referrer" 
+              />
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
-              Trek Schedule & Archive
-            </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="w-2 h-2 rounded-full bg-white" />
-              <p className="text-xs sm:text-sm font-extrabold tracking-widest text-[#FFE8D1] uppercase">
-                Fitness • Fun • Friendship
-              </p>
-            </div>
+            <div className="relative z-10 w-full">
+              {/* Top Pill Tag matching depth theme */}
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/25 border border-white/20 text-[#FFF3E0] text-[10px] sm:text-xs font-extrabold uppercase tracking-wider mb-2.5 shadow-3xs">
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                <span>All Season Himalayan Treks &amp; Hikes</span>
+              </div>
 
-            {/* Quick Mobile Roster Stats with Frosted Glass styling */}
-            <div className="grid grid-cols-3 gap-2 mt-3.5 pt-3 border-t border-white/15 bg-black/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3 text-[11px]">
-              <div className="flex items-center gap-1.5">
-                <div className="p-1 rounded-md bg-[#E08828]/20">
-                  <Sparkles className="w-3.5 h-3.5 text-[#F5A844] shrink-0" />
-                </div>
-                <span className="truncate text-stone-200">
-                  <strong className="text-white font-extrabold">{upcomingTreks.length}</strong> Upcoming
-                </span>
+              <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                Trek Schedule &amp; Archive
+              </h1>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xs sm:text-sm font-bold tracking-wider text-[#FFE8D1]">
+                  Fitness • Fun • Friendship — Follow schedule to secure your spot on the trail
+                </p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="p-1 rounded-md bg-[#7ABA42]/20">
-                  <History className="w-3.5 h-3.5 text-[#A8E063] shrink-0" />
+
+              {/* Quick Mobile Roster Stats */}
+              <div className="grid grid-cols-3 gap-2 mt-3.5 pt-3 border-t border-white/20 bg-black/20 rounded-xl p-2.5 sm:p-3 text-[11px] shadow-[inset_0_2px_6px_rgba(0,0,0,0.3)] border border-white/10">
+                <div className="flex items-center gap-1.5">
+                  <div className="p-1 rounded-md bg-white/20">
+                    <Sparkles className="w-3.5 h-3.5 text-white shrink-0" />
+                  </div>
+                  <span className="truncate text-stone-100">
+                    <strong className="text-white font-extrabold">{upcomingTreks.length}</strong> Upcoming
+                  </span>
                 </div>
-                <span className="truncate text-stone-200">
-                  <strong className="text-white font-extrabold">{pastTreks.length}</strong> Completed
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="p-1 rounded-md bg-white/15">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#E5E1DB] shrink-0" />
+                <div className="flex items-center gap-1.5">
+                  <div className="p-1 rounded-md bg-white/20">
+                    <History className="w-3.5 h-3.5 text-white shrink-0" />
+                  </div>
+                  <span className="truncate text-stone-100">
+                    <strong className="text-white font-extrabold">{pastTreks.length}</strong> Completed
+                  </span>
                 </div>
-                <span className="truncate text-stone-200 font-medium">Official Guides</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="p-1 rounded-md bg-white/20">
+                    <ShieldCheck className="w-3.5 h-3.5 text-white shrink-0" />
+                  </div>
+                  <span className="truncate text-stone-100 font-medium">Official Guides</span>
+                </div>
               </div>
             </div>
           </div>

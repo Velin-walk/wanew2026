@@ -33,7 +33,9 @@ import {
   ArrowUpDown,
   Filter,
   CheckCircle,
-  Info
+  Info,
+  Crown,
+  Gem
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Trek, Booking } from '../types';
@@ -628,20 +630,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     </span>
                   </div>
                   {lifetimeDistance >= 500 ? (
-                    <span className="px-2.5 py-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-2xs">
-                      👑 500KM Ultra Legend
+                    <span className="px-2.5 py-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+                      <Crown className="w-3 h-3 text-amber-300" /> 500KM Ultra Legend
                     </span>
                   ) : lifetimeDistance >= 200 ? (
-                    <span className="px-2.5 py-1 bg-sky-400/20 border border-sky-400/40 text-sky-300 text-[10px] font-black rounded-full shadow-2xs">
-                      💎 200KM Summit Club
+                    <span className="px-2.5 py-1 bg-sky-400/20 border border-sky-400/40 text-sky-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+                      <Gem className="w-3 h-3 text-sky-300" /> 200KM Summit Club
                     </span>
                   ) : lifetimeDistance >= 100 ? (
-                    <span className="px-2.5 py-1 bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black rounded-full shadow-2xs">
-                      💯 100KM Century Club
+                    <span className="px-2.5 py-1 bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-emerald-300" /> 100KM Century Club
                     </span>
                   ) : (
-                    <span className="px-2.5 py-1 bg-stone-800 border border-stone-700 text-stone-300 text-[10px] font-bold rounded-full">
-                      🥾 Active Explorer
+                    <span className="px-2.5 py-1 bg-stone-800 border border-stone-700 text-stone-300 text-[10px] font-bold rounded-full flex items-center gap-1">
+                      <Compass className="w-3 h-3 text-stone-400" /> Active Explorer
                     </span>
                   )}
                 </div>

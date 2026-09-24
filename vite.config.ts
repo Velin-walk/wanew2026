@@ -19,7 +19,7 @@ export default defineConfig({
         theme_color: '#7ABA42',
         background_color: '#F7F4EF',
         display: 'standalone',
-        start_url: '/',
+        start_url: '/?utm_source=pwa&utm_medium=homescreen',
         scope: '/',
         icons: [
           {
