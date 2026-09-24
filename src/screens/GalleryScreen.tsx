@@ -30,6 +30,7 @@ import { Trek } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, fetchPhotoComments } from '../services/api';
 import { PhotoCommentsSection } from '../components/PhotoCommentsSection';
+import galleryHeroImg from '../assets/images/gallery_trail_hero_1790246900034.jpg';
 
 interface GalleryPhoto {
   id: string;
@@ -597,19 +598,30 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* Hero Header with Plain Orange Card inside Depth Frame */}
-      <div className="bg-[#542000] rounded-3xl p-2.5 sm:p-3.5 shadow-md border border-[#3D1700] w-full">
-        <div className="bg-[#E06800] rounded-2xl p-5 sm:p-7 shadow-[inset_0_6px_16px_rgba(0,0,0,0.45)] border border-[#B84E00] text-white relative overflow-hidden w-full">
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-2xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/25 border border-white/20 text-[#FFF3E0] text-[10px] sm:text-xs font-extrabold uppercase tracking-wider shadow-3xs">
-                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+      {/* Hero Header & Controls nested inside Mountain Trail Art Image Container */}
+      <div className="relative rounded-3xl overflow-hidden shadow-xl border border-stone-300 w-full p-4 sm:p-7 space-y-5">
+        {/* Background Image with Gradient Scrim for crisp readability */}
+        <img
+          src={galleryHeroImg}
+          alt="Community Trail Gallery"
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/35 to-black/70 pointer-events-none" />
+
+        {/* Foreground Content inside Image */}
+        <div className="relative z-10 space-y-5">
+          {/* Header & Upload Action */}
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-white">
+            <div className="space-y-1.5 max-w-2xl text-left">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/25 text-[#FFF3E0] text-[9px] sm:text-[11px] font-extrabold uppercase tracking-wider shadow-3xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 <span>Walk Nepal Walk Community Wall</span>
               </div>
-              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight">
+              <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight drop-shadow-md">
                 Community Trail Gallery
               </h1>
-              <p className="text-xs sm:text-sm text-[#FFE8D1] font-medium leading-relaxed">
+              <p className="text-[11px] sm:text-xs text-[#FFF3E0] font-medium leading-relaxed drop-shadow-xs">
                 Explore photo memories captured by hikers along Nepal's rivers, ridges, and mountain trails.
               </p>
             </div>
@@ -617,84 +629,82 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             <button
               type="button"
               onClick={handleOpenUploadModal}
-              className="flex items-center justify-center gap-2 px-5 py-3 bg-[#7ABA42] hover:bg-[#6AA437] text-white text-xs sm:text-sm font-extrabold rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer shrink-0 border border-black/15"
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#7ABA42] hover:bg-[#6AA437] text-white text-[11px] sm:text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer shrink-0 border border-white/30 backdrop-blur-xs self-start md:self-auto mr-auto md:mr-0"
             >
-              <Camera className="w-4 h-4 shrink-0" />
+              <Camera className="w-3.5 h-3.5 shrink-0" />
               <span>Upload Hike Photo</span>
             </button>
           </div>
-        </div>
-      </div>
 
-      {/* Filter, Sort, and View Mode Bar */}
-      <div className="bg-white border border-[#EFEAE4] rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-        {/* Search */}
-        <div className="relative w-full lg:w-80">
-          <Search className="w-4 h-4 text-[#8B8680] absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by hike #, name, or hiker..."
-            className="w-full pl-9 pr-3 py-2 bg-[#FAF8F5] border border-[#EFEAE4] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:outline-hidden focus:border-[#7ABA42]"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+          {/* Filter, Sort, and View Mode Bar inside Hero Image */}
+          <div className="bg-white/75 backdrop-blur-md border border-white/60 rounded-2xl p-2.5 sm:p-3 shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-start lg:justify-end gap-2.5">
+            {/* Search */}
+            <div className="relative w-full lg:w-72">
+              <Search className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by hike #, name, or hiker..."
+                className="w-full pl-8 pr-2.5 py-1.5 bg-stone-100 border border-stone-300 rounded-lg text-[11px] font-semibold text-stone-900 placeholder-stone-500 focus:outline-hidden focus:border-[#7ABA42] focus:bg-white"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
 
-        {/* View Mode Switch, Sort, Filter, and Admin POV */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
-          {/* View Mode Toggle */}
-          <div className="flex items-center bg-[#FAF8F5] border border-[#EFEAE4] p-1 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setViewMode('boxed')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                viewMode === 'boxed'
-                  ? 'bg-white text-[#7ABA42] shadow-xs border border-stone-200'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-              title="Boxed by Hike Albums"
-            >
-              <LayoutGrid className="w-3.5 h-3.5 text-[#7ABA42]" />
-              <span>Hike Boxes</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                viewMode === 'grid'
-                  ? 'bg-white text-[#7ABA42] shadow-xs border border-stone-200'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-              title="All Photos Stream Grid"
-            >
-              <Grid className="w-3.5 h-3.5 text-stone-500" />
-              <span>All Photos</span>
-            </button>
+            {/* View Mode Switch and Sort */}
+            <div className="flex flex-wrap items-center justify-start lg:justify-end gap-1.5 w-full lg:w-auto">
+              {/* View Mode Toggle */}
+              <div className="flex items-center bg-stone-100 border border-stone-300 p-0.5 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('boxed')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                    viewMode === 'boxed'
+                      ? 'bg-white text-emerald-800 shadow-2xs border border-stone-300'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                  title="Boxed by Hike Albums"
+                >
+                  <LayoutGrid className="w-3 h-3 text-emerald-600" />
+                  <span>Hike Boxes</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                    viewMode === 'grid'
+                      ? 'bg-white text-emerald-800 shadow-2xs border border-stone-300'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                  title="All Photos Stream Grid"
+                >
+                  <Grid className="w-3 h-3 text-emerald-600" />
+                  <span>All Photos</span>
+                </button>
+              </div>
+
+              {/* Sort Dropdown */}
+              <div className="flex items-center gap-1 bg-stone-100 border border-stone-300 px-2 py-1 rounded-lg">
+                <ArrowUpDown className="w-3 h-3 text-stone-600 shrink-0" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="bg-transparent text-[10px] font-bold text-stone-900 focus:outline-hidden cursor-pointer"
+                >
+                  <option value="hike_desc">Hike # (High → Low)</option>
+                  <option value="hike_asc">Hike # (Low → High)</option>
+                  <option value="newest">Newest Uploads</option>
+                </select>
+              </div>
+            </div>
           </div>
-
-          {/* Sort Dropdown */}
-          <div className="flex items-center gap-1 bg-[#FAF8F5] border border-[#EFEAE4] px-2.5 py-1.5 rounded-xl">
-            <ArrowUpDown className="w-3.5 h-3.5 text-[#8B8680] shrink-0" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-transparent text-xs font-bold text-[#1F1F1F] focus:outline-hidden cursor-pointer"
-            >
-              <option value="hike_desc">Hike # (High → Low)</option>
-              <option value="hike_asc">Hike # (Low → High)</option>
-              <option value="newest">Newest Uploads</option>
-            </select>
-          </div>
-
-
         </div>
       </div>
 

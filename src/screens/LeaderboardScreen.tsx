@@ -118,20 +118,20 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
   }[category];
 
   return (
-    <div className="rounded-3xl border border-[#E5E1DB] bg-white/96 backdrop-blur-md shadow-md overflow-hidden">
+    <div className="rounded-3xl border border-stone-300 bg-white/70 backdrop-blur-md shadow-md shadow-stone-900/5 overflow-hidden transition-all">
       {/* Board Header & Controls */}
-      <div className="p-5 border-b border-[#F0EBE5] space-y-4">
+      <div className="p-5 border-b border-stone-200 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-[#FAF8F5]">
+            <div className="p-2 rounded-xl bg-stone-100 border border-stone-200/80">
               {categoryIcon}
             </div>
             <div>
-              <h2 className="text-lg font-black text-[#1F1F1F]">{categoryTitle}</h2>
-              <p className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">Community Top 100 Rankings</p>
+              <h2 className="text-lg font-black text-stone-900">{categoryTitle}</h2>
+              <p className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Community Top 100 Rankings</p>
             </div>
           </div>
-          <div className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-black uppercase tracking-tighter shadow-3xs">
+          <div className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-black uppercase tracking-tighter shadow-3xs">
             Top 100
           </div>
         </div>
@@ -139,7 +139,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
         {/* Time Window Pills & Metric Toggle */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-extrabold text-stone-600 mr-1 shrink-0 flex items-center gap-1.5 w-full sm:w-auto mb-1 sm:mb-0 uppercase tracking-wider">
+            <span className="text-[11px] font-extrabold text-stone-700 mr-1 shrink-0 flex items-center gap-1.5 w-full sm:w-auto mb-1 sm:mb-0 uppercase tracking-wider">
               <Calendar className="w-3.5 h-3.5 text-[#E08828]" /> Period:
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -159,7 +159,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all active:scale-95 cursor-pointer select-none border ${
                     period === t.id
                       ? 'bg-stone-900 text-white border-stone-900 shadow-md ring-2 ring-stone-900/20'
-                      : 'bg-white text-stone-700 border-stone-250 hover:border-[#E08828] hover:text-[#E08828] hover:bg-amber-50/40 shadow-2xs'
+                      : 'bg-white text-stone-700 border-stone-300 hover:border-[#E08828] hover:text-[#E08828] hover:bg-amber-50/50 shadow-2xs'
                   }`}
                 >
                   {t.label}
@@ -168,14 +168,14 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 bg-stone-100 p-1.5 rounded-2xl border border-stone-250 shadow-inner w-full sm:w-auto shrink-0">
+          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 bg-stone-100 p-1.5 rounded-2xl border border-stone-300 shadow-inner w-full sm:w-auto shrink-0">
             <button
               type="button"
               onClick={() => { setMetric('dist'); setLimit(20); }}
               className={`py-2 px-4 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95 select-none ${
                 metric === 'dist'
                   ? 'bg-[#E08828] text-white shadow-md shadow-[#E08828]/30 ring-2 ring-[#E08828]/25'
-                  : 'bg-white/80 hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-200/80 shadow-2xs'
+                  : 'bg-white hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-300 shadow-2xs'
               }`}
             >
               <Footprints className="w-4 h-4" />
@@ -187,7 +187,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
               className={`py-2 px-4 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95 select-none ${
                 metric === 'count'
                   ? 'bg-stone-900 text-white shadow-md shadow-stone-900/30 ring-2 ring-stone-900/25'
-                  : 'bg-white/80 hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-200/80 shadow-2xs'
+                  : 'bg-white hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-300 shadow-2xs'
               }`}
             >
               <Mountain className="w-4 h-4" />
@@ -201,7 +201,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
       {loading ? (
         <div className="p-12 text-center space-y-3">
           <RefreshCw className="w-8 h-8 text-[#E08828] animate-spin mx-auto" />
-          <p className="text-xs font-bold text-[#5A5551]">Loading hiker standings...</p>
+          <p className="text-xs font-bold text-stone-600">Loading hiker standings...</p>
         </div>
       ) : error ? (
         <div className="p-8 text-center space-y-3">
@@ -209,19 +209,19 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
         </div>
       ) : filteredHikers.length === 0 ? (
         <div className="p-10 text-center space-y-2">
-          <Mountain className="w-8 h-8 text-[#C2BCB4] mx-auto" />
-          <p className="text-xs font-bold text-[#5A5551]">No activity found for this period</p>
+          <Mountain className="w-8 h-8 text-stone-400 mx-auto" />
+          <p className="text-xs font-bold text-stone-600">No activity found for this period</p>
         </div>
       ) : (
         <div>
-          <div className="grid grid-cols-12 px-4 py-3 bg-[#FAF8F5] border-b border-[#EFEAE4] text-[11px] font-black uppercase tracking-wider text-[#6A645D]">
+          <div className="grid grid-cols-12 px-4 py-3 bg-stone-100 border-b border-stone-200 text-[11px] font-black uppercase tracking-wider text-stone-700">
             <div className="col-span-2 sm:col-span-1 text-center">Rank</div>
             <div className="col-span-5 sm:col-span-6">Hiker</div>
             <div className="col-span-3 sm:col-span-3 text-right">Distance</div>
             <div className="col-span-2 sm:col-span-2 text-right">Trips</div>
           </div>
 
-          <div className="divide-y divide-[#F4EFEA]">
+          <div className="divide-y divide-stone-200/80 bg-white/60">
             {visibleHikers.map((hiker, idx) => {
               const { d: distKey, c: countKey } = getKeys(category, period);
               const distanceVal = ((hiker as any)[distKey] as number) || 0;
@@ -231,64 +231,64 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                 <div
                   key={`${hiker.n}-${idx}`}
                   onClick={() => setSelectedHiker(hiker)}
-                  className="grid grid-cols-12 items-center px-4 py-3 hover:bg-[#FFFDF9] transition-colors cursor-pointer group"
+                  className="grid grid-cols-12 items-center px-4 py-3 bg-transparent hover:bg-stone-100/60 transition-colors cursor-pointer group"
                 >
                   <div className="col-span-2 sm:col-span-1 flex items-center justify-center">
                     {idx === 0 ? (
-                      <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
+                      <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
                         <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
                       </span>
                     ) : idx === 1 ? (
-                      <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
+                      <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
                         <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
                       </span>
                     ) : idx === 2 ? (
-                      <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-200">
+                      <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-900 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
                         <Award className="w-3.5 h-3.5 text-amber-700" /> 3
                       </span>
                     ) : (
-                      <span className="text-xs font-black text-[#8B8680]">#{idx + 1}</span>
+                      <span className="text-xs font-black text-stone-500">#{idx + 1}</span>
                     )}
                   </div>
 
                   <div className="col-span-5 sm:col-span-6 flex items-center gap-2 pr-2">
-                    <div className="w-8 h-8 rounded-xl bg-[#FAF6F0] border border-[#E5E1DB] flex items-center justify-center text-xs font-black text-[#5A5551] shrink-0 group-hover:border-[#E08828]/40 transition-colors">
+                    <div className="w-8 h-8 rounded-xl bg-stone-100 border border-stone-300 flex items-center justify-center text-xs font-black text-stone-700 shrink-0 group-hover:border-[#E08828]/60 transition-colors">
                       {(hiker.n || 'H')[0]?.toUpperCase()}
                     </div>
                     <div className="truncate">
-                      <span className="text-xs sm:text-sm font-bold text-[#1F1F1F] group-hover:text-[#E08828] transition-colors block truncate">
+                      <span className="text-xs sm:text-sm font-bold text-stone-900 group-hover:text-[#E08828] transition-colors block truncate">
                         {maskName(hiker.n)}
                       </span>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {hiker.d >= 500 ? (
-                          <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[9px] font-bold border border-purple-200 flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-800 text-[9px] font-bold border border-purple-300 flex items-center gap-1">
                             500KM Legend <Gem className="w-3 h-3 text-purple-600" />
                           </span>
                         ) : hiker.d >= 100 ? (
-                          <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[9px] font-bold border border-emerald-200 flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[9px] font-bold border border-emerald-300 flex items-center gap-1">
                             100KM Century <Sparkles className="w-3 h-3 text-emerald-600" />
                           </span>
                         ) : (
-                          <span className="text-[10px] text-[#8B8680]">Trail Walker</span>
+                          <span className="text-[10px] text-stone-500 font-medium">Trail Walker</span>
                         )}
                       </div>
                     </div>
                   </div>
 
                   <div className="col-span-3 sm:col-span-3 text-right">
-                    <span className="text-xs sm:text-sm font-black text-[#1F5BBB] block">
+                    <span className="text-xs sm:text-sm font-black text-blue-700 block">
                       {distanceVal.toLocaleString()} km
                     </span>
-                    <span className="text-[10px] text-[#8B8680]">
+                    <span className="text-[10px] text-stone-500 font-medium">
                       {period === 'overall' ? 'lifetime' : period}
                     </span>
                   </div>
 
                   <div className="col-span-2 sm:col-span-2 text-right">
-                    <span className="text-xs sm:text-sm font-black text-[#7ABA42] block">
+                    <span className="text-xs sm:text-sm font-black text-emerald-700 block">
                       {countVal}
                     </span>
-                    <span className="text-[10px] text-[#8B8680]">
+                    <span className="text-[10px] text-stone-500 font-medium">
                       {category === 'hikers' ? 'hikes' : category === 'trekkers' ? 'treks' : 'trips'}
                     </span>
                   </div>
@@ -298,11 +298,11 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
           </div>
 
           {visibleHikers.length < filteredHikers.length && (
-            <div className="p-4 bg-[#FAF8F5] border-t border-[#EFEAE4] text-center">
+            <div className="p-4 bg-stone-50 border-t border-stone-200 text-center">
               <button
                 type="button"
                 onClick={() => setLimit((prev) => prev + 20)}
-                className="w-full sm:w-auto px-6 py-2 bg-white hover:bg-[#F3EFEA] border-2 border-dashed border-[#7ABA42] text-[#1B5E20] font-black text-[11px] rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2 bg-white hover:bg-stone-100 border-2 border-dashed border-emerald-600 text-emerald-800 font-black text-[11px] rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer"
               >
                 See More ⬇
               </button>
@@ -381,13 +381,10 @@ export const LeaderboardScreen: React.FC = () => {
 
   return (
     <div className="space-y-4 sm:space-y-6 w-full pb-10 relative">
-      {/* Real-life 3D Himalayan Environment with Stupa, Prayer Flags & Scroll Parallax */}
-      <Himalayan3DBackground opacity={0.85} />
-
       {/* Main Foreground Content */}
       <div className="relative z-10 space-y-4 sm:space-y-6">
         {/* Header Banner */}
-      <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-3xl p-5 sm:p-7 shadow-md relative overflow-hidden border border-[#F5A844]/30">
+        <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-3xl p-5 sm:p-7 shadow-md relative overflow-hidden border border-[#F5A844]/40">
         {/* Glow & ambient accent */}
         <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
         <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#FED7AA]">
@@ -460,17 +457,20 @@ export const LeaderboardScreen: React.FC = () => {
         </div>
       </div>
 
+      {/* Standalone 3D Himalayan Environment Resources Bar */}
+      <Himalayan3DBackground mode="contained" />
+
       {/* Community KM Journey (Pre-computed Curve & Milestones) */}
       {data && (
-        <div className="bg-white/96 backdrop-blur-md rounded-3xl p-5 sm:p-6 border border-[#E5E1DB] shadow-md space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F0EBE5]">
+        <div className="bg-white/70 backdrop-blur-md rounded-3xl p-5 sm:p-6 border border-stone-300 shadow-md shadow-stone-900/5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-200">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-[#1B361D] text-[#A8E063]">
                 <Mountain className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base sm:text-lg font-black text-[#1F1F1F]">Community KM Journey</h2>
-                <p className="text-[11px] text-[#6A645D] font-bold">Cumulative walking trajectory across all organized treks</p>
+                <h2 className="text-base sm:text-lg font-black text-stone-900">Community KM Journey</h2>
+                <p className="text-[11px] text-stone-600 font-bold">Cumulative walking trajectory across all organized treks</p>
               </div>
             </div>
 
@@ -492,7 +492,7 @@ export const LeaderboardScreen: React.FC = () => {
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 active:scale-95 cursor-pointer select-none border ${
                     journeyPeriod === t.id
                       ? 'bg-[#1B361D] text-white border-[#1B361D] shadow-md shadow-[#1B361D]/25 ring-2 ring-[#1B361D]/20'
-                      : 'bg-white text-stone-700 border-stone-250 hover:border-[#1B361D] hover:text-[#1B361D] hover:bg-emerald-50/40 shadow-2xs'
+                      : 'bg-white text-stone-700 border-stone-300 hover:border-[#1B361D] hover:text-[#1B361D] hover:bg-emerald-50/40 shadow-2xs'
                   }`}
                 >
                   {t.label}
@@ -504,25 +504,25 @@ export const LeaderboardScreen: React.FC = () => {
           {/* Quick Metrics Bar */}
           {currentStats && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <div className="p-3 bg-[#FAF8F5] rounded-2xl border border-[#EFEAE4]">
-                <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">Total KM</span>
+              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200">
+                <span className="text-[10px] font-bold text-stone-600 uppercase tracking-wider block">Total KM</span>
                 <span className="text-base sm:text-lg font-black text-[#1B5E20] block mt-0.5">
                   {currentStats.totalDistance?.toLocaleString() || '0'} km
                 </span>
               </div>
-              <div className="p-3 bg-[#FAF8F5] rounded-2xl border border-[#EFEAE4]">
-                <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">Events</span>
-                <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
+              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200">
+                <span className="text-[10px] font-bold text-stone-600 uppercase tracking-wider block">Events</span>
+                <span className="text-base sm:text-lg font-black text-stone-900 block mt-0.5">
                   {currentStats.totalEvents || 0} conducted
                 </span>
               </div>
-              <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200/60">
+              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-300">
                 <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Day Hike KM</span>
                 <span className="text-base sm:text-lg font-black text-emerald-900 block mt-0.5">
                   {currentStats.totalHikeDist?.toLocaleString() || '0'} km
                 </span>
               </div>
-              <div className="p-3 bg-purple-50/60 rounded-2xl border border-purple-200/60">
+              <div className="p-3 bg-purple-50 rounded-2xl border border-purple-300">
                 <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block">Trek KM</span>
                 <span className="text-base sm:text-lg font-black text-purple-900 block mt-0.5">
                   {currentStats.totalTrekDist?.toLocaleString() || '0'} km
@@ -574,19 +574,19 @@ export const LeaderboardScreen: React.FC = () => {
                       <stop offset="95%" stopColor="#4527A0" stopOpacity={0.02}/>
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="event_no" tick={{ fontSize: 10, fill: '#8B8680' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: '#8B8680' }} tickLine={false} tickFormatter={(val) => `${Math.round(val / 1000)}k`} />
+                  <XAxis dataKey="event_no" tick={{ fontSize: 10, fill: '#57534E' }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#57534E' }} tickLine={false} tickFormatter={(val) => `${Math.round(val / 1000)}k`} />
                   <Tooltip
                     cursor={{ stroke: '#1B5E20', strokeWidth: 1.5, strokeDasharray: '3 3' }}
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const pt = payload[0].payload;
                         return (
-                          <div className="bg-white/95 backdrop-blur-xs p-2 sm:p-2.5 rounded-xl shadow-lg border border-[#E5E1DB] text-[10px] sm:text-[11px] space-y-0.5 sm:space-y-1 pointer-events-none max-w-[180px] sm:max-w-none">
-                            <strong className="block text-[#1F1F1F] font-black truncate">{pt.title || `Event #${pt.event_no}`}</strong>
-                            <span className="text-[9px] sm:text-[10px] text-[#8B8680] block">{pt.date}</span>
-                            <div className="text-emerald-700 font-bold">Total: {pt.total_km?.toLocaleString()} km</div>
-                            <div className="text-stone-500 text-[9px] sm:text-[10px]">Hike: {pt.hike_km?.toLocaleString()}k • Trek: {pt.trek_km?.toLocaleString()}k</div>
+                          <div className="bg-white p-2.5 sm:p-3 rounded-xl shadow-xl border border-stone-300 text-[10px] sm:text-[11px] space-y-1 pointer-events-none max-w-[180px] sm:max-w-none">
+                            <strong className="block text-stone-900 font-black truncate">{pt.title || `Event #${pt.event_no}`}</strong>
+                            <span className="text-[9px] sm:text-[10px] text-stone-500 block font-medium">{pt.date}</span>
+                            <div className="text-emerald-800 font-bold">Total: {pt.total_km?.toLocaleString()} km</div>
+                            <div className="text-stone-600 text-[9px] sm:text-[10px]">Hike: {pt.hike_km?.toLocaleString()}k • Trek: {pt.trek_km?.toLocaleString()}k</div>
                           </div>
                         );
                       }
@@ -614,14 +614,14 @@ export const LeaderboardScreen: React.FC = () => {
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-xs text-[#8B8680]">
+              <div className="h-full flex items-center justify-center text-xs text-stone-500 font-medium">
                 Growth curve updates with completed treks
               </div>
             )}
           </div>
 
           {/* Active Event Inspection Strip (Docked under chart so mobile chart view is never disrupted) */}
-          <div className="bg-[#FAF8F5] border border-[#EFEAE4] rounded-2xl p-3 sm:p-3.5 transition-all">
+          <div className="bg-stone-50 border border-stone-200 rounded-2xl p-3 sm:p-3.5 transition-all">
             {activeJourneyPoint ? (
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2.5">
@@ -630,32 +630,32 @@ export const LeaderboardScreen: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-black text-[#1F1F1F]">
+                      <span className="text-xs font-black text-stone-900">
                         {activeJourneyPoint.title || `Event #${activeJourneyPoint.event_no}`}
                       </span>
                       {activeJourneyPoint.date && (
-                        <span className="text-[10px] font-bold text-[#8B8680] bg-white px-2 py-0.5 rounded-md border border-[#E5E1DB]">
+                        <span className="text-[10px] font-bold text-stone-600 bg-white px-2 py-0.5 rounded-md border border-stone-300">
                           {activeJourneyPoint.date}
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-[#6A645D] font-medium mt-0.5">
+                    <p className="text-[11px] text-stone-600 font-medium mt-0.5">
                       Day Hike: <strong className="text-emerald-800">{activeJourneyPoint.hike_km?.toLocaleString() || 0} km</strong> • Multi-day Trek: <strong className="text-purple-800">{activeJourneyPoint.trek_km?.toLocaleString() || 0} km</strong>
                     </p>
                   </div>
                 </div>
-                <div className="text-left sm:text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-[#EFEAE4]">
-                  <span className="text-[9px] uppercase font-bold text-[#8B8680] block tracking-wider">Cumulative Total</span>
+                <div className="text-left sm:text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-stone-200">
+                  <span className="text-[9px] uppercase font-bold text-stone-500 block tracking-wider">Cumulative Total</span>
                   <span className="text-sm sm:text-base font-black text-[#1B5E20]">
                     {activeJourneyPoint.total_km?.toLocaleString()} km
                   </span>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between text-xs text-[#8B8680] py-0.5">
+              <div className="flex items-center justify-between text-xs text-stone-600 py-0.5">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#E08828] shrink-0" />
-                  <span className="font-semibold text-stone-600 text-[11px] sm:text-xs">
+                  <span className="font-semibold text-stone-700 text-[11px] sm:text-xs">
                     Tap or scrub across the curve to inspect any milestone
                   </span>
                 </div>
@@ -670,16 +670,16 @@ export const LeaderboardScreen: React.FC = () => {
 
           {/* Milestones Ribbon */}
           {data.milestones && data.milestones.length > 0 && (
-            <div className="pt-3 border-t border-[#F0EBE5]">
-              <span className="text-[10px] font-black uppercase text-[#8B8680] tracking-wider block mb-2">
+            <div className="pt-3 border-t border-stone-200">
+              <span className="text-[10px] font-black uppercase text-stone-600 tracking-wider block mb-2">
                 Milestones Unlocked Along The Journey
               </span>
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                 {data.milestones.map((m, idx) => (
-                  <div key={idx} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
+                  <div key={idx} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-[11px] font-bold">
                     <Trophy className="w-3.5 h-3.5 text-amber-600" />
                     <span>{m.km.toLocaleString()} km</span>
-                    <span className="text-[10px] text-amber-700/80 font-medium">({m.trek})</span>
+                    <span className="text-[10px] text-amber-800 font-medium">({m.trek})</span>
                   </div>
                 ))}
               </div>
@@ -721,26 +721,32 @@ export const LeaderboardScreen: React.FC = () => {
 
       {/* Clubs & Milestones Showcase */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-4 bg-gradient-to-br from-purple-50/95 to-purple-100/80 backdrop-blur-md rounded-2xl border border-purple-200 text-center shadow-xs">
-          <Crown className="w-6 h-6 text-purple-600 mx-auto mb-1" />
-          <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider">500KM Ultra Club</h4>
-          <p className="text-[11px] text-purple-700 font-medium mt-1">
+        <div className="p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-purple-200 text-center shadow-xs shadow-purple-900/5">
+          <div className="w-9 h-9 mx-auto mb-2 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700">
+            <Crown className="w-5 h-5" />
+          </div>
+          <h4 className="text-xs font-black text-purple-950 uppercase tracking-wider">500KM Ultra Club</h4>
+          <p className="text-[11px] text-purple-800 font-bold mt-1">
             {data?.hikers ? data.hikers.filter((h) => h.d >= 500).length : 0} Legends Registered
           </p>
         </div>
 
-        <div className="p-4 bg-gradient-to-br from-blue-50/95 to-blue-100/80 backdrop-blur-md rounded-2xl border border-blue-200 text-center shadow-xs">
-          <Gem className="w-6 h-6 text-blue-600 mx-auto mb-1" />
-          <h4 className="text-xs font-black text-blue-900 uppercase tracking-wider">200KM Summit Club</h4>
-          <p className="text-[11px] text-blue-700 font-medium mt-1">
+        <div className="p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-blue-200 text-center shadow-xs shadow-blue-900/5">
+          <div className="w-9 h-9 mx-auto mb-2 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700">
+            <Gem className="w-5 h-5" />
+          </div>
+          <h4 className="text-xs font-black text-blue-950 uppercase tracking-wider">200KM Summit Club</h4>
+          <p className="text-[11px] text-blue-800 font-bold mt-1">
             {data?.hikers ? data.hikers.filter((h) => h.d >= 200 && h.d < 500).length : 0} Elite Trekkers
           </p>
         </div>
 
-        <div className="p-4 bg-gradient-to-br from-emerald-50/95 to-emerald-100/80 backdrop-blur-md rounded-2xl border border-emerald-200 text-center shadow-xs">
-          <Sparkles className="w-6 h-6 text-emerald-600 mx-auto mb-1" />
-          <h4 className="text-xs font-black text-emerald-900 uppercase tracking-wider">100KM Century Club</h4>
-          <p className="text-[11px] text-emerald-700 font-medium mt-1">
+        <div className="p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-emerald-200 text-center shadow-xs shadow-emerald-900/5">
+          <div className="w-9 h-9 mx-auto mb-2 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wider">100KM Century Club</h4>
+          <p className="text-[11px] text-emerald-800 font-bold mt-1">
             {data?.hikers ? data.hikers.filter((h) => h.d >= 100 && h.d < 200).length : 0} Century Walkers
           </p>
         </div>

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 
 interface Himalayan3DBackgroundProps {
   opacity?: number;
+  mode?: 'contained' | 'fullscreen' | string;
 }
 
 export const Himalayan3DBackground: React.FC<Himalayan3DBackgroundProps> = ({ opacity = 0.85 }) => {
