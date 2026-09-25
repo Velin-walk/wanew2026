@@ -1082,12 +1082,16 @@ function MainApp() {
           />
         )}
 
-        {/* Info Pages Modal (Payment, Tips, Safety, Private Trek, Contact) */}
+        {/* Info Pages Modal (Payment, Tips, Safety, Reviews, Private Trek, Contact) */}
         {Boolean(infoModalPage) && (
           <InfoPagesModal
             isOpen={Boolean(infoModalPage)}
             onClose={() => setInfoModalPage(null)}
             initialPage={infoModalPage || 'payment'}
+            onNavigateToBookings={() => {
+              setInfoModalPage(null);
+              setCurrentTab('bookings');
+            }}
             onSuccessSubmitted={async () => {
               await fetchBookings();
               showToast('Private Trek Request saved to Cloudflare!', 'success');

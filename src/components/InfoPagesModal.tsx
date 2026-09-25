@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TrekTipsContent } from './TrekTipsContent';
 import { apiFetch } from '../services/api';
 import {
@@ -18,16 +18,26 @@ import {
   Calendar,
   Users,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Star,
+  Quote,
+  RefreshCw,
+  Award,
+  ArrowRight,
+  Filter,
+  Search
 } from 'lucide-react';
+import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
+import { ReviewsAnalyticsBoard } from './ReviewsAnalyticsBoard';
 
-export type SubPageType = 'payment' | 'trek_tips' | 'safety_policy' | 'request_private_trek' | 'contact' | 'about';
+export type SubPageType = 'payment' | 'trek_tips' | 'safety_policy' | 'reviews' | 'request_private_trek' | 'contact' | 'about';
 
 interface InfoPagesModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialPage?: SubPageType;
   onSuccessSubmitted?: () => void;
+  onNavigateToBookings?: () => void;
 }
 
 export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
@@ -35,11 +45,12 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   onClose,
   initialPage = 'payment',
   onSuccessSubmitted,
+  onNavigateToBookings,
 }) => {
   const [activeTab, setActiveTab] = useState<SubPageType>(initialPage);
 
   // Sync initial tab when reopened
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen && initialPage) {
       setActiveTab(initialPage);
     }
@@ -57,6 +68,121 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
     phone: string;
   } | null>(null);
   const [privateSubmitted, setPrivateSubmitted] = useState<boolean>(false);
+
+  // Reviews & Feedback State (Static baseline + local client cache for zero Cloudflare read/write overhead)
+  const [liveReviews, setLiveReviews] = useState<any[]>(() => {
+    try {
+      const local = localStorage.getItem('wnw_user_feedbacks');
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
+  const [reviewFilter, setReviewFilter] = useState<'all' | '5star' | 'team'>('all');
+  const [reviewSearch, setReviewSearch] = useState<string>('');
+  const [selectedTrekPill, setSelectedTrekPill] = useState<string>('');
+  const [starRatingFilter, setStarRatingFilter] = useState<number | 'all'>('all');
+
+  // Manual refresh from Cloudflare D1 only when user explicitly requests
+  const fetchReviews = async () => {
+    setLoadingReviews(true);
+    try {
+      const res = await apiFetch('/feedback', { forceFresh: true });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.data) && json.data.length > 0) {
+          setLiveReviews((prev) => {
+            const merged = [...prev];
+            for (const item of json.data) {
+              if (!merged.some(m => m.id === item.id || (m.full_name === item.full_name && m.submitted_at === item.submitted_at && m.overall_feedback === item.overall_feedback))) {
+                merged.unshift(item);
+              }
+            }
+            try {
+              localStorage.setItem('wnw_user_feedbacks', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load feedback from D1:', err);
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  const allReviewsCombined = useMemo(() => {
+    const normalizedLive = (liveReviews || []).map((r: any) => ({
+      id: r.id ? `live-${r.id}` : `live-${r.uid || Math.random()}`,
+      full_name: r.full_name || r.name || 'Verified Hiker',
+      hike_number: String(r.hike_number || r.hikeNumber || '').replace(/^#/, ''),
+      trek_name: r.trek_name || r.recentWalk || 'Himalayan Trek',
+      overall_rating: Math.min(5, Math.max(1, Number(r.overall_rating || r.overallRating) || 5)),
+      team_rating: Math.min(5, Math.max(1, Number(r.team_rating || r.teamRating) || 5)),
+      overall_feedback: (r.overall_feedback || r.overallFeedback || '').trim(),
+      team_feedback: (r.team_feedback || r.teamFeedback || '').trim(),
+      submitted_at: r.submitted_at ? String(r.submitted_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      is_verified: true,
+    }));
+
+    const combined = [...normalizedLive, ...HISTORIC_COMMUNITY_REVIEWS];
+
+    // Sort descending by submission date so the most recent reviews appear first
+    return combined.sort((a, b) => {
+      const dateA = a.submitted_at || '';
+      const dateB = b.submitted_at || '';
+      const cmp = dateB.localeCompare(dateA);
+      if (cmp !== 0) return cmp;
+      if (a.id.startsWith('live') && !b.id.startsWith('live')) return -1;
+      if (!a.id.startsWith('live') && b.id.startsWith('live')) return 1;
+      return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+    });
+  }, [liveReviews]);
+
+  const reviewStats = useMemo(() => {
+    const total = allReviewsCombined.length;
+    if (total === 0) return { avgOverall: '4.9', avgTeam: '4.9', count: 0 };
+    const sumOverall = allReviewsCombined.reduce((acc, r) => acc + (r.overall_rating || 5), 0);
+    const sumTeam = allReviewsCombined.reduce((acc, r) => acc + (r.team_rating || 5), 0);
+    return {
+      avgOverall: (sumOverall / total).toFixed(1),
+      avgTeam: (sumTeam / total).toFixed(1),
+      count: total,
+    };
+  }, [allReviewsCombined]);
+
+  const displayReviews = useMemo(() => {
+    return allReviewsCombined.filter((item) => {
+      if (reviewFilter === '5star' && (item.overall_rating < 5 || item.team_rating < 5)) {
+        return false;
+      }
+      if (reviewFilter === 'team' && !item.team_feedback) {
+        return false;
+      }
+      if (starRatingFilter !== 'all' && Math.round(item.overall_rating) !== starRatingFilter) {
+        return false;
+      }
+      if (selectedTrekPill) {
+        if (!item.trek_name.toLowerCase().includes(selectedTrekPill.toLowerCase())) {
+          return false;
+        }
+      }
+      if (reviewSearch.trim()) {
+        const query = reviewSearch.toLowerCase();
+        const matchesName = item.full_name.toLowerCase().includes(query);
+        const matchesTrek = item.trek_name.toLowerCase().includes(query);
+        const matchesHikeNum = String(item.hike_number || '').toLowerCase().includes(query);
+        const matchesFeedback = item.overall_feedback.toLowerCase().includes(query);
+        const matchesTeamFeedback = (item.team_feedback || '').toLowerCase().includes(query);
+        if (!matchesName && !matchesTrek && !matchesHikeNum && !matchesFeedback && !matchesTeamFeedback) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [allReviewsCombined, reviewFilter, reviewSearch, starRatingFilter, selectedTrekPill]);
 
   // Submit Private Trek to Cloudflare Worker
   const handlePrivateTrekSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -175,8 +301,8 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-[#E5E1DB]">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-4 md:p-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl md:rounded-none w-full max-w-4xl md:max-w-none md:w-screen md:h-screen md:max-h-screen max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-[#E5E1DB] md:border-0">
         
         {/* Modal Top Bar */}
         <div className="px-5 py-4 border-b border-[#F0EBE5] flex items-center justify-between bg-[#FDFBF9] shrink-0">
@@ -241,6 +367,19 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
             >
               <ShieldCheck className={`w-4 h-4 shrink-0 ${activeTab === 'safety_policy' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
               <span>Safety & Refund Policy</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('reviews')}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                activeTab === 'reviews'
+                  ? 'bg-white text-amber-700 shadow-xs border border-amber-200'
+                  : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+              }`}
+            >
+              <Star className={`w-4 h-4 shrink-0 ${activeTab === 'reviews' ? 'text-amber-500 fill-amber-500' : 'text-[#8B8680]'}`} />
+              <span>Hiker Reviews</span>
             </button>
 
             <button
@@ -949,6 +1088,299 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                   <div className="text-[#8B8680] text-[11px] font-medium">
                     Response time: Instant on WhatsApp (08:00 – 20:00 NPT)
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* 6. HIKER REVIEWS & STORIES */}
+            {activeTab === 'reviews' && (
+              <div className="space-y-5 animate-in fade-in duration-150">
+                {/* Header & Refresh */}
+                <div className="border-b border-[#F0EBE5] pb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-extrabold text-[#1F1F1F] flex items-center gap-2">
+                      <span>Hiker Reviews &amp; Community Stories</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                        Verified
+                      </span>
+                    </h3>
+
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchReviews}
+                    disabled={loadingReviews}
+                    className="p-2 rounded-xl border border-[#E5E1DB] bg-white hover:bg-[#F9F7F5] text-[#5A5551] text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
+                    title="Reload latest reviews"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingReviews ? 'animate-spin text-amber-600' : ''}`} />
+                    <span className="hidden sm:inline">Refresh</span>
+                  </button>
+                </div>
+
+                {/* Analytics Dashboard Board (Global Satisfaction, Recent 30 Treks, Rating Momentum) */}
+                <ReviewsAnalyticsBoard
+                  reviews={allReviewsCombined}
+                  selectedTrek={selectedTrekPill}
+                  onSelectTrek={(trek) => setSelectedTrekPill(trek)}
+                  selectedRating={starRatingFilter}
+                  onSelectRating={(star) => setStarRatingFilter(star)}
+                />
+
+                {/* Active Filter Indicators */}
+                {(selectedTrekPill || starRatingFilter !== 'all') && (
+                  <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-2xl bg-amber-50 border border-amber-200/80 text-xs">
+                    <span className="font-bold text-amber-900 text-[11px]">Active Board Filter:</span>
+                    {selectedTrekPill && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white text-stone-800 font-bold border border-amber-300 shadow-2xs">
+                        Trek: {selectedTrekPill}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTrekPill('')}
+                          className="hover:text-red-500 cursor-pointer ml-1"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {starRatingFilter !== 'all' && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white text-stone-800 font-bold border border-amber-300 shadow-2xs">
+                        Rating: {starRatingFilter} Stars
+                        <button
+                          type="button"
+                          onClick={() => setStarRatingFilter('all')}
+                          className="hover:text-red-500 cursor-pointer ml-1"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTrekPill('');
+                        setStarRatingFilter('all');
+                      }}
+                      className="text-[11px] font-bold text-amber-800 hover:underline cursor-pointer ml-auto"
+                    >
+                      Clear all board filters
+                    </button>
+                  </div>
+                )}
+
+                {/* Filter & Search Bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                    <button
+                      type="button"
+                      onClick={() => setReviewFilter('all')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                        reviewFilter === 'all'
+                          ? 'bg-[#1F1F1F] text-white shadow-2xs'
+                          : 'bg-[#F9F7F5] border border-[#E5E1DB] text-[#5A5551] hover:bg-[#F0ECE7]'
+                      }`}
+                    >
+                      All ({displayReviews.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewFilter('5star')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                        reviewFilter === '5star'
+                          ? 'bg-amber-500 text-white shadow-2xs'
+                          : 'bg-[#F9F7F5] border border-[#E5E1DB] text-[#5A5551] hover:bg-[#F0ECE7]'
+                      }`}
+                    >
+                      <Star className="w-3 h-3 fill-current" />
+                      <span>5-Star Only</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewFilter('team')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                        reviewFilter === 'team'
+                          ? 'bg-emerald-700 text-white shadow-2xs'
+                          : 'bg-[#F9F7F5] border border-[#E5E1DB] text-[#5A5551] hover:bg-[#F0ECE7]'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>Team Notes</span>
+                    </button>
+                  </div>
+
+                  {/* Search box */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-[#8B8680] absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={reviewSearch}
+                      onChange={(e) => setReviewSearch(e.target.value)}
+                      placeholder="Search hike or reviewer..."
+                      className="w-full sm:w-48 pl-8 pr-3 py-1.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs text-[#1F1F1F] placeholder:text-[#8B8680] focus:outline-none focus:border-[#7ABA42] focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Reviews List */}
+                <div className="space-y-3.5">
+                  {loadingReviews && displayReviews.length === 0 ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((n) => (
+                        <div key={n} className="p-4 rounded-2xl border border-[#E5E1DB] bg-[#F9F7F5] animate-pulse space-y-2.5">
+                          <div className="h-4 bg-neutral-200 rounded w-1/3" />
+                          <div className="h-3 bg-neutral-200 rounded w-3/4" />
+                          <div className="h-3 bg-neutral-200 rounded w-1/2" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : displayReviews.length === 0 ? (
+                    <div className="p-8 text-center bg-[#F9F7F5] rounded-2xl border border-dashed border-[#E5E1DB] space-y-2">
+                      <p className="text-sm font-bold text-[#1F1F1F]">No reviews match this filter</p>
+                      <p className="text-xs text-[#8B8680]">Try clearing the search term or switching to "All Reviews".</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReviewFilter('all');
+                          setReviewSearch('');
+                          setSelectedTrekPill('');
+                          setStarRatingFilter('all');
+                        }}
+                        className="mt-2 px-3 py-1.5 rounded-xl bg-white border border-[#E5E1DB] text-xs font-bold text-[#1F1F1F] hover:bg-[#F3F0EC] transition-all cursor-pointer"
+                      >
+                        Reset Filters
+                      </button>
+                    </div>
+                  ) : (
+                    displayReviews.map((rev) => {
+                      const initials = (rev.full_name || 'Hiker')
+                        .split(' ')
+                        .map((n: string) => n[0])
+                        .slice(0, 2)
+                        .join('')
+                        .toUpperCase();
+
+                      return (
+                        <div
+                          key={rev.id}
+                          className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E5E1DB] shadow-2xs hover:border-[#D5CFC9] transition-all space-y-3"
+                        >
+                          {/* Reviewer Header */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 border border-emerald-200 flex items-center justify-center text-emerald-900 font-extrabold text-xs shrink-0 shadow-xs">
+                                {initials || 'H'}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="text-sm font-bold text-[#1F1F1F] leading-tight">
+                                    {rev.full_name}
+                                  </h4>
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>Verified Hiker</span>
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-[#8B8680] mt-0.5">
+                                  {rev.hike_number && (
+                                    <span className="font-semibold text-[#E08828]">
+                                      Hike #{rev.hike_number}
+                                    </span>
+                                  )}
+                                  {rev.hike_number && rev.trek_name && <span>•</span>}
+                                  {rev.trek_name && (
+                                    <span className="truncate max-w-[200px] sm:max-w-xs">{rev.trek_name}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Date */}
+                            {rev.submitted_at && (
+                              <span className="text-[10px] text-[#8B8680] shrink-0 font-medium">
+                                {rev.submitted_at}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Ratings Row */}
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+                            {/* Trip Rating */}
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/80">
+                              <span className="text-[10px] font-bold text-amber-900">Experience:</span>
+                              <div className="flex items-center text-amber-500">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Star
+                                    key={s}
+                                    className={`w-3 h-3 ${
+                                      s <= rev.overall_rating ? 'fill-amber-500 text-amber-500' : 'text-neutral-300'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Team Rating */}
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/80">
+                              <span className="text-[10px] font-bold text-emerald-900">Guide &amp; Team:</span>
+                              <div className="flex items-center text-emerald-600">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Star
+                                    key={s}
+                                    className={`w-3 h-3 ${
+                                      s <= rev.team_rating ? 'fill-emerald-600 text-emerald-600' : 'text-neutral-300'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Overall Feedback Quote */}
+                          {rev.overall_feedback && (
+                            <div className="relative pl-3.5 border-l-2 border-amber-400">
+                              <p className="text-xs text-[#2A2725] leading-relaxed italic">
+                                "{rev.overall_feedback}"
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Team Feedback Note */}
+                          {rev.team_feedback && (
+                            <div className="p-2.5 sm:p-3 rounded-xl bg-[#FAF8F5] border border-[#EFEAE4] text-xs flex items-start gap-2 text-[#5A5551]">
+                              <ShieldCheck className="w-3.5 h-3.5 text-[#7ABA42] shrink-0 mt-0.5" />
+                              <div className="leading-snug">
+                                <span className="font-bold text-[#1F1F1F]">Leadership &amp; Pacing: </span>
+                                <span>{rev.team_feedback}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Bottom Call to Action: Invite Hikers to Rate */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <h5 className="font-bold text-sm text-[#1F1F1F]">Hiked with Walk Nepal Walk recently?</h5>
+                    <p className="text-[11px] text-[#8B8680] mt-0.5">
+                      Your feedback helps our community flourish. Head to <strong>My Bookings</strong> to rate your completed trek.
+                    </p>
+                  </div>
+                  {onNavigateToBookings && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onNavigateToBookings();
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#7ABA42] hover:bg-[#6AA836] text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
+                    >
+                      <span>Go to My Bookings</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             )}

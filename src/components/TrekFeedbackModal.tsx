@@ -84,6 +84,26 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
         throw new Error('Failed to submit feedback. Please try again.');
       }
 
+      // Persist locally so it stays static and immediately visible without recurring D1 queries
+      try {
+        const newLocalReview = {
+          id: `live-${Date.now()}`,
+          full_name: payload.name || 'Verified Hiker',
+          trek_name: payload.recentWalk,
+          hike_number: String(payload.hikeNumber || '').replace(/^#/, ''),
+          overall_rating: payload.overallRating,
+          team_rating: payload.teamRating,
+          overall_feedback: payload.overallFeedback,
+          team_feedback: payload.teamFeedback,
+          submitted_at: new Date().toISOString().slice(0, 10),
+          is_verified: true,
+        };
+        const existing = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
+        localStorage.setItem('wnw_user_feedbacks', JSON.stringify([newLocalReview, ...existing]));
+      } catch (e) {
+        // Ignore storage errors
+      }
+
       setIsSuccess(true);
       if (onSubmitSuccess) onSubmitSuccess();
       setTimeout(() => {

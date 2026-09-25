@@ -637,9 +637,9 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
 
           {/* Filter, Sort, and View Mode Bar inside Hero Image */}
-          <div className="bg-white/75 backdrop-blur-md border border-white/60 rounded-2xl p-2.5 sm:p-3 shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-start lg:justify-end gap-2.5">
+          <div className="bg-white/75 backdrop-blur-md border border-white/60 rounded-2xl p-2.5 sm:p-3 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-start gap-2.5 max-w-full md:max-w-[50%] mr-auto">
             {/* Search */}
-            <div className="relative w-full lg:w-72">
+            <div className="relative w-full md:w-64">
               <Search className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -659,7 +659,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             </div>
 
             {/* View Mode Switch and Sort */}
-            <div className="flex flex-wrap items-center justify-start lg:justify-end gap-1.5 w-full lg:w-auto">
+            <div className="flex flex-wrap items-center justify-start gap-1.5 w-full md:w-auto">
               {/* View Mode Toggle */}
               <div className="flex items-center bg-stone-100 border border-stone-300 p-0.5 rounded-lg">
                 <button
