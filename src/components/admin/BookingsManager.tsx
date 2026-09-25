@@ -25,7 +25,8 @@ import {
   FileText,
   Clock,
   Compass,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
 } from 'lucide-react';
 import { Trek } from '../../types';
 
@@ -59,6 +60,8 @@ export interface AdminRegistration {
   paid_amount?: number;
   due_amount?: number;
   admin_notes?: string;
+  payment_voucher_url?: string;
+  payment_voucher_submitted_at?: string;
   created_at?: string;
   user_email?: string;
   email_address?: string;
@@ -87,6 +90,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [bookingTypeFilter, setBookingTypeFilter] = useState<'all' | 'public' | 'private'>('all');
   const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(null);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
+  const [viewingAdminVoucherUrl, setViewingAdminVoucherUrl] = useState<string | null>(null);
+  const [viewingAdminVoucherReg, setViewingAdminVoucherReg] = useState<AdminRegistration | null>(null);
 
   // Filter for upcoming events + last 2 months hikes in Bookings & Roster
   const upcomingTreks = useMemo(() => {
@@ -740,6 +745,23 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                               </a>
                             </div>
 
+                            {/* View Payment Voucher for Admins */}
+                            {reg.payment_voucher_url && (
+                              <div className="pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setViewingAdminVoucherUrl(reg.payment_voucher_url || null);
+                                    setViewingAdminVoucherReg(reg);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-all cursor-pointer shadow-3xs"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-amber-700" />
+                                  <span>View Voucher 📄</span>
+                                </button>
+                              </div>
+                            )}
+
                             {/* Toggle Details for Private Inquiries or Custom Remarks */}
                             {(isPrivate || reg.person_remarks) && (
                               <div className="pt-0.5">
@@ -1065,6 +1087,86 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
               >
                 Permanently Delete ({selectedIds.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Payment Voucher Inspection Lightbox Modal */}
+      {viewingAdminVoucherUrl && (
+        <div
+          className="fixed inset-0 z-[2200] bg-black/85 p-4 flex flex-col items-center justify-center animate-in fade-in duration-200"
+          onClick={() => {
+            setViewingAdminVoucherUrl(null);
+            setViewingAdminVoucherReg(null);
+          }}
+        >
+          <div
+            className="relative max-w-2xl w-full max-h-[90vh] bg-stone-900 rounded-2xl overflow-hidden flex flex-col p-4 border border-white/10 shadow-2xl text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 text-xs font-bold">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-amber-400" />
+                <span>Payment Voucher — {viewingAdminVoucherReg?.full_name || 'Participant Receipt'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewingAdminVoucherUrl(null);
+                  setViewingAdminVoucherReg(null);
+                }}
+                className="p-1 text-stone-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {viewingAdminVoucherReg && (
+              <div className="p-3 bg-stone-800/80 my-2 rounded-xl text-xs space-y-1 text-stone-200">
+                <div className="flex justify-between font-bold">
+                  <span>Hike: #{viewingAdminVoucherReg.hike_number || '?'} - {viewingAdminVoucherReg.trek_name || 'Trek'}</span>
+                  <span className="text-amber-400">Date: {viewingAdminVoucherReg.trek_date || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-stone-400">
+                  <span>Phone: {viewingAdminVoucherReg.phone} ({viewingAdminVoucherReg.email})</span>
+                  <span>
+                    Submitted:{' '}
+                    {viewingAdminVoucherReg.payment_voucher_submitted_at
+                      ? new Date(viewingAdminVoucherReg.payment_voucher_submitted_at).toLocaleString()
+                      : 'Recently'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-auto flex items-center justify-center p-2 bg-black/40 rounded-xl">
+              <img
+                src={viewingAdminVoucherUrl}
+                alt="Payment Voucher Receipt"
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+              />
+            </div>
+
+            <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 text-xs">
+              <a
+                href={viewingAdminVoucherUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-xs font-bold transition-all"
+              >
+                Open Full Size ↗
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewingAdminVoucherUrl(null);
+                  setViewingAdminVoucherReg(null);
+                }}
+                className="px-4 py-1.5 bg-[#7ABA42] hover:bg-[#689f38] text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>

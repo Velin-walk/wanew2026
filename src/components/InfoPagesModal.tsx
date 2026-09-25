@@ -25,7 +25,8 @@ import {
   Award,
   ArrowRight,
   Filter,
-  Search
+  Search,
+  UploadCloud,
 } from 'lucide-react';
 import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
 import { ReviewsAnalyticsBoard } from './ReviewsAnalyticsBoard';
@@ -38,6 +39,7 @@ interface InfoPagesModalProps {
   initialPage?: SubPageType;
   onSuccessSubmitted?: () => void;
   onNavigateToBookings?: () => void;
+  onOpenVoucherUpload?: () => void;
 }
 
 export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
@@ -46,6 +48,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   initialPage = 'payment',
   onSuccessSubmitted,
   onNavigateToBookings,
+  onOpenVoucherUpload,
 }) => {
   const [activeTab, setActiveTab] = useState<SubPageType>(initialPage);
 
@@ -420,7 +423,35 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                   <p className="text-xs text-[#8B8680] mt-0.5">Secure, community-backed transparent payment guidelines for all Himalayan treks.</p>
                 </div>
 
-                <img src="/paymentqr.png" alt="Payment QR Codes" className="w-full h-auto rounded-2xl" />
+                <div className="flex justify-center bg-[#FAF8F5] p-3 rounded-2xl border border-[#E5E1DB]">
+                  <img src="/paymentqr.png" alt="Payment QR Codes" className="max-w-sm w-full h-auto rounded-xl object-contain shadow-2xs" />
+                </div>
+
+                {/* Forward Voucher Button at the end of Payment & Pricing page */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF8F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xs">
+                  <div>
+                    <h4 className="font-extrabold text-sm text-[#1F1F1F] flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-[#E08828]" />
+                      Already Made A Payment Transfer?
+                    </h4>
+                    <p className="text-[11px] text-[#8B8680] mt-0.5 leading-relaxed">
+                      Forward your payment receipt screenshot or transaction voucher so our coordinators can verify and update your booking roster immediately.
+                    </p>
+                  </div>
+                  {onOpenVoucherUpload && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenVoucherUpload();
+                      }}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-[#E08828] hover:bg-[#cc781f] text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
+                    >
+                      <UploadCloud className="w-4 h-4" />
+                      <span>Forward Voucher</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

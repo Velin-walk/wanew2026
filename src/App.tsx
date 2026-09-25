@@ -11,6 +11,7 @@ import { InviteModal } from './components/InviteModal';
 import { ItineraryModal } from './components/ItineraryModal';
 import { TrekFeedbackModal } from './components/TrekFeedbackModal';
 import { InfoPagesModal, SubPageType } from './components/InfoPagesModal';
+import { VoucherModal } from './components/VoucherModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { FALLBACK_TREKS } from './data/fallbackTreks';
@@ -73,6 +74,8 @@ function MainApp() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showMapMinerContribute, setShowMapMinerContribute] = useState(false);
   const [infoModalPage, setInfoModalPage] = useState<SubPageType | null>(null);
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [voucherTargetBooking, setVoucherTargetBooking] = useState<Booking | null>(null);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -936,6 +939,11 @@ function MainApp() {
                   setItineraryModalType('itinerary');
                 }
               }}
+              onOpenPaymentPage={() => setInfoModalPage('payment')}
+              onUploadVoucher={(booking) => {
+                setVoucherTargetBooking(booking);
+                setShowVoucherModal(true);
+              }}
             />
           )}
 
@@ -1095,12 +1103,32 @@ function MainApp() {
               setInfoModalPage(null);
               setCurrentTab('bookings');
             }}
+            onOpenVoucherUpload={() => {
+              setVoucherTargetBooking(bookings[0] || null);
+              setShowVoucherModal(true);
+            }}
             onSuccessSubmitted={async () => {
               await fetchBookings();
               showToast('Private Trek Request saved to Cloudflare!', 'success');
             }}
           />
         )}
+
+        {/* Payment Voucher Upload Modal */}
+        <VoucherModal
+          isOpen={showVoucherModal}
+          onClose={() => {
+            setShowVoucherModal(false);
+            setVoucherTargetBooking(null);
+          }}
+          booking={voucherTargetBooking}
+          allBookings={bookings}
+          userEmail={activeUserEmail}
+          onVoucherUploaded={async () => {
+            await refreshData({ force: true });
+            showToast('Payment voucher forwarded successfully!', 'success');
+          }}
+        />
 
         {/* Firebase Authentication Modal */}
         <AuthModal />

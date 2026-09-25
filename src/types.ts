@@ -106,6 +106,8 @@ export interface Booking {
   due_amount?: number;
   pickup_point?: string;
   admin_notes?: string;
+  payment_voucher_url?: string;
+  payment_voucher_submitted_at?: string;
 }
 
 export interface Invite {

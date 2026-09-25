@@ -22,6 +22,10 @@ import {
   Award,
   Footprints,
   ArrowRight,
+  CreditCard,
+  UploadCloud,
+  Eye,
+  X,
 } from 'lucide-react';
 
 interface MyBookingsScreenProps {
@@ -33,6 +37,8 @@ interface MyBookingsScreenProps {
   onLeaveFeedback?: (booking: Booking) => void;
   onViewItinerary?: (booking: Booking) => void;
   onViewMyHikes?: () => void;
+  onOpenPaymentPage?: () => void;
+  onUploadVoucher?: (booking: Booking) => void;
 }
 
 export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
@@ -44,10 +50,13 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   onLeaveFeedback,
   onViewItinerary,
   onViewMyHikes,
+  onOpenPaymentPage,
+  onUploadVoucher,
 }) => {
   const [expandedId, setExpandedId] = useState<number | string | null>(null);
   const [cancelingId, setCancelingId] = useState<number | string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<number | string | null>(null);
+  const [viewingVoucherUrl, setViewingVoucherUrl] = useState<string | null>(null);
 
   // Set of completed hike numbers from historical sheet database
   const completedHikeNumbers = useMemo(() => {
@@ -386,10 +395,43 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                   {/* Actions */}
                   <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 border-t border-[#F0EBE5]">
                     <div className="flex items-center gap-2 flex-wrap">
+                      {onOpenPaymentPage && (
+                        <button
+                          type="button"
+                          onClick={onOpenPaymentPage}
+                          className="min-h-[40px] px-3.5 bg-[#E08828] hover:bg-[#cc781f] text-white font-bold rounded-xl text-xs active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>Pay</span>
+                        </button>
+                      )}
+
+                      {onUploadVoucher && (
+                        <button
+                          type="button"
+                          onClick={() => onUploadVoucher(booking)}
+                          className="min-h-[40px] px-3.5 bg-[#2B6CB0] hover:bg-[#235896] text-white font-bold rounded-xl text-xs active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>Forward Voucher</span>
+                        </button>
+                      )}
+
+                      {booking.payment_voucher_url && (
+                        <button
+                          type="button"
+                          onClick={() => setViewingVoucherUrl(booking.payment_voucher_url || null)}
+                          className="min-h-[40px] px-3 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-xs font-extrabold active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-[#E08828]" />
+                          <span>View My Voucher</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => onShare(booking)}
-                        className="min-h-[40px] px-3 bg-white border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#5A5551] hover:bg-[#F3F1ED] active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all"
+                        className="min-h-[40px] px-3 bg-white border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#5A5551] hover:bg-[#F3F1ED] active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                       >
                         <Share2 className="w-3.5 h-3.5 text-[#E08828]" />
                         <span>Share Booking</span>
@@ -399,7 +441,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                         <button
                           type="button"
                           onClick={() => onLeaveFeedback(booking)}
-                          className="min-h-[40px] px-3 bg-[#7ABA42]/10 hover:bg-[#7ABA42]/20 border border-[#7ABA42]/30 rounded-xl text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all"
+                          className="min-h-[40px] px-3 bg-[#7ABA42]/10 hover:bg-[#7ABA42]/20 border border-[#7ABA42]/30 rounded-xl text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                         >
                           <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                           <span>Rate &amp; Review</span>
@@ -448,6 +490,37 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
           );
         })}
       </div>
+
+      {/* Lightbox Modal for User Viewing Uploaded Voucher */}
+      {viewingVoucherUrl && (
+        <div
+          className="fixed inset-0 z-[2200] bg-black/85 p-4 flex flex-col items-center justify-center animate-in fade-in duration-200"
+          onClick={() => setViewingVoucherUrl(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full max-h-[85vh] bg-stone-900 rounded-2xl overflow-hidden flex flex-col p-3 border border-white/10 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/10 text-white text-xs font-bold">
+              <span>My Uploaded Payment Voucher Receipt</span>
+              <button
+                type="button"
+                onClick={() => setViewingVoucherUrl(null)}
+                className="p-1 text-stone-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto flex items-center justify-center p-2">
+              <img
+                src={viewingVoucherUrl}
+                alt="Uploaded Payment Receipt"
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

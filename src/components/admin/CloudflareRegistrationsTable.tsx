@@ -54,6 +54,7 @@ const D1_COLUMNS: ColumnDef[] = [
   { key: 'due', label: 'due', type: 'TEXT', width: 'w-24' },
   { key: 'paid', label: 'paid', type: 'TEXT', width: 'w-24' },
   { key: 'roster_payment_status', label: 'payment_status', type: 'TEXT', width: 'w-28' },
+  { key: 'payment_voucher_url', label: 'payment_voucher_url', type: 'TEXT', width: 'w-48' },
   { key: 'registration_status', label: 'status', type: 'TEXT', width: 'w-28' },
   { key: 'pickup_point', label: 'pickup_point', type: 'TEXT', width: 'w-36' },
   { key: 'fitness', label: 'fitness', type: 'TEXT', width: 'w-28' },

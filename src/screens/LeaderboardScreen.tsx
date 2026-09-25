@@ -137,28 +137,28 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
         </div>
 
         {/* Time Window Pills & Metric Toggle */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full lg:w-auto">
-            <span className="text-[10px] sm:text-[11px] font-extrabold text-stone-700 shrink-0 flex items-center gap-1 uppercase tracking-wider">
-              <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#E08828]" /> Period:
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5 w-full">
+            <span className="text-[10px] font-extrabold text-stone-700 shrink-0 flex items-center gap-1 uppercase tracking-wider">
+              <Calendar className="w-3 h-3 text-[#E08828]" /> Period:
             </span>
-            <div className="grid grid-cols-5 gap-1 sm:gap-1.5 w-full sm:w-auto">
+            <div className="grid grid-cols-5 gap-1 w-full">
               {(
                 [
-                  { id: 't30', label: '30 Days' },
-                  { id: 't60', label: '60 Days' },
-                  { id: 't90', label: '90 Days' },
-                  { id: 't365', label: '1 Year' },
-                  { id: 'overall', label: 'All Time' },
+                  { id: 't30', label: '30D' },
+                  { id: 't60', label: '60D' },
+                  { id: 't90', label: '90D' },
+                  { id: 't365', label: '1Y' },
+                  { id: 'overall', label: 'All' },
                 ] as const
               ).map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => { setPeriod(t.id); setLimit(20); }}
-                  className={`px-1 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all active:scale-95 cursor-pointer select-none border text-center whitespace-nowrap ${
+                  className={`px-0.5 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 cursor-pointer select-none border text-center whitespace-nowrap ${
                     period === t.id
-                      ? 'bg-stone-900 text-white border-stone-900 shadow-md ring-1 sm:ring-2 ring-stone-900/20'
+                      ? 'bg-stone-900 text-white border-stone-900 shadow-md ring-1 ring-stone-900/20'
                       : 'bg-white text-stone-700 border-stone-300 hover:border-[#E08828] hover:text-[#E08828] hover:bg-amber-50/50 shadow-2xs'
                   }`}
                 >
@@ -168,29 +168,29 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 bg-stone-100 p-1.5 rounded-2xl border border-stone-300 shadow-inner w-full sm:w-auto shrink-0">
+          <div className="grid grid-cols-2 gap-1 bg-stone-100 p-1 rounded-xl border border-stone-300 shadow-inner w-full shrink-0">
             <button
               type="button"
               onClick={() => { setMetric('dist'); setLimit(20); }}
-              className={`py-2 px-4 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95 select-none ${
+              className={`py-1.5 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1 active:scale-95 select-none ${
                 metric === 'dist'
-                  ? 'bg-[#E08828] text-white shadow-md shadow-[#E08828]/30 ring-2 ring-[#E08828]/25'
+                  ? 'bg-[#E08828] text-white shadow-md shadow-[#E08828]/30 ring-1 ring-[#E08828]/25'
                   : 'bg-white hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-300 shadow-2xs'
               }`}
             >
-              <Footprints className="w-4 h-4" />
+              <Footprints className="w-3.5 h-3.5" />
               <span>By KM</span>
             </button>
             <button
               type="button"
               onClick={() => { setMetric('count'); setLimit(20); }}
-              className={`py-2 px-4 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95 select-none ${
+              className={`py-1.5 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1 active:scale-95 select-none ${
                 metric === 'count'
-                  ? 'bg-stone-900 text-white shadow-md shadow-stone-900/30 ring-2 ring-stone-900/25'
+                  ? 'bg-stone-900 text-white shadow-md shadow-stone-900/30 ring-1 ring-stone-900/25'
                   : 'bg-white hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-300 shadow-2xs'
               }`}
             >
-              <Mountain className="w-4 h-4" />
+              <Mountain className="w-3.5 h-3.5" />
               <span>By Trips</span>
             </button>
           </div>
@@ -688,36 +688,38 @@ export const LeaderboardScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Separate Boards for Overall, Hikers, and Trekkers */}
-      <LeaderboardBoardSection
-        category="all"
-        data={data}
-        loading={loading}
-        error={error}
-        setSelectedHiker={setSelectedHiker}
-        maskName={maskName}
-        getKeys={getKeys}
-      />
+      {/* Separate Boards for Overall, Hikers, and Trekkers (Side-by-side grid on desktop) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        <LeaderboardBoardSection
+          category="all"
+          data={data}
+          loading={loading}
+          error={error}
+          setSelectedHiker={setSelectedHiker}
+          maskName={maskName}
+          getKeys={getKeys}
+        />
 
-      <LeaderboardBoardSection
-        category="hikers"
-        data={data}
-        loading={loading}
-        error={error}
-        setSelectedHiker={setSelectedHiker}
-        maskName={maskName}
-        getKeys={getKeys}
-      />
+        <LeaderboardBoardSection
+          category="hikers"
+          data={data}
+          loading={loading}
+          error={error}
+          setSelectedHiker={setSelectedHiker}
+          maskName={maskName}
+          getKeys={getKeys}
+        />
 
-      <LeaderboardBoardSection
-        category="trekkers"
-        data={data}
-        loading={loading}
-        error={error}
-        setSelectedHiker={setSelectedHiker}
-        maskName={maskName}
-        getKeys={getKeys}
-      />
+        <LeaderboardBoardSection
+          category="trekkers"
+          data={data}
+          loading={loading}
+          error={error}
+          setSelectedHiker={setSelectedHiker}
+          maskName={maskName}
+          getKeys={getKeys}
+        />
+      </div>
 
       {/* Clubs & Milestones Showcase */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
