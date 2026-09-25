@@ -744,7 +744,6 @@ function MainApp() {
       ? `Booking recorded for ${trek.name}! (Backup mode)`
       : `Registered for ${trek.name}! See you on the trail!`;
     showToast(toastMsg, 'success');
-    setSelectedTrekForRegister(null);
     // Background refresh
     refreshData({ force: true });
   };
@@ -1032,6 +1031,10 @@ function MainApp() {
             isOpen={Boolean(selectedTrekForRegister)}
             onClose={() => setSelectedTrekForRegister(null)}
             onSubmit={handleRegisterSubmit}
+            onNavigateToPayment={() => {
+              setSelectedTrekForRegister(null);
+              setInfoModalPage('payment');
+            }}
           />
         )}
 

@@ -637,16 +637,16 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
 
           {/* Filter, Sort, and View Mode Bar inside Hero Image */}
-          <div className="bg-white/75 backdrop-blur-md border border-white/60 rounded-2xl p-2.5 sm:p-3 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-start gap-2.5 max-w-full md:max-w-[50%] mr-auto">
+          <div className="bg-white/50 backdrop-blur-md border border-white/50 rounded-2xl p-2.5 sm:p-3 shadow-xl flex flex-col items-start justify-start gap-2 max-w-full md:max-w-[25%] mr-auto">
             {/* Search */}
-            <div className="relative w-full md:w-64">
+            <div className="relative w-full">
               <Search className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by hike #, name, or hiker..."
-                className="w-full pl-8 pr-2.5 py-1.5 bg-stone-100 border border-stone-300 rounded-lg text-[11px] font-semibold text-stone-900 placeholder-stone-500 focus:outline-hidden focus:border-[#7ABA42] focus:bg-white"
+                className="w-full pl-8 pr-2.5 py-1.5 bg-stone-100/90 border border-stone-300 rounded-lg text-[11px] font-semibold text-stone-900 placeholder-stone-500 focus:outline-hidden focus:border-[#7ABA42] focus:bg-white"
               />
               {searchQuery && (
                 <button
@@ -658,51 +658,48 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               )}
             </div>
 
-            {/* View Mode Switch and Sort */}
-            <div className="flex flex-wrap items-center justify-start gap-1.5 w-full md:w-auto">
-              {/* View Mode Toggle */}
-              <div className="flex items-center bg-stone-100 border border-stone-300 p-0.5 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('boxed')}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                    viewMode === 'boxed'
-                      ? 'bg-white text-emerald-800 shadow-2xs border border-stone-300'
-                      : 'text-stone-600 hover:text-stone-900'
-                  }`}
-                  title="Boxed by Hike Albums"
-                >
-                  <LayoutGrid className="w-3 h-3 text-emerald-600" />
-                  <span>Hike Boxes</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('grid')}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                    viewMode === 'grid'
-                      ? 'bg-white text-emerald-800 shadow-2xs border border-stone-300'
-                      : 'text-stone-600 hover:text-stone-900'
-                  }`}
-                  title="All Photos Stream Grid"
-                >
-                  <Grid className="w-3 h-3 text-emerald-600" />
-                  <span>All Photos</span>
-                </button>
-              </div>
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-stone-100/90 border border-stone-300 p-0.5 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setViewMode('boxed')}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                  viewMode === 'boxed'
+                    ? 'bg-white text-emerald-800 shadow-2xs border border-stone-300'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+                title="Boxed by Hike Albums"
+              >
+                <LayoutGrid className="w-3 h-3 text-emerald-600" />
+                <span>Hike Boxes</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-emerald-800 shadow-2xs border border-stone-300'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+                title="All Photos Stream Grid"
+              >
+                <Grid className="w-3 h-3 text-emerald-600" />
+                <span>All Photos</span>
+              </button>
+            </div>
 
-              {/* Sort Dropdown */}
-              <div className="flex items-center gap-1 bg-stone-100 border border-stone-300 px-2 py-1 rounded-lg">
-                <ArrowUpDown className="w-3 h-3 text-stone-600 shrink-0" />
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="bg-transparent text-[10px] font-bold text-stone-900 focus:outline-hidden cursor-pointer"
-                >
-                  <option value="hike_desc">Hike # (High → Low)</option>
-                  <option value="hike_asc">Hike # (Low → High)</option>
-                  <option value="newest">Newest Uploads</option>
-                </select>
-              </div>
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-1 bg-stone-100/90 border border-stone-300 px-2 py-1 rounded-lg">
+              <ArrowUpDown className="w-3 h-3 text-stone-600 shrink-0" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-transparent text-[10px] font-bold text-stone-900 focus:outline-hidden cursor-pointer"
+              >
+                <option value="hike_desc">Hike # (High → Low)</option>
+                <option value="hike_asc">Hike # (Low → High)</option>
+                <option value="newest">Newest Uploads</option>
+              </select>
             </div>
           </div>
         </div>

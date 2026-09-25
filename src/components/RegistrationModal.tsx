@@ -32,6 +32,7 @@ interface RegistrationModalProps {
   onSubmit: (formData: BookingFormData) => Promise<void>;
   userEmail?: string;
   latestBooking?: any;
+  onNavigateToPayment?: () => void;
 }
 
 export const RegistrationModal: React.FC<RegistrationModalProps> = ({
@@ -42,6 +43,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   onSubmit,
   userEmail = '',
   latestBooking,
+  onNavigateToPayment,
 }) => {
   // Helper to accurately parse trek date
   const parseTrekDate = (dateStr?: string): Date | null => {
@@ -125,6 +127,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAutoFilled, setIsAutoFilled] = useState(false);
+  const [submissionProgress, setSubmissionProgress] = useState<number>(0);
+  const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
 
   // Helper to load saved profile data from localStorage or passed props
   const getSavedProfile = () => {
@@ -341,6 +345,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     if (!validateForm()) return;
     setSubmitting(true);
     setError(null);
+    setSubmissionProgress(0);
 
     const payload: BookingFormData = {
       trek_id: selectedTrekId,
@@ -364,6 +369,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       transport_preference: transportPreference,
       suggestions: suggestions.trim(),
     };
+
+    const progressInterval = setInterval(() => {
+      setSubmissionProgress((prev) => {
+        if (prev >= 95) return prev;
+        const inc = Math.floor(Math.random() * 8) + 4;
+        return Math.min(98, prev + inc);
+      });
+    }, 150);
 
     try {
       // Save profile locally so subsequent registrations always prefill smoothly
@@ -399,11 +412,18 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       }
 
       await onSubmit(payload);
-      onClose();
+      clearInterval(progressInterval);
+      setSubmissionProgress(100);
+
+      setTimeout(() => {
+        setIsSubmitted(true);
+        setSubmitting(false);
+      }, 300);
     } catch (err: any) {
-      setError(err?.message || 'Failed to submit registration');
-    } finally {
+      clearInterval(progressInterval);
+      setSubmissionProgress(0);
       setSubmitting(false);
+      setError(err?.message || 'Failed to submit registration');
     }
   };
 
@@ -505,7 +525,84 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 
         {/* Scrollable Form Body */}
         <div className="flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4 space-y-3.5 text-xs text-[#1F1F1F]">
-          {!isReviewMode ? (
+          {submitting ? (
+            /* ===== SUBMISSION PROGRESS VIEW ===== */
+            <div className="py-12 flex flex-col items-center justify-center space-y-6 text-center animate-in fade-in duration-200">
+              <div className="relative flex items-center justify-center">
+                {/* Outer spin track */}
+                <div className="w-20 h-20 rounded-full border-4 border-stone-100" />
+                {/* Active progress border */}
+                <div 
+                  className="absolute w-20 h-20 rounded-full border-4 border-t-[#7ABA42] border-r-transparent border-b-transparent border-l-transparent animate-spin"
+                  style={{ animationDuration: '0.8s' }}
+                />
+                <span className="absolute text-sm font-black font-mono text-[#1F1F1F]">
+                  {submissionProgress}%
+                </span>
+              </div>
+              
+              <div className="space-y-1.5 max-w-sm">
+                <h4 className="text-sm font-bold text-[#1F1F1F]">
+                  Submitting Registration...
+                </h4>
+                <div className="w-48 h-1.5 bg-stone-100 rounded-full overflow-hidden mx-auto">
+                  <div 
+                    className="h-full bg-[#7ABA42] transition-all duration-150 ease-out"
+                    style={{ width: `${submissionProgress}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-[#78716C] animate-pulse">
+                  {submissionProgress < 40 
+                    ? 'Packaging details...' 
+                    : submissionProgress < 80 
+                    ? 'Creating secure reservation...' 
+                    : 'Finalizing coordination links...'}
+                </p>
+              </div>
+            </div>
+          ) : isSubmitted ? (
+            /* ===== SUBMISSION COMPLETE SUCCESS SCREEN ===== */
+            <div className="py-10 flex flex-col items-center justify-center space-y-6 text-center animate-in zoom-in-95 duration-300">
+              <div className="w-16 h-16 bg-[#EEF8E7] rounded-full flex items-center justify-center text-[#7ABA42] shadow-2xs border border-[#D0EBC4]">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+              
+              <div className="space-y-2 max-w-sm">
+                <h3 className="text-lg font-black text-[#1F1F1F] tracking-tight">
+                  Registration Confirmed!
+                </h3>
+                <p className="text-xs text-[#5A5551] leading-relaxed">
+                  Hi <strong className="text-[#1F1F1F]">{fullName}</strong>, your spot on the <strong className="text-[#1F1F1F]">{activeTrek?.name}</strong> expedition has been secured successfully.
+                </p>
+
+              </div>
+
+              {/* Success Call to Actions */}
+              <div className="w-full max-w-xs space-y-2.5 pt-4 mx-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onNavigateToPayment) {
+                      onNavigateToPayment();
+                    } else {
+                      onClose();
+                    }
+                  }}
+                  className="w-full py-3 px-5 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>Pay Now (Pricing & Payment)</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full py-2.5 px-5 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#5A5551] font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  Pay Later (Return to Homepage)
+                </button>
+              </div>
+            </div>
+          ) : !isReviewMode ? (
             /* ===== COMPACT FORM VIEW ===== */
             <form onSubmit={handleProceedToReview} className="space-y-3.5">
               {/* 1. Trek Selector Banner */}
