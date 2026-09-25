@@ -54,20 +54,57 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
   const parseTrekDate = (dateStr?: string): Date | null => {
     if (!dateStr) return null;
     const trimmed = dateStr.trim();
+
+    // 1. Slash format: DD/MM/YYYY or YYYY/MM/DD
     if (trimmed.includes('/')) {
       const parts = trimmed.split('/');
       if (parts.length === 3) {
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        const d = new Date(year, month, day);
-        if (!isNaN(d.getTime())) return d;
+        if (parts[0].length === 4) {
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) return d;
+        } else {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) return d;
+        }
       }
     }
+
+    // 2. Dash/Dot format: DD-MM-YYYY or DD.MM.YYYY
+    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+      const delimiter = trimmed.includes('-') ? '-' : '.';
+      const parts = trimmed.split(delimiter);
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            const d = new Date(year, month, day);
+            if (!isNaN(d.getTime())) return d;
+          }
+        } else if (parts[0].length === 4) {
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            const d = new Date(year, month, day);
+            if (!isNaN(d.getTime())) return d;
+          }
+        }
+      }
+    }
+
+    // 3. Direct JS Date constructor
     const d = new Date(trimmed);
     if (!isNaN(d.getTime())) return d;
 
-    // Handle range formats like "Wed 14 Oct – Sun 18 Oct 2026 (5 Days)" or "14 Oct - 18 Oct 2026"
+    // 4. Handle range formats like "Wed 14 Oct – Sun 18 Oct 2026 (5 Days)" or "14 Oct - 18 Oct 2026"
     try {
       const yearMatch = trimmed.match(/\b(20\d\d)\b/);
       const year = yearMatch ? yearMatch[1] : '';
@@ -163,10 +200,10 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       }
     }
 
-    // Sort upcoming ascending (nearest first)
+    // Sort upcoming ascending (closest upcoming hike first)
     upcoming.sort((a, b) => {
-      const da = parseTrekDate(a.date)?.getTime() || 0;
-      const db = parseTrekDate(b.date)?.getTime() || 0;
+      const da = parseTrekDate(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const db = parseTrekDate(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       return da - db;
     });
 
