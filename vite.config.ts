@@ -13,8 +13,8 @@ export default defineConfig({
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
         id: '/',
-        name: 'Walk Nepal Walk',
-        short_name: 'WalkNepal',
+        name: 'WalkWalk',
+        short_name: 'WalkWalk',
         description: 'Empowering communities through walking and sustainable eco-tourism in Nepal.',
         theme_color: '#7ABA42',
         background_color: '#F7F4EF',
