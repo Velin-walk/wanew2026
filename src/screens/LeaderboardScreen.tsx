@@ -24,8 +24,8 @@ import {
 } from 'lucide-react';
 import { HikerStats, LeaderboardResponse } from '../types/leaderboard';
 import { fetchLeaderboardData } from '../services/api';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { Himalayan3DBackground } from '../components/3d/Himalayan3DBackground';
+import { LowPolyMountainTrailChart } from '../components/3d/LowPolyMountainTrailChart';
 
 type TimePeriod = 't30' | 't60' | 't90' | 't365' | 'overall';
 type SortMetric = 'dist' | 'count';
@@ -531,93 +531,14 @@ export const LeaderboardScreen: React.FC = () => {
             </div>
           )}
 
-          {/* Chart Area */}
-          <div className="h-48 sm:h-56 w-full pt-2">
-            {filteredGrowthCurve.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={filteredGrowthCurve}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  onClick={(state: any) => {
-                    if (state && state.activePayload && state.activePayload.length) {
-                      setActiveJourneyPoint(state.activePayload[0].payload);
-                    }
-                  }}
-                  onMouseDown={(state: any) => {
-                    if (state && state.activePayload && state.activePayload.length) {
-                      setActiveJourneyPoint(state.activePayload[0].payload);
-                    }
-                  }}
-                  onMouseMove={(state: any) => {
-                    if (state && state.activePayload && state.activePayload.length) {
-                      setActiveJourneyPoint(state.activePayload[0].payload);
-                    }
-                  }}
-                  onTouchStart={(state: any) => {
-                    if (state && state.activePayload && state.activePayload.length) {
-                      setActiveJourneyPoint(state.activePayload[0].payload);
-                    }
-                  }}
-                  onTouchMove={(state: any) => {
-                    if (state && state.activePayload && state.activePayload.length) {
-                      setActiveJourneyPoint(state.activePayload[0].payload);
-                    }
-                  }}
-                >
-                  <defs>
-                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7ABA42" stopOpacity={0.5}/>
-                      <stop offset="95%" stopColor="#7ABA42" stopOpacity={0.03}/>
-                    </linearGradient>
-                    <linearGradient id="colorTrek" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#4527A0" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#4527A0" stopOpacity={0.02}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="event_no" tick={{ fontSize: 10, fill: '#57534E' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: '#57534E' }} tickLine={false} tickFormatter={(val) => `${Math.round(val / 1000)}k`} />
-                  <Tooltip
-                    cursor={{ stroke: '#1B5E20', strokeWidth: 1.5, strokeDasharray: '3 3' }}
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const pt = payload[0].payload;
-                        return (
-                          <div className="bg-white p-2.5 sm:p-3 rounded-xl shadow-xl border border-stone-300 text-[10px] sm:text-[11px] space-y-1 pointer-events-none max-w-[180px] sm:max-w-none">
-                            <strong className="block text-stone-900 font-black truncate">{pt.title || `Event #${pt.event_no}`}</strong>
-                            <span className="text-[9px] sm:text-[10px] text-stone-500 block font-medium">{pt.date}</span>
-                            <div className="text-emerald-800 font-bold">Total: {pt.total_km?.toLocaleString()} km</div>
-                            <div className="text-stone-600 text-[9px] sm:text-[10px]">Hike: {pt.hike_km?.toLocaleString()}k • Trek: {pt.trek_km?.toLocaleString()}k</div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="total_km"
-                    stroke="#1B5E20"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#colorTotal)"
-                    activeDot={{ r: 5, fill: '#1B5E20', stroke: '#ffffff', strokeWidth: 2 }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="trek_km"
-                    stroke="#4527A0"
-                    strokeWidth={1.5}
-                    fillOpacity={1}
-                    fill="url(#colorTrek)"
-                    activeDot={{ r: 4, fill: '#4527A0', stroke: '#ffffff', strokeWidth: 2 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-xs text-stone-500 font-medium">
-                Growth curve updates with completed treks
-              </div>
-            )}
+          {/* 3D Low-Poly Mountain Trail Chart Area (Scrollable Vertically Only) */}
+          <div className="w-full pt-1">
+            <LowPolyMountainTrailChart
+              points={filteredGrowthCurve}
+              activePoint={activeJourneyPoint}
+              onSelectPoint={(pt) => setActiveJourneyPoint(pt)}
+              milestones={data.milestones}
+            />
           </div>
 
           {/* Active Event Inspection Strip (Docked under chart so mobile chart view is never disrupted) */}

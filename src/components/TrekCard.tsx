@@ -184,7 +184,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
       {/* Card Image */}
       <div className="relative h-40 sm:h-48 w-full overflow-hidden group">
         <img
-          src={trek.featured_image}
+          src={dbData?.cardImageUrl || trek.featured_image}
           alt={trek.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           referrerPolicy="no-referrer"

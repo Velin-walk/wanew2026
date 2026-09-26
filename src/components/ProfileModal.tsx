@@ -42,27 +42,44 @@ import { Trek, Booking } from '../types';
 import { HISTORICAL_TREKS, HistoricalTrekItem } from '../data/historicalTreks';
 import { fetchLeaderboardData } from '../services/api';
 import { HikerStats } from '../types/leaderboard';
+import { MyBookingsScreen } from '../screens/MyBookingsScreen';
 
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   userBookings: any[];
+  loadingBookings?: boolean;
   allTreks: Trek[];
   favorites?: string[];
   onToggleFavorite?: (trekId: string) => void;
   onOpenTrek: (trek: Trek) => void;
   initialTab?: 'hikes' | 'bookings' | 'saved' | 'settings';
+  onCancelBooking?: (id: number | string) => Promise<void>;
+  onExploreTreks?: () => void;
+  onShareBooking?: (booking: Booking) => void;
+  onLeaveFeedbackBooking?: (booking: Booking) => void;
+  onViewItineraryBooking?: (booking: Booking) => void;
+  onOpenPaymentPage?: () => void;
+  onUploadVoucher?: (booking: Booking) => void;
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
   isOpen,
   onClose,
   userBookings,
+  loadingBookings = false,
   allTreks,
   favorites = [],
   onToggleFavorite,
   onOpenTrek,
   initialTab = 'hikes',
+  onCancelBooking,
+  onExploreTreks,
+  onShareBooking,
+  onLeaveFeedbackBooking,
+  onViewItineraryBooking,
+  onOpenPaymentPage,
+  onUploadVoucher,
 }) => {
   const { user, isAdmin, userPhone, signOutUser, showProfileImage, updateUserProfile } = useAuth();
   const [activeProfileTab, setActiveProfileTab] = useState<'hikes' | 'bookings' | 'saved' | 'settings'>(initialTab);
@@ -452,8 +469,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const savedTreksList = allTreks.filter((t) => favorites.includes(t.id));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#EFEAE4] overflow-hidden flex flex-col max-h-[94vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-0 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl md:max-w-none md:w-screen md:h-screen bg-white rounded-3xl md:rounded-none shadow-2xl border border-[#EFEAE4] md:border-0 overflow-hidden flex flex-col max-h-[94vh] md:max-h-screen">
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-[#FAF6F0] via-white to-[#FAF6F0] p-4 sm:p-5 border-b border-[#EFEAE4] relative flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -523,9 +540,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           >
             <BookmarkCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#E08828] shrink-0" />
             <span>My Bookings</span>
-            {activeBookings.length > 0 && (
+            {userBookings.length > 0 && (
               <span className="px-1 sm:px-1.5 py-0.2 bg-[#E08828]/15 text-[#E08828] rounded-full text-[9px] sm:text-[10px] font-black shrink-0">
-                {activeBookings.length}
+                {userBookings.length}
               </span>
             )}
           </button>
@@ -558,7 +575,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-3 sm:p-5 overflow-y-auto space-y-4">
+        <div className="flex-1 p-3 sm:p-5 md:p-6 lg:p-8 overflow-y-auto space-y-4">
           {/* TAB 1: MY HIKES & GOOGLE SHEET LIFETIME STATS & TABULAR ARCHIVE */}
           {activeProfileTab === 'hikes' && (
             <div className="space-y-4">
@@ -781,7 +798,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
                 {/* THE TABULAR LEDGER OF COMPLETED HIKES */}
                 <div className="border border-[#EFEAE4] rounded-2xl overflow-hidden bg-white shadow-xs">
-                  <div className="overflow-x-auto max-h-[420px] scrollbar-thin">
+                  <div className="overflow-x-auto max-h-[420px] md:max-h-none scrollbar-thin">
                     <table className="w-full text-left text-xs border-collapse table-fixed">
                       <thead className="bg-[#FAF8F5] text-[#78716C] uppercase text-[10px] font-black sticky top-0 z-10 border-b border-[#EFEAE4]">
                         <tr>
@@ -882,110 +899,45 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: MY BOOKINGS (ACTIVE / UPCOMING UNFINALIZED) */}
+          {/* TAB 2: MY BOOKINGS (IDENTICAL TO NAVBAR MY BOOKINGS) */}
           {activeProfileTab === 'bookings' && (
-            <div className="space-y-4">
-              {/* Account Overview Box */}
-              <div className="bg-[#F9F7F5] border border-[#EFEAE4] rounded-2xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-[#E5E1DB] flex items-center justify-center text-[#E08828]">
-                    <BookmarkCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-[#1F1F1F] block">Active Upcoming Bookings</span>
-                    <span className="text-[11px] text-[#8B8680]">
-                      {activeBookings.length} upcoming trip{activeBookings.length === 1 ? '' : 's'} on live roster
-                    </span>
-                  </div>
-                </div>
-                <span className="text-lg font-black text-[#E08828] bg-white px-3 py-1 rounded-xl border border-[#E5E1DB]">
-                  {activeBookings.length}
-                </span>
-              </div>
-
-              {/* Booked Treks List */}
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-[#8B8680] mb-3 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-[#E08828]" />
-                  <span>Upcoming Roster Reservations</span>
-                </h4>
-
-                {activeBookings.length === 0 ? (
-                  <div className="p-6 text-center bg-[#F9F7F5] rounded-2xl border border-dashed border-[#E5E1DB] space-y-2">
-                    <Compass className="w-8 h-8 text-[#C2BCB4] mx-auto" />
-                    <p className="text-xs font-bold text-[#5A5551]">No upcoming trek reservations</p>
-                    <p className="text-[11px] text-[#8B8680]">
-                      Explore upcoming treks and register to see your bookings and WhatsApp groups here!
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {activeBookings.map((b, idx) => {
-                      const matchingTrek = allTreks.find((t) => t.id === b.trek_id || t.hike_number === b.hike_number);
-                      return (
-                        <div
-                          key={b.id || idx}
-                          className="p-4 bg-white rounded-2xl border border-[#EFEAE4] shadow-2xs hover:border-[#E08828]/40 transition-all flex flex-col gap-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <span className="text-[10px] font-bold text-[#E08828] uppercase tracking-wider block">
-                                Hike #{b.hike_number || matchingTrek?.hike_number || 'Upcoming'}
-                              </span>
-                              <h5 className="font-bold text-sm text-[#1F1F1F] leading-tight mt-0.5">
-                                {b.trek_name || matchingTrek?.name || 'Walk Nepal Hike'}
-                              </h5>
-                            </div>
-                            <span className="px-2 py-0.5 bg-[#7ABA42]/10 text-[#7ABA42] border border-[#7ABA42]/20 text-[10px] font-bold rounded-full">
-                              Confirmed
-                            </span>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#5A5551] pt-1 border-t border-[#F9F7F5]">
-                            <span className="flex items-center gap-1">
-                              <User className="w-3 h-3 text-[#8B8680]" />
-                              {b.full_name || b.name} ({b.pax || 1} pax)
-                            </span>
-                            {b.pickup_point && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3 text-[#8B8680]" />
-                                {b.pickup_point}
-                              </span>
-                            )}
-                          </div>
-
-                          {matchingTrek && (
-                            <div className="flex items-center justify-between pt-2">
-                              {matchingTrek.whatsapp_link ? (
-                                <a
-                                  href={matchingTrek.whatsapp_link}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-[11px] font-bold text-[#7ABA42] hover:underline flex items-center gap-1"
-                                >
-                                  Join Hike WhatsApp Group <ExternalLink className="w-3 h-3" />
-                                </a>
-                              ) : <span />}
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onClose();
-                                  onOpenTrek(matchingTrek);
-                                }}
-                                className="text-[11px] font-bold text-[#E08828] hover:underline cursor-pointer"
-                              >
-                                View Itinerary →
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
+            <MyBookingsScreen
+              bookings={userBookings}
+              loading={loadingBookings}
+              onCancelBooking={onCancelBooking || (async () => {})}
+              onExploreTreks={() => {
+                onClose();
+                onExploreTreks?.();
+              }}
+              onViewMyHikes={() => setActiveProfileTab('hikes')}
+              onShare={(booking) => {
+                onClose();
+                onShareBooking?.(booking);
+              }}
+              onLeaveFeedback={(booking) => {
+                onClose();
+                onLeaveFeedbackBooking?.(booking);
+              }}
+              onViewItinerary={(booking) => {
+                onClose();
+                if (onViewItineraryBooking) {
+                  onViewItineraryBooking(booking);
+                } else {
+                  const matchingTrek = allTreks.find(
+                    (t) => t.id === booking.trek_id || t.hike_number === booking.hike_number || t.name === booking.trek_name
+                  );
+                  if (matchingTrek) onOpenTrek(matchingTrek);
+                }
+              }}
+              onOpenPaymentPage={() => {
+                onClose();
+                onOpenPaymentPage?.();
+              }}
+              onUploadVoucher={(booking) => {
+                onClose();
+                onUploadVoucher?.(booking);
+              }}
+            />
           )}
 
           {/* TAB 3: SAVED / WISHLIST */}

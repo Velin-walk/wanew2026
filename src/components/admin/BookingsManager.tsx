@@ -757,7 +757,13 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-all cursor-pointer shadow-3xs"
                                 >
                                   <FileText className="w-3.5 h-3.5 text-amber-700" />
-                                  <span>View Voucher 📄</span>
+                                  <span>
+                                    View Voucher
+                                    {reg.payment_voucher_url.split(',').filter(Boolean).length > 1
+                                      ? `s (${reg.payment_voucher_url.split(',').filter(Boolean).length})`
+                                      : ''}{' '}
+                                    📄
+                                  </span>
                                 </button>
                               </div>
                             )}
@@ -1141,17 +1147,38 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               </div>
             )}
 
-            <div className="flex-1 overflow-auto flex items-center justify-center p-2 bg-black/40 rounded-xl">
-              <img
-                src={viewingAdminVoucherUrl}
-                alt="Payment Voucher Receipt"
-                className="max-w-full max-h-[60vh] object-contain rounded-lg"
-              />
+            <div className="flex-1 overflow-auto flex flex-col items-center gap-4 p-2 bg-black/40 rounded-xl">
+              {viewingAdminVoucherUrl
+                .split(',')
+                .map((u) => u.trim())
+                .filter(Boolean)
+                .map((url, idx, arr) => (
+                  <div key={idx} className="w-full flex flex-col items-center gap-1.5">
+                    {arr.length > 1 && (
+                      <div className="flex items-center justify-between w-full px-2 text-[11px] font-bold text-amber-400">
+                        <span>Receipt #{idx + 1}</span>
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-stone-300 hover:text-white underline"
+                        >
+                          Open Full Size ↗
+                        </a>
+                      </div>
+                    )}
+                    <img
+                      src={url}
+                      alt={`Payment Voucher Receipt ${idx + 1}`}
+                      className="max-w-full max-h-[55vh] object-contain rounded-lg"
+                    />
+                  </div>
+                ))}
             </div>
 
             <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 text-xs">
               <a
-                href={viewingAdminVoucherUrl}
+                href={viewingAdminVoucherUrl.split(',')[0]?.trim()}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-xs font-bold transition-all"

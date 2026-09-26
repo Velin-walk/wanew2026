@@ -36,9 +36,11 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
 
     try {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.src = image;
-      await new Promise((resolve) => {
+      await new Promise((resolve, reject) => {
         img.onload = resolve;
+        img.onerror = reject;
       });
 
       const canvas = document.createElement('canvas');
@@ -91,8 +93,10 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-black text-stone-900 leading-tight">Adjust Cover Image</h3>
-            <p className="text-[11px] text-stone-500 font-bold uppercase tracking-wider mt-0.5">Drag to reposition • Zoom to fit</p>
+            <h3 className="text-lg font-black text-stone-900 leading-tight">Adjust Trek Card Preview</h3>
+            <p className="text-[11px] text-stone-500 font-bold uppercase tracking-wider mt-0.5">
+              Drag & zoom to frame the Home Page Trek Card • Full image is kept for Itinerary display
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -152,7 +156,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                 onClick={onClose}
                 className="px-5 py-2.5 text-stone-600 font-bold text-sm hover:bg-stone-50 rounded-xl transition-all cursor-pointer"
               >
-                Cancel
+                Keep Uncropped
               </button>
 
               <button
@@ -160,7 +164,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                 className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                <span>Apply Crop</span>
+                <span>Apply Card Crop</span>
               </button>
             </div>
           </div>

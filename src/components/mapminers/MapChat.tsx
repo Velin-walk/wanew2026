@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Send, MessageSquare, Compass, Calendar, Sparkles, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Send, MessageSquare, Sparkles, RotateCcw, Trash2 } from 'lucide-react';
+import { apiFetch } from '../../services/api';
+
+const GLOBAL_CHAT_TRAIL_ID = 'global_trail_chat';
 
 interface MapChatProps {
   currentUserEmail?: string;
@@ -21,18 +24,26 @@ const INITIAL_TRAIL_POSTS: ChatMessage[] = [
     text: 'Welcome to MapMiners Trail Chat! Share real-time conditions, trail blockages, or questions with fellow hikers.',
     senderEmail: 'walknepalwalk@gmail.com',
     senderName: 'Coordinator (WNW)',
-    timestamp: Date.now() - 1000 * 60 * 60 * 3,
+    timestamp: 1700000000000,
   },
   {
     id: 'seed-2',
     text: 'Sundarijal to Chisapani route is clear today. Spring water point near the army checkpost is flowing well.',
     senderEmail: 'biraj@seekscape.com',
     senderName: 'Trail Scout',
-    timestamp: Date.now() - 1000 * 60 * 45,
+    timestamp: 1700000060000,
   }
 ];
 
-export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProps) {
+function mergeChatMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const map = new Map<string, ChatMessage>();
+  INITIAL_TRAIL_POSTS.forEach((m) => map.set(m.id, m));
+  existing.forEach((m) => map.set(m.id, m));
+  incoming.forEach((m) => map.set(m.id, m));
+  return Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+export default function MapChat({ currentUserEmail }: MapChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem('wnw_mapchat_messages');
@@ -45,6 +56,7 @@ export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProp
   });
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline'>('online');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [guestName, setGuestName] = useState(() => {
@@ -64,10 +76,61 @@ export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProp
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto scroll to bottom
+  const fetchGlobalChat = useCallback(async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    try {
+      const res = await apiFetch(
+        `mapminers/comments?trailId=${encodeURIComponent(GLOBAL_CHAT_TRAIL_ID)}`,
+        { forceFresh: true }
+      );
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data?.success && Array.isArray(data.comments)) {
+        const remoteMsgs: ChatMessage[] = data.comments.map((c: any) => ({
+          id: String(c.id),
+          text: String(c.text || ''),
+          senderName: String(c.authorName || c.author_name || 'Hiker'),
+          senderEmail: String(c.authorEmail || c.author_email || ''),
+          guestSessionId: c.guestSessionId || c.guest_session_id || null,
+          timestamp: Number(c.timestamp) || Date.now(),
+        }));
+
+        setMessages((prev) => {
+          const merged = mergeChatMessages(prev, remoteMsgs);
+          try {
+            localStorage.setItem('wnw_mapchat_messages', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+        setConnectionStatus('online');
+        setErrorMessage('');
+      }
+    } catch (err: any) {
+      setConnectionStatus('offline');
+      setErrorMessage(err?.message || 'Unable to sync with Cloudflare D1');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Initial fetch + periodic live sync while MapChat is open
+  useEffect(() => {
+    fetchGlobalChat(false);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchGlobalChat(true);
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [fetchGlobalChat]);
+
+  // Auto scroll to bottom when message count changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length]);
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -97,18 +160,57 @@ export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProp
     const commentId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newMsg: ChatMessage = { id: commentId, ...payload };
 
+    // 1. Optimistically update UI & localStorage
+    setMessages((prev) => {
+      const updated = mergeChatMessages(prev, [newMsg]);
+      try {
+        localStorage.setItem('wnw_mapchat_messages', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 2. Persist to Cloudflare D1 via existing mapminers/comments endpoint
     try {
-      setMessages(prev => {
-        const updated = [...prev, newMsg];
-        try {
-          localStorage.setItem('wnw_mapchat_messages', JSON.stringify(updated));
-        } catch {}
-        return updated;
+      const res = await apiFetch('mapminers/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: commentId,
+          trailId: GLOBAL_CHAT_TRAIL_ID,
+          text: payload.text,
+          authorName: payload.senderName,
+          authorEmail: payload.senderEmail,
+          guestSessionId: payload.guestSessionId,
+          timestamp: payload.timestamp,
+        }),
       });
-    } catch (err) {
-      console.error('Failed to post live chat:', err);
-      setInputText(textToSubmit); // Restore text on failure so message isn't lost
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      setConnectionStatus('online');
+      setErrorMessage('');
+    } catch (err: any) {
+      console.error('Failed to post live chat to D1:', err);
+      setConnectionStatus('offline');
+      setErrorMessage(err?.message || 'Saved locally; could not reach server');
+      setInputText(textToSubmit);
     }
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    setMessages((prev) => {
+      const updated = prev.filter((m) => m.id !== msgId);
+      try {
+        localStorage.setItem('wnw_mapchat_messages', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      await apiFetch(`mapminers/comments/${encodeURIComponent(msgId)}`, {
+        method: 'DELETE',
+      });
+    } catch (_) {}
   };
 
   const saveGuestName = (e: React.FormEvent) => {
@@ -133,9 +235,20 @@ export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProp
             {connectionStatus === 'online' ? 'Live Trail chat' : 'Radio Signal Weak'}
           </span>
         </div>
-        <span className="text-[10px] text-neutral-400 font-bold">
-          {connectionStatus === 'online' ? `${messages.length} active logs` : 'reconnecting...'}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-neutral-400 font-bold">
+            {connectionStatus === 'online' ? `${messages.length} active logs` : 'offline cache'}
+          </span>
+          <button
+            type="button"
+            onClick={() => fetchGlobalChat(false)}
+            disabled={refreshing}
+            title="Refresh live trail chat"
+            className="p-1 rounded-lg hover:bg-neutral-100 text-neutral-500 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <RotateCcw className={`w-3 h-3 ${refreshing ? 'animate-spin text-[#7ABA42]' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Offline Status Diagnostic Banner */}
@@ -163,6 +276,8 @@ export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProp
           messages.map((msg) => {
             const isMe = (currentUserEmail && msg.senderEmail === currentUserEmail) || 
                          (!currentUserEmail && (msg.guestSessionId === currentSessionId || (msg.senderName === guestName && guestName.trim() !== '')));
+            const isAdminUser = currentUserEmail?.toLowerCase() === 'walknepalwalk@gmail.com';
+            const canDelete = !msg.id.startsWith('seed-') && (isMe || isAdminUser);
             return (
               <div
                 key={msg.id}
@@ -175,6 +290,16 @@ export default function MapChat({ currentUserEmail, onSelectTrail }: MapChatProp
                   <span className="text-[8px] text-neutral-400">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMessage(msg.id)}
+                      title="Delete message"
+                      className="text-neutral-300 hover:text-rose-500 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
+                  )}
                 </div>
                 <div
                   className={`p-3 rounded-2xl text-xs leading-relaxed shadow-3xs break-words w-full ${

@@ -274,15 +274,42 @@ function MainApp() {
       } catch {}
 
       // 2. Fetch from Cloudflare D1 for candidate emails and phones
+      const mergeRemoteBooking = (b: any) => {
+        const idKey = b.id ? String(b.id) : '';
+        const existingById = idKey ? mergedMap.get(idKey) : undefined;
+        // Also check if a local-only booking exists for the same hike + name
+        let matchedKey = idKey || `${b.hike_number || b.trek_id}_${b.email_address || b.user_email}_${b.trek_date || b.timestamp}`;
+        if (!existingById) {
+          for (const [k, val] of mergedMap.entries()) {
+            const sameHike = String(val.hike_number || val.trek_id || '') === String(b.hike_number || b.trek_id || '');
+            const sameName = String(val.full_name || '').toLowerCase().trim() === String(b.full_name || '').toLowerCase().trim();
+            if (sameHike && sameName) {
+              matchedKey = idKey || k;
+              if (idKey && k !== idKey) mergedMap.delete(k);
+              mergedMap.set(matchedKey, {
+                ...val,
+                ...b,
+                payment_voucher_url: b.payment_voucher_url || val.payment_voucher_url || '',
+                payment_voucher_submitted_at: b.payment_voucher_submitted_at || val.payment_voucher_submitted_at || '',
+              });
+              return;
+            }
+          }
+        }
+        mergedMap.set(matchedKey, {
+          ...(existingById || {}),
+          ...b,
+          payment_voucher_url: b.payment_voucher_url || existingById?.payment_voucher_url || '',
+          payment_voucher_submitted_at: b.payment_voucher_submitted_at || existingById?.payment_voucher_submitted_at || '',
+        });
+      };
+
       if (candidateEmails.size > 0) {
         for (const email of candidateEmails) {
           try {
             const userRegs = await fetchUserBookings(email, undefined, force);
             if (Array.isArray(userRegs)) {
-              userRegs.forEach((b: any) => {
-                const key = String(b.id || `${b.hike_number || b.trek_id}_${b.email_address || b.user_email}_${b.trek_date || b.timestamp}`);
-                mergedMap.set(key, b);
-              });
+              userRegs.forEach(mergeRemoteBooking);
             }
           } catch (cfErr) {
             console.warn(`Could not fetch D1 bookings for ${email}:`, cfErr);
@@ -295,10 +322,7 @@ function MainApp() {
           try {
             const userRegs = await fetchUserBookings(undefined, phone, force);
             if (Array.isArray(userRegs)) {
-              userRegs.forEach((b: any) => {
-                const key = String(b.id || `${b.hike_number || b.trek_id}_${b.phone || b.whatsapp_number}_${b.trek_date || b.timestamp}`);
-                mergedMap.set(key, b);
-              });
+              userRegs.forEach(mergeRemoteBooking);
             }
           } catch (cfErr) {
             console.warn(`Could not fetch D1 bookings for phone ${phone}:`, cfErr);
@@ -373,12 +397,12 @@ function MainApp() {
           whatsapp_link: b.whatsapp_link || matchedTrek?.whatsapp_link || '',
           is_cancelled: Boolean(b.is_cancelled || matchedTrek?.is_cancelled),
           cancellation_reason: b.cancellation_reason || matchedTrek?.cancellation_reason || '',
-          status: b.status || b.registration_status || 'Confirmed',
-          payment_status: b.payment_status || 'Unpaid',
-          paid_amount: Number(b.paid_amount) || 0,
-          due_amount: Number(b.due_amount) || 0,
-          pickup_point: b.pickup_point || b.pickupPoint || '',
-          admin_notes: b.admin_notes || '',
+          status: b.roster_registration_status || b.registration_status || b.status || 'Confirmed',
+          payment_status: b.roster_payment_status || b.payment_status || 'Unpaid',
+          paid_amount: Number(b.roster_paid_amount ?? b.paid_amount) || 0,
+          due_amount: Number(b.roster_due_amount ?? b.due_amount) || 0,
+          pickup_point: b.roster_pickup_point || b.pickup_point || b.pickupPoint || '',
+          admin_notes: b.roster_admin_notes || b.admin_notes || '',
         } as Booking;
       });
 
@@ -435,12 +459,12 @@ function MainApp() {
     }
   }, []);
 
-  // When user visits Bookings tab, refresh bookings if needed
+  // When user visits Bookings tab or opens Profile modal, refresh bookings so Admin roster updates appear immediately
   useEffect(() => {
-    if (currentTab === 'bookings') {
-      loadUserBookings();
+    if (currentTab === 'bookings' || profileModalOpen) {
+      loadUserBookings(undefined, true);
     }
-  }, [currentTab, loadUserBookings]);
+  }, [currentTab, profileModalOpen, loadUserBookings]);
 
   // Keep a stable ref to refreshData to avoid re-attaching listeners
   const refreshDataRef = useRef(refreshData);
@@ -1138,11 +1162,37 @@ function MainApp() {
           isOpen={profileModalOpen}
           onClose={() => setProfileModalOpen(false)}
           userBookings={bookings}
+          loadingBookings={loadingBookings}
           allTreks={treks}
           favorites={favorites}
           onToggleFavorite={toggleFavorite}
           onOpenTrek={(t) => setItineraryModalTrek(t)}
           initialTab={profileModalTab}
+          onCancelBooking={handleCancelBooking}
+          onExploreTreks={() => setCurrentTab('treks')}
+          onShareBooking={(booking) => {
+            const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number);
+            setSelectedTrekForInvite(matchedTrek || null);
+            setShowInviteModal(true);
+          }}
+          onLeaveFeedbackBooking={(booking) => {
+            setFeedbackModalBooking(booking);
+            const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number);
+            setFeedbackModalTrek(matchedTrek || null);
+            setShowFeedbackModal(true);
+          }}
+          onViewItineraryBooking={(booking) => {
+            const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number || t.name === booking.trek_name);
+            if (matchedTrek) {
+              setItineraryModalTrek(matchedTrek);
+              setItineraryModalType('itinerary');
+            }
+          }}
+          onOpenPaymentPage={() => setInfoModalPage('payment')}
+          onUploadVoucher={(booking) => {
+            setVoucherTargetBooking(booking);
+            setShowVoucherModal(true);
+          }}
         />
       </div>
     </div>

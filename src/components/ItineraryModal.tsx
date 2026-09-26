@@ -225,14 +225,14 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
         <div ref={contentScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           
           {/* Cover image header */}
-          <div className="relative h-44 sm:h-56 w-full rounded-2xl overflow-hidden bg-neutral-900 shadow-xs shrink-0">
+          <div className="relative w-full rounded-2xl overflow-hidden bg-neutral-900 shadow-xs shrink-0 flex items-center justify-center">
             <img
               src={dbData?.coverImageUrl || trek.featured_image || 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80'}
               alt={trek.name}
-              className="w-full h-full object-cover"
+              className="w-full h-auto max-h-[75vh] object-contain block"
               referrerPolicy="no-referrer"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/20" />
+            <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
 
             {/* Auspicious miniature prayer flag garland draped over cover */}
             <div className="absolute -top-1 left-3 sm:left-6 w-32 xs:w-36 sm:w-44 z-20 pointer-events-none drop-shadow-md">

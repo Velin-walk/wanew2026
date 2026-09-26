@@ -844,38 +844,38 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
               <div>
                 <label className="text-xs font-bold text-[#1F1F1F] flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-[#E08828]" />
-                  <span>Trek Cover Image (Header Banner)</span>
+                  <span>Trek Cover Image (Full Itinerary & Card Preview)</span>
                 </label>
                 <span className="text-[11px] text-[#8B8680]">
-                  Display high-resolution Nepal scenery at the top of the card and preview page.
+                  Full size image is displayed on the Itinerary page. Use <b>Adjust Card Crop</b> to frame the Home Page Trek Card preview.
                 </span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] text-[#8B8680] font-semibold">Nepal Trail Presets:</span>
                 <button
                   type="button"
-                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80' }))}
+                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80', cardImageUrl: '' }))}
                   className="px-2 py-0.5 text-[10px] font-semibold bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white border border-[#E5E1DB] rounded-md transition-colors cursor-pointer"
                 >
                   Sailung Ridge
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1585938389612-a552a28d6914?auto=format&fit=crop&w=1200&q=80' }))}
+                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1585938389612-a552a28d6914?auto=format&fit=crop&w=1200&q=80', cardImageUrl: '' }))}
                   className="px-2 py-0.5 text-[10px] font-semibold bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white border border-[#E5E1DB] rounded-md transition-colors cursor-pointer"
                 >
                   Gosainkunda Lake
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1580618672591-eb180b1a973f?auto=format&fit=crop&w=1200&q=80' }))}
+                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1580618672591-eb180b1a973f?auto=format&fit=crop&w=1200&q=80', cardImageUrl: '' }))}
                   className="px-2 py-0.5 text-[10px] font-semibold bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white border border-[#E5E1DB] rounded-md transition-colors cursor-pointer"
                 >
                   Langtang Valley
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=1200&q=80' }))}
+                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=1200&q=80', cardImageUrl: '' }))}
                   className="px-2 py-0.5 text-[10px] font-semibold bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white border border-[#E5E1DB] rounded-md transition-colors cursor-pointer"
                 >
                   Phulchowki Forest
@@ -889,13 +889,13 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                 <input
                   type="url"
                   value={formData.coverImageUrl || ''}
-                  onChange={(e) => updateData((prev) => ({ ...prev, coverImageUrl: e.target.value }))}
+                  onChange={(e) => updateData((prev) => ({ ...prev, coverImageUrl: e.target.value, cardImageUrl: '' }))}
                   placeholder="Paste direct Image URL (e.g. https://images.unsplash.com/... or Google Drive / Cloudinary)"
                   className="w-full pl-8 pr-3 py-2 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
                 />
               </div>
 
-              {/* Direct File Upload Simulation */}
+              {/* Direct File Upload - Preserves Full Image for Itinerary + Opens Card Cropper */}
               <label className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#FAF8F5] hover:bg-[#F0EBE5] border border-[#E5E1DB] text-[#1F1F1F] rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0">
                 <Upload className="w-3.5 h-3.5 text-[#E08828]" />
                 <span>Upload Local File</span>
@@ -908,9 +908,48 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                     if (file) {
                       const reader = new FileReader();
                       reader.onload = (event) => {
-                        if (event.target?.result) {
-                          setCroppingImage(String(event.target.result));
-                        }
+                        const rawDataUrl = event.target?.result ? String(event.target.result) : '';
+                        if (!rawDataUrl) return;
+
+                        const img = new Image();
+                        img.onload = () => {
+                          const maxDim = 1600;
+                          let w = img.width;
+                          let h = img.height;
+                          if (w > maxDim || h > maxDim) {
+                            if (w > h) {
+                              h = Math.round((maxDim / w) * h);
+                              w = maxDim;
+                            } else {
+                              w = Math.round((maxDim / h) * w);
+                              h = maxDim;
+                            }
+                          }
+                          const canvas = document.createElement('canvas');
+                          canvas.width = w;
+                          canvas.height = h;
+                          const ctx = canvas.getContext('2d');
+                          const fullOptimizedUrl = ctx
+                            ? (ctx.drawImage(img, 0, 0, w, h), canvas.toDataURL('image/jpeg', 0.85))
+                            : rawDataUrl;
+
+                          // Preserve full uncropped image for Itinerary view, then open cropper for Trek Card preview
+                          updateData((prev) => ({
+                            ...prev,
+                            coverImageUrl: fullOptimizedUrl,
+                            cardImageUrl: '',
+                          }));
+                          setCroppingImage(fullOptimizedUrl);
+                        };
+                        img.onerror = () => {
+                          updateData((prev) => ({
+                            ...prev,
+                            coverImageUrl: rawDataUrl,
+                            cardImageUrl: '',
+                          }));
+                          setCroppingImage(rawDataUrl);
+                        };
+                        img.src = rawDataUrl;
                       };
                       reader.readAsDataURL(file);
                       // Reset value so same file can be selected again
@@ -924,36 +963,39 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setCroppingImage(formData.coverImageUrl)}
-                    className="px-2 py-2 bg-[#FAF8F5] hover:bg-[#F0EBE5] border border-[#E5E1DB] text-[#E08828] rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                    title="Adjust crop"
+                    onClick={() => setCroppingImage(formData.coverImageUrl || null)}
+                    className="px-2.5 py-2 bg-[#FAF8F5] hover:bg-[#F0EBE5] border border-[#E5E1DB] text-[#E08828] rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                    title="Adjust cropped preview for Home Page Trek Card while keeping full image for Itinerary"
                   >
                     <Sparkles className="w-3 h-3" />
-                    <span>Adjust Crop</span>
+                    <span>{formData.cardImageUrl ? 'Re-adjust Card Crop' : 'Adjust Card Crop'}</span>
                   </button>
-                  <div className="relative w-14 h-9 rounded-lg overflow-hidden border border-[#E5E1DB] shrink-0 bg-neutral-100 group">
-                  <img
-                    src={formData.coverImageUrl}
-                    alt="Cover preview"
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=300&q=80';
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: '' }))}
-                    className="absolute inset-0 bg-black/60 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
-                    title="Remove cover image"
+                  <div
+                    className="relative w-14 h-9 rounded-lg overflow-hidden border border-[#E5E1DB] shrink-0 bg-neutral-100 group"
+                    title="Trek Card Preview (Full image preserved for Itinerary)"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    <img
+                      src={formData.cardImageUrl || formData.coverImageUrl}
+                      alt="Cover preview"
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=300&q=80';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: '', cardImageUrl: '' }))}
+                      className="absolute inset-0 bg-black/60 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                      title="Remove cover image"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
             {/* External Links Subsection */}
             <div className="mt-4 pt-4 border-t border-[#F5F2ED]">
@@ -1820,7 +1862,11 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
           image={croppingImage}
           onClose={() => setCroppingImage(null)}
           onCropComplete={(croppedImage) => {
-            updateData((prev) => ({ ...prev, coverImageUrl: croppedImage }));
+            updateData((prev) => ({
+              ...prev,
+              coverImageUrl: prev.coverImageUrl || croppingImage,
+              cardImageUrl: croppedImage,
+            }));
             setCroppingImage(null);
           }}
         />

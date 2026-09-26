@@ -272,6 +272,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               paid_amount: Number(r.paid_amount ?? r.paidAmount ?? r.paid ?? 0),
               due_amount: Number(r.due_amount ?? r.dueAmount ?? r.due ?? 0),
               admin_notes: r.admin_notes || r.notes || '',
+              payment_voucher_url: r.payment_voucher_url || '',
+              payment_voucher_submitted_at: r.payment_voucher_submitted_at || '',
               created_at: r.created_at || r.registeredAt || r.timestamp || new Date().toISOString(),
             };
           });
@@ -405,6 +407,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     setRawRegistrations((prev) =>
       prev.map((r) => (String(r.id) === String(id) ? { ...r, ...updates } : r))
     );
+    try {
+      const devRaw = localStorage.getItem('wnw_device_bookings');
+      if (devRaw) {
+        const devList = JSON.parse(devRaw);
+        if (Array.isArray(devList)) {
+          const updatedDev = devList.map((b: any) =>
+            String(b.id) === String(id) ? { ...b, ...updates } : b
+          );
+          localStorage.setItem('wnw_device_bookings', JSON.stringify(updatedDev));
+        }
+      }
+    } catch (_) {}
     window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
   };
 

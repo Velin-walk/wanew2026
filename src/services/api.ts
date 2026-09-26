@@ -347,7 +347,7 @@ export function normalizeTrek(row: any): Trek {
     faq_link: row.faq_link || "",
     whatsapp_link: row.whatsapp_link || "",
     price: displayPrice,
-    featured_image: d.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",
+    featured_image: d.cardImageUrl || d.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",
     fitness_level: d.overview?.difficulty || row.fitness_level || "All fitness levels",
     season: row.season || "Autumn / Year-round",
     type_of_trail: row.type_of_trail || "",
@@ -514,10 +514,29 @@ export async function fetchUserBookings(email?: string, phone?: string, forceFre
       forceFresh,
       cacheTtl: 5 * 60 * 1000, // 5 minutes cache to prevent D1 row reads
     });
-    if (!res.ok) return [];
-    const json = await res.json();
-    const items = Array.isArray(json) ? json : json?.data;
-    return Array.isArray(items) ? items : [];
+    if (res.ok) {
+      const json = await res.json();
+      const items = Array.isArray(json) ? json : json?.data;
+      if (Array.isArray(items)) return items;
+    }
+
+    // Fallback if worker email query returned 500 (e.g. before worker.js is redeployed)
+    const fallbackRes = await apiFetch('registrations?limit=300', {
+      forceFresh,
+      cacheTtl: 60 * 1000,
+    });
+    if (!fallbackRes.ok) return [];
+    const fallbackJson = await fallbackRes.json();
+    const allItems = Array.isArray(fallbackJson) ? fallbackJson : fallbackJson?.data;
+    if (!Array.isArray(allItems)) return [];
+
+    return allItems.filter((r: any) => {
+      const rowEmail = String(r.email_address || r.email || r.user_email || '').trim().toLowerCase();
+      const rowPhone = String(r.phone || r.whatsapp_number || r.whatsapp || '').replace(/[^0-9]/g, '');
+      const emailMatch = cleanEmail && rowEmail === cleanEmail;
+      const phoneMatch = cleanPhone && rowPhone && (rowPhone.includes(cleanPhone) || cleanPhone.includes(rowPhone));
+      return Boolean(emailMatch || phoneMatch);
+    });
   } catch (e) {
     console.warn(`Failed to fetch user bookings for ${email}/${phone}:`, e);
     return [];

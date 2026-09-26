@@ -1437,12 +1437,12 @@ export default {
         if (email && phone) {
           const cleanEmail = email.trim().toLowerCase();
           const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
-          regSql += ' WHERE (LOWER(r.email_address) = ? OR LOWER(r.user_email) = ?) OR (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
-          regParams.push(cleanEmail, cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
+          regSql += ' WHERE LOWER(r.email_address) = ? OR (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
+          regParams.push(cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
         } else if (email) {
           const cleanEmail = email.trim().toLowerCase();
-          regSql += ' WHERE LOWER(r.email_address) = ? OR LOWER(r.user_email) = ?';
-          regParams.push(cleanEmail, cleanEmail);
+          regSql += ' WHERE LOWER(r.email_address) = ?';
+          regParams.push(cleanEmail);
         } else if (phone) {
           const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
           regSql += ' WHERE (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
@@ -1488,7 +1488,7 @@ export default {
       }
 
       // PATCH /registrations/:id - Update Bookings & Roster details in Cloudflare D1
-      if (method === 'PATCH' && path.startsWith('/registrations/')) {
+      if ((method === 'PATCH' || method === 'PUT') && path.startsWith('/registrations/')) {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
         const id = decodeURIComponent(path.replace('/registrations/', ''));
         const body = await request.json();
@@ -1525,6 +1525,27 @@ export default {
           try {
             await env.DB.prepare('UPDATE registrations SET status = ? WHERE id = ?').bind(body.status, String(id)).run();
           } catch (_) {}
+        }
+
+        // Persist payment_voucher_url and payment_voucher_submitted_at on registrations when provided
+        if (body.payment_voucher_url !== undefined) {
+          try {
+            await env.DB.prepare('ALTER TABLE registrations ADD COLUMN payment_voucher_url TEXT').run();
+          } catch (_) {}
+          try {
+            await env.DB.prepare('ALTER TABLE registrations ADD COLUMN payment_voucher_submitted_at TEXT').run();
+          } catch (_) {}
+          try {
+            await env.DB.prepare(
+              'UPDATE registrations SET payment_voucher_url = ?, payment_voucher_submitted_at = ? WHERE id = ?'
+            ).bind(
+              body.payment_voucher_url,
+              body.payment_voucher_submitted_at || new Date().toISOString(),
+              regRow?.id !== undefined ? regRow.id : id
+            ).run();
+          } catch (vErr) {
+            console.warn('Could not update payment_voucher_url on registrations:', vErr);
+          }
         }
 
         // 3. Upsert into bookings_roster table

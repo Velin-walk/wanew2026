@@ -195,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAuthModalOpen(false);
       return result.user;
     } catch (error: any) {
-      console.error('Google Sign-In error:', error);
+      console.warn('Google Sign-In notice:', error?.code || error?.message || error);
       throw error;
     }
   };

@@ -43,11 +43,17 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
     allBookings.find((b) => String(b.id) === selectedBookingId) ||
     booking;
 
-  const [stagedFile, setStagedFile] = useState<{ id: string; url: string; file: File } | null>(null);
+  const [stagedFiles, setStagedFiles] = useState<{ id: string; url: string; file: File }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [viewingVoucherUrl, setViewingVoucherUrl] = useState<string | null>(null);
+
+  const parseVoucherUrls = (raw?: string | null): string[] =>
+    String(raw || '')
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -119,30 +125,28 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
     setError(null);
     setSuccessMsg(null);
 
-    const f = files[0];
-    if (stagedFile) {
-      URL.revokeObjectURL(stagedFile.url);
-    }
-
-    setStagedFile({
-      id: `voucher_${Date.now()}`,
+    const added = Array.from(files).map((f, idx) => ({
+      id: `voucher_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
       url: URL.createObjectURL(f),
       file: f,
-    });
+    }));
+
+    setStagedFiles((prev) => [...prev, ...added]);
 
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleRemoveStagedFile = () => {
-    if (stagedFile) {
-      URL.revokeObjectURL(stagedFile.url);
-      setStagedFile(null);
-    }
+  const handleRemoveStagedFile = (idToRemove: string) => {
+    setStagedFiles((prev) => {
+      const target = prev.find((item) => item.id === idToRemove);
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((item) => item.id !== idToRemove);
+    });
   };
 
   const handleSubmitVoucher = async () => {
-    if (!stagedFile) {
-      setError('Please select or drag your payment receipt image first.');
+    if (stagedFiles.length === 0) {
+      setError('Please select or drag at least one payment receipt image first.');
       return;
     }
     if (!activeBooking) {
@@ -155,29 +159,39 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
     setSuccessMsg(null);
 
     try {
-      // 1. Compress image
-      const compressedBlob = await compressImage(stagedFile.file);
+      const uploadedUrls: string[] = [];
 
-      // 2. Upload to Cloudinary
-      const formData = new FormData();
-      formData.append('file', compressedBlob, stagedFile.file.name);
-      formData.append('upload_preset', UPLOAD_PRESET);
+      for (const item of stagedFiles) {
+        // 1. Compress image
+        const compressedBlob = await compressImage(item.file);
 
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-        {
-          method: 'POST',
-          body: formData,
+        // 2. Upload to Cloudinary
+        const formData = new FormData();
+        formData.append('file', compressedBlob, item.file.name);
+        formData.append('upload_preset', UPLOAD_PRESET);
+
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+          {
+            method: 'POST',
+            body: formData,
+          }
+        );
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          throw new Error(errBody.error?.message || 'Cloudinary upload failed');
         }
-      );
 
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        throw new Error(errBody.error?.message || 'Cloudinary upload failed');
+        const resData = await response.json();
+        if (resData.secure_url) {
+          uploadedUrls.push(resData.secure_url);
+        }
       }
 
-      const resData = await response.json();
-      const voucherUrl = resData.secure_url;
+      const existingUrls = parseVoucherUrls(activeBooking.payment_voucher_url);
+      const allUrls = Array.from(new Set([...existingUrls, ...uploadedUrls]));
+      const voucherUrl = allUrls.join(',');
       const submittedAt = new Date().toISOString();
 
       // 3. Update Cloudflare D1 Registration Record
@@ -190,7 +204,7 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
 
       try {
         await apiFetch(`/registrations/${activeBooking.id}`, {
-          method: 'PUT',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             hike_number: activeBooking.hike_number || activeBooking.trek_id,
@@ -222,11 +236,9 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
         }
       } catch (_) {}
 
-      // Clean up staged file
-      if (stagedFile) {
-        URL.revokeObjectURL(stagedFile.url);
-        setStagedFile(null);
-      }
+      // Clean up staged files
+      stagedFiles.forEach((f) => URL.revokeObjectURL(f.url));
+      setStagedFiles([]);
 
       setSuccessMsg('Payment Voucher Forwarded Successfully! Our coordinators will verify and approve your booking status shortly.');
       onVoucherUploaded?.(updatedRecord);
@@ -355,7 +367,8 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
                   {activeBooking.payment_voucher_url && (
                     <div className="pt-2 border-t border-[#F0EBE5] flex items-center justify-between">
                       <span className="text-[10px] text-amber-800 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Previous Voucher Uploaded
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />{' '}
+                        {parseVoucherUrls(activeBooking.payment_voucher_url).length} Voucher(s) Uploaded
                       </span>
                       <button
                         type="button"
@@ -363,15 +376,24 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
                         className="text-[10px] font-extrabold text-[#2B6CB0] hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <Eye className="w-3 h-3" />
-                        <span>View Existing Voucher</span>
+                        <span>View Existing ({parseVoucherUrls(activeBooking.payment_voucher_url).length})</span>
                       </button>
                     </div>
                   )}
                 </div>
               )}
 
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                multiple
+                className="hidden"
+              />
+
               {/* File Dropzone */}
-              {!stagedFile ? (
+              {stagedFiles.length === 0 ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-stone-200 bg-white hover:border-[#E08828] rounded-2xl p-8 text-center space-y-3 transition-all cursor-pointer shadow-xs group"
@@ -381,43 +403,50 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-black text-[#1F1F1F]">
-                      Drag &amp; drop payment receipt / bank screenshot
+                      Drag &amp; drop payment receipt(s) / bank screenshots
                     </p>
                     <p className="text-[11px] text-[#8B8680] font-semibold">
-                      Or click to upload file (eSewa / Khalti / Bank Transfer)
+                      Or click to select one or more files (eSewa / Khalti / Bank Transfer)
                     </p>
                   </div>
                   <p className="text-[10px] text-[#A8A29E]">
-                    Supports JPG, PNG, WebP • Auto compressed &amp; encrypted
+                    Supports multiple JPG, PNG, WebP images • Auto compressed
                   </p>
-
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept="image/*"
-                    className="hidden"
-                  />
                 </div>
               ) : (
-                /* Staged Image Preview */
-                <div className="space-y-2 bg-white p-3 rounded-2xl border border-[#E5E1DB] shadow-2xs">
+                /* Staged Images Preview */
+                <div className="space-y-2.5 bg-white p-3 rounded-2xl border border-[#E5E1DB] shadow-2xs">
                   <div className="flex items-center justify-between text-xs font-bold text-[#1F1F1F]">
-                    <span>Receipt Preview</span>
+                    <span>Receipt Previews ({stagedFiles.length})</span>
                     <button
                       type="button"
-                      onClick={handleRemoveStagedFile}
-                      className="text-rose-600 hover:text-rose-800 text-[11px] flex items-center gap-1 cursor-pointer"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-[#E08828] hover:underline text-[11px] font-extrabold cursor-pointer"
                     >
-                      <X className="w-3.5 h-3.5" /> Remove
+                      + Add Another Receipt
                     </button>
                   </div>
-                  <div className="relative aspect-video rounded-xl overflow-hidden bg-stone-100 border border-stone-200 flex items-center justify-center">
-                    <img
-                      src={stagedFile.url}
-                      alt="Payment voucher receipt preview"
-                      className="w-full h-full object-contain"
-                    />
+                  <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto">
+                    {stagedFiles.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="relative aspect-video rounded-xl overflow-hidden bg-stone-100 border border-stone-200 flex items-center justify-center group"
+                      >
+                        <img
+                          src={item.url}
+                          alt={`Payment voucher receipt preview ${idx + 1}`}
+                          className="w-full h-full object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStagedFile(item.id)}
+                          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/70 hover:bg-rose-600 text-white flex items-center justify-center transition-colors cursor-pointer"
+                          title="Remove receipt"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -426,19 +455,21 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
               <div className="pt-2">
                 <button
                   type="button"
-                  disabled={uploading || !stagedFile}
+                  disabled={uploading || stagedFiles.length === 0}
                   onClick={handleSubmitVoucher}
                   className="w-full min-h-[44px] py-2.5 px-5 bg-[#E08828] hover:bg-[#cc781f] text-white font-bold rounded-xl text-xs sm:text-sm shadow-xs transition-all active:scale-[0.99] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                 >
                   {uploading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin text-white" />
-                      <span>Forwarding Payment Voucher...</span>
+                      <span>Forwarding {stagedFiles.length} Voucher(s)...</span>
                     </>
                   ) : (
                     <>
                       <UploadCloud className="w-4 h-4" />
-                      <span>Forward Payment Voucher</span>
+                      <span>
+                        Forward {stagedFiles.length > 1 ? `${stagedFiles.length} Payment Vouchers` : 'Payment Voucher'}
+                      </span>
                     </>
                   )}
                 </button>
@@ -451,7 +482,7 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
         </div>
       </div>
 
-      {/* Lightbox Modal for User Viewing Voucher */}
+      {/* Lightbox Modal for User Viewing Voucher(s) */}
       {viewingVoucherUrl && (
         <div
           className="fixed inset-0 z-[2200] bg-black/90 p-4 flex flex-col items-center justify-center animate-in fade-in"
@@ -459,7 +490,7 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
         >
           <div className="relative max-w-2xl w-full max-h-[85vh] bg-stone-900 rounded-2xl overflow-hidden flex flex-col p-3 border border-white/10" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between pb-2 border-b border-white/10 text-white text-xs font-bold">
-              <span>My Uploaded Payment Receipt</span>
+              <span>My Uploaded Payment Receipt(s) ({parseVoucherUrls(viewingVoucherUrl).length})</span>
               <button
                 type="button"
                 onClick={() => setViewingVoucherUrl(null)}
@@ -468,8 +499,17 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto flex items-center justify-center p-2">
-              <img src={viewingVoucherUrl} alt="Payment Voucher Receipt" className="max-w-full max-h-[70vh] object-contain rounded-lg" />
+            <div className="flex-1 overflow-auto flex flex-col items-center gap-4 p-2">
+              {parseVoucherUrls(viewingVoucherUrl).map((url, idx) => (
+                <div key={idx} className="w-full flex flex-col items-center gap-1.5">
+                  {parseVoucherUrls(viewingVoucherUrl).length > 1 && (
+                    <span className="text-[11px] font-bold text-amber-400">
+                      Receipt #{idx + 1}
+                    </span>
+                  )}
+                  <img src={url} alt={`Payment Voucher Receipt ${idx + 1}`} className="max-w-full max-h-[65vh] object-contain rounded-lg" />
+                </div>
+              ))}
             </div>
           </div>
         </div>

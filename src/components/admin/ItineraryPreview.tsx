@@ -310,18 +310,17 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
         {/* Section 1 & 2: Hero & Basic Info */}
         <div className="bg-white rounded-3xl border border-[#EFEAE4] shadow-xs relative overflow-hidden">
           {data.coverImageUrl && (
-            <div className="relative h-48 sm:h-64 w-full overflow-hidden bg-neutral-900">
+            <div className="relative w-full overflow-hidden bg-neutral-900 flex items-center justify-center">
               <img
                 src={data.coverImageUrl}
                 alt={data.title}
-                className="w-full h-full object-cover"
+                className="w-full h-auto max-h-[75vh] object-contain block"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src =
                     'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80';
                 }}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/20" />
             </div>
           )}
 

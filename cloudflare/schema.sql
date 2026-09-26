@@ -54,7 +54,9 @@ CREATE TABLE IF NOT EXISTS registrations (
   suggestions TEXT,
   guide_mode TEXT,
   transport_mode TEXT,
-  hike_number TEXT
+  hike_number TEXT,
+  payment_voucher_url TEXT,
+  payment_voucher_submitted_at TEXT
 );
 
 -- 3. Bookings Roster / Active Edits Table

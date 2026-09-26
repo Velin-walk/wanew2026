@@ -143,7 +143,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
 
   if (activeBookings.length === 0) {
     return (
-      <div className="space-y-4 max-w-md mx-auto my-4">
+      <div className="space-y-4 max-w-md md:max-w-none w-full mx-auto my-4">
         {completedCount > 0 && (
           <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 text-left space-y-2.5 shadow-xs">
             <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-xs">
@@ -260,14 +260,18 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    {booking.is_cancelled ? (
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {booking.is_cancelled || (booking.status || '').toLowerCase() === 'cancelled' ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
                         <AlertTriangle className="w-3 h-3 text-rose-600" /> Cancelled
                       </span>
+                    ) : (booking.status || '').toLowerCase() === 'pending' || (booking.status || '').toLowerCase() === 'waitlisted' ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                        <Clock className="w-3 h-3 text-amber-600" /> {booking.status}
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#7ABA42] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3" /> Confirmed
+                        <CheckCircle2 className="w-3 h-3" /> {booking.status || 'Confirmed'}
                       </span>
                     )}
                     <div className="text-[#8B8680] p-1">
@@ -300,6 +304,77 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                     <span className="flex items-center gap-1 font-medium">
                       <Users className="w-3.5 h-3.5 text-[#8B8680]" />
                       Party: <strong className="text-[#1F1F1F]">{totalPeople}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Live Admin Roster Status Bar: REG STATUS, PAYMENT STATUS, PAID (NPR), DUE (NPR), PICKUP POINT */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2.5 mt-0.5 border-t border-[#F0EBE5] text-left">
+                  <div className="bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
+                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                      Reg Status
+                    </span>
+                    <span
+                      className={`text-[11px] font-extrabold mt-0.5 block truncate ${
+                        (booking.status || '').toLowerCase() === 'cancelled'
+                          ? 'text-rose-700'
+                          : (booking.status || '').toLowerCase() === 'pending' ||
+                            (booking.status || '').toLowerCase() === 'waitlisted'
+                          ? 'text-amber-700'
+                          : 'text-emerald-700'
+                      }`}
+                    >
+                      {booking.status || 'Confirmed'}
+                    </span>
+                  </div>
+
+                  <div className="bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
+                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                      Payment Status
+                    </span>
+                    <span
+                      className={`text-[11px] font-extrabold mt-0.5 block truncate ${
+                        (booking.payment_status || '').toLowerCase().includes('paid') &&
+                        !(booking.payment_status || '').toLowerCase().includes('unpaid')
+                          ? 'text-emerald-700'
+                          : (booking.payment_status || '').toLowerCase().includes('partial') ||
+                            (booking.payment_status || '').toLowerCase().includes('voucher')
+                          ? 'text-amber-700'
+                          : 'text-rose-700'
+                      }`}
+                    >
+                      {booking.payment_status || 'Unpaid'}
+                    </span>
+                  </div>
+
+                  <div className="bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
+                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                      Paid (NPR)
+                    </span>
+                    <span className="text-[11px] font-extrabold text-emerald-700 mt-0.5 block truncate">
+                      NPR {Number(booking.paid_amount || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
+                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                      Due (NPR)
+                    </span>
+                    <span
+                      className={`text-[11px] font-extrabold mt-0.5 block truncate ${
+                        Number(booking.due_amount || 0) > 0 ? 'text-rose-700' : 'text-[#1F1F1F]'
+                      }`}
+                    >
+                      NPR {Number(booking.due_amount || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="col-span-2 sm:col-span-1 bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
+                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                      Pickup Point
+                    </span>
+                    <span className="text-[11px] font-extrabold text-[#1F1F1F] mt-0.5 block truncate">
+                      {booking.pickup_point || 'TBA'}
                     </span>
                   </div>
                 </div>
@@ -424,7 +499,12 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                           className="min-h-[40px] px-3 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-xs font-extrabold active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                         >
                           <Eye className="w-3.5 h-3.5 text-[#E08828]" />
-                          <span>View My Voucher</span>
+                          <span>
+                            View My Voucher
+                            {booking.payment_voucher_url.split(',').filter(Boolean).length > 1
+                              ? `s (${booking.payment_voucher_url.split(',').filter(Boolean).length})`
+                              : ''}
+                          </span>
                         </button>
                       )}
 
@@ -511,12 +591,25 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto flex items-center justify-center p-2">
-              <img
-                src={viewingVoucherUrl}
-                alt="Uploaded Payment Receipt"
-                className="max-w-full max-h-[70vh] object-contain rounded-lg"
-              />
+            <div className="flex-1 overflow-auto flex flex-col items-center gap-4 p-2">
+              {viewingVoucherUrl
+                .split(',')
+                .map((u) => u.trim())
+                .filter(Boolean)
+                .map((url, idx, arr) => (
+                  <div key={idx} className="w-full flex flex-col items-center gap-1.5">
+                    {arr.length > 1 && (
+                      <span className="text-[11px] font-bold text-amber-400">
+                        Receipt #{idx + 1}
+                      </span>
+                    )}
+                    <img
+                      src={url}
+                      alt={`Uploaded Payment Receipt ${idx + 1}`}
+                      className="max-w-full max-h-[65vh] object-contain rounded-lg"
+                    />
+                  </div>
+                ))}
             </div>
           </div>
         </div>

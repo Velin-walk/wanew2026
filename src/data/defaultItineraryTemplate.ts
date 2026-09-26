@@ -34,6 +34,7 @@ export interface TrekItineraryData {
   title: string;
   category: 'Overnight Bus Hikes' | 'Subscription Hikes' | 'Day Hikes' | 'Multi Day Treks';
   coverImageUrl?: string;
+  cardImageUrl?: string;
   priceTiers: PriceTier[];
   currency: 'NPR' | 'USD';
   pricingNotes: string;
@@ -210,6 +211,7 @@ export const normalizeItineraryData = (raw?: Partial<TrekItineraryData> | null):
     title: d.title !== undefined && d.title !== null ? String(d.title) : '',
     category: d.category || 'Overnight Bus Hikes',
     coverImageUrl: d.coverImageUrl ?? '',
+    cardImageUrl: d.cardImageUrl ?? '',
     currency: d.currency || 'NPR',
     pricingNotes: d.pricingNotes ?? '',
     teamLeader: d.teamLeader !== undefined && d.teamLeader !== null ? String(d.teamLeader) : 'Walk Nepal Walk Guide',
