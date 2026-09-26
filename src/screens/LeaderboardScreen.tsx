@@ -199,9 +199,19 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
 
       {/* Table Content */}
       {loading ? (
-        <div className="p-12 text-center space-y-3">
-          <RefreshCw className="w-8 h-8 text-[#E08828] animate-spin mx-auto" />
-          <p className="text-xs font-bold text-stone-600">Loading hiker standings...</p>
+        <div className="divide-y divide-stone-200/60 animate-pulse p-3 space-y-2">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="flex items-center justify-between py-2.5 px-2 gap-3">
+              <div className="flex items-center gap-3 flex-1">
+                <div className="w-6 h-6 rounded-full bg-stone-200 shrink-0" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-3.5 w-28 bg-stone-200 rounded-md" />
+                  <div className="h-2.5 w-16 bg-stone-100 rounded-md" />
+                </div>
+              </div>
+              <div className="h-5 w-14 bg-stone-200 rounded-lg shrink-0" />
+            </div>
+          ))}
         </div>
       ) : error ? (
         <div className="p-8 text-center space-y-3">

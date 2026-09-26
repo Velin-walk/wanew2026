@@ -362,9 +362,22 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
       {/* Main Content Area */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-16 text-[#8B8680]">
-          <div className="w-8 h-8 border-3 border-[#E08828] border-t-transparent rounded-full animate-spin mb-3" />
-          <p className="text-xs font-medium uppercase tracking-wider">Loading trek roster...</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4 lg:gap-5 w-full">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white rounded-2xl border-2 border-[#E5E1DB]/60 p-4 space-y-4 animate-pulse">
+              <div className="bg-stone-200 h-40 sm:h-48 w-full rounded-xl" />
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="bg-stone-200 h-4 w-12 rounded" />
+                  <div className="bg-stone-200 h-4 w-16 rounded" />
+                </div>
+                <div className="bg-stone-200 h-5 w-5/6 rounded" />
+                <div className="bg-stone-200 h-4 w-1/2 rounded" />
+              </div>
+              <div className="bg-stone-200 h-7 w-full rounded-lg" />
+              <div className="bg-stone-200 h-11 w-full rounded-xl" />
+            </div>
+          ))}
         </div>
       ) : filteredTreks.length === 0 ? (
         <div className="bg-white rounded-xl border border-[#F0EBE5] p-8 sm:p-12 text-center shadow-xs">

@@ -89,7 +89,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header
       id="top-header"
-      className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#EFEAE4] w-full"
+      className="sticky top-0 z-[1010] bg-white/95 backdrop-blur-md border-b border-[#EFEAE4] w-full"
     >
       <div className="w-full px-3.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4">
         {/* Brand / Screen Title */}
@@ -271,7 +271,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {dropdownOpen && (
               <div
                 id="navbar-resources-dropdown"
-                className="absolute right-0 mt-2 w-56 bg-white border border-[#EFEAE4] rounded-2xl shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                className="absolute right-0 mt-2 w-56 bg-white border border-[#EFEAE4] rounded-2xl shadow-xl py-2 z-[1020] animate-in fade-in slide-in-from-top-2 duration-150"
               >
                 <div className="px-3 py-1.5 border-b border-[#F9F7F5] mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#8B8680]">Guides & Support</span>
@@ -400,7 +400,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               {avatarDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-52 bg-white border border-[#EFEAE4] rounded-2xl shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="absolute right-0 mt-2 w-52 bg-white border border-[#EFEAE4] rounded-2xl shadow-xl py-2 z-[1020] animate-in fade-in slide-in-from-top-2 duration-150">
                   <div className="px-3 py-1.5 border-b border-[#F9F7F5] mb-1">
                     <span className="text-xs font-bold text-[#1F1F1F] truncate block">
                       {user.displayName || 'Hiker Account'}

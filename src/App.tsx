@@ -1132,7 +1132,7 @@ function MainApp() {
               setShowVoucherModal(true);
             }}
             onSuccessSubmitted={async () => {
-              await fetchBookings();
+              await refreshData({ force: true });
               showToast('Private Trek Request saved to Cloudflare!', 'success');
             }}
           />

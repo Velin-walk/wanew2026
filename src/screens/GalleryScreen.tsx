@@ -707,9 +707,38 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
       {/* Main Gallery Grid */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-stone-400 space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#7ABA42]" />
-          <p className="text-xs font-bold">Loading community gallery photos...</p>
+        <div className="space-y-6 animate-pulse">
+          {[1, 2].map((boxIdx) => (
+            <div
+              key={boxIdx}
+              className="bg-white border border-[#EFEAE4] rounded-3xl p-5 sm:p-6 shadow-xs space-y-4"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#EFEAE4]/80">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#E5E1DB] shrink-0" />
+                  <div className="space-y-1.5">
+                    <div className="h-4 w-48 bg-[#E5E1DB] rounded-lg" />
+                    <div className="h-3 w-32 bg-[#F0EBE5] rounded-md" />
+                  </div>
+                </div>
+                <div className="h-8 w-28 bg-[#F0EBE5] rounded-xl" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+                {[1, 2, 3, 4].map((cardIdx) => (
+                  <div
+                    key={cardIdx}
+                    className="rounded-2xl overflow-hidden border border-[#EFEAE4] bg-[#FAF8F5] space-y-2 pb-2.5"
+                  >
+                    <div className="aspect-square w-full bg-[#E5E1DB]" />
+                    <div className="px-2.5 space-y-1.5">
+                      <div className="h-3.5 w-3/4 bg-[#E5E1DB] rounded-md" />
+                      <div className="h-2.5 w-1/2 bg-[#F0EBE5] rounded-md" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ) : filteredPhotos.length === 0 && uploadingPreviews.length === 0 ? (
         <div className="text-center py-20 bg-white border-2 border-dashed border-[#EFEAE4] rounded-3xl p-8 space-y-4">

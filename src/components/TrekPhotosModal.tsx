@@ -734,9 +734,19 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
 
           {/* Photo Grid - Second Format View (Direct spacious photos) */}
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-16 text-stone-400 space-y-3">
-              <Loader2 className="w-8 h-8 animate-spin text-[#7ABA42]" />
-              <p className="text-xs font-semibold">Loading trek photo gallery...</p>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 animate-pulse">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-3xl overflow-hidden bg-white border border-stone-200 shadow-xs space-y-2 pb-3"
+                >
+                  <div className="aspect-square sm:aspect-4/3 w-full bg-[#E5E1DB]" />
+                  <div className="px-3 space-y-1.5">
+                    <div className="h-3.5 w-2/3 bg-[#E5E1DB] rounded-md" />
+                    <div className="h-2.5 w-1/2 bg-[#F0EBE5] rounded-md" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : photos.length === 0 && uploadingPreviews.length === 0 ? (
             <div className="text-center py-16 bg-white border-2 border-dashed border-stone-200 rounded-3xl space-y-3 p-6">

@@ -134,9 +134,20 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-[#8B8680]">
-        <div className="w-8 h-8 border-3 border-[#E08828] border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-xs font-medium uppercase tracking-wider">Loading your registrations...</p>
+      <div className="space-y-4 max-w-4xl w-full mx-auto my-4">
+        {[1, 2].map((i) => (
+          <div key={i} className="bg-white rounded-2xl border border-[#E5E1DB]/60 p-5 space-y-4 animate-pulse">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="space-y-2 flex-1 w-full">
+                <div className="bg-stone-200 h-4 w-24 rounded" />
+                <div className="bg-stone-200 h-6 w-3/4 rounded" />
+                <div className="bg-stone-200 h-4 w-1/3 rounded" />
+              </div>
+              <div className="bg-stone-200 h-8 w-24 rounded-lg shrink-0" />
+            </div>
+            <div className="bg-stone-100 h-10 w-full rounded-xl" />
+          </div>
+        ))}
       </div>
     );
   }

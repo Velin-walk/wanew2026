@@ -331,86 +331,102 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
         {/* Modal Body with Sidebar + Content */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           
-          {/* Navigation Drawer / Sub-Tabs */}
-          <nav className="w-full md:w-60 bg-[#F9F7F5] border-b md:border-b-0 md:border-r border-[#E5E1DB] p-2 sm:p-3 flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab('payment')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
-                activeTab === 'payment'
-                  ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
-                  : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
-              }`}
-            >
-              <CreditCard className={`w-4 h-4 shrink-0 ${activeTab === 'payment' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
-              <span>Payment & Pricing</span>
-            </button>
+          {/* Navigation Drawer / Sub-Tabs with Scrollbar hiding and visual fade mask on mobile */}
+          <div className="relative w-full md:w-60 bg-[#F9F7F5] border-b md:border-b-0 md:border-r border-[#E5E1DB] shrink-0">
+            <style dangerouslySetInnerHTML={{__html: `
+              .no-scrollbar-x {
+                -ms-overflow-style: none; /* IE/Edge */
+                scrollbar-width: none; /* Firefox */
+              }
+              .no-scrollbar-x::-webkit-scrollbar {
+                display: none; /* Chrome/Safari */
+              }
+            `}} />
+            
+            <nav className="no-scrollbar-x w-full p-2.5 sm:p-3 flex md:flex-col gap-1.5 overflow-x-auto md:overflow-x-visible items-center md:items-stretch relative z-10">
+              <button
+                type="button"
+                onClick={() => setActiveTab('payment')}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                  activeTab === 'payment'
+                    ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
+                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <CreditCard className={`w-4 h-4 shrink-0 ${activeTab === 'payment' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
+                <span>Payment & Pricing</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('trek_tips')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
-                activeTab === 'trek_tips'
-                  ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
-                  : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
-              }`}
-            >
-              <Compass className={`w-4 h-4 shrink-0 ${activeTab === 'trek_tips' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
-              <span>Trek Tips & Packing</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('trek_tips')}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                  activeTab === 'trek_tips'
+                    ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
+                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <Compass className={`w-4 h-4 shrink-0 ${activeTab === 'trek_tips' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
+                <span>Trek Tips & Packing</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('safety_policy')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
-                activeTab === 'safety_policy'
-                  ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
-                  : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
-              }`}
-            >
-              <ShieldCheck className={`w-4 h-4 shrink-0 ${activeTab === 'safety_policy' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
-              <span>Safety & Refund Policy</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('safety_policy')}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                  activeTab === 'safety_policy'
+                    ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
+                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <ShieldCheck className={`w-4 h-4 shrink-0 ${activeTab === 'safety_policy' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
+                <span>Safety & Refund Policy</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('reviews')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
-                activeTab === 'reviews'
-                  ? 'bg-white text-amber-700 shadow-xs border border-amber-200'
-                  : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
-              }`}
-            >
-              <Star className={`w-4 h-4 shrink-0 ${activeTab === 'reviews' ? 'text-amber-500 fill-amber-500' : 'text-[#8B8680]'}`} />
-              <span>Hiker Reviews</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('reviews')}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                  activeTab === 'reviews'
+                    ? 'bg-white text-amber-700 shadow-xs border border-amber-200'
+                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <Star className={`w-4 h-4 shrink-0 ${activeTab === 'reviews' ? 'text-amber-500 fill-amber-500' : 'text-[#8B8680]'}`} />
+                <span>Hiker Reviews</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('request_private_trek')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
-                activeTab === 'request_private_trek'
-                  ? 'bg-white text-[#E08828] shadow-xs border border-[#E08828]/30'
-                  : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
-              }`}
-            >
-              <Users className={`w-4 h-4 shrink-0 ${activeTab === 'request_private_trek' ? 'text-[#E08828]' : 'text-[#8B8680]'}`} />
-              <span>Request Private Trek</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('request_private_trek')}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                  activeTab === 'request_private_trek'
+                    ? 'bg-white text-[#E08828] shadow-xs border border-[#E08828]/30'
+                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <Users className={`w-4 h-4 shrink-0 ${activeTab === 'request_private_trek' ? 'text-[#E08828]' : 'text-[#8B8680]'}`} />
+                <span>Request Private Trek</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('contact')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
-                activeTab === 'contact'
-                  ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
-                  : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
-              }`}
-            >
-              <Mail className={`w-4 h-4 shrink-0 ${activeTab === 'contact' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
-              <span>Contact & Support</span>
-            </button>
-          </nav>
+              <button
+                type="button"
+                onClick={() => setActiveTab('contact')}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                  activeTab === 'contact'
+                    ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
+                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <Mail className={`w-4 h-4 shrink-0 ${activeTab === 'contact' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
+                <span>Contact & Support</span>
+              </button>
+            </nav>
+
+            {/* Fading left & right swipe indicators for premium visual polish on mobile */}
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#F9F7F5] to-transparent pointer-events-none md:hidden z-20" />
+            <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-[#F9F7F5] to-transparent pointer-events-none md:hidden z-20" />
+          </div>
 
           {/* Tab Content Panel */}
           <div className="flex-1 p-4 sm:p-6 overflow-y-auto bg-white text-neutral-800">

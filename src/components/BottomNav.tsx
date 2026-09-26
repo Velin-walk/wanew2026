@@ -77,7 +77,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     <nav
       id="mobile-bottom-nav"
       aria-label="Mobile Navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-[#EFEAE4] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] select-none"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-[1010] bg-white/95 backdrop-blur-lg border-t border-[#EFEAE4] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] select-none"
     >
       <div className="w-full max-w-3xl mx-auto px-2 py-1.5 flex items-center justify-around">
         {/* Treks Home Tab */}
@@ -227,7 +227,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           {dropdownOpen && (
             <div
               id="mobile-resources-dropdown"
-              className="absolute bottom-16 right-2 w-52 bg-white border border-[#EFEAE4] rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200"
+              className="absolute bottom-16 right-2 w-52 bg-white border border-[#EFEAE4] rounded-2xl shadow-2xl py-2 z-[1020] animate-in fade-in slide-in-from-bottom-3 duration-200"
             >
               <div className="px-3 py-1.5 border-b border-[#F9F7F5] mb-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-[#8B8680]">Guides & Support</span>

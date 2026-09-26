@@ -157,9 +157,19 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
       {/* Comments List */}
       <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-stone-800 pr-1 space-y-3 min-h-[180px] max-h-[300px] md:max-h-[350px]">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-8 gap-2">
-            <Loader2 className={`w-6 h-6 animate-spin ${isDarkTheme ? 'text-[#7ABA42]' : 'text-[#629b35]'}`} />
-            <span className={`text-[10px] font-medium ${textSecondary}`}>Retrieving messages...</span>
+          <div className="space-y-3 py-2 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className={`p-3 rounded-2xl border ${bgCard} flex items-start gap-2.5`}
+              >
+                <div className={`w-7 h-7 rounded-full shrink-0 ${isDarkTheme ? 'bg-stone-800' : 'bg-stone-200'}`} />
+                <div className="flex-1 space-y-1.5">
+                  <div className={`h-3 w-24 rounded-md ${isDarkTheme ? 'bg-stone-800' : 'bg-stone-200'}`} />
+                  <div className={`h-2.5 w-3/4 rounded-md ${isDarkTheme ? 'bg-stone-800/70' : 'bg-stone-100'}`} />
+                </div>
+              </div>
+            ))}
           </div>
         ) : comments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center px-4">

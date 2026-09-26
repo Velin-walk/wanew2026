@@ -589,9 +589,26 @@ export default function MapMinersDashboard({
           {minerTab === 'chat' ? (
             <MapChat currentUserEmail={currentUserEmail} />
           ) : isLoading ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-2 text-center h-full p-4">
-              <div className="w-8 h-8 border-3 border-[#7ABA42] border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs font-semibold text-neutral-400 mt-2">Loading hiking routes...</span>
+            <div className="p-4 space-y-3 animate-pulse">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white rounded-2xl border border-neutral-200 p-4 space-y-3 shadow-2xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-4 w-3/4 bg-neutral-200 rounded-md" />
+                      <div className="h-3 w-1/2 bg-neutral-100 rounded-md" />
+                    </div>
+                    <div className="h-5 w-16 bg-neutral-100 rounded-full shrink-0" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-neutral-100">
+                    <div className="h-7 bg-neutral-100 rounded-lg" />
+                    <div className="h-7 bg-neutral-100 rounded-lg" />
+                    <div className="h-7 bg-neutral-100 rounded-lg" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : filteredRoutes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 gap-2 text-center h-full text-neutral-400 p-4">
