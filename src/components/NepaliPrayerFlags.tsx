@@ -401,7 +401,7 @@ export const NepaliPrayerFlags: React.FC<{
     return Math.max(10, Math.min(calculated, 32));
   }, [containerWidth]);
 
-  // Compute catenary sag and natural hanging tilt for the curved garland across the entire bar
+  // Straight horizontal alignment across the entire bar
   const flags = useMemo(() => {
     const list: (FlagConfig & {
       key: string;
@@ -412,12 +412,8 @@ export const NepaliPrayerFlags: React.FC<{
 
     for (let i = 0; i < flagCount; i++) {
       const base = MIXED_VIBRANT_FLAGS[i % MIXED_VIBRANT_FLAGS.length];
-      // Arc formula from -1 (far left) to +1 (far right)
-      const t = flagCount > 1 ? (i - (flagCount - 1) / 2) / ((flagCount - 1) / 2) : 0;
-      // Arc droop: center hangs lower (parabolic catenary curve)
-      const sagY = Math.round((1 - t * t) * 16); // 0px at ends to 16px in center
-      // Natural arch tilt matching the hanging garland
-      const naturalTilt = Number((-t * 11).toFixed(1));
+      const sagY = 0;
+      const naturalTilt = 0;
 
       list.push({
         ...base,
@@ -537,7 +533,7 @@ export const NepaliPrayerFlags: React.FC<{
   return (
     <div
       ref={containerRef}
-      className={`relative w-full overflow-hidden select-none py-1 pointer-events-none will-change-opacity ${className}`}
+      className={`relative w-full overflow-hidden select-none pt-0 pb-0.5 pointer-events-none will-change-opacity ${className}`}
       style={{
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
@@ -545,17 +541,17 @@ export const NepaliPrayerFlags: React.FC<{
       }}
     >
       {/* Garland container (no scrollbars, flex fits dynamically across full width) */}
-      <div className="relative w-full h-[68px] xs:h-[76px] sm:h-[86px] md:h-[94px] flex items-start justify-center">
-        {/* Arched Hanging Rope SVG */}
+      <div className="relative w-full h-[38px] xs:h-[46px] sm:h-[54px] md:h-[62px] flex items-start justify-center">
+        {/* Straight Top Rope SVG */}
         <svg
           ref={ropeSvgRef}
-          className="absolute top-1 left-0 w-full h-8 pointer-events-none z-10 overflow-visible will-change-transform"
+          className="absolute top-0 left-0 w-full h-2 pointer-events-none z-10 overflow-visible will-change-transform"
           preserveAspectRatio="none"
-          viewBox="0 0 1000 36"
+          viewBox="0 0 1000 6"
         >
           {/* Subtle rope drop shadow */}
           <path
-            d="M 5,6 Q 500,32 995,6"
+            d="M 0,2.5 L 1000,2.5"
             fill="none"
             stroke="rgba(0,0,0,0.09)"
             strokeWidth="3.5"
@@ -563,14 +559,14 @@ export const NepaliPrayerFlags: React.FC<{
           />
           {/* Main White Cord as in the uploaded photos */}
           <path
-            d="M 5,5 Q 500,30 995,5"
+            d="M 0,1.5 L 1000,1.5"
             fill="none"
             stroke="#FFFFFF"
             strokeWidth="2.5"
             strokeLinecap="round"
           />
           <path
-            d="M 5,5 Q 500,30 995,5"
+            d="M 0,1.5 L 1000,1.5"
             fill="none"
             stroke="#E5E5E5"
             strokeWidth="1.2"
