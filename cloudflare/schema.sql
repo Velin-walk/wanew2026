@@ -211,6 +211,29 @@ CREATE TABLE IF NOT EXISTS admin_activity_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 13. User Activities Table (MapMiners recorded coordinate tracks & R2 GPX links)
+CREATE TABLE IF NOT EXISTS user_activities (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  user_name TEXT,
+  user_email TEXT,
+  trail_id TEXT,
+  trail_name TEXT,
+  distance REAL DEFAULT 0,
+  duration INTEGER DEFAULT 0,
+  elevation_gain REAL DEFAULT 0,
+  elevation_loss REAL DEFAULT 0,
+  avg_speed REAL DEFAULT 0,
+  pace TEXT,
+  calories INTEGER DEFAULT 0,
+  points_count INTEGER DEFAULT 0,
+  start_time TEXT,
+  end_time TEXT,
+  gpx_file_name TEXT,
+  gpx_url TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for Ultra-Low Row Reads & High-Speed Querying
 CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_email ON admin_activity_logs (admin_email);

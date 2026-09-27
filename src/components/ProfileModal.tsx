@@ -1039,15 +1039,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   />
                 </div>
 
-                {/* 2 Phone Numbers Limit Warning Banner */}
-                <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-2xl text-xs text-amber-950 flex items-start gap-2.5 shadow-3xs">
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 flex items-start gap-2.5 shadow-3xs">
                   <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <span className="font-black text-amber-950 block text-[11px] uppercase tracking-wider">
                       Maximum 2 Phone Numbers Allowed
                     </span>
                     <p className="text-[11px] text-amber-800 leading-relaxed">
-                      Only 2 phone numbers (Calling Phone &amp; WhatsApp Number) are allowed per profile. These auto-populate from your confirmed hike registration forms to sync past records.
+                      Only 2 phone numbers (Calling Phone and WhatsApp Number) are allowed per profile. These auto-populate from your confirmed hike registration forms to sync past records.
                     </p>
                   </div>
                 </div>

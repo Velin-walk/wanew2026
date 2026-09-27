@@ -107,7 +107,10 @@ function FitBounds({ route, bottomPadding }: { route: any; bottomPadding?: numbe
 
 function AllRoutesBounds({ routes }: { routes: any[] }) {
   const map = useMap();
+  const hasFittedInitialRef = useRef(false);
+
   useEffect(() => {
+    if (hasFittedInitialRef.current) return;
     if (!routes || routes.length === 0) return;
     const allLats: number[] = [];
     const allLngs: number[] = [];
@@ -127,6 +130,7 @@ function AllRoutesBounds({ routes }: { routes: any[] }) {
       [Math.max(...allLats), Math.max(...allLngs)]
     ];
     try {
+      hasFittedInitialRef.current = true;
       map.fitBounds(bounds, { padding: [40, 40], animate: true, duration: 0.8 });
     } catch (e) {
       console.warn('[AllRoutesBounds] Error fitting bounds:', e);
@@ -168,6 +172,171 @@ const TILE_LAYERS = {
   },
 };
 
+// Memory-safe offline tile cache reader (serves pre-downloaded tiles from CacheStorage)
+function OfflineTileLoader() {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || typeof caches === 'undefined') return;
+
+    if (!(L.TileLayer.prototype as any).hasOwnProperty('_wnwOriginalCreateTile')) {
+      const originalCreateTile = (L.TileLayer.prototype as any).createTile;
+      (L.TileLayer.prototype as any)._wnwOriginalCreateTile = originalCreateTile;
+
+      (L.TileLayer.prototype as any).createTile = function (
+        this: L.TileLayer,
+        coords: L.Coords,
+        done: L.LeafletEventHandlerFn
+      ) {
+        const tile: HTMLImageElement = originalCreateTile.call(this, coords, done);
+        const url = this.getTileUrl(coords);
+
+        if (!url || (!url.includes('openstreetmap.org') && !url.includes('arcgisonline.com'))) {
+          return tile;
+        }
+
+        caches
+          .open('wnw-offline-map-tiles')
+          .then((cache) => cache.match(url))
+          .then((cachedResponse) => {
+            if (!cachedResponse) return;
+            return cachedResponse.blob().then((blob) => {
+              const objectURL = URL.createObjectURL(blob);
+              const revoke = () => URL.revokeObjectURL(objectURL);
+              tile.addEventListener('load', revoke, { once: true });
+              tile.addEventListener('error', revoke, { once: true });
+              tile.src = objectURL;
+            });
+          })
+          .catch(() => {});
+
+        return tile;
+      };
+    }
+  }, [map]);
+
+  return null;
+}
+
+// Lightweight passive GPS Blue Dot component (single watcher, no activity recording)
+function UserLocationDot() {
+  const map = useMap();
+  const [isTracking, setIsTracking] = useState(false);
+  const [userPos, setUserPos] = useState<[number, number] | null>(null);
+  const [accuracy, setAccuracy] = useState<number>(0);
+  const watchIdRef = useRef<number | null>(null);
+  const hasCenteredRef = useRef(false);
+
+  const stopTracking = () => {
+    if (watchIdRef.current !== null && 'geolocation' in navigator) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    hasCenteredRef.current = false;
+    setIsTracking(false);
+    setUserPos(null);
+  };
+
+  const toggleTracking = () => {
+    if (isTracking) {
+      stopTracking();
+      return;
+    }
+    if (!('geolocation' in navigator)) return;
+
+    setIsTracking(true);
+    hasCenteredRef.current = false;
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude, accuracy: acc } = position.coords;
+        const pos: [number, number] = [latitude, longitude];
+        setUserPos(pos);
+        setAccuracy(acc || 0);
+
+        if (!hasCenteredRef.current) {
+          hasCenteredRef.current = true;
+          map.flyTo(pos, Math.max(map.getZoom(), 14), { duration: 0.8 });
+        }
+      },
+      () => {
+        stopTracking();
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+  };
+
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null && 'geolocation' in navigator) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <>
+      <div className="absolute top-14 right-3 z-[1000]">
+        <button
+          type="button"
+          onClick={toggleTracking}
+          className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer ${
+            isTracking
+              ? 'bg-blue-600 border-blue-600 text-white'
+              : 'bg-white border-neutral-200 text-neutral-700 hover:border-blue-500 hover:text-blue-600'
+          }`}
+          title={isTracking ? 'Hide current GPS location' : 'Show current GPS location'}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <circle cx="12" cy="12" r="8" />
+            <line x1="12" y1="2" x2="12" y2="4" />
+            <line x1="12" y1="20" x2="12" y2="22" />
+            <line x1="2" y1="12" x2="4" y2="12" />
+            <line x1="20" y1="12" x2="22" y2="12" />
+          </svg>
+          <span className="hidden md:inline">{isTracking ? 'GPS On' : 'My Location'}</span>
+        </button>
+      </div>
+
+      {isTracking && userPos && (
+        <>
+          <CircleMarker
+            center={userPos}
+            radius={18}
+            pathOptions={{
+              color: '#3b82f6',
+              weight: 1.5,
+              fillColor: '#3b82f6',
+              fillOpacity: 0.14,
+              className: 'animate-pulse',
+            }}
+          />
+          <CircleMarker
+            center={userPos}
+            radius={7}
+            pathOptions={{
+              color: '#ffffff',
+              weight: 2.5,
+              fillColor: '#3b82f6',
+              fillOpacity: 1,
+            }}
+          >
+            <Popup>
+              <div className="text-center text-xs p-1 font-semibold">
+                You are here<br />
+                <span className="text-[10px] text-neutral-400 font-mono">
+                  Accuracy: ±{Math.round(accuracy)}m
+                </span>
+              </div>
+            </Popup>
+          </CircleMarker>
+        </>
+      )}
+    </>
+  );
+}
+
 function TileLayerToggle() {
   const [mode, setMode] = useState<'street' | 'satellite'>('street');
   const [isCompact, setIsCompact] = useState(() => window.innerWidth <= 768);
@@ -181,6 +350,7 @@ function TileLayerToggle() {
 
   return (
     <>
+      <OfflineTileLoader />
       <TileLayer key={mode} url={tile.url} attribution={tile.attribution} />
       <div className="absolute top-3 right-3 z-[1000]">
         <button
@@ -221,6 +391,7 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
         >
           <MapResizer />
           <TileLayerToggle />
+          <UserLocationDot />
           <ZoomControl position="bottomright" />
 
           {routes.map((route, idx) => {
@@ -229,7 +400,6 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
               ? route.displayLineSegments
               : (route.lineSegments?.length ? route.lineSegments : (route.coordinates?.length ? [route.coordinates] : []));
 
-            // Extract only valid numeric coordinates into segments of [lat, lng] tuples
             const validSegments: [number, number][][] = (renderSegments || [])
               .map((seg: any) =>
                 (seg || [])
@@ -251,13 +421,11 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                 <div key={route.id || idx}>
                   {validSegments.map((positions: [number, number][], segmentIdx: number) => (
                     <div key={`${route.id || idx}-seg-${segmentIdx}`}>
-                      {/* Shadow/glow line */}
                       <Polyline
                         positions={positions}
                         pathOptions={{ color: color, weight: 10, opacity: 0.15 }}
                         eventHandlers={{ click: () => onRouteClick(route) }}
                       />
-                      {/* Main line */}
                       <Polyline
                         positions={positions}
                         pathOptions={{ color: color, weight: 4, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
@@ -271,7 +439,6 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                     </div>
                   ))}
 
-                  {/* Start marker */}
                   <CircleMarker
                     center={startPos}
                     radius={8}
@@ -296,7 +463,6 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                     </Popup>
                   </CircleMarker>
 
-                  {/* End marker */}
                   <CircleMarker
                     center={endPos}
                     radius={6}
@@ -306,7 +472,6 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                 </div>
               );
             } else {
-              // For inactive routes, ONLY render a lightweight dot to prevent browser lag
               return (
                 <CircleMarker
                   key={route.id || idx}
@@ -326,7 +491,6 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
           {activeRoute && <FitBounds route={activeRoute} bottomPadding={detailPanelHeight} />}
           {!activeRoute && routes.length > 0 && <AllRoutesBounds routes={routes} />}
 
-          {/* Imperative hover dot — listens to DOM events, zero React overhead */}
           <HoverDot />
         </MapContainer>
       </MapErrorBoundary>
@@ -334,7 +498,6 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
   );
 }
 
-// Fully imperative: listens to 'chart-hover' CustomEvent, calls setLatLng() directly
 function HoverDot() {
   const map = useMap();
   const glowRef = useRef<L.CircleMarker | null>(null);

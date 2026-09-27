@@ -7,6 +7,7 @@ import { parseGPX, parseKML, parseRouteFile, routeToGPX, simplifyLineSegments } 
 import { resolveAssetUrl } from './assetUrl';
 import { generateDemoRoutes } from './demoData';
 import { apiFetch, clearApiCache } from '../../services/api';
+import { isAdminEmail } from '../../adminUtils';
 import { db } from '../../lib/firebase';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 import MapChat from './MapChat';
@@ -54,6 +55,84 @@ export default function MapMinersDashboard({
   const [contributionError, setContributionError] = useState('');
   const [isContributing, setIsContributing] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+  const savedStorageKey = `wnw_saved_trails_${(currentUserEmail || 'guest').toLowerCase()}`;
+  const [savedRouteIds, setSavedRouteIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(`wnw_saved_trails_${(currentUserEmail || 'guest').toLowerCase()}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map(String);
+      }
+    } catch (_) {}
+    return [];
+  });
+
+  // Load local saved trails and sync with Cloudflare D1 when user changes
+  useEffect(() => {
+    let localIds: string[] = [];
+    try {
+      const raw = localStorage.getItem(savedStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) localIds = parsed.map(String);
+      }
+    } catch (_) {}
+    setSavedRouteIds(localIds);
+
+    if (!currentUserEmail) return;
+
+    let isMounted = true;
+    apiFetch(`mapminers/saved?email=${encodeURIComponent(currentUserEmail)}`, { forceFresh: true })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (data?.success && Array.isArray(data.trailIds) && isMounted) {
+          setSavedRouteIds((prev) => {
+            const merged = Array.from(new Set([...prev, ...data.trailIds.map(String)]));
+            try {
+              localStorage.setItem(savedStorageKey, JSON.stringify(merged));
+            } catch (_) {}
+            return merged;
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUserEmail, savedStorageKey]);
+
+  const handleToggleSaveRoute = useCallback(
+    async (trailId: string, forceSave?: boolean) => {
+      if (!trailId) return;
+      const idStr = String(trailId);
+      const currentlySaved = savedRouteIds.includes(idStr);
+      const shouldSave = forceSave !== undefined ? forceSave : !currentlySaved;
+
+      setSavedRouteIds((prev) => {
+        const next = shouldSave
+          ? Array.from(new Set([...prev, idStr]))
+          : prev.filter((id) => id !== idStr);
+        try {
+          localStorage.setItem(savedStorageKey, JSON.stringify(next));
+        } catch (_) {}
+        return next;
+      });
+
+      if (currentUserEmail) {
+        try {
+          await apiFetch('mapminers/saved', {
+            method: shouldSave ? 'POST' : 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: currentUserEmail, trailId: idStr }),
+          });
+        } catch (_) {}
+      }
+    },
+    [currentUserEmail, savedRouteIds, savedStorageKey]
+  );
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -145,9 +224,7 @@ export default function MapMinersDashboard({
         console.warn('Could not load trails from Cloudflare Worker:', cfErr);
       }
 
-      // 2. Fetch Firestore Fallback/Resilient Trails
-      let firestoreRoutes: any[] = [];
-      // 2. Merge and Deduplicate by trail ID
+      // 2. Deduplicate by trail ID
       const mergedMap = new Map<string, any>();
       
       cloudflareRoutes.forEach(r => {
@@ -439,7 +516,10 @@ export default function MapMinersDashboard({
       const matchesSearch = route.name.toLowerCase().includes(query) || 
         (route.description && route.description.toLowerCase().includes(query));
       const matchesDifficulty = filterDifficulty === 'All' || route.difficulty === filterDifficulty;
-      const matchesMyMaps = minerTab !== 'my' || (currentUserEmail && route.contributorEmail === currentUserEmail);
+      const matchesMyMaps =
+        minerTab !== 'my' ||
+        savedRouteIds.includes(String(route.id)) ||
+        Boolean(currentUserEmail && route.contributorEmail && route.contributorEmail.toLowerCase() === currentUserEmail.toLowerCase());
       return matchesSearch && matchesDifficulty && matchesMyMaps;
     })
     .sort((a, b) => {
@@ -618,16 +698,27 @@ export default function MapMinersDashboard({
             </div>
           ) : (
             <div className="p-4 space-y-3">
-              {filteredRoutes.map((route, idx) => (
-                <RouteCard
-                  key={route.id}
-                  route={route}
-                  index={idx}
-                  isActive={activeRoute?.id === route.id}
-                  onClick={handleRouteClick}
-                  onDelete={handleDeleteRoute}
-                />
-              ))}
+              {filteredRoutes.map((route, idx) => {
+                const canDeleteRoute = Boolean(
+                  currentUserEmail &&
+                    (isAdminEmail(currentUserEmail) ||
+                      (route.contributorEmail &&
+                        route.contributorEmail.toLowerCase() === currentUserEmail.toLowerCase()))
+                );
+                return (
+                  <RouteCard
+                    key={route.id}
+                    route={route}
+                    index={idx}
+                    isActive={activeRoute?.id === route.id}
+                    canDelete={canDeleteRoute}
+                    isSaved={savedRouteIds.includes(String(route.id))}
+                    onClick={handleRouteClick}
+                    onDelete={handleDeleteRoute}
+                    onToggleSave={handleToggleSaveRoute}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -664,6 +755,8 @@ export default function MapMinersDashboard({
               onClose={() => setActiveRoute(null)}
               isMobile={isMobile}
               currentUserEmail={currentUserEmail}
+              isSaved={savedRouteIds.includes(String(activeRoute.id))}
+              onToggleSave={handleToggleSaveRoute}
             />
           </div>
         )}

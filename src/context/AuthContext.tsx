@@ -66,7 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (currentUser) {
         setUser(currentUser);
         safeLocalStorage.removeItem('wnw_dev_user');
-      } else {
+      } else if (import.meta.env.DEV) {
         const savedDevUser = safeLocalStorage.getItem('wnw_dev_user');
         if (savedDevUser) {
           try {
@@ -90,6 +90,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setUser(null);
         }
+      } else {
+        setUser(null);
       }
       setLoading(false);
     });

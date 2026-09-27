@@ -113,7 +113,7 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
   const headers = new Headers(options?.headers);
   try {
     let userEmail = headers.get("X-Admin-Email") || auth.currentUser?.email;
-    if (!userEmail) {
+    if (!userEmail && import.meta.env?.DEV) {
       try {
         const savedDev = localStorage.getItem("wnw_dev_user");
         if (savedDev) {
@@ -130,9 +130,6 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
           if (parsed?.email || parsed?.email_address) userEmail = parsed.email || parsed.email_address;
         }
       } catch (_) {}
-    }
-    if (!userEmail) {
-      userEmail = "walknepalwalk@gmail.com";
     }
     if (userEmail && method !== "GET") {
       headers.set("X-Admin-Email", userEmail);

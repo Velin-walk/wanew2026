@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, TrendingUp, TrendingDown, Download, MapPin, Flag, Share2, Check, ChevronUp, ChevronDown, MessageSquare, Trash2, Send } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Download, MapPin, Share2, Check, ChevronUp, ChevronDown, MessageSquare, Trash2, Send, Bookmark } from 'lucide-react';
 import ElevationChart from './ElevationChart';
 import { routeToGPX } from './kmlParser';
-import { db } from '../../lib/firebase';
-// Firestore methods removed as app now uses Cloudflare D1 for storage
 import { apiFetch } from '../../services/api';
 
 interface RouteDetailProps {
@@ -11,6 +9,8 @@ interface RouteDetailProps {
   onClose: () => void;
   isMobile: boolean;
   currentUserEmail?: string;
+  isSaved?: boolean;
+  onToggleSave?: (id: string, forceSave?: boolean) => void;
 }
 
 interface TrailComment {
@@ -56,49 +56,94 @@ function formatEstimatedTime(hours: number): string {
   return `~${h}h ${m}m`;
 }
 
-function buildAboutParagraphs(text: string): string[] {
-  if (!text) return [];
-  const sentences = text
-    .replace(/\s+/g, ' ')
-    .trim()
-    .match(/[^.!?]+[.!?]?/g) || [text.trim()];
-
-  const paragraphs: string[] = [];
-  for (let i = 0; i < sentences.length && paragraphs.length < 3; i += 2) {
-    paragraphs.push(`${(sentences[i] || '').trim()} ${(sentences[i + 1] || '').trim()}`.trim());
-  }
-  return paragraphs.filter(Boolean);
-}
-
-function getHighlights(route: any): string[] {
-  const chips: string[] = [];
-  const difficulty = String(route?.difficulty || '').toLowerCase();
-  const text = `${route?.description || ''} ${route?.highlights || ''}`.toLowerCase();
-
-  if (difficulty === 'easy' || difficulty === 'moderate') chips.push('Beginner Friendly');
-  if (text.includes('family') || text.includes('kids')) chips.push('Family Friendly');
-  if (text.includes('transport') || text.includes('bus') || text.includes('jeep')) {
-    chips.push('Transit available');
-  }
-  if (chips.length === 0 && (route?.stats?.distance || 0) <= 15) chips.push('Great Half-day Hike');
-
-  return chips.slice(0, 3);
-}
-
-function maskEmail(email: string): string {
-  if (!email) return '';
-  const [localPart, domainPart] = String(email).split('@');
-  if (!domainPart) return email;
-
-  const visibleChars = localPart.length > 2 ? localPart.slice(0, 2) : localPart.slice(0);
-  const maskedChars = '*'.repeat(Math.max(4, localPart.length - visibleChars.length));
-  return `${visibleChars}${maskedChars}@${domainPart}`;
-}
-
-export default function RouteDetail({ route, onClose, isMobile, currentUserEmail }: RouteDetailProps) {
-  const [activeTab, setActiveTab] = useState<'SUMMARY' | 'PROFILE' | 'MORE' | 'COMMENTS'>('SUMMARY');
+export default function RouteDetail({ route, onClose, currentUserEmail, isSaved = false, onToggleSave }: RouteDetailProps) {
+  const [activeTab, setActiveTab] = useState<'SUMMARY' | 'PROFILE' | 'COMMENTS'>('SUMMARY');
   const [shareCopied, setShareCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+
+  const handleDownloadOffline = async () => {
+    if (!route || typeof caches === 'undefined') return;
+
+    let coordinatesList: any[] = [];
+    if (route.coordinates?.length) {
+      coordinatesList = route.coordinates;
+    } else if (route.lineSegments) {
+      coordinatesList = route.lineSegments.flat();
+    }
+
+    if (coordinatesList.length === 0) return;
+
+    setDownloadProgress(0);
+
+    const latLngToTile = (lat: number, lng: number, zoom: number) => {
+      const latRad = (lat * Math.PI) / 180;
+      const x = Math.floor(((lng + 180) / 360) * Math.pow(2, zoom));
+      const y = Math.floor(
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * Math.pow(2, zoom)
+      );
+      return { x, y };
+    };
+
+    try {
+      const zooms = [12, 13, 14, 15];
+      const tileUrls = new Set<string>();
+
+      const samplingStep = Math.max(1, Math.floor(coordinatesList.length / 40));
+      const sampledCoords: any[] = [];
+      for (let i = 0; i < coordinatesList.length; i += samplingStep) {
+        sampledCoords.push(coordinatesList[i]);
+      }
+      sampledCoords.push(coordinatesList[coordinatesList.length - 1]);
+
+      sampledCoords.forEach((pt) => {
+        if (pt && typeof pt.lat === 'number' && typeof pt.lng === 'number') {
+          zooms.forEach((zoom) => {
+            const { x, y } = latLngToTile(pt.lat, pt.lng, zoom);
+            tileUrls.add(`https://a.tile.openstreetmap.org/${zoom}/${x}/${y}.png`);
+            tileUrls.add(`https://b.tile.openstreetmap.org/${zoom}/${x}/${y}.png`);
+            tileUrls.add(`https://c.tile.openstreetmap.org/${zoom}/${x}/${y}.png`);
+            tileUrls.add(`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${y}/${x}`);
+          });
+        }
+      });
+
+      const urls = Array.from(tileUrls);
+      const total = Math.max(1, urls.length);
+      let completed = 0;
+
+      const cache = await caches.open('wnw-offline-map-tiles');
+      const batchSize = 6;
+
+      for (let i = 0; i < urls.length; i += batchSize) {
+        const batch = urls.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(async (url) => {
+            try {
+              const cached = await cache.match(url);
+              if (!cached) {
+                const res = await fetch(url, { mode: 'cors' });
+                if (res.ok) {
+                  await cache.put(url, res);
+                }
+              }
+            } catch (_) {}
+            completed++;
+          })
+        );
+        setDownloadProgress(Math.round((completed / total) * 100));
+      }
+
+      setDownloadProgress(100);
+      if (route?.id && onToggleSave) {
+        onToggleSave(String(route.id), true);
+      }
+      setTimeout(() => setDownloadProgress(null), 3000);
+    } catch (err) {
+      console.warn('Failed offline cache download:', err);
+      setDownloadProgress(null);
+    }
+  };
 
   // Initialize comments from localStorage cache so UI is instantaneous and resilient
   const [comments, setComments] = useState<TrailComment[]>(() => {
@@ -124,12 +169,10 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
     return id;
   });
 
-  const highlightChips = getHighlights(route);
-  const aboutParagraphs = buildAboutParagraphs(route?.description || '');
-
   // Keep expanded state synchronized with route switches
   useEffect(() => {
     setIsExpanded(false);
+    setDownloadProgress(null);
   }, [route.id]);
 
   // Lazy-load comments ONLY when the COMMENTS tab is selected
@@ -159,7 +202,6 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
       });
 
     // 2. Resilient sync listener (Cloudflare only now)
-    // Firestore listener removed to use authentication only
     setLoadingComments(false);
 
     return () => {
@@ -187,15 +229,6 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
     navigator.clipboard.writeText(shareUrl);
     setShareCopied(true);
     setTimeout(() => setShareCopied(false), 2000);
-  };
-
-  const handleTabClick = (tab: 'SUMMARY' | 'PROFILE' | 'MORE' | 'COMMENTS') => {
-    setActiveTab(tab);
-    setIsExpanded(true); // Auto expand when user clicks any tab
-  };
-
-  const toggleExpand = () => {
-    setIsExpanded(!isExpanded);
   };
 
   const handlePostComment = async (e: React.FormEvent) => {
@@ -266,184 +299,114 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
   const headerBgImage = route?.heroImage || route?.image || 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80';
 
   return (
-    <div className="bg-white border border-neutral-200 rounded-t-xl md:rounded-xl shadow-xl overflow-hidden flex flex-col w-full max-w-[410px] mx-auto transition-all duration-300">
+    <div className="bg-white border border-neutral-200 rounded-t-xl md:rounded-xl shadow-xl overflow-hidden flex flex-col w-full max-w-[380px] mx-auto transition-all duration-300">
       
-      {/* Tap/Click to expand top handle area */}
+      {/* Smooth Expandable Content Box - Placed at the top (Details expand UPWARD) */}
       <div 
-        onClick={toggleExpand}
-        className="flex flex-col justify-center items-center py-1 cursor-pointer hover:bg-neutral-50 active:bg-neutral-100 transition-colors shrink-0"
-        title={isExpanded ? "Click to collapse" : "Click to expand details"}
-      >
-        <div className="w-8 h-1 bg-neutral-200 rounded-full mb-0.5" />
-        <div className="text-[8px] text-neutral-400 font-bold tracking-wider flex items-center gap-0.5">
-          {isExpanded ? (
-            <>
-              <span>COLLAPSE</span>
-              <ChevronDown className="w-2.5 h-2.5 text-[#7ABA42]" />
-            </>
-          ) : (
-            <>
-              <span>EXPAND TRAIL INFORMATION</span>
-              <ChevronUp className="w-2.5 h-2.5 text-[#7ABA42]" />
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Hero Header Area */}
-      <div 
-        className="h-[75px] bg-cover bg-center relative shrink-0"
-        style={{ backgroundImage: `url(${headerBgImage})` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/30" />
-        
-        <div className="absolute bottom-2.5 left-3.5 right-3.5 flex justify-between items-end gap-3 z-10">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-xs font-black text-white leading-tight tracking-tight drop-shadow-sm truncate">
-              {route.name}
-            </h2>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className={`text-[8px] font-black uppercase text-white px-1.5 py-0.2 rounded ${
-                route.difficulty === 'Easy' ? 'bg-emerald-500' :
-                route.difficulty === 'Moderate' ? 'bg-amber-500' :
-                route.difficulty === 'Hard' ? 'bg-red-500' : 'bg-rose-700'
-              }`}>
-                {route.difficulty}
-              </span>
-
-              {route.nearbyCity && (
-                <span className="text-[8px] text-neutral-300 font-semibold truncate">
-                  • {route.nearbyCity}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Action Row & Close */}
-          <div className="flex items-center gap-1 shrink-0 self-start">
-            <button
-              onClick={handleDownloadGPX}
-              className="flex items-center gap-0.5 px-1.5 py-0.5 bg-sky-500 hover:bg-sky-600 border border-sky-400 text-white font-bold text-[8px] rounded shadow-xs cursor-pointer"
-              title="Export GPS file"
-            >
-              <Download className="w-2 h-2" />
-              <span>Export</span>
-            </button>
-
-            <button
-              onClick={handleShareRoute}
-              className={`flex items-center gap-0.5 px-1.5 py-0.5 border font-bold text-[8px] rounded shadow-xs cursor-pointer text-white ${
-                shareCopied 
-                  ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-500' 
-                  : 'bg-indigo-600 hover:bg-indigo-700 border-indigo-500'
-              }`}
-              title="Copy trail link to share"
-            >
-              {shareCopied ? <Check className="w-2 h-2" /> : <Share2 className="w-2 h-2" />}
-              <span>{shareCopied ? 'Copied' : 'Share'}</span>
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose();
-              }}
-              className="p-1 bg-black/60 hover:bg-black/80 border border-white/10 rounded text-white transition-colors cursor-pointer"
-              aria-label="Close details"
-            >
-              <X className="w-2.5 h-2.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs Menu */}
-      <div className="flex justify-center items-center gap-5 border-b border-neutral-100 bg-white px-3 pt-2 shrink-0">
-        {(['SUMMARY', 'PROFILE', 'MORE', 'COMMENTS'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => handleTabClick(tab)}
-            className={`pb-1.5 text-[8.5px] font-bold tracking-wider transition-all border-b-2 uppercase ${
-              activeTab === tab 
-                ? 'border-[#7ABA42] text-[#7ABA42]' 
-                : 'border-transparent text-neutral-400 hover:text-neutral-700'
-            }`}
-          >
-            {tab === 'COMMENTS' ? `Comments (${comments.length})` : tab}
-          </button>
-        ))}
-      </div>
-
-      {/* Smooth Expandable Content Box */}
-      <div 
-        className={`transition-all duration-300 ease-in-out bg-white overflow-hidden ${
-          isExpanded ? 'max-h-[250px] opacity-100 border-t border-neutral-50' : 'max-h-0 opacity-0 pointer-events-none'
+        className={`transition-all duration-300 ease-in-out bg-neutral-50/50 overflow-hidden ${
+          isExpanded ? 'max-h-[165px] opacity-100 border-b border-neutral-200' : 'max-h-0 opacity-0 pointer-events-none'
         }`}
       >
-        <div className="p-2 overflow-y-auto no-scrollbar max-h-[250px] flex flex-col h-full">
+        <div className="p-3 overflow-y-auto no-scrollbar max-h-[165px] flex flex-col h-full text-neutral-800">
           
           {activeTab === 'SUMMARY' && (
-            <div className="space-y-2">
-              {/* Divider grid perfectly matching references */}
-              <div className="grid grid-cols-2 bg-white border border-neutral-200 rounded-lg overflow-hidden divide-x divide-y divide-neutral-200">
-                
+            <div className="space-y-2 animate-in fade-in duration-150 max-h-[145px] overflow-y-auto no-scrollbar">
+              {/* Elegant single-row 4-column divider grid */}
+              <div className="grid grid-cols-4 bg-white border border-neutral-200 rounded-lg overflow-hidden divide-x divide-neutral-200 text-center shadow-3xs shrink-0">
                 {/* Distance */}
-                <div className="p-2">
-                  <span className="text-[7.5px] uppercase font-bold tracking-wider text-neutral-400 block">
-                    DISTANCE
+                <div className="p-1.5">
+                  <span className="text-[7px] uppercase font-black tracking-wider text-neutral-400 block">
+                    DIST
                   </span>
-                  <span className="text-xs font-bold text-neutral-800 block mt-0.5">
+                  <span className="text-[11px] font-black text-neutral-800 block mt-0.5">
                     {route.stats.distance}km
                   </span>
                 </div>
 
                 {/* Gain */}
-                <div className="p-2 !border-t-0">
-                  <span className="text-[7.5px] uppercase font-bold tracking-wider text-neutral-400 block">
+                <div className="p-1.5">
+                  <span className="text-[7px] uppercase font-black tracking-wider text-neutral-400 block">
                     GAIN
                   </span>
-                  <span className="text-xs font-bold text-emerald-600 block mt-0.5">
+                  <span className="text-[11px] font-black text-emerald-600 block mt-0.5">
                     +{route.stats.elevationGain}m
                   </span>
                 </div>
 
                 {/* Loss */}
-                <div className="p-2">
-                  <span className="text-[7.5px] uppercase font-bold tracking-wider text-neutral-400 block">
+                <div className="p-1.5">
+                  <span className="text-[7px] uppercase font-black tracking-wider text-neutral-400 block">
                     LOSS
                   </span>
-                  <span className="text-xs font-bold text-blue-600 block mt-0.5">
+                  <span className="text-[11px] font-black text-blue-600 block mt-0.5">
                     -{route.stats.elevationLoss}m
                   </span>
                 </div>
 
                 {/* Duration / Time */}
-                <div className="p-2">
-                  <span className="text-[7.5px] uppercase font-bold tracking-wider text-neutral-400 block">
+                <div className="p-1.5">
+                  <span className="text-[7px] uppercase font-black tracking-wider text-neutral-400 block">
                     TIME
                   </span>
-                  <span className="text-xs font-bold text-[#7ABA42] block mt-0.5">
+                  <span className="text-[11px] font-black text-[#7ABA42] block mt-0.5">
                     {formatEstimatedTime(route.stats.estimatedHours)}
                   </span>
                 </div>
-
               </div>
 
-              {/* Region location details bar */}
-              {(route.district || route.province) && (
-                <div className="flex items-center gap-1.5 text-[8.5px] text-neutral-500 px-1 bg-neutral-50 py-1 rounded-lg border border-neutral-100">
-                  <MapPin className="w-2.5 h-2.5 text-neutral-400 shrink-0 ml-0.5" />
-                  <span className="truncate font-semibold text-[8.5px]">
-                    {route.district && route.district} • {route.province && route.province} region
-                  </span>
+              {/* Description/About inline preview */}
+              {route.description && (
+                <div className="px-1 text-[8.5px] leading-tight text-neutral-500 line-clamp-2 shrink-0">
+                  {route.description}
                 </div>
               )}
+
+              {/* Location and Download inside vertical stack */}
+              <div className="flex flex-col gap-1 shrink-0">
+                {(route.district || route.province) && (
+                  <div className="flex items-center gap-1.5 text-[8.2px] text-neutral-600 px-2 py-0.8 bg-white rounded-md border border-neutral-150 shadow-3xs">
+                    <MapPin className="w-2 h-2 text-neutral-400 shrink-0" />
+                    <span className="truncate font-bold">
+                      {route.district && route.district} • {route.province && route.province} region
+                    </span>
+                  </div>
+                )}
+
+                {/* Download Offline Trail Corridor Map */}
+                <button
+                  type="button"
+                  onClick={handleDownloadOffline}
+                  disabled={downloadProgress !== null || (!route.isLazyLoaded && !route.isDemo)}
+                  className="w-full flex items-center justify-center gap-1.5 py-1 px-3 border border-[#7ABA42]/20 bg-[#7ABA42]/5 hover:bg-[#7ABA42]/10 rounded-lg text-[#7ABA42] text-[8.5px] font-black tracking-wide transition-all cursor-pointer shadow-3xs select-none disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {downloadProgress === null ? (
+                    <>
+                      <Download className="w-2.5 h-2.5" />
+                      <span>
+                        {!route.isLazyLoaded && !route.isDemo
+                          ? 'Loading Trail Coordinates...'
+                          : 'Download Trail Offline Map'}
+                      </span>
+                    </>
+                  ) : downloadProgress === 100 ? (
+                    <>
+                      <Check className="w-2.5 h-2.5 text-emerald-600" />
+                      <span className="text-emerald-700 font-extrabold">Offline Map Saved!</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-2 h-2 border-2 border-[#7ABA42] border-t-transparent rounded-full animate-spin shrink-0" />
+                      <span>Downloading Tiles... {downloadProgress}%</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 
           {activeTab === 'PROFILE' && (
-            <div className="space-y-1.5">
-              <div className="h-[90px] w-full relative">
+            <div className="space-y-1 animate-in fade-in duration-150">
+              <div className="h-[75px] w-full relative bg-white rounded-lg p-1 border border-neutral-150 shadow-3xs">
                 {route.loadError ? (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 text-center px-4">
                     <span className="text-[8px] font-bold">Failed to load route file</span>
@@ -459,108 +422,27 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
                 )}
               </div>
               
-              <div className="flex justify-between text-[8px] font-bold text-neutral-500 px-1 pt-1 border-t border-neutral-100">
-                <span className="flex items-center gap-0.5">
-                  <TrendingUp className="w-2.5 h-2.5 text-emerald-500" />
-                  <span>Peak: {route.stats.maxElevation}m</span>
-                </span>
-                <span className="flex items-center gap-0.5">
-                  <TrendingDown className="w-2.5 h-2.5 text-blue-500" />
-                  <span>Min: {route.stats.minElevation}m</span>
-                </span>
+              <div className="flex justify-between items-center text-[7.2px] font-bold text-neutral-500 px-1 pt-0.5 gap-1 shrink-0">
+                <span className="truncate">Start: {route.stats.startElevation}m</span>
+                <span className="truncate">End: {route.stats.endElevation}m</span>
+                <span className="text-emerald-600 truncate flex items-center gap-0.2 font-extrabold"><TrendingUp className="w-1.8 h-1.8" /> Peak: {route.stats.maxElevation}m</span>
+                <span className="text-blue-600 truncate flex items-center gap-0.2 font-extrabold"><TrendingDown className="w-1.8 h-1.8" /> Min: {route.stats.minElevation}m</span>
               </div>
-            </div>
-          )}
-
-          {activeTab === 'MORE' && (
-            <div className="space-y-2 text-[10px]">
-              {/* Elevation range */}
-              <div className="grid grid-cols-2 gap-1">
-                <div className="p-1 bg-neutral-50 rounded border border-neutral-100 text-center">
-                  <span className="text-[7.5px] text-neutral-400 font-bold uppercase tracking-wider block">Start Elev</span>
-                  <span className="text-[10px] font-bold text-neutral-700 font-mono mt-0.5 block">{route.stats.startElevation}m</span>
-                </div>
-                <div className="p-1 bg-neutral-50 rounded border border-neutral-100 text-center">
-                  <span className="text-[7.5px] text-neutral-400 font-bold uppercase tracking-wider block">End Elev</span>
-                  <span className="text-[10px] font-bold text-neutral-700 font-mono mt-0.5 block">{route.stats.endElevation}m</span>
-                </div>
-              </div>
-
-              {/* Google Maps trailhead navigator */}
-              {route.isLazyLoaded && route.waypoints && route.waypoints.length >= 2 && (
-                <div className="grid grid-cols-2 gap-1 shrink-0">
-                  <a
-                    href={`https://www.google.com/maps?q=${route.waypoints[0].lat},${route.waypoints[0].lng}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-0.5 py-1 bg-emerald-50 border border-emerald-100 text-emerald-700 text-[8px] font-bold rounded hover:bg-emerald-100 transition-colors cursor-pointer"
-                  >
-                    <MapPin size={9} />
-                    <span>Start GPS</span>
-                  </a>
-                  <a
-                    href={`https://www.google.com/maps?q=${route.waypoints[route.waypoints.length - 1].lat},${route.waypoints[route.waypoints.length - 1].lng}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-0.5 py-1 bg-rose-50 border border-rose-100 text-rose-700 text-[8px] font-bold rounded hover:bg-rose-100 transition-colors cursor-pointer"
-                  >
-                    <Flag size={9} />
-                    <span>End GPS</span>
-                  </a>
-                </div>
-              )}
-
-              {/* Description/About */}
-              {route.description && (
-                <div className="p-1.5 bg-neutral-50 rounded-lg border border-neutral-150">
-                  <span className="text-[7.5px] text-neutral-400 font-bold uppercase tracking-wider block mb-0.5">About Trail</span>
-                  {highlightChips.length > 0 && (
-                    <div className="flex flex-wrap gap-0.5 mb-1">
-                      {highlightChips.map((chip) => (
-                        <span key={chip} className="text-[7.5px] font-bold text-neutral-500 bg-white border border-neutral-200 rounded-full px-1 py-0.2">
-                          {chip}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {aboutParagraphs.map((p, idx) => (
-                    <p key={idx} className="text-[9px] text-neutral-600 leading-relaxed mb-0.5 last:mb-0">
-                      {p}
-                    </p>
-                  ))}
-                </div>
-              )}
-
-              {/* Contributor credentials block */}
-              {route.contributorName && (
-                <div className="p-1.5 bg-amber-50/40 border border-amber-200/40 rounded-lg flex items-center justify-between text-[9px]">
-                  <div>
-                    <span className="text-[7.5px] text-amber-600 font-bold uppercase tracking-wider block">CONTRIBUTOR</span>
-                    <span className="font-bold text-neutral-700 mt-0.5 block">{route.contributorName}</span>
-                  </div>
-                  {route.contributorEmail && (
-                    <span className="text-[8px] font-mono text-neutral-500 bg-white/60 border border-amber-200/30 px-1 py-0.2 rounded">
-                      {maskEmail(route.contributorEmail)}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
           {activeTab === 'COMMENTS' && (
-            <div className="flex flex-col h-full space-y-2 text-[10px]">
-              {/* Comments Stream Viewport */}
-              <div className="flex-1 overflow-y-auto space-y-2 p-1 max-h-[145px] scrollbar-thin">
+            <div className="flex flex-col h-full space-y-1.5 text-[9px] animate-in fade-in duration-150">
+              {/* Comments Stream Viewport with custom thin scrollbar */}
+              <div className="flex-1 overflow-y-auto space-y-1.5 p-0.5 max-h-[90px] scrollbar-thin">
                 {loadingComments ? (
-                  <div className="text-center py-4 text-neutral-400 text-[9px] font-bold">
+                  <div className="text-center py-2 text-neutral-400 text-[8px] font-bold">
                     Syncing trail comments...
                   </div>
                 ) : comments.length === 0 ? (
-                  <div className="text-center py-6 text-neutral-400 text-[9px] font-bold flex flex-col items-center justify-center gap-1">
-                    <MessageSquare className="w-5 h-5 text-neutral-300" />
+                  <div className="text-center py-3 text-neutral-400 text-[8px] font-bold flex flex-col items-center justify-center gap-0.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-neutral-300" />
                     <span>No Comments Yet</span>
-                    <span className="text-[8px] text-neutral-400">Be the first to share your notes!</span>
                   </div>
                 ) : (
                   comments.map((comm) => {
@@ -568,24 +450,24 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
                                         (!currentUserEmail && comm.guestSessionId === currentSessionId);
                     const isAdmin = currentUserEmail === 'walknepalwalk@gmail.com';
                     return (
-                      <div key={comm.id} className="p-2 bg-neutral-50 border border-neutral-150 rounded-xl flex items-start justify-between gap-2">
+                      <div key={comm.id} className="p-1.5 bg-white border border-neutral-150 rounded-lg flex items-start justify-between gap-1.5 shadow-3xs">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 mb-1 text-[8.5px]">
-                            <span className="font-extrabold text-neutral-700 truncate max-w-[100px]">
+                          <div className="flex items-center gap-1.5 text-[7.5px] mb-0.5">
+                            <span className="font-extrabold text-neutral-700 truncate max-w-[80px]">
                               {comm.authorName}
                             </span>
                             <span className="text-neutral-400">
                               {new Date(comm.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                             </span>
                           </div>
-                          <p className="text-[9.5px] text-neutral-600 leading-relaxed break-words">
+                          <p className="text-[8.5px] text-neutral-600 leading-tight break-words">
                             {comm.text}
                           </p>
                         </div>
                         {(isMyComment || isAdmin) && (
                           <button
                             onClick={() => handleDeleteComment(comm.id)}
-                            className="p-1 text-neutral-400 hover:text-red-600 rounded hover:bg-red-50 cursor-pointer transition-colors shrink-0 self-start"
+                            className="p-0.5 text-neutral-400 hover:text-red-600 rounded hover:bg-red-50 cursor-pointer transition-colors shrink-0 self-start"
                             title="Delete comment"
                           >
                             <Trash2 className="w-2.5 h-2.5" />
@@ -598,29 +480,149 @@ export default function RouteDetail({ route, onClose, isMobile, currentUserEmail
               </div>
 
               {/* Post Comment Input */}
-              <form onSubmit={handlePostComment} className="flex gap-1.5 pt-1.5 border-t border-neutral-100 shrink-0">
+              <form onSubmit={handlePostComment} className="flex gap-1.5 pt-1.5 border-t border-neutral-150 shrink-0">
                 <input
                   type="text"
-                  placeholder="Share notes, tips, coordinates..."
+                  placeholder="Share notes..."
                   value={commentInput}
                   onChange={(e) => setCommentInput(e.target.value)}
-                  className="flex-1 p-2 bg-neutral-50 border border-neutral-200 rounded-lg text-[9px] font-semibold focus:bg-white focus:outline-none focus:border-[#7ABA42] text-neutral-800"
+                  className="flex-1 p-1 bg-white border border-neutral-200 rounded-lg text-[8.5px] font-semibold focus:outline-none focus:border-[#7ABA42] text-neutral-800"
                   maxLength={250}
                   required
                 />
                 <button
                   type="submit"
-                  className="p-2 bg-[#7ABA42] hover:bg-[#6CA838] text-white rounded-lg transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center min-h-[28px]"
+                  className="px-2 py-1 bg-[#7ABA42] hover:bg-[#6CA838] text-white rounded-lg transition-all cursor-pointer shadow-3xs shrink-0 flex items-center justify-center min-h-[22px]"
                 >
-                  <Send className="w-3 h-3" />
+                  <Send className="w-2.5 h-2.5" />
                 </button>
               </form>
             </div>
           )}
         </div>
       </div>
+
+      {/* Tabs Menu - Inline pill buttons placed in the MIDDLE */}
+      <div className="flex items-center gap-1.5 bg-neutral-50/50 border-b border-neutral-200 px-3 py-1.5 shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap">
+        {(['SUMMARY', 'PROFILE', 'COMMENTS'] as const).map((tab) => {
+          const isCurrent = activeTab === tab;
+          return (
+            <button
+              key={tab}
+              onClick={() => {
+                if (isCurrent) {
+                  setIsExpanded(!isExpanded);
+                } else {
+                  setActiveTab(tab);
+                  setIsExpanded(true);
+                }
+              }}
+              className={`px-3 py-1 text-[8.5px] font-black tracking-wider transition-all rounded-full border uppercase shrink-0 cursor-pointer flex items-center gap-1 ${
+                isCurrent && isExpanded
+                  ? 'bg-[#7ABA42] border-[#7ABA42] text-white shadow-3xs'
+                  : 'bg-white border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-700'
+              }`}
+            >
+              <span>{tab === 'COMMENTS' ? `Comments (${comments.length})` : tab}</span>
+              {isCurrent && (
+                isExpanded ? (
+                  <ChevronUp className="w-2.5 h-2.5 shrink-0" />
+                ) : (
+                  <ChevronDown className="w-2.5 h-2.5 shrink-0" />
+                )
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Hero Header Area - Placed at the BOTTOM as an ultra-slim base row */}
+      <div className="p-2 px-3 bg-white flex items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          {/* Circular Thumbnail replacing the giant bulky background banner */}
+          <img 
+            src={headerBgImage} 
+            alt={route.name} 
+            className="w-10 h-10 rounded-xl object-cover border border-neutral-200 shadow-3xs shrink-0" 
+          />
+
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xs font-black text-neutral-800 leading-tight truncate">
+              {route.name}
+            </h2>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`text-[8px] font-black uppercase text-white px-1.5 py-0.2 rounded shrink-0 ${
+                route.difficulty === 'Easy' ? 'bg-emerald-500' :
+                route.difficulty === 'Moderate' ? 'bg-amber-500' :
+                route.difficulty === 'Hard' ? 'bg-red-500' : 'bg-rose-700'
+              }`}>
+                {route.difficulty}
+              </span>
+
+              {route.nearbyCity && (
+                <span className="text-[8px] text-neutral-500 font-semibold truncate">
+                  • {route.nearbyCity}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Compact action row & Close */}
+        <div className="flex items-center gap-1 shrink-0">
+          {onToggleSave && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSave(String(route.id));
+              }}
+              className={`flex items-center gap-0.5 px-2 py-1 border font-bold text-[8.5px] rounded-lg transition-colors cursor-pointer shadow-3xs ${
+                isSaved
+                  ? 'bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border-[#7ABA42]/40 text-[#5C942D]'
+                  : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-700'
+              }`}
+              title={isSaved ? 'Saved to My Maps (Click to remove)' : 'Save to My Maps'}
+            >
+              <Bookmark className={`w-2.5 h-2.5 ${isSaved ? 'fill-current' : ''}`} />
+              <span className="hidden xs:inline">{isSaved ? 'Saved' : 'Save'}</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleDownloadGPX}
+            className="flex items-center gap-0.5 px-2 py-1 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 font-bold text-[8.5px] rounded-lg transition-colors cursor-pointer shadow-3xs"
+            title="Export GPS file"
+          >
+            <Download className="w-2.5 h-2.5" />
+            <span className="hidden xs:inline">Export</span>
+          </button>
+
+          <button
+            onClick={handleShareRoute}
+            className={`flex items-center gap-0.5 px-2 py-1 border font-bold text-[8.5px] rounded-lg transition-colors cursor-pointer shadow-3xs ${
+              shareCopied 
+                ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
+                : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700'
+            }`}
+            title="Copy trail link to share"
+          >
+            {shareCopied ? <Check className="w-2.5 h-2.5" /> : <Share2 className="w-2.5 h-2.5" />}
+            <span className="hidden xs:inline">{shareCopied ? 'Copied' : 'Share'}</span>
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="p-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-lg text-neutral-400 hover:text-neutral-700 transition-colors cursor-pointer"
+            aria-label="Close details"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }
-
-

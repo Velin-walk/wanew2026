@@ -1483,14 +1483,14 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                       <button
                         onClick={() => handlePreviewTrail(trail)}
-                        className="px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100 rounded-lg text-xs font-bold transition-colors"
+                        className="px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                       >
                         Preview
                       </button>
                       {trail.status !== 'approved' && (
                         <button
                           onClick={() => handleApproveTrail(trail.id)}
-                          className="px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors"
+                          className="px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                         >
                           Approve
                         </button>
@@ -1498,11 +1498,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                       {trail.status !== 'rejected' && (
                         <button
                           onClick={() => handleRejectTrail(trail.id)}
-                          className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-lg text-xs font-bold transition-colors"
+                          className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                         >
                           Reject
                         </button>
                       )}
+                      <button
+                        onClick={() => handleDeleteTrailRecord(trail.id)}
+                        className="px-3 py-1.5 bg-neutral-100 text-neutral-700 border border-neutral-200 hover:bg-rose-600 hover:text-white hover:border-rose-600 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                        title="Permanently delete trail from R2 and D1"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 ))}

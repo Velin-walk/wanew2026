@@ -392,6 +392,10 @@ export default {
         let uploadedToR2 = false;
         if (bucket && fileContent) {
           try {
+            const existingObj = await bucket.head(fileName).catch(() => null);
+            if (existingObj) {
+              fileName = `${Date.now()}_${fileName}`;
+            }
             const buffer = new TextEncoder().encode(fileContent);
             await bucket.put(fileName, buffer, {
               httpMetadata: { contentType: 'application/xml' },
@@ -476,7 +480,322 @@ export default {
           ).run();
         }
 
+        try {
+          if (typeof caches !== 'undefined' && caches.default) {
+            await caches.default.delete(new Request(new URL('/mapminers/trails', request.url).toString()));
+            await caches.default.delete(new Request(new URL('/community_trails', request.url).toString()));
+            await caches.default.delete(new Request(new URL('/trails', request.url).toString()));
+          }
+        } catch (_) {}
+
         return jsonResponse({ success: true, message: 'Trail uploaded successfully to D1', id: trailId, fileName });
+      }
+
+      // ===== USER ACTIVITIES (GPX R2 UPLOAD + D1 PERSISTENCE) =====
+
+      // Helper to format coordinate track array into a standard GPX 1.1 XML string
+      const formatCoordinatesToGpx = (coordinates = [], meta = {}) => {
+        const escapeXml = (str) =>
+          String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+
+        const title = escapeXml(meta.trailName || meta.name || 'Hike Activity');
+        const desc = escapeXml(meta.description || `Recorded by ${meta.userName || meta.userEmail || 'Hiker'}`);
+        const timeIso = escapeXml(meta.startTime || new Date().toISOString());
+
+        const trkpts = (Array.isArray(coordinates) ? coordinates : [])
+          .map((pt) => {
+            const lat = Array.isArray(pt) ? Number(pt[0]) : Number(pt.lat ?? pt.latitude);
+            const lon = Array.isArray(pt) ? Number(pt[1]) : Number(pt.lng ?? pt.lon ?? pt.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+
+            const ele = Array.isArray(pt) ? pt[2] : (pt.ele ?? pt.elevation ?? pt.altitude);
+            const rawTime = Array.isArray(pt) ? pt[3] : (pt.time ?? pt.timestamp);
+
+            let childTags = '';
+            if (ele !== undefined && ele !== null && Number.isFinite(Number(ele))) {
+              childTags += `<ele>${Number(ele).toFixed(1)}</ele>`;
+            }
+            if (rawTime) {
+              const iso = typeof rawTime === 'number' ? new Date(rawTime).toISOString() : String(rawTime);
+              childTags += `<time>${escapeXml(iso)}</time>`;
+            }
+            return `      <trkpt lat="${lat}" lon="${lon}">${childTags}</trkpt>`;
+          })
+          .filter(Boolean)
+          .join('\n');
+
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Walk Nepal Walk - MapMiners" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${title}</name>
+    <desc>${desc}</desc>
+    <time>${timeIso}</time>
+  </metadata>
+  <trk>
+    <name>${title}</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+      };
+
+      const ensureUserActivitiesTable = async (db) => {
+        await db.prepare(`
+          CREATE TABLE IF NOT EXISTS user_activities (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            user_name TEXT,
+            user_email TEXT,
+            trail_id TEXT,
+            trail_name TEXT,
+            distance REAL DEFAULT 0,
+            duration INTEGER DEFAULT 0,
+            elevation_gain REAL DEFAULT 0,
+            elevation_loss REAL DEFAULT 0,
+            avg_speed REAL DEFAULT 0,
+            pace TEXT,
+            calories INTEGER DEFAULT 0,
+            points_count INTEGER DEFAULT 0,
+            start_time TEXT,
+            end_time TEXT,
+            gpx_file_name TEXT,
+            gpx_url TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
+      };
+
+      // POST /mapminers/activities or POST /user_activities or POST /activities
+      // Step B: Formats coordinate track to GPX -> Uploads to R2 -> Inserts row into D1 user_activities table
+      if (
+        method === 'POST' &&
+        (path === '/mapminers/activities' ||
+          path === '/mapminers/user_activities' ||
+          path === '/user_activities' ||
+          path === '/activities')
+      ) {
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+        const bucket = env.TRAILS_BUCKET || env.BUCKET;
+        if (!bucket) return errorResponse('R2 Storage binding (TRAILS_BUCKET) missing', 500);
+
+        const body = await request.json().catch(() => ({}));
+        const coordinates = body.coordinates || body.track || body.points || [];
+        const rawGpx = body.gpxContent || body.gpx_content || body.fileContent || '';
+
+        if ((!Array.isArray(coordinates) || coordinates.length === 0) && !rawGpx) {
+          return errorResponse('Coordinate track (coordinates array) or gpxContent is required', 400);
+        }
+
+        const activityId = body.id || `act_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const userId = body.userId || body.user_id || body.uid || '';
+        const userName = body.userName || body.user_name || 'Hiker';
+        const userEmail = body.userEmail || body.user_email || '';
+        const trailId = body.trailId || body.trail_id || '';
+        const trailName = body.trailName || body.trail_name || body.name || 'Recorded Hike';
+
+        const metrics = body.metrics || body.stats || {};
+        const distance = Number(body.distance ?? metrics.distance ?? 0);
+        const duration = Number(body.duration ?? metrics.duration ?? 0);
+        const elevationGain = Number(body.elevationGain ?? body.elevation_gain ?? metrics.elevationGain ?? metrics.elevation_gain ?? 0);
+        const elevationLoss = Number(body.elevationLoss ?? body.elevation_loss ?? metrics.elevationLoss ?? metrics.elevation_loss ?? 0);
+        const avgSpeed = Number(body.avgSpeed ?? body.avg_speed ?? metrics.avgSpeed ?? metrics.avg_speed ?? 0);
+        const pace = String(body.pace ?? metrics.pace ?? '');
+        const calories = Number(body.calories ?? metrics.calories ?? 0);
+        const pointsCount = Array.isArray(coordinates) ? coordinates.length : Number(body.pointsCount ?? body.points_count ?? 0);
+        const startTime = body.startTime || body.start_time || new Date().toISOString();
+        const endTime = body.endTime || body.end_time || new Date().toISOString();
+
+        // 1. Format coordinate track into GPX XML string
+        const gpxXml = rawGpx || formatCoordinatesToGpx(coordinates, {
+          trailName,
+          userName,
+          userEmail,
+          startTime,
+        });
+
+        // 2. Upload GPX file to R2 Bucket and confirm upload before D1 insert
+        const gpxFileName = body.fileName || body.file_name || `activity_${activityId}.gpx`;
+        const gpxBuffer = new TextEncoder().encode(gpxXml);
+
+        const r2Result = await bucket.put(gpxFileName, gpxBuffer, {
+          httpMetadata: { contentType: 'application/gpx+xml' },
+        });
+
+        if (!r2Result) {
+          return errorResponse('R2 upload failed: no confirmation returned from bucket', 500);
+        }
+
+        const gpxUrl = `${url.origin}/mapminers/download/${encodeURIComponent(gpxFileName)}`;
+
+        // 3. Once R2 confirms upload, insert a new row into D1 user_activities table
+        await ensureUserActivitiesTable(env.DB);
+
+        await env.DB.prepare(`
+          INSERT INTO user_activities (
+            id, user_id, user_name, user_email, trail_id, trail_name,
+            distance, duration, elevation_gain, elevation_loss, avg_speed,
+            pace, calories, points_count, start_time, end_time,
+            gpx_file_name, gpx_url
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          activityId,
+          userId,
+          userName,
+          userEmail,
+          trailId,
+          trailName,
+          distance,
+          duration,
+          elevationGain,
+          elevationLoss,
+          avgSpeed,
+          pace,
+          calories,
+          pointsCount,
+          startTime,
+          endTime,
+          gpxFileName,
+          gpxUrl
+        ).run();
+
+        return jsonResponse({
+          success: true,
+          message: 'Activity GPX uploaded to R2 and saved to D1 user_activities',
+          activity: {
+            id: activityId,
+            user_id: userId,
+            user_name: userName,
+            user_email: userEmail,
+            trail_id: trailId,
+            trail_name: trailName,
+            distance,
+            duration,
+            elevation_gain: elevationGain,
+            elevation_loss: elevationLoss,
+            avg_speed: avgSpeed,
+            pace,
+            calories,
+            points_count: pointsCount,
+            start_time: startTime,
+            end_time: endTime,
+            gpx_file_name: gpxFileName,
+            gpx_url: gpxUrl,
+          },
+        });
+      }
+
+      // GET /mapminers/activities or GET /user_activities or GET /activities - Fetch recorded user activities
+      if (
+        method === 'GET' &&
+        (path === '/mapminers/activities' ||
+          path === '/mapminers/user_activities' ||
+          path === '/user_activities' ||
+          path === '/activities')
+      ) {
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+
+        await ensureUserActivitiesTable(env.DB);
+
+        const userEmail = url.searchParams.get('user_email') || url.searchParams.get('email') || '';
+        const userId = url.searchParams.get('user_id') || url.searchParams.get('userId') || '';
+        const trailId = url.searchParams.get('trail_id') || url.searchParams.get('trailId') || '';
+
+        let sql = 'SELECT * FROM user_activities';
+        const conditions = [];
+        const params = [];
+
+        if (userEmail) {
+          conditions.push('LOWER(user_email) = LOWER(?)');
+          params.push(userEmail);
+        }
+        if (userId) {
+          conditions.push('user_id = ?');
+          params.push(userId);
+        }
+        if (trailId) {
+          conditions.push('trail_id = ?');
+          params.push(trailId);
+        }
+        if (conditions.length > 0) {
+          sql += ' WHERE ' + conditions.join(' AND ');
+        }
+        sql += ' ORDER BY created_at DESC LIMIT 200';
+
+        const res = await env.DB.prepare(sql).bind(...params).all();
+        return jsonResponse({
+          success: true,
+          activities: res.results || [],
+        });
+      }
+
+      // ===== SAVED TRAILS (MY MAPS BOOKMARKS) ENDPOINTS =====
+      const ensureSavedTrailsTable = async (db) => {
+        await db.prepare(`
+          CREATE TABLE IF NOT EXISTS saved_trails (
+            id TEXT PRIMARY KEY,
+            user_email TEXT NOT NULL,
+            trail_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
+      };
+
+      // GET /mapminers/saved?email=...
+      if (method === 'GET' && (path === '/mapminers/saved' || path === '/saved_trails' || path === '/saved')) {
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+        const email = (url.searchParams.get('email') || url.searchParams.get('user_email') || '').trim().toLowerCase();
+        if (!email) return jsonResponse({ success: true, trailIds: [] });
+
+        await ensureSavedTrailsTable(env.DB);
+        const res = await env.DB.prepare(
+          'SELECT trail_id FROM saved_trails WHERE LOWER(user_email) = LOWER(?) ORDER BY created_at DESC'
+        ).bind(email).all();
+
+        const trailIds = (res.results || []).map((r) => r.trail_id).filter(Boolean);
+        return jsonResponse({ success: true, trailIds });
+      }
+
+      // POST /mapminers/saved - Save a trail to user's My Maps
+      if (method === 'POST' && (path === '/mapminers/saved' || path === '/saved_trails' || path === '/saved')) {
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+        const body = await request.json().catch(() => ({}));
+        const email = String(body.email || body.user_email || '').trim().toLowerCase();
+        const trailId = String(body.trailId || body.trail_id || '').trim();
+        if (!email || !trailId) {
+          return errorResponse('email and trailId are required', 400);
+        }
+
+        await ensureSavedTrailsTable(env.DB);
+        const rowId = `${email}__${trailId}`;
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO saved_trails (id, user_email, trail_id) VALUES (?, ?, ?)'
+        ).bind(rowId, email, trailId).run();
+
+        return jsonResponse({ success: true, trailId, saved: true });
+      }
+
+      // DELETE /mapminers/saved - Remove a trail from user's My Maps
+      if (method === 'DELETE' && (path === '/mapminers/saved' || path === '/saved_trails' || path === '/saved')) {
+        if (!env.DB) return errorResponse('D1 Database binding (DB) missing', 500);
+        const body = await request.json().catch(() => ({}));
+        const email = String(url.searchParams.get('email') || body.email || body.user_email || '').trim().toLowerCase();
+        const trailId = String(url.searchParams.get('trailId') || body.trailId || body.trail_id || '').trim();
+        if (!email || !trailId) {
+          return errorResponse('email and trailId are required', 400);
+        }
+
+        await ensureSavedTrailsTable(env.DB);
+        await env.DB.prepare(
+          'DELETE FROM saved_trails WHERE LOWER(user_email) = LOWER(?) AND trail_id = ?'
+        ).bind(email, trailId).run();
+
+        return jsonResponse({ success: true, trailId, saved: false });
       }
 
       return errorResponse(`Route ${method} ${path} not found in MapMiners Worker`, 404);

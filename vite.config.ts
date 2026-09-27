@@ -85,6 +85,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -97,6 +99,12 @@ export default defineConfig({
               id.includes('react-leaflet')
             ) {
               return 'vendor-core';
+            }
+            if (id.includes('firebase')) {
+              return 'vendor-firebase';
+            }
+            if (id.includes('three')) {
+              return 'vendor-three';
             }
             if (id.includes('recharts') || id.includes('d3')) {
               return 'vendor-recharts';

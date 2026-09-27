@@ -1,12 +1,15 @@
 import { memo } from 'react';
-import { ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronRight, Trash2, Bookmark } from 'lucide-react';
 
 interface RouteCardProps {
   route: any;
   index: number;
   isActive: boolean;
+  canDelete?: boolean;
+  isSaved?: boolean;
   onClick: (route: any) => void;
   onDelete: (id: string) => void;
+  onToggleSave?: (id: string) => void;
 }
 
 const ROUTE_COLORS = [
@@ -14,13 +17,27 @@ const ROUTE_COLORS = [
   '#fb7185', '#22d3ee', '#84cc16', '#e879f9', '#38bdf8',
 ];
 
-export const RouteCard = memo(function RouteCard({ route, index, isActive, onClick, onDelete }: RouteCardProps) {
+export const RouteCard = memo(function RouteCard({
+  route,
+  index,
+  isActive,
+  canDelete = false,
+  isSaved = false,
+  onClick,
+  onDelete,
+  onToggleSave,
+}: RouteCardProps) {
   const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
 
   const handleClick = () => onClick(route);
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canDelete) return;
     onDelete(route.id);
+  };
+  const handleSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleSave?.(route.id);
   };
 
   return (
@@ -81,14 +98,30 @@ export const RouteCard = memo(function RouteCard({ route, index, isActive, onCli
 
           {/* Action buttons */}
           <div className="flex items-center gap-1 shrink-0 self-start pt-0.5">
-            <button
-              onClick={handleDelete}
-              className="opacity-0 group-hover:opacity-100 p-1 bg-red-50 hover:bg-red-100 border border-red-200 rounded-md text-red-500 transition-opacity duration-200 flex items-center justify-center shrink-0 cursor-pointer"
-              title="Delete Route"
-              aria-label="Delete route"
-            >
-              <Trash2 size={12} />
-            </button>
+            {onToggleSave && (
+              <button
+                onClick={handleSave}
+                className={`p-1 rounded-md border transition-all duration-200 flex items-center justify-center shrink-0 cursor-pointer ${
+                  isSaved
+                    ? 'opacity-100 bg-[#7ABA42]/10 border-[#7ABA42]/30 text-[#7ABA42]'
+                    : 'opacity-0 group-hover:opacity-100 bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-[#7ABA42]'
+                }`}
+                title={isSaved ? 'Saved in My Maps (Click to remove)' : 'Save to My Maps'}
+                aria-label={isSaved ? 'Unsave route' : 'Save route'}
+              >
+                <Bookmark size={12} className={isSaved ? 'fill-current' : ''} />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={handleDelete}
+                className="opacity-0 group-hover:opacity-100 p-1 bg-red-50 hover:bg-red-100 border border-red-200 rounded-md text-red-500 transition-opacity duration-200 flex items-center justify-center shrink-0 cursor-pointer"
+                title="Delete Route"
+                aria-label="Delete route"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
             <ChevronRight
               size={14}
               style={{ color: isActive ? color : '#8B8680', transition: 'color 0.2s' }}
