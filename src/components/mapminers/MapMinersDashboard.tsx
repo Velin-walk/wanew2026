@@ -475,9 +475,11 @@ export default function MapMinersDashboard({
     }
   }, [isMobile, buildFallbackRouteFromMetadata]);
 
+  const hasAutoOpenedRouteRef = useRef(false);
+
   // Auto-open targeted trail if ?route=... parameter is provided in the URL
   useEffect(() => {
-    if (routes.length === 0) return;
+    if (routes.length === 0 || hasAutoOpenedRouteRef.current) return;
     try {
       const searchParams = new URLSearchParams(window.location.search);
       const routeParam = searchParams.get('route');
@@ -485,11 +487,12 @@ export default function MapMinersDashboard({
         const decodedParam = decodeURIComponent(routeParam).toLowerCase();
         const matched = routes.find(
           (r) =>
-              r.fileName?.toLowerCase() === decodedParam ||
-              r.id?.toLowerCase() === decodedParam ||
-              r.name?.toLowerCase() === decodedParam
+            String(r.fileName || '').toLowerCase() === decodedParam ||
+            String(r.id || '').toLowerCase() === decodedParam ||
+            String(r.name || '').toLowerCase() === decodedParam
         );
         if (matched) {
+          hasAutoOpenedRouteRef.current = true;
           handleRouteClick(matched);
         }
       }

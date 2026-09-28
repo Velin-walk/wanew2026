@@ -41,8 +41,11 @@ export const InviteModal: React.FC<InviteModalProps> = ({
     setDragOffsetY(0);
   };
 
-  const shareUrl = selectedTrek
-    ? `${window.location.origin}/?trek=${encodeURIComponent(selectedTrek.id)}`
+  const trekIdentifier = selectedTrek
+    ? (selectedTrek.hike_number && selectedTrek.hike_number !== 'TBD' ? selectedTrek.hike_number : selectedTrek.id)
+    : '';
+  const shareUrl = selectedTrek && trekIdentifier
+    ? `${window.location.origin}${window.location.pathname}?trek=${encodeURIComponent(trekIdentifier)}`
     : window.location.origin;
 
   const handleCopy = () => {

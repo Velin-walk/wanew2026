@@ -546,9 +546,17 @@ export function generateWhatsAppSummary(hike: SavedHikeRecord | TrekItineraryDat
     )
     .join('\n\n');
 
+  const fallbackWebUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}?trek=${encodeURIComponent(
+          (data.hikeNumber && data.hikeNumber !== 'TBD' ? data.hikeNumber : ('id' in hike ? hike.id : '')) || 'preview'
+        )}`
+      : '';
+  const effectiveItineraryLink = data.itineraryLink || fallbackWebUrl;
+
   const links = [
     data.whatsappLink ? `  💬 *WhatsApp Group*: ${data.whatsappLink}` : '',
-    data.itineraryLink ? `  📑 *Full Itinerary (PDF/Link)*: ${data.itineraryLink}` : '',
+    effectiveItineraryLink ? `  📑 *Full Itinerary & Registration*: ${effectiveItineraryLink}` : '',
     data.faqLink ? `  ❓ *FAQ & Docs*: ${data.faqLink}` : '',
   ].filter(Boolean).join('\n');
 

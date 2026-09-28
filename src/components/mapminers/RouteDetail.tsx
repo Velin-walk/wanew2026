@@ -225,7 +225,8 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
 
   const handleShareRoute = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const shareUrl = `${window.location.origin}${window.location.pathname}?route=${encodeURIComponent(route.fileName)}`;
+    const routeIdentifier = route.fileName || String(route.id || '') || route.name || '';
+    const shareUrl = `${window.location.origin}${window.location.pathname}?tab=mapminers&route=${encodeURIComponent(routeIdentifier)}`;
     navigator.clipboard.writeText(shareUrl);
     setShareCopied(true);
     setTimeout(() => setShareCopied(false), 2000);

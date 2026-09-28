@@ -31,8 +31,9 @@ export const ShareHikeModal: React.FC<ShareHikeModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
 
-  // Generate web link based on current origin or hike number
-  const shareableUrl = `${window.location.origin}/#itinerary-${hike.id || hike.hikeNumber || 'preview'}`;
+  // Generate web link based on current origin and hike number / id
+  const targetIdentifier = (hike.hikeNumber && hike.hikeNumber !== 'TBD' ? hike.hikeNumber : hike.id) || 'preview';
+  const shareableUrl = `${window.location.origin}${window.location.pathname}?trek=${encodeURIComponent(targetIdentifier)}`;
   const whatsappSummary = generateWhatsAppSummary(hike);
 
   const handleCopyLink = async () => {

@@ -36,7 +36,16 @@ import { db } from './lib/firebase';
 
 function MainApp() {
   const { user, userEmail, userPhone, isAdmin, openAuthModal } = useAuth();
-  const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>('treks');
+  const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash || '';
+      const tabParam = searchParams.get('tab');
+      if (tabParam === 'admin' || hash === '#admin') return 'admin';
+      if (tabParam === 'mapminers' || searchParams.has('route') || hash === '#mapminers') return 'mapminers';
+    } catch {}
+    return 'treks';
+  });
   const [treks, setTreks] = useState<Trek[]>(() => {
     try {
       const cached = localStorage.getItem('wnw_cached_cloudflare_treks');
@@ -426,37 +435,105 @@ function MainApp() {
   const fetchTreks = refreshData;
   const fetchBookings = refreshData;
 
-  // On mount: Check if URL targets a specific shared trek (?trek=..., ?hike=..., or #itinerary-...) or tab (?tab=admin or #admin)
+  const findTrekForBooking = useCallback(
+    (booking: Booking): Trek | null => {
+      const cleanNum = (val?: string | number) => {
+        if (val === undefined || val === null) return '';
+        const str = String(val).trim();
+        const m = str.match(/\d+/);
+        return m ? m[0] : str.toLowerCase();
+      };
+      const normText = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      const bNum = cleanNum(booking.hike_number || booking.trek_id);
+      const bName = normText(booking.trek_name);
+
+      const matched = treks.find((t) => {
+        if (booking.trek_id && String(t.id) === String(booking.trek_id)) return true;
+        if (booking.hike_number && String(t.hike_number) === String(booking.hike_number)) return true;
+        const tNum = cleanNum(t.hike_number || t.id);
+        if (bNum && tNum && bNum === tNum) return true;
+        if (bName && t.name && normText(t.name) === bName) return true;
+        return false;
+      });
+
+      if (matched) return matched;
+
+      const fallbackId = String(booking.hike_number || booking.trek_id || '').trim();
+      if (fallbackId || booking.trek_name) {
+        return {
+          id: fallbackId || booking.id,
+          hike_number: booking.hike_number || fallbackId,
+          name: booking.trek_name || (fallbackId ? `Hike #${fallbackId}` : 'Walk Nepal Walk Hike'),
+          date: booking.trek_date || 'TBA',
+          meeting_point: booking.pickup_point || 'Kathmandu',
+          price: booking.paid_amount || booking.due_amount || 0,
+        } as Trek;
+      }
+
+      return null;
+    },
+    [treks]
+  );
+
+  // On mount & URL change: Check if URL targets a specific shared trek (?trek=..., ?hike=..., or #itinerary-...) or tab (?tab=admin or #admin)
   useEffect(() => {
-    try {
-      const searchParams = new URLSearchParams(window.location.search);
-      const hash = window.location.hash || '';
+    const handleUrlRouting = () => {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const hash = window.location.hash || '';
 
-      const tabParam = searchParams.get('tab');
-      if (tabParam === 'admin' || hash === '#admin') {
-        setCurrentTab('admin');
-      }
-
-      let targetTrekId = searchParams.get('trek') || searchParams.get('hike') || searchParams.get('id') || '';
-
-      if (!targetTrekId && hash) {
-        const hashMatch = hash.match(/^#(?:itinerary|trek)-(.+)$/i);
-        if (hashMatch) {
-          targetTrekId = decodeURIComponent(hashMatch[1]);
+        const tabParam = searchParams.get('tab');
+        if (tabParam === 'admin' || hash === '#admin') {
+          setCurrentTab('admin');
+        } else if (tabParam === 'mapminers' || searchParams.has('route') || hash === '#mapminers') {
+          setCurrentTab('mapminers');
         }
-      }
 
-      if (targetTrekId && targetTrekId !== 'preview') {
-        fetchSingleTrek(targetTrekId).then((singleTrek) => {
-          if (singleTrek) {
-            setItineraryModalTrek(singleTrek);
-            setItineraryModalType('itinerary');
+        let targetTrekId = searchParams.get('trek') || searchParams.get('hike') || searchParams.get('id') || '';
+
+        if (!targetTrekId && hash) {
+          const hashMatch = hash.match(/^#(?:itinerary|trek)-(.+)$/i);
+          if (hashMatch) {
+            targetTrekId = decodeURIComponent(hashMatch[1]);
           }
-        });
+        }
+
+        if (targetTrekId && targetTrekId !== 'preview') {
+          const cleanTarget = targetTrekId.trim().toLowerCase();
+          const cleanNum = targetTrekId.match(/\d+/)?.[0] || '';
+
+          fetchSingleTrek(targetTrekId).then((singleTrek) => {
+            if (singleTrek) {
+              setItineraryModalTrek(singleTrek);
+              setItineraryModalType('itinerary');
+            } else {
+              const localMatch = treks.find((t) => {
+                if (String(t.id || '').toLowerCase() === cleanTarget) return true;
+                if (String(t.hike_number || '').toLowerCase() === cleanTarget) return true;
+                if (cleanNum && (String(t.hike_number) === cleanNum || String(t.id).toLowerCase() === `hike-${cleanNum}`)) return true;
+                if (String(t.name || '').toLowerCase() === cleanTarget) return true;
+                return false;
+              });
+              if (localMatch) {
+                setItineraryModalTrek(localMatch);
+                setItineraryModalType('itinerary');
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Could not parse shared trek URL parameter:', e);
       }
-    } catch (e) {
-      console.warn('Could not parse shared trek URL parameter:', e);
-    }
+    };
+
+    handleUrlRouting();
+    window.addEventListener('hashchange', handleUrlRouting);
+    window.addEventListener('popstate', handleUrlRouting);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlRouting);
+      window.removeEventListener('popstate', handleUrlRouting);
+    };
   }, []);
 
   // When user visits Bookings tab or opens Profile modal, refresh bookings so Admin roster updates appear immediately
@@ -946,18 +1023,16 @@ function MainApp() {
                 setProfileModalOpen(true);
               }}
               onShare={(booking) => {
-                const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number);
-                setSelectedTrekForInvite(matchedTrek || null);
+                setSelectedTrekForInvite(findTrekForBooking(booking));
                 setShowInviteModal(true);
               }}
               onLeaveFeedback={(booking) => {
                 setFeedbackModalBooking(booking);
-                const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number);
-                setFeedbackModalTrek(matchedTrek || null);
+                setFeedbackModalTrek(findTrekForBooking(booking));
                 setShowFeedbackModal(true);
               }}
               onViewItinerary={(booking) => {
-                const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number || t.name === booking.trek_name);
+                const matchedTrek = findTrekForBooking(booking);
                 if (matchedTrek) {
                   setItineraryModalTrek(matchedTrek);
                   setItineraryModalType('itinerary');
@@ -1171,18 +1246,16 @@ function MainApp() {
           onCancelBooking={handleCancelBooking}
           onExploreTreks={() => setCurrentTab('treks')}
           onShareBooking={(booking) => {
-            const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number);
-            setSelectedTrekForInvite(matchedTrek || null);
+            setSelectedTrekForInvite(findTrekForBooking(booking));
             setShowInviteModal(true);
           }}
           onLeaveFeedbackBooking={(booking) => {
             setFeedbackModalBooking(booking);
-            const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number);
-            setFeedbackModalTrek(matchedTrek || null);
+            setFeedbackModalTrek(findTrekForBooking(booking));
             setShowFeedbackModal(true);
           }}
           onViewItineraryBooking={(booking) => {
-            const matchedTrek = treks.find((t) => t.id === booking.trek_id || t.hike_number === booking.hike_number || t.name === booking.trek_name);
+            const matchedTrek = findTrekForBooking(booking);
             if (matchedTrek) {
               setItineraryModalTrek(matchedTrek);
               setItineraryModalType('itinerary');
