@@ -280,7 +280,7 @@ function UserLocationDot() {
         <button
           type="button"
           onClick={toggleTracking}
-          className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-2 min-h-[38px] border rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm cursor-pointer select-none ${
             isTracking
               ? 'bg-blue-600 border-blue-600 text-white'
               : 'bg-white border-neutral-200 text-neutral-700 hover:border-blue-500 hover:text-blue-600'
@@ -295,6 +295,7 @@ function UserLocationDot() {
             <line x1="2" y1="12" x2="4" y2="12" />
             <line x1="20" y1="12" x2="22" y2="12" />
           </svg>
+          <span className="md:hidden">{isTracking ? 'GPS On' : 'GPS'}</span>
           <span className="hidden md:inline">{isTracking ? 'GPS On' : 'My Location'}</span>
         </button>
       </div>
@@ -339,14 +340,7 @@ function UserLocationDot() {
 
 function TileLayerToggle() {
   const [mode, setMode] = useState<'street' | 'satellite'>('street');
-  const [isCompact, setIsCompact] = useState(() => window.innerWidth <= 768);
   const tile = TILE_LAYERS[mode];
-
-  useEffect(() => {
-    const handleResize = () => setIsCompact(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   return (
     <>
@@ -354,8 +348,9 @@ function TileLayerToggle() {
       <TileLayer key={mode} url={tile.url} attribution={tile.attribution} />
       <div className="absolute top-3 right-3 z-[1000]">
         <button
+          type="button"
           onClick={() => setMode(m => m === 'street' ? 'satellite' : 'street')}
-          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-neutral-200 rounded-xl text-neutral-700 text-xs font-bold hover:border-[#7ABA42] hover:text-[#7ABA42] transition-colors shadow-sm cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-2 min-h-[38px] bg-white border border-neutral-200 rounded-xl text-neutral-700 text-xs font-bold hover:border-[#7ABA42] hover:text-[#7ABA42] transition-all active:scale-95 shadow-sm cursor-pointer select-none"
           title={mode === 'street' ? 'Switch to Satellite View' : 'Switch to Street View'}
         >
           {mode === 'street' ? (
@@ -369,7 +364,7 @@ function TileLayerToggle() {
               <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16"/><path d="M16 6v16"/>
             </svg>
           )}
-          {!isCompact && (mode === 'street' ? 'Satellite' : 'Map')}
+          <span>{mode === 'street' ? 'Satellite' : 'Map'}</span>
         </button>
       </div>
     </>
@@ -392,7 +387,7 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
           <MapResizer />
           <TileLayerToggle />
           <UserLocationDot />
-          <ZoomControl position="bottomright" />
+          {!activeRoute && <ZoomControl position="bottomleft" />}
 
           {routes.map((route, idx) => {
             if (!route) return null;

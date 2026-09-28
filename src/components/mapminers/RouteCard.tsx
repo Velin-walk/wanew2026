@@ -7,6 +7,8 @@ interface RouteCardProps {
   isActive: boolean;
   canDelete?: boolean;
   isSaved?: boolean;
+  isContributed?: boolean;
+  showMyMapsBadges?: boolean;
   onClick: (route: any) => void;
   onDelete: (id: string) => void;
   onToggleSave?: (id: string) => void;
@@ -23,6 +25,8 @@ export const RouteCard = memo(function RouteCard({
   isActive,
   canDelete = false,
   isSaved = false,
+  isContributed = false,
+  showMyMapsBadges = false,
   onClick,
   onDelete,
   onToggleSave,
@@ -93,39 +97,51 @@ export const RouteCard = memo(function RouteCard({
                   </span>
                 </>
               )}
+              {showMyMapsBadges && isSaved && (
+                <span className="text-[9.5px] font-bold text-[#5C942D] bg-[#7ABA42]/15 border border-[#7ABA42]/30 px-1.5 py-0.2 rounded">
+                  Saved
+                </span>
+              )}
+              {showMyMapsBadges && isContributed && (
+                <span className="text-[9.5px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.2 rounded">
+                  Contributed
+                </span>
+              )}
             </div>
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-1 shrink-0 self-start pt-0.5">
+          <div className="flex items-center gap-1.5 shrink-0 self-start">
             {onToggleSave && (
               <button
+                type="button"
                 onClick={handleSave}
-                className={`p-1 rounded-md border transition-all duration-200 flex items-center justify-center shrink-0 cursor-pointer ${
+                className={`p-1.5 min-h-[30px] min-w-[30px] rounded-lg border transition-all duration-150 active:scale-90 flex items-center justify-center shrink-0 cursor-pointer ${
                   isSaved
-                    ? 'opacity-100 bg-[#7ABA42]/10 border-[#7ABA42]/30 text-[#7ABA42]'
-                    : 'opacity-0 group-hover:opacity-100 bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-[#7ABA42]'
+                    ? 'opacity-100 bg-[#7ABA42]/15 border-[#7ABA42]/40 text-[#5C942D]'
+                    : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-500 hover:text-[#7ABA42]'
                 }`}
                 title={isSaved ? 'Saved in My Maps (Click to remove)' : 'Save to My Maps'}
                 aria-label={isSaved ? 'Unsave route' : 'Save route'}
               >
-                <Bookmark size={12} className={isSaved ? 'fill-current' : ''} />
+                <Bookmark size={14} className={isSaved ? 'fill-current' : ''} />
               </button>
             )}
             {canDelete && (
               <button
+                type="button"
                 onClick={handleDelete}
-                className="opacity-0 group-hover:opacity-100 p-1 bg-red-50 hover:bg-red-100 border border-red-200 rounded-md text-red-500 transition-opacity duration-200 flex items-center justify-center shrink-0 cursor-pointer"
+                className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-h-[30px] min-w-[30px] bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-500 transition-all duration-150 active:scale-90 flex items-center justify-center shrink-0 cursor-pointer"
                 title="Delete Route"
                 aria-label="Delete route"
               >
-                <Trash2 size={12} />
+                <Trash2 size={14} />
               </button>
             )}
             <ChevronRight
-              size={14}
+              size={16}
               style={{ color: isActive ? color : '#8B8680', transition: 'color 0.2s' }}
-              className="shrink-0"
+              className="shrink-0 ml-0.5"
             />
           </div>
         </div>

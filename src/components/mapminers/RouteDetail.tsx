@@ -299,18 +299,143 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
   const headerBgImage = route?.heroImage || route?.image || 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80';
 
   return (
-    <div className="bg-white border border-neutral-200 rounded-t-xl md:rounded-xl shadow-xl overflow-hidden flex flex-col w-full max-w-[380px] mx-auto transition-all duration-300">
+    <div className="bg-white border border-neutral-200 rounded-2xl shadow-xl overflow-hidden flex flex-col w-full max-w-[380px] mx-auto transition-all duration-300">
       
-      {/* Smooth Expandable Content Box - Placed at the top (Details expand UPWARD) */}
+      {/* Top Header Area - Trail Identity & Primary Actions */}
+      <div className="p-2.5 px-3 bg-white flex items-center justify-between gap-2 border-b border-neutral-100 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <img 
+            src={headerBgImage} 
+            alt={route.name} 
+            className="w-10 h-10 rounded-xl object-cover border border-neutral-200 shadow-3xs shrink-0" 
+          />
+
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xs sm:text-[13px] font-black text-neutral-800 leading-tight truncate">
+              {route.name}
+            </h2>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`text-[8.5px] font-black uppercase text-white px-1.5 py-0.5 rounded shrink-0 ${
+                route.difficulty === 'Easy' ? 'bg-emerald-500' :
+                route.difficulty === 'Moderate' ? 'bg-amber-500' :
+                route.difficulty === 'Hard' ? 'bg-red-500' : 'bg-rose-700'
+              }`}>
+                {route.difficulty}
+              </span>
+
+              {route.nearbyCity && (
+                <span className="text-[9px] text-neutral-500 font-semibold truncate">
+                  • {route.nearbyCity}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Row & Close Button in expected Top-Right position */}
+        <div className="flex items-center gap-1 shrink-0">
+          {onToggleSave && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSave(String(route.id));
+              }}
+              className={`flex items-center gap-1 px-2 py-1.5 min-h-[32px] border font-bold text-[10px] rounded-lg transition-all active:scale-95 cursor-pointer shadow-3xs ${
+                isSaved
+                  ? 'bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border-[#7ABA42]/40 text-[#5C942D]'
+                  : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-700'
+              }`}
+              title={isSaved ? 'Saved to My Maps (Click to remove)' : 'Save to My Maps'}
+            >
+              <Bookmark className={`w-3.5 h-3.5 shrink-0 ${isSaved ? 'fill-current' : ''}`} />
+              <span>{isSaved ? 'Saved' : 'Save'}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleDownloadGPX}
+            className="flex items-center gap-1 px-2 py-1.5 min-h-[32px] bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 font-bold text-[10px] rounded-lg transition-all active:scale-95 cursor-pointer shadow-3xs"
+            title="Export GPS file"
+          >
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Export</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleShareRoute}
+            className={`flex items-center gap-1 px-2 py-1.5 min-h-[32px] border font-bold text-[10px] rounded-lg transition-all active:scale-95 cursor-pointer shadow-3xs ${
+              shareCopied 
+                ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
+                : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700'
+            }`}
+            title="Copy trail link to share"
+          >
+            {shareCopied ? <Check className="w-3.5 h-3.5 shrink-0" /> : <Share2 className="w-3.5 h-3.5 shrink-0" />}
+            <span className="hidden sm:inline">{shareCopied ? 'Copied' : 'Share'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-lg text-neutral-500 hover:text-neutral-800 transition-all active:scale-95 cursor-pointer"
+            aria-label="Close details"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs Menu - Placed cleanly below Header */}
+      <div className="flex items-center gap-1.5 bg-neutral-50/80 border-b border-neutral-200 px-3 py-1.5 shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap">
+        {(['SUMMARY', 'PROFILE', 'COMMENTS'] as const).map((tab) => {
+          const isCurrent = activeTab === tab;
+          return (
+            <button
+              type="button"
+              key={tab}
+              onClick={() => {
+                if (isCurrent) {
+                  setIsExpanded(!isExpanded);
+                } else {
+                  setActiveTab(tab);
+                  setIsExpanded(true);
+                }
+              }}
+              className={`px-3 py-1.5 min-h-[30px] text-[9.5px] font-black tracking-wider transition-all active:scale-95 rounded-full border uppercase shrink-0 cursor-pointer flex items-center gap-1 ${
+                isCurrent && isExpanded
+                  ? 'bg-[#7ABA42] border-[#7ABA42] text-white shadow-3xs'
+                  : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50 hover:text-neutral-800'
+              }`}
+            >
+              <span>{tab === 'COMMENTS' ? `Comments (${comments.length})` : tab}</span>
+              {isCurrent && (
+                isExpanded ? (
+                  <ChevronDown className="w-3 h-3 shrink-0" />
+                ) : (
+                  <ChevronUp className="w-3 h-3 shrink-0" />
+                )
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Smooth Expandable Content Box */}
       <div 
         className={`transition-all duration-300 ease-in-out bg-neutral-50/50 overflow-hidden ${
-          isExpanded ? 'max-h-[165px] opacity-100 border-b border-neutral-200' : 'max-h-0 opacity-0 pointer-events-none'
+          isExpanded ? 'max-h-[180px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
         }`}
       >
-        <div className="p-3 overflow-y-auto no-scrollbar max-h-[165px] flex flex-col h-full text-neutral-800">
+        <div className="p-3 overflow-y-auto no-scrollbar max-h-[180px] flex flex-col h-full text-neutral-800">
           
           {activeTab === 'SUMMARY' && (
-            <div className="space-y-2 animate-in fade-in duration-150 max-h-[145px] overflow-y-auto no-scrollbar">
+            <div className="space-y-2 animate-in fade-in duration-150 max-h-[160px] overflow-y-auto no-scrollbar">
               {/* Elegant single-row 4-column divider grid */}
               <div className="grid grid-cols-4 bg-white border border-neutral-200 rounded-lg overflow-hidden divide-x divide-neutral-200 text-center shadow-3xs shrink-0">
                 {/* Distance */}
@@ -356,16 +481,16 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
 
               {/* Description/About inline preview */}
               {route.description && (
-                <div className="px-1 text-[8.5px] leading-tight text-neutral-500 line-clamp-2 shrink-0">
+                <div className="px-1 text-[9px] leading-tight text-neutral-500 line-clamp-2 shrink-0">
                   {route.description}
                 </div>
               )}
 
               {/* Location and Download inside vertical stack */}
-              <div className="flex flex-col gap-1 shrink-0">
+              <div className="flex flex-col gap-1.5 shrink-0">
                 {(route.district || route.province) && (
-                  <div className="flex items-center gap-1.5 text-[8.2px] text-neutral-600 px-2 py-0.8 bg-white rounded-md border border-neutral-150 shadow-3xs">
-                    <MapPin className="w-2 h-2 text-neutral-400 shrink-0" />
+                  <div className="flex items-center gap-1.5 text-[8.5px] text-neutral-600 px-2 py-1 bg-white rounded-md border border-neutral-150 shadow-3xs">
+                    <MapPin className="w-2.5 h-2.5 text-neutral-400 shrink-0" />
                     <span className="truncate font-bold">
                       {route.district && route.district} • {route.province && route.province} region
                     </span>
@@ -377,11 +502,11 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
                   type="button"
                   onClick={handleDownloadOffline}
                   disabled={downloadProgress !== null || (!route.isLazyLoaded && !route.isDemo)}
-                  className="w-full flex items-center justify-center gap-1.5 py-1 px-3 border border-[#7ABA42]/20 bg-[#7ABA42]/5 hover:bg-[#7ABA42]/10 rounded-lg text-[#7ABA42] text-[8.5px] font-black tracking-wide transition-all cursor-pointer shadow-3xs select-none disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 min-h-[34px] border border-[#7ABA42]/30 bg-[#7ABA42]/10 hover:bg-[#7ABA42]/15 active:scale-[0.99] rounded-lg text-[#5C942D] text-[10px] font-black tracking-wide transition-all cursor-pointer shadow-3xs select-none disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {downloadProgress === null ? (
                     <>
-                      <Download className="w-2.5 h-2.5" />
+                      <Download className="w-3.5 h-3.5 shrink-0" />
                       <span>
                         {!route.isLazyLoaded && !route.isDemo
                           ? 'Loading Trail Coordinates...'
@@ -390,12 +515,12 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
                     </>
                   ) : downloadProgress === 100 ? (
                     <>
-                      <Check className="w-2.5 h-2.5 text-emerald-600" />
+                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span className="text-emerald-700 font-extrabold">Offline Map Saved!</span>
                     </>
                   ) : (
                     <>
-                      <div className="w-2 h-2 border-2 border-[#7ABA42] border-t-transparent rounded-full animate-spin shrink-0" />
+                      <div className="w-3 h-3 border-2 border-[#7ABA42] border-t-transparent rounded-full animate-spin shrink-0" />
                       <span>Downloading Tiles... {downloadProgress}%</span>
                     </>
                   )}
@@ -422,11 +547,11 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
                 )}
               </div>
               
-              <div className="flex justify-between items-center text-[7.2px] font-bold text-neutral-500 px-1 pt-0.5 gap-1 shrink-0">
+              <div className="flex justify-between items-center text-[7.5px] font-bold text-neutral-500 px-1 pt-0.5 gap-1 shrink-0">
                 <span className="truncate">Start: {route.stats.startElevation}m</span>
                 <span className="truncate">End: {route.stats.endElevation}m</span>
-                <span className="text-emerald-600 truncate flex items-center gap-0.2 font-extrabold"><TrendingUp className="w-1.8 h-1.8" /> Peak: {route.stats.maxElevation}m</span>
-                <span className="text-blue-600 truncate flex items-center gap-0.2 font-extrabold"><TrendingDown className="w-1.8 h-1.8" /> Min: {route.stats.minElevation}m</span>
+                <span className="text-emerald-600 truncate flex items-center gap-0.5 font-extrabold"><TrendingUp className="w-2.5 h-2.5" /> Peak: {route.stats.maxElevation}m</span>
+                <span className="text-blue-600 truncate flex items-center gap-0.5 font-extrabold"><TrendingDown className="w-2.5 h-2.5" /> Min: {route.stats.minElevation}m</span>
               </div>
             </div>
           )}
@@ -466,11 +591,12 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
                         </div>
                         {(isMyComment || isAdmin) && (
                           <button
+                            type="button"
                             onClick={() => handleDeleteComment(comm.id)}
-                            className="p-0.5 text-neutral-400 hover:text-red-600 rounded hover:bg-red-50 cursor-pointer transition-colors shrink-0 self-start"
+                            className="p-1 text-neutral-400 hover:text-red-600 rounded hover:bg-red-50 active:scale-90 cursor-pointer transition-all shrink-0 self-start"
                             title="Delete comment"
                           >
-                            <Trash2 className="w-2.5 h-2.5" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         )}
                       </div>
@@ -486,140 +612,19 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
                   placeholder="Share notes..."
                   value={commentInput}
                   onChange={(e) => setCommentInput(e.target.value)}
-                  className="flex-1 p-1 bg-white border border-neutral-200 rounded-lg text-[8.5px] font-semibold focus:outline-none focus:border-[#7ABA42] text-neutral-800"
+                  className="flex-1 px-2.5 py-1.5 bg-white border border-neutral-200 rounded-lg text-[10px] font-semibold focus:outline-none focus:border-[#7ABA42] text-neutral-800"
                   maxLength={250}
                   required
                 />
                 <button
                   type="submit"
-                  className="px-2 py-1 bg-[#7ABA42] hover:bg-[#6CA838] text-white rounded-lg transition-all cursor-pointer shadow-3xs shrink-0 flex items-center justify-center min-h-[22px]"
+                  className="px-3 py-1.5 bg-[#7ABA42] hover:bg-[#6CA838] active:scale-95 text-white rounded-lg transition-all cursor-pointer shadow-3xs shrink-0 flex items-center justify-center min-h-[28px]"
                 >
-                  <Send className="w-2.5 h-2.5" />
+                  <Send className="w-3 h-3" />
                 </button>
               </form>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Tabs Menu - Inline pill buttons placed in the MIDDLE */}
-      <div className="flex items-center gap-1.5 bg-neutral-50/50 border-b border-neutral-200 px-3 py-1.5 shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap">
-        {(['SUMMARY', 'PROFILE', 'COMMENTS'] as const).map((tab) => {
-          const isCurrent = activeTab === tab;
-          return (
-            <button
-              key={tab}
-              onClick={() => {
-                if (isCurrent) {
-                  setIsExpanded(!isExpanded);
-                } else {
-                  setActiveTab(tab);
-                  setIsExpanded(true);
-                }
-              }}
-              className={`px-3 py-1 text-[8.5px] font-black tracking-wider transition-all rounded-full border uppercase shrink-0 cursor-pointer flex items-center gap-1 ${
-                isCurrent && isExpanded
-                  ? 'bg-[#7ABA42] border-[#7ABA42] text-white shadow-3xs'
-                  : 'bg-white border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-700'
-              }`}
-            >
-              <span>{tab === 'COMMENTS' ? `Comments (${comments.length})` : tab}</span>
-              {isCurrent && (
-                isExpanded ? (
-                  <ChevronUp className="w-2.5 h-2.5 shrink-0" />
-                ) : (
-                  <ChevronDown className="w-2.5 h-2.5 shrink-0" />
-                )
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Hero Header Area - Placed at the BOTTOM as an ultra-slim base row */}
-      <div className="p-2 px-3 bg-white flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          {/* Circular Thumbnail replacing the giant bulky background banner */}
-          <img 
-            src={headerBgImage} 
-            alt={route.name} 
-            className="w-10 h-10 rounded-xl object-cover border border-neutral-200 shadow-3xs shrink-0" 
-          />
-
-          <div className="min-w-0 flex-1">
-            <h2 className="text-xs font-black text-neutral-800 leading-tight truncate">
-              {route.name}
-            </h2>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`text-[8px] font-black uppercase text-white px-1.5 py-0.2 rounded shrink-0 ${
-                route.difficulty === 'Easy' ? 'bg-emerald-500' :
-                route.difficulty === 'Moderate' ? 'bg-amber-500' :
-                route.difficulty === 'Hard' ? 'bg-red-500' : 'bg-rose-700'
-              }`}>
-                {route.difficulty}
-              </span>
-
-              {route.nearbyCity && (
-                <span className="text-[8px] text-neutral-500 font-semibold truncate">
-                  • {route.nearbyCity}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Compact action row & Close */}
-        <div className="flex items-center gap-1 shrink-0">
-          {onToggleSave && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleSave(String(route.id));
-              }}
-              className={`flex items-center gap-0.5 px-2 py-1 border font-bold text-[8.5px] rounded-lg transition-colors cursor-pointer shadow-3xs ${
-                isSaved
-                  ? 'bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border-[#7ABA42]/40 text-[#5C942D]'
-                  : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-700'
-              }`}
-              title={isSaved ? 'Saved to My Maps (Click to remove)' : 'Save to My Maps'}
-            >
-              <Bookmark className={`w-2.5 h-2.5 ${isSaved ? 'fill-current' : ''}`} />
-              <span className="hidden xs:inline">{isSaved ? 'Saved' : 'Save'}</span>
-            </button>
-          )}
-
-          <button
-            onClick={handleDownloadGPX}
-            className="flex items-center gap-0.5 px-2 py-1 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 font-bold text-[8.5px] rounded-lg transition-colors cursor-pointer shadow-3xs"
-            title="Export GPS file"
-          >
-            <Download className="w-2.5 h-2.5" />
-            <span className="hidden xs:inline">Export</span>
-          </button>
-
-          <button
-            onClick={handleShareRoute}
-            className={`flex items-center gap-0.5 px-2 py-1 border font-bold text-[8.5px] rounded-lg transition-colors cursor-pointer shadow-3xs ${
-              shareCopied 
-                ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
-                : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700'
-            }`}
-            title="Copy trail link to share"
-          >
-            {shareCopied ? <Check className="w-2.5 h-2.5" /> : <Share2 className="w-2.5 h-2.5" />}
-            <span className="hidden xs:inline">{shareCopied ? 'Copied' : 'Share'}</span>
-          </button>
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose();
-            }}
-            className="p-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-lg text-neutral-400 hover:text-neutral-700 transition-colors cursor-pointer"
-            aria-label="Close details"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
 

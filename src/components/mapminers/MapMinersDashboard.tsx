@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Compass, X, Filter, RefreshCw, Upload, AlertTriangle, ListFilter, MapPin, Map as MapIcon, MessageSquare } from 'lucide-react';
+import { Search, Compass, X, Filter, RefreshCw, Upload, AlertTriangle, ListFilter, MapPin, Map as MapIcon, MessageSquare, Bookmark } from 'lucide-react';
 import MapView from './MapView';
 import RouteCard from './RouteCard';
 import RouteDetail from './RouteDetail';
@@ -27,12 +27,13 @@ export default function MapMinersDashboard({
 }: MapMinersDashboardProps) {
   const [routes, setRoutes] = useState<any[]>([]);
   const [activeRoute, setActiveRoute] = useState<any>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState('All');
   const [sortBy, setSortBy] = useState('name');
   const [showFilters, setShowFilters] = useState(false);
-  const [minerTab, setMinerTab] = useState<'all' | 'my' | 'chat'>('all');
+  const [minerTab, setMinerTab] = useState<'all' | 'my' | 'chat' | 'map'>('map');
+  const [myMapsFilter, setMyMapsFilter] = useState<'all' | 'saved' | 'contributed'>('all');
   const [loadingState, setLoadingState] = useState<{ status: 'idle' | 'loading' | 'done' | 'error'; errors: string[] }>({ status: 'idle', errors: [] });
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [isLoading, setIsLoading] = useState(true);
@@ -398,9 +399,10 @@ export default function MapMinersDashboard({
   }, []);
 
   const handleRouteClick = useCallback(async (route: any) => {
-    // High-performance lazy loader
-    if (isMobile) {
+    // High-performance lazy loader - always close full-screen list on mobile so the map & trail sheet are immediately visible
+    if (isMobile || window.innerWidth <= 768) {
       setSidebarOpen(false);
+      setMinerTab('map');
     }
 
     const routeWithLoadingState = { ...route, loadError: null };
@@ -616,6 +618,8 @@ export default function MapMinersDashboard({
         return [sessionRoute, ...filtered];
       });
       setActiveRoute(sessionRoute);
+      setSidebarOpen(false);
+      setMinerTab('map');
       setContributionModalOpen(false);
       setContributionName('');
       setContributionFile(null);
@@ -626,6 +630,18 @@ export default function MapMinersDashboard({
     }
   };
 
+  const isRouteSaved = (route: any) => savedRouteIds.includes(String(route.id));
+  const isRouteContributed = (route: any) =>
+    Boolean(
+      currentUserEmail &&
+        route.contributorEmail &&
+        route.contributorEmail.toLowerCase() === currentUserEmail.toLowerCase()
+    );
+
+  const savedCount = routes.filter(isRouteSaved).length;
+  const contributedCount = routes.filter(isRouteContributed).length;
+  const allMyMapsCount = routes.filter(r => isRouteSaved(r) || isRouteContributed(r)).length;
+
   // Filter routes client-side
   const filteredRoutes = routes
     .filter(route => {
@@ -633,10 +649,16 @@ export default function MapMinersDashboard({
       const matchesSearch = route.name.toLowerCase().includes(query) || 
         (route.description && route.description.toLowerCase().includes(query));
       const matchesDifficulty = filterDifficulty === 'All' || route.difficulty === filterDifficulty;
-      const matchesMyMaps =
-        minerTab !== 'my' ||
-        savedRouteIds.includes(String(route.id)) ||
-        Boolean(currentUserEmail && route.contributorEmail && route.contributorEmail.toLowerCase() === currentUserEmail.toLowerCase());
+      let matchesMyMaps = true;
+      if (minerTab === 'my') {
+        if (myMapsFilter === 'saved') {
+          matchesMyMaps = isRouteSaved(route);
+        } else if (myMapsFilter === 'contributed') {
+          matchesMyMaps = isRouteContributed(route);
+        } else {
+          matchesMyMaps = isRouteSaved(route) || isRouteContributed(route);
+        }
+      }
       return matchesSearch && matchesDifficulty && matchesMyMaps;
     })
     .sort((a, b) => {
@@ -646,237 +668,304 @@ export default function MapMinersDashboard({
     });
 
   return (
-    <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-[#F9F7F5] relative text-neutral-800 pb-[62px] md:pb-0">
+    <div className="flex flex-col h-[calc(100vh-64px)] w-full overflow-hidden bg-[#F9F7F5] relative text-neutral-800 pb-[62px] md:pb-0">
       
-      {/* Sidebar List Pane */}
-      <div className={`transition-all duration-300 shrink-0 border-r border-neutral-200 bg-white flex flex-col h-full z-10 ${
-        sidebarOpen ? 'w-full md:w-[360px]' : 'w-0 overflow-hidden'
-      }`}>
-        <div className="p-3.5 border-b border-neutral-100 shrink-0">
-          {/* View Tab Segment Selector (All Trails, My Maps, Map Chat, Map View) */}
-          <div className="flex gap-1 bg-neutral-100 p-1 rounded-xl mb-2.5 shrink-0">
-            <button
-              onClick={() => {
-                setMinerTab('all');
-                setSidebarOpen(true);
-              }}
-              className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                minerTab === 'all'
-                  ? 'bg-white text-neutral-800 shadow-xs' 
-                  : 'text-neutral-500 hover:text-neutral-800'
-              }`}
-            >
-              <Compass className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
-              <span className="truncate">All Trails</span>
-            </button>
-            <button
-              onClick={() => {
-                setMinerTab('my');
-                setSidebarOpen(true);
-              }}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer relative ${
-                minerTab === 'my'
-                  ? 'bg-white text-neutral-800 shadow-xs' 
-                  : 'text-neutral-500 hover:text-neutral-800'
-              }`}
-            >
-              <MapPin className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
-              <span className="truncate">My Maps</span>
-            </button>
-            <button
-              onClick={() => {
-                setMinerTab('chat');
-                setSidebarOpen(true);
-              }}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer relative ${
-                minerTab === 'chat'
-                  ? 'bg-white text-neutral-800 shadow-xs' 
-                  : 'text-neutral-500 hover:text-neutral-800'
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
-              <span className="truncate">MapChat</span>
-            </button>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 bg-white/80 hover:bg-white text-neutral-700 hover:text-[#7ABA42] rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs border border-neutral-200/60"
-              title="Focus full map view"
-            >
-              <MapIcon className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
-              <span className="truncate">Map View</span>
-            </button>
-          </div>
-
-          {minerTab !== 'chat' && (
-            /* Search Box and Filters Button Side by Side */
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-sm">
-                <Search className="w-4 h-4 text-neutral-400 shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Search trail or region..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 bg-transparent border-none text-xs focus:outline-none placeholder-neutral-400 min-w-0"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="p-0.5 hover:bg-neutral-200 rounded-full cursor-pointer">
-                    <X className="w-3 h-3 text-neutral-500" />
-                  </button>
-                )}
-              </div>
-
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
-                  showFilters 
-                    ? 'bg-neutral-800 border-neutral-800 text-white shadow-xs' 
-                    : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-                }`}
-                title="Toggle trail filters"
-              >
-                <ListFilter className="w-4 h-4" />
-                <span>Filters</span>
-              </button>
-            </div>
-          )}
-
-          {/* Collapsible Filters Expansion Panel */}
-          {minerTab !== 'chat' && showFilters && (
-            <div className="mt-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200/50 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div>
-                <span className="text-[9px] uppercase font-bold tracking-wider text-neutral-400 block mb-1">Difficulty</span>
-                <div className="flex flex-wrap gap-1">
-                  {['All', 'Easy', 'Moderate', 'Hard', 'Extreme'].map((diff) => (
-                    <button
-                      key={diff}
-                      onClick={() => setFilterDifficulty(diff)}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
-                        filterDifficulty === diff
-                          ? 'bg-[#7ABA42] text-white'
-                          : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-100'
-                      }`}
-                    >
-                      {diff}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <span className="text-[9px] uppercase font-bold tracking-wider text-neutral-400 block mb-1">Sort Trails By</span>
-                <div className="flex gap-2">
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="flex-1 bg-white border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg px-2 py-1.5 focus:outline-none"
-                  >
-                    <option value="name">Name (A-Z)</option>
-                    <option value="distance">Distance (Max-Min)</option>
-                    <option value="uploadedAt">Recently Contributed</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* List Content */}
-        <div className={`flex-1 min-h-0 flex flex-col ${minerTab === 'chat' ? 'overflow-hidden' : 'overflow-y-auto no-scrollbar'}`}>
-          {minerTab === 'chat' ? (
-            <MapChat currentUserEmail={currentUserEmail} />
-          ) : isLoading ? (
-            <div className="p-4 space-y-3 animate-pulse">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-2xl border border-neutral-200 p-4 space-y-3 shadow-2xs"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1.5 flex-1">
-                      <div className="h-4 w-3/4 bg-neutral-200 rounded-md" />
-                      <div className="h-3 w-1/2 bg-neutral-100 rounded-md" />
-                    </div>
-                    <div className="h-5 w-16 bg-neutral-100 rounded-full shrink-0" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-neutral-100">
-                    <div className="h-7 bg-neutral-100 rounded-lg" />
-                    <div className="h-7 bg-neutral-100 rounded-lg" />
-                    <div className="h-7 bg-neutral-100 rounded-lg" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : filteredRoutes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-2 text-center h-full text-neutral-400 p-4">
-              <Compass className="w-10 h-10 text-neutral-300 animate-pulse" />
-              <span className="text-xs font-bold text-neutral-500">No Trails Found</span>
-              <span className="text-[10px]">Try adjusting your search filters or upload a new track!</span>
-            </div>
-          ) : (
-            <div className="p-4 space-y-3">
-              {filteredRoutes.map((route, idx) => {
-                const canDeleteRoute = Boolean(
-                  currentUserEmail &&
-                    (isAdminEmail(currentUserEmail) ||
-                      (route.contributorEmail &&
-                        route.contributorEmail.toLowerCase() === currentUserEmail.toLowerCase()))
-                );
-                return (
-                  <RouteCard
-                    key={route.id}
-                    route={route}
-                    index={idx}
-                    isActive={activeRoute?.id === route.id}
-                    canDelete={canDeleteRoute}
-                    isSaved={savedRouteIds.includes(String(route.id))}
-                    onClick={handleRouteClick}
-                    onDelete={handleDeleteRoute}
-                    onToggleSave={handleToggleSaveRoute}
-                  />
-                );
-              })}
-            </div>
-          )}
+      {/* Pinned Top Bar (All Trails | My Maps | MapChat | Map) - Always visible */}
+      <div className="bg-white border-b border-neutral-200 px-3 py-2 shrink-0 z-20">
+        <div className="flex gap-1 bg-neutral-100 p-1 rounded-xl max-w-2xl mx-auto">
+          <button
+            type="button"
+            onClick={() => {
+              setMinerTab('all');
+              setSidebarOpen(true);
+            }}
+            className={`flex-1 flex items-center justify-center gap-1 py-2 px-1 min-h-[36px] rounded-lg text-[11px] font-bold transition-all active:scale-95 cursor-pointer select-none ${
+              minerTab === 'all' && sidebarOpen
+                ? 'bg-white text-neutral-800 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-800'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
+            <span className="truncate">All Trails</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMinerTab('my');
+              setSidebarOpen(true);
+            }}
+            className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 min-h-[36px] rounded-lg text-[11px] font-bold transition-all active:scale-95 cursor-pointer select-none relative ${
+              minerTab === 'my' && sidebarOpen
+                ? 'bg-white text-neutral-800 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-800'
+            }`}
+          >
+            <MapPin className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
+            <span className="truncate">My Maps</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMinerTab('chat');
+              setSidebarOpen(true);
+            }}
+            className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 min-h-[36px] rounded-lg text-[11px] font-bold transition-all active:scale-95 cursor-pointer select-none relative ${
+              minerTab === 'chat' && sidebarOpen
+                ? 'bg-white text-neutral-800 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-800'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
+            <span className="truncate">MapChat</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMinerTab('map');
+              setSidebarOpen(false);
+            }}
+            className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 min-h-[36px] rounded-lg text-[11px] font-bold transition-all active:scale-95 cursor-pointer select-none ${
+              minerTab === 'map' || !sidebarOpen
+                ? 'bg-white text-neutral-800 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-800'
+            }`}
+            title="Focus full map view"
+          >
+            <MapIcon className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
+            <span className="truncate">Map</span>
+          </button>
         </div>
       </div>
 
-      {/* Map view Pane */}
-      <div className="flex-1 h-full relative overflow-hidden flex flex-col">
-        {/* Toggle Sidebar Button */}
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="absolute top-3 left-3 z-[1000] px-3 py-2 bg-white hover:bg-neutral-50 text-neutral-800 border border-neutral-200 rounded-xl shadow-md transition-transform hover:scale-105 flex items-center gap-2 text-xs font-bold cursor-pointer"
-            title="Open Sidebar"
-          >
-            <Compass className="w-4 h-4 text-[#7ABA42] animate-spin-slow shrink-0" />
-            <span>Show Trail List</span>
-          </button>
-        )}
+      {/* Main Content Area below Pinned Top Bar */}
+      <div className="flex-1 flex min-h-0 w-full relative overflow-hidden">
+        {/* Sidebar List Pane */}
+        <div className={`transition-all duration-300 shrink-0 border-r border-neutral-200 bg-white flex flex-col h-full z-10 ${
+          sidebarOpen ? 'w-full md:w-[360px]' : 'w-0 overflow-hidden border-r-0'
+        }`}>
+          {minerTab !== 'chat' && (
+            <div className="p-3 border-b border-neutral-100 shrink-0 space-y-2.5">
+              {/* Sub-Filter Pills inside My Maps (All | Saved | Contributed) */}
+              {minerTab === 'my' && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setMyMapsFilter('all')}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 min-h-[32px] rounded-lg text-[11px] font-bold border transition-all active:scale-95 cursor-pointer select-none ${
+                      myMapsFilter === 'all'
+                        ? 'bg-neutral-800 border-neutral-800 text-white shadow-2xs'
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                    }`}
+                  >
+                    <span>All ({allMyMapsCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMyMapsFilter('saved')}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 min-h-[32px] rounded-lg text-[11px] font-bold border transition-all active:scale-95 cursor-pointer select-none ${
+                      myMapsFilter === 'saved'
+                        ? 'bg-[#7ABA42] border-[#7ABA42] text-white shadow-2xs'
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                    }`}
+                  >
+                    <Bookmark className={`w-3 h-3 shrink-0 ${myMapsFilter === 'saved' ? 'fill-current text-white' : 'text-[#7ABA42]'}`} />
+                    <span>Saved ({savedCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMyMapsFilter('contributed')}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 min-h-[32px] rounded-lg text-[11px] font-bold border transition-all active:scale-95 cursor-pointer select-none ${
+                      myMapsFilter === 'contributed'
+                        ? 'bg-sky-600 border-sky-600 text-white shadow-2xs'
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                    }`}
+                  >
+                    <Upload className={`w-3 h-3 shrink-0 ${myMapsFilter === 'contributed' ? 'text-white' : 'text-sky-600'}`} />
+                    <span>Contributed ({contributedCount})</span>
+                  </button>
+                </div>
+              )}
 
-        {/* Leaflet Map */}
-        <div className="flex-1 h-full w-full">
-          <MapView
-            routes={filteredRoutes}
-            activeRoute={activeRoute}
-            onRouteClick={handleRouteClick}
-          />
+              {/* Search Box and Filters Button Side by Side */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 min-h-[38px] text-sm">
+                  <Search className="w-4 h-4 text-neutral-400 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search trail or region..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="flex-1 bg-transparent border-none text-xs focus:outline-none placeholder-neutral-400 min-w-0"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="p-1 hover:bg-neutral-200 rounded-full active:scale-90 cursor-pointer"
+                    >
+                      <X className="w-3 h-3 text-neutral-500" />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-xl text-xs font-bold border transition-all active:scale-95 cursor-pointer select-none shrink-0 ${
+                    showFilters 
+                      ? 'bg-neutral-800 border-neutral-800 text-white shadow-xs' 
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
+                  }`}
+                  title="Toggle trail filters"
+                >
+                  <ListFilter className="w-4 h-4" />
+                  <span>Filters</span>
+                </button>
+              </div>
+
+              {/* Collapsible Filters Expansion Panel */}
+              {showFilters && (
+                <div className="mt-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200/50 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div>
+                    <span className="text-[9px] uppercase font-bold tracking-wider text-neutral-400 block mb-1">Difficulty</span>
+                    <div className="flex flex-wrap gap-1">
+                      {['All', 'Easy', 'Moderate', 'Hard', 'Extreme'].map((diff) => (
+                        <button
+                          type="button"
+                          key={diff}
+                          onClick={() => setFilterDifficulty(diff)}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                            filterDifficulty === diff
+                              ? 'bg-[#7ABA42] text-white'
+                              : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                          }`}
+                        >
+                          {diff}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[9px] uppercase font-bold tracking-wider text-neutral-400 block mb-1">Sort Trails By</span>
+                    <div className="flex gap-2">
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="flex-1 bg-white border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg px-2 py-1.5 focus:outline-none"
+                      >
+                        <option value="name">Name (A-Z)</option>
+                        <option value="distance">Distance (Max-Min)</option>
+                        <option value="uploadedAt">Recently Contributed</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* List Content */}
+          <div className={`flex-1 min-h-0 flex flex-col ${minerTab === 'chat' ? 'overflow-hidden' : 'overflow-y-auto no-scrollbar'}`}>
+            {minerTab === 'chat' ? (
+              <MapChat currentUserEmail={currentUserEmail} />
+            ) : isLoading ? (
+              <div className="p-4 space-y-3 animate-pulse">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="bg-white rounded-2xl border border-neutral-200 p-4 space-y-3 shadow-2xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-4 w-3/4 bg-neutral-200 rounded-md" />
+                        <div className="h-3 w-1/2 bg-neutral-100 rounded-md" />
+                      </div>
+                      <div className="h-5 w-16 bg-neutral-100 rounded-full shrink-0" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-neutral-100">
+                      <div className="h-7 bg-neutral-100 rounded-lg" />
+                      <div className="h-7 bg-neutral-100 rounded-lg" />
+                      <div className="h-7 bg-neutral-100 rounded-lg" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredRoutes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-2 text-center h-full text-neutral-400 p-4">
+                <Compass className="w-10 h-10 text-neutral-300 animate-pulse" />
+                <span className="text-xs font-bold text-neutral-500">
+                  {minerTab === 'my'
+                    ? myMapsFilter === 'saved'
+                      ? 'No Saved Trails Yet'
+                      : myMapsFilter === 'contributed'
+                      ? 'No Contributed Trails Yet'
+                      : 'Your My Maps Collection is Empty'
+                    : 'No Trails Found'}
+                </span>
+                <span className="text-[10px]">
+                  {minerTab === 'my'
+                    ? myMapsFilter === 'saved'
+                      ? 'Tap the Bookmark button on any trail to save it here for quick access.'
+                      : myMapsFilter === 'contributed'
+                      ? 'Tap "Contribute Map" in the top bar to upload a GPX or KML trail!'
+                      : 'Save trails with the Bookmark button or upload your own GPX/KML tracks.'
+                    : 'Try adjusting your search filters or upload a new track!'}
+                </span>
+              </div>
+            ) : (
+              <div className="p-4 space-y-3">
+                {filteredRoutes.map((route, idx) => {
+                  const routeContributed = isRouteContributed(route);
+                  const canDeleteRoute = Boolean(
+                    currentUserEmail && (isAdminEmail(currentUserEmail) || routeContributed)
+                  );
+                  return (
+                    <RouteCard
+                      key={route.id}
+                      route={route}
+                      index={idx}
+                      isActive={activeRoute?.id === route.id}
+                      canDelete={canDeleteRoute}
+                      isSaved={isRouteSaved(route)}
+                      isContributed={routeContributed}
+                      showMyMapsBadges={minerTab === 'my'}
+                      onClick={handleRouteClick}
+                      onDelete={handleDeleteRoute}
+                      onToggleSave={handleToggleSaveRoute}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Detailed Sheet overlay (Float style to preserve Map canvas aspect ratio) */}
-        {activeRoute && (
-          <div className="absolute bottom-3 left-3 right-3 md:left-auto md:right-3 md:w-[380px] z-[1000]">
-            <RouteDetail
-              route={activeRoute}
-              onClose={() => setActiveRoute(null)}
-              isMobile={isMobile}
-              currentUserEmail={currentUserEmail}
-              isSaved={savedRouteIds.includes(String(activeRoute.id))}
-              onToggleSave={handleToggleSaveRoute}
+        {/* Map view Pane */}
+        <div className="flex-1 h-full relative overflow-hidden flex flex-col">
+          {/* Leaflet Map */}
+          <div className="flex-1 h-full w-full">
+            <MapView
+              routes={filteredRoutes}
+              activeRoute={activeRoute}
+              onRouteClick={handleRouteClick}
             />
           </div>
-        )}
+
+          {/* Detailed Sheet overlay (Float style to preserve Map canvas aspect ratio) */}
+          {activeRoute && (
+            <div className="absolute bottom-3 left-3 right-3 md:left-auto md:right-3 md:w-[380px] z-[1000]">
+              <RouteDetail
+                route={activeRoute}
+                onClose={() => setActiveRoute(null)}
+                isMobile={isMobile}
+                currentUserEmail={currentUserEmail}
+                isSaved={savedRouteIds.includes(String(activeRoute.id))}
+                onToggleSave={handleToggleSaveRoute}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Upload Modal Popup */}

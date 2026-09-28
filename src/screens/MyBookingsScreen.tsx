@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Booking } from '../types';
 import { HISTORICAL_TREKS } from '../data/historicalTreks';
-import { MiniPrayerFlags } from '../components/NepaliPrayerFlags';
 import {
   Calendar,
   Phone,
@@ -96,17 +95,38 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   };
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'TBA';
+    if (!dateStr || dateStr.trim().toUpperCase() === 'TBA' || dateStr.trim().toUpperCase() === 'TBD') {
+      return 'TBA';
+    }
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          });
+        }
+      }
+    }
     try {
       const d = new Date(dateStr);
-      return d.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+      }
     } catch {
-      return dateStr;
+      // fallback
     }
+    return dateStr;
   };
 
   const getDifficultyColor = (diff?: string) => {
@@ -243,11 +263,6 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
               key={booking.id}
               className="relative bg-white rounded-2xl border border-[#EFEAE4] shadow-xs overflow-hidden transition-all duration-200"
             >
-              {/* Auspicious miniature prayer flag garland draped over booking ticket */}
-              <div className="absolute -top-1 right-2 sm:right-5 w-24 xs:w-28 sm:w-32 z-20 pointer-events-none drop-shadow-2xs opacity-85">
-                <MiniPrayerFlags variant="draped" count={5} />
-              </div>
-
               {/* Card Header (Tap to toggle) */}
               <div
                 role="button"
