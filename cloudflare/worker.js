@@ -434,7 +434,7 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
 
       for (const reg of regList) {
         const status = String(reg.active_status || 'Confirmed').toLowerCase();
-        if (status === 'cancelled' || status === 'rejected') {
+        if (status.includes('cancelled') || status === 'rejected') {
           continue;
         }
 

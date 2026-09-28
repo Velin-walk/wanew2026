@@ -148,10 +148,18 @@ const doesRegistrationMatchTrek = (r: AdminRegistration, trek: Trek): boolean =>
 
 export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   treks,
-  registrations,
+  registrations: rawRegistrations,
   loading,
   onRefresh,
 }) => {
+  // Exclude Cancelled, Waitlisted, and Cancelled by User from Coordinator Hub
+  const registrations = useMemo(() => {
+    return rawRegistrations.filter((r) => {
+      const st = (r.status || 'Confirmed').toLowerCase().trim();
+      return st !== 'cancelled' && st !== 'waitlisted' && st !== 'cancelled by user' && !st.includes('cancelled');
+    });
+  }, [rawRegistrations]);
+
   // 1. Merge library treks + synthesize virtual trek events from registrations if not yet in library
   const allAvailableTreks = useMemo(() => {
     const existingHikeNums = new Set<string>();

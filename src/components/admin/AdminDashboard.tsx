@@ -377,15 +377,36 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const handleDeleteRegistration = async (id: string) => {
-    // 1. Try deleting via API
+    // Keep the registration record in D1 by updating status to 'Cancelled by User'
+    const updates: Partial<AdminRegistration> = { status: 'Cancelled by User' };
     try {
-      await apiFetch(`registrations/${id}`, { method: 'DELETE' });
+      await apiFetch(`registrations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
     } catch (err) {
-      console.warn('API delete registration fallback:', err);
+      console.warn('API mark registration as Cancelled by User fallback:', err);
     }
 
-    setRegistrations((prev) => prev.filter((r) => r.id !== id));
-    setRawRegistrations((prev) => prev.filter((r) => String(r.id) !== String(id)));
+    setRegistrations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+    );
+    setRawRegistrations((prev) =>
+      prev.map((r) => (String(r.id) === String(id) ? { ...r, ...updates } : r))
+    );
+    try {
+      const devRaw = localStorage.getItem('wnw_device_bookings');
+      if (devRaw) {
+        const devList = JSON.parse(devRaw);
+        if (Array.isArray(devList)) {
+          const updatedDev = devList.map((b: any) =>
+            String(b.id) === String(id) ? { ...b, ...updates } : b
+          );
+          localStorage.setItem('wnw_device_bookings', JSON.stringify(updatedDev));
+        }
+      }
+    } catch (_) {}
     window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
   };
 

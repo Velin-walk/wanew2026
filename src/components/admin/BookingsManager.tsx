@@ -94,9 +94,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [viewingAdminVoucherReg, setViewingAdminVoucherReg] = useState<AdminRegistration | null>(null);
 
   // Filter for upcoming events + last 2 months hikes in Bookings & Roster
+  // Ordered with upcoming events first (closest upcoming first), then recent past events (most recent first)
   const upcomingTreks = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
 
     const twoMonthsAgo = new Date();
     twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
@@ -105,28 +107,90 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     const parseTrekDate = (dateStr?: string): Date | null => {
       if (!dateStr) return null;
       const trimmed = dateStr.trim();
+
       if (trimmed.includes('/')) {
         const parts = trimmed.split('/');
         if (parts.length === 3) {
-          const day = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10) - 1;
-          const year = parseInt(parts[2], 10);
-          const d = new Date(year, month, day);
-          if (!isNaN(d.getTime())) return d;
+          if (parts[0].length === 4) {
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (!isNaN(d.getTime())) return d;
+          } else {
+            const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+            if (!isNaN(d.getTime())) return d;
+          }
         }
       }
+
+      if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+        const delimiter = trimmed.includes('-') ? '-' : '.';
+        const parts = trimmed.split(delimiter);
+        if (parts.length === 3) {
+          if (parts[2].length === 4) {
+            const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+            if (!isNaN(d.getTime())) return d;
+          } else if (parts[0].length === 4) {
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (!isNaN(d.getTime())) return d;
+          }
+        }
+      }
+
       const d = new Date(trimmed);
-      return isNaN(d.getTime()) ? null : d;
+      if (!isNaN(d.getTime())) return d;
+
+      try {
+        const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+        const year = yearMatch ? yearMatch[1] : '';
+        const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+        const parts = cleanRange.split(/[–—\-]/);
+        if (parts.length > 1 && year) {
+          const firstPart = parts[0]
+            .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+            .trim();
+          const rangeDate = new Date(`${firstPart} ${year}`);
+          if (!isNaN(rangeDate.getTime())) return rangeDate;
+        }
+      } catch {}
+
+      return null;
     };
 
-    return treks.filter((t) => {
-      const dt = parseTrekDate(t.date);
-      return !dt || dt.getTime() >= twoMonthsAgo.getTime();
-    }).sort((a, b) => {
-      const da = parseTrekDate(a.date)?.getTime() || 0;
-      const db = parseTrekDate(b.date)?.getTime() || 0;
-      return da - db; // nearest first
-    });
+    const getHikeNum = (t: Trek) => {
+      const m = String(t.hike_number || t.id || '').match(/\d+/);
+      return m ? parseInt(m[0], 10) : 0;
+    };
+
+    return treks
+      .filter((t) => {
+        const dt = parseTrekDate(t.date);
+        return !dt || dt.getTime() >= twoMonthsAgo.getTime();
+      })
+      .sort((a, b) => {
+        const da = parseTrekDate(a.date)?.getTime() ?? null;
+        const db = parseTrekDate(b.date)?.getTime() ?? null;
+
+        const aIsUpcoming = da !== null && da >= todayMs;
+        const bIsUpcoming = db !== null && db >= todayMs;
+
+        // 1. Upcoming events always appear before past/undated events
+        if (aIsUpcoming && !bIsUpcoming) return -1;
+        if (!aIsUpcoming && bIsUpcoming) return 1;
+
+        // 2. Both are upcoming: nearest upcoming date first
+        if (aIsUpcoming && bIsUpcoming) {
+          if (da !== db) return da - db;
+          return getHikeNum(b) - getHikeNum(a);
+        }
+
+        // 3. Recent past events before undated events, ordered most recent first
+        if (da !== null && db === null) return -1;
+        if (da === null && db !== null) return 1;
+        if (da !== null && db !== null && da !== db) {
+          return db - da;
+        }
+
+        return getHikeNum(b) - getHikeNum(a);
+      });
   }, [treks]);
 
   // Local draft state for inline row edits
@@ -173,7 +237,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     setIsPurging(false);
     setSelectedIds([]);
     onRefresh();
-    setToastMessage(`Successfully purged ${total} registrations from both Cloudflare D1 and Firestore.`);
+    setToastMessage(`Updated ${total} registration(s) to Cancelled by User.`);
     setTimeout(() => setToastMessage(null), 5000);
   };
 
@@ -209,7 +273,13 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       reg.trek_name?.toLowerCase().includes(selectedTrekFilter.toLowerCase());
 
     const regStatus = reg.status || 'Confirmed';
-    const matchesStatus = statusFilter === 'all' || regStatus.toLowerCase() === statusFilter.toLowerCase();
+    const regStatusLower = regStatus.toLowerCase();
+    const filterLower = statusFilter.toLowerCase();
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (filterLower === 'cancelled'
+        ? regStatusLower.includes('cancelled')
+        : regStatusLower === filterLower);
 
     return matchesSearch && matchesTrek && matchesStatus;
   });
@@ -538,7 +608,9 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                 <option value="all">All Statuses</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="pending">Pending</option>
+                <option value="waitlisted">Waitlisted</option>
                 <option value="cancelled">Cancelled</option>
+                <option value="cancelled by user">Cancelled by User</option>
               </select>
             </div>
 
@@ -806,6 +878,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                             <option value="Pending">Pending</option>
                             <option value="Waitlisted">Waitlisted</option>
                             <option value="Cancelled">Cancelled</option>
+                            <option value="Cancelled by User">Cancelled by User</option>
                           </select>
                         </td>
 
@@ -1035,11 +1108,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mb-4">
               <Trash2 className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-[#1F1F1F]">Delete Registration?</h3>
+            <h3 className="text-base font-bold text-[#1F1F1F]">Mark as Cancelled by User?</h3>
             <p className="text-xs text-[#5A5551] mt-2">
-              Are you sure you want to delete the registration for{' '}
-              <strong className="text-[#1F1F1F]">{pendingDeleteReg.full_name}</strong> ({pendingDeleteReg.email})?
-              This will remove the record from both Cloudflare D1 and Firestore.
+              Mark the registration for{' '}
+              <strong className="text-[#1F1F1F]">{pendingDeleteReg.full_name}</strong> ({pendingDeleteReg.email}) as{' '}
+              <strong className="text-rose-600">Cancelled by User</strong>? The record will be preserved in Cloudflare D1 for future profile history.
             </p>
             <div className="flex items-center justify-end gap-3 mt-6">
               <button
@@ -1047,7 +1120,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                 onClick={() => setPendingDeleteReg(null)}
                 className="px-4 py-2 text-xs font-bold text-[#5A5551] hover:text-[#1F1F1F] rounded-xl hover:bg-[#F9F7F5] transition-colors"
               >
-                Cancel
+                Keep Active
               </button>
               <button
                 type="button"
@@ -1058,7 +1131,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                 }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
               >
-                Delete Record
+                Mark Cancelled by User
               </button>
             </div>
           </div>

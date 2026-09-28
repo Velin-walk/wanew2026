@@ -75,7 +75,14 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
 
     bookings.forEach((b) => {
       const hikeNum = String(b.hike_number || b.trek_id || '').toLowerCase().trim();
-      const isPastCompleted = (b.status || '').toLowerCase() === 'completed' || (hikeNum && completedHikeNumbers.has(hikeNum));
+      const statusLower = (b.status || '').toLowerCase();
+      if (statusLower === 'cancelled by user') {
+        return;
+      }
+      const isCancelledStatus = statusLower.includes('cancelled');
+      const isPastCompleted =
+        !isCancelledStatus &&
+        (statusLower === 'completed' || (hikeNum && completedHikeNumbers.has(hikeNum)));
 
       if (isPastCompleted) {
         completed++;
@@ -287,9 +294,12 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    {booking.is_cancelled || (booking.status || '').toLowerCase() === 'cancelled' ? (
+                    {booking.is_cancelled || (booking.status || '').toLowerCase().includes('cancelled') ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-                        <AlertTriangle className="w-3 h-3 text-rose-600" /> Cancelled
+                        <AlertTriangle className="w-3 h-3 text-rose-600" />{' '}
+                        {(booking.status || '').toLowerCase().includes('cancelled')
+                          ? booking.status
+                          : 'Cancelled'}
                       </span>
                     ) : (booking.status || '').toLowerCase() === 'pending' || (booking.status || '').toLowerCase() === 'waitlisted' ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
@@ -342,7 +352,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                     </span>
                     <span
                       className={`text-[11px] font-extrabold mt-0.5 block truncate ${
-                        (booking.status || '').toLowerCase() === 'cancelled'
+                        (booking.status || '').toLowerCase().includes('cancelled')
                           ? 'text-rose-700'
                           : (booking.status || '').toLowerCase() === 'pending' ||
                             (booking.status || '').toLowerCase() === 'waitlisted'
@@ -555,7 +565,12 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                       )}
                     </div>
 
-                    {isConfirmingCancel ? (
+                    {(booking.status || '').toLowerCase().includes('cancelled') ? (
+                      <span className="min-h-[36px] px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                        <span>{booking.status || 'Cancelled by User'}</span>
+                      </span>
+                    ) : isConfirmingCancel ? (
                       <div className="flex items-center gap-2 bg-rose-50 p-2 rounded-xl border border-rose-200 justify-between">
                         <span className="text-[11px] text-rose-700 font-semibold flex items-center gap-1">
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />

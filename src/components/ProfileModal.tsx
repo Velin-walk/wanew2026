@@ -198,7 +198,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
     userBookings.forEach((b) => {
       const hikeNum = String(b.hike_number || b.trek_id || '').toLowerCase().trim();
-      const isPastCompleted = (b.status || '').toLowerCase() === 'completed' || (hikeNum && historicalHikesMap.has(hikeNum));
+      const statusLower = (b.status || '').toLowerCase();
+      if (statusLower === 'cancelled by user') {
+        return;
+      }
+      const isCancelledStatus = statusLower.includes('cancelled');
+      const isPastCompleted =
+        !isCancelledStatus &&
+        (statusLower === 'completed' || (hikeNum && historicalHikesMap.has(hikeNum)));
 
       if (isPastCompleted) {
         completed.push(b);

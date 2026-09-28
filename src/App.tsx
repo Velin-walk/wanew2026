@@ -353,7 +353,8 @@ function MainApp() {
 
       const rawList = Array.from(mergedMap.values()).filter((b: any) => {
         const id = String(b.id || b.registration_id || '');
-        return id && !cancelledIds.has(id);
+        const st = String(b.roster_registration_status || b.registration_status || b.status || '').toLowerCase();
+        return id && !cancelledIds.has(id) && st !== 'cancelled by user';
       });
       const currentTreks = (baseTreks && baseTreks.length > 0) ? baseTreks : treksRef.current;
       const enriched = rawList.map((b: any) => {
@@ -853,7 +854,7 @@ function MainApp() {
   };
 
   const handleCancelBooking = async (bookingId: number | string) => {
-    // 1. Remove from local memory and device localStorage immediately for instant feedback
+    // 1. Remove from user's My Bookings display and device localStorage immediately
     const idStr = String(bookingId);
     setBookings((prev) => prev.filter((b) => String(b.id) !== idStr));
     try {
@@ -872,17 +873,15 @@ function MainApp() {
       }
     } catch (_) {}
 
-    // 2. Dual-delete from Cloudflare and Firestore
-    let cfDeleted = false;
+    // 2. Keep record in Cloudflare D1 by updating status to 'Cancelled by User' for Admin Bookings & Roster
     try {
-      const res = await apiFetch(`/registrations/${bookingId}`, {
-        method: 'DELETE',
+      await apiFetch(`/registrations/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Cancelled by User' }),
       });
-      if (res.ok) {
-        cfDeleted = true;
-      }
     } catch (e) {
-      console.warn('Cloudflare delete failed:', e);
+      console.warn('Cloudflare status update to Cancelled by User failed:', e);
     }
 
     showToast('Registration cancelled successfully', 'success');
