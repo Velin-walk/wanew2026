@@ -25,6 +25,10 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
   const [charError, setCharError] = useState<string | null>(null);
 
   const commentsEndRef = useRef<HTMLDivElement>(null);
+  const onCommentCountChangeRef = useRef(onCommentCountChange);
+  useEffect(() => {
+    onCommentCountChangeRef.current = onCommentCountChange;
+  }, [onCommentCountChange]);
 
   // Fetch comments on mount/photoId change
   useEffect(() => {
@@ -35,7 +39,6 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
         const data = await fetchPhotoComments(photoId);
         if (active) {
           setComments(data);
-          onCommentCountChange?.(data.length);
         }
       } catch (err) {
         console.error('Error fetching comments:', err);
@@ -49,7 +52,14 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
     return () => {
       active = false;
     };
-  }, [photoId, onCommentCountChange]);
+  }, [photoId]);
+
+  // Notify parent of comment count changes safely inside an effect (never inside a state updater)
+  useEffect(() => {
+    if (!loading) {
+      onCommentCountChangeRef.current?.(comments.length);
+    }
+  }, [comments.length, loading]);
 
   // Scroll comments into view when new comment arrives
   useEffect(() => {
@@ -83,11 +93,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
       );
 
       if (newComment) {
-        setComments((prev) => {
-          const next = [...prev, newComment];
-          onCommentCountChange?.(next.length);
-          return next;
-        });
+        setComments((prev) => [...prev, newComment]);
         setCommentText('');
       }
     } catch (err) {
@@ -101,11 +107,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
     try {
       const success = await deletePhotoComment(id);
       if (success) {
-        setComments((prev) => {
-          const next = prev.filter((c) => c.id !== id);
-          onCommentCountChange?.(next.length);
-          return next;
-        });
+        setComments((prev) => prev.filter((c) => c.id !== id));
         if (deleteId === id) setDeleteId(null);
       }
     } catch (err) {

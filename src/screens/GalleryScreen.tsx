@@ -925,7 +925,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       {/* Global Upload Modal */}
       {uploadModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setUploadModalOpen(false);
@@ -1207,7 +1207,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       {/* Lightbox Modal */}
       {activePhoto && (
         <div
-          className="fixed inset-0 z-60 bg-black/95 flex items-center justify-center p-0 md:p-4 select-none overflow-hidden"
+          className="fixed inset-0 z-[2000] bg-black/95 flex items-center justify-center p-0 md:p-4 select-none overflow-hidden"
           onClick={(e) => {
             if (e.target === e.currentTarget && !mobileDiscussionOpen) {
               handleCloseLightbox();
@@ -1315,7 +1315,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                     {/* Options Menu Dropdown */}
                     {showOptionsMenu && (
                       <div
-                        className="absolute right-0 bottom-full mb-2 w-44 bg-[#1F1F1F] border border-white/20 rounded-2xl shadow-2xl p-1.5 text-white z-70 animate-in fade-in zoom-in-95 duration-150"
+                        className="absolute right-0 top-full mt-2 w-44 bg-[#1F1F1F] border border-white/20 rounded-2xl shadow-2xl p-1.5 text-white z-[10050] animate-in fade-in zoom-in-95 duration-150"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {(!viewerPovMode && ((user && user.uid === activePhoto.userUid) || isAdmin)) ? (
