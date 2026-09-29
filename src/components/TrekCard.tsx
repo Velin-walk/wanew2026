@@ -158,8 +158,13 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 
   const badge = getDifficultyBadge(effectiveDifficulty);
   const currentParticipants = trek.participants || 0;
+  const execStatus = trek.data?.execution_status;
+  const isCancelled = Boolean(trek.is_cancelled || trek.data?.is_cancelled || execStatus === 'Cancelled');
+  const isCompleted = execStatus === 'Completed';
+  const isClosedByAdmin = execStatus === 'Registration Closed';
   const isFull = currentParticipants >= trek.capacity;
-  const fillPercentage = Math.min(100, Math.round((currentParticipants / trek.capacity) * 100));
+  const isRegistrationDisabled = isFull || isCancelled || isCompleted || isClosedByAdmin;
+  const fillPercentage = Math.min(100, Math.round((currentParticipants / Math.max(1, trek.capacity)) * 100));
 
   const getBorderColor = (difficulty?: string) => {
     switch (difficulty?.toLowerCase()?.trim()) {
@@ -417,17 +422,27 @@ export const TrekCard: React.FC<TrekCardProps> = ({
           <button
             type="button"
             id={`trek-card-register-btn-${trek.id}`}
-            disabled={isFull || trek.is_cancelled}
+            disabled={isRegistrationDisabled}
             onClick={() => onRegister(trek)}
             className={`flex items-center justify-center gap-1.5 min-h-[44px] px-2 text-xs font-black rounded-xl transition-all shadow-sm select-none ${
-              trek.is_cancelled
+              isCancelled
                 ? 'bg-rose-100 text-rose-700 border-2 border-rose-300 cursor-not-allowed opacity-90'
-                : isFull
+                : isRegistrationDisabled
                 ? 'bg-[#8B8680] text-white cursor-not-allowed opacity-75'
                 : 'bg-[#7ABA42] hover:bg-[#6AA437] hover:shadow-md active:scale-95 text-white cursor-pointer ring-2 ring-[#7ABA42]/30'
             }`}
           >
-            <span>{trek.is_cancelled ? 'Cancelled' : isFull ? 'Waitlist' : 'Register'}</span>
+            <span>
+              {isCancelled
+                ? 'Cancelled'
+                : isCompleted
+                ? 'Completed'
+                : isFull
+                ? 'Waitlist'
+                : isClosedByAdmin
+                ? 'Closed'
+                : 'Register'}
+            </span>
           </button>
         </div>
       </div>

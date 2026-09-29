@@ -70,11 +70,18 @@ const isGenericTitle = (name?: string): boolean => {
   );
 };
 
+const extractDigits = (val?: string): string => {
+  if (!val) return '';
+  const s = String(val).trim();
+  if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
+  const m = s.match(/^\d{1,4}$/) || s.match(/^hike-(\d{1,4})$/i) || s.match(/^#?(\d{1,4})$/);
+  return m ? m[1] || m[0] : '';
+};
+
 export const getHikeNumberFromAny = (obj: any): string => {
   if (!obj) return '';
   if (typeof obj === 'string' || typeof obj === 'number') {
-    const m = String(obj).match(/\b\d{1,4}\b/) || String(obj).match(/\d+/);
-    return m ? m[0] : '';
+    return extractDigits(String(obj));
   }
   const fields = [
     obj.hike_number,
@@ -82,17 +89,11 @@ export const getHikeNumberFromAny = (obj: any): string => {
     obj.trek_id,
     obj.hike_id,
     obj.id,
-    obj.trek_name,
-    obj.trekName,
-    obj.hike_name,
-    obj.list_name,
-    obj.person_remarks,
-    obj.suggestions,
   ];
   for (const f of fields) {
-    if (f) {
-      const m = String(f).match(/\b\d{1,4}\b/) || String(f).match(/\d+/);
-      if (m && parseInt(m[0], 10) > 0) return m[0];
+    if (f !== undefined && f !== null) {
+      const d = extractDigits(String(f));
+      if (d && parseInt(d, 10) > 0) return d;
     }
   }
   return '';
@@ -118,27 +119,24 @@ const getTrekNameForHike = (hikeNum: string, fallbackName?: string): string => {
 const doesRegistrationMatchTrek = (r: AdminRegistration, trek: Trek): boolean => {
   if (!r || !trek) return false;
 
-  const regHikeNum = getHikeNumberFromAny(r);
-  const trekHikeNum = getHikeNumberFromAny(trek);
+  const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // 1. Strict numeric hike number comparison if both have numbers
-  if (trekHikeNum && regHikeNum) {
-    return trekHikeNum === regHikeNum;
-  }
+  const tId = (trek.id || '').toLowerCase().trim();
+  const tHikeNum = (trek.hike_number || '').toLowerCase().trim();
+  const tDigits = extractDigits(trek.hike_number) || extractDigits(trek.id);
 
-  // 2. Strict ID comparison
-  const queryId = (trek.id || trek.hike_number || '').toLowerCase().trim();
-  const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase().trim();
-  if (queryId && regTrekId && (queryId === regTrekId || queryId.includes(regTrekId) || regTrekId.includes(queryId))) {
-    return true;
-  }
+  const rTrekId = (r.trek_id || '').toLowerCase().trim();
+  const rHikeNum = (r.hike_number || '').toLowerCase().trim();
+  const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
 
-  // 3. Name comparison only if neither is generic
-  const trekTitle = (trek.name || '').toLowerCase().trim();
-  const regTrekName = (r.trek_name || '').toLowerCase().trim();
+  if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
+  if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
+  if (tDigits && rDigits) return tDigits === rDigits;
 
-  if (trekTitle && regTrekName && !isGenericTitle(trekTitle) && !isGenericTitle(regTrekName)) {
-    if (regTrekName === trekTitle || regTrekName.includes(trekTitle) || trekTitle.includes(regTrekName)) {
+  const tNameNorm = normStr(trek.name);
+  const rNameNorm = normStr(r.trek_name);
+  if (tNameNorm && rNameNorm && !isGenericTitle(trek.name) && !isGenericTitle(r.trek_name)) {
+    if (rNameNorm === tNameNorm || rNameNorm.includes(tNameNorm) || tNameNorm.includes(rNameNorm)) {
       return true;
     }
   }
@@ -235,6 +233,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   const upcomingTreks = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
 
     const twoMonthsAgo = new Date();
     twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
@@ -243,23 +242,61 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     const parseTrekDate = (dateStr?: string): Date | null => {
       if (!dateStr) return null;
       const trimmed = dateStr.trim();
+
       if (trimmed.includes('/')) {
         const parts = trimmed.split('/');
         if (parts.length === 3) {
-          const day = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10) - 1;
-          const year = parseInt(parts[2], 10);
-          const d = new Date(year, month, day);
-          if (!isNaN(d.getTime())) return d;
+          if (parts[0].length === 4) {
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (!isNaN(d.getTime())) return d;
+          } else {
+            const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+            if (!isNaN(d.getTime())) return d;
+          }
         }
       }
+
+      if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+        const delimiter = trimmed.includes('-') ? '-' : '.';
+        const parts = trimmed.split(delimiter);
+        if (parts.length === 3) {
+          if (parts[2].length === 4) {
+            const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+            if (!isNaN(d.getTime())) return d;
+          } else if (parts[0].length === 4) {
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (!isNaN(d.getTime())) return d;
+          }
+        }
+      }
+
       const d = new Date(trimmed);
-      return isNaN(d.getTime()) ? null : d;
+      if (!isNaN(d.getTime())) return d;
+
+      try {
+        const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+        const year = yearMatch ? yearMatch[1] : '';
+        const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+        const parts = cleanRange.split(/[–—\-]/);
+        if (parts.length > 1 && year) {
+          const firstPart = parts[0]
+            .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+            .trim();
+          const rangeDate = new Date(`${firstPart} ${year}`);
+          if (!isNaN(rangeDate.getTime())) return rangeDate;
+        }
+      } catch {}
+
+      return null;
+    };
+
+    const getHikeNum = (t: Trek) => {
+      const m = String(t.hike_number || t.id || '').match(/\d+/);
+      return m ? parseInt(m[0], 10) : 0;
     };
 
     return allAvailableTreks
       .filter((t) => {
-        // Always include if this trek has bookings in registrations
         const hasRegistrations = registrations.some(
           (r) => doesRegistrationMatchTrek(r, t)
         );
@@ -269,25 +306,27 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         return !dt || dt.getTime() >= twoMonthsAgo.getTime();
       })
       .sort((a, b) => {
-        // Prioritize events with active registered hikers
-        const regsA = registrations.filter(
-          (r) => doesRegistrationMatchTrek(r, a)
-        ).length;
-        const regsB = registrations.filter(
-          (r) => doesRegistrationMatchTrek(r, b)
-        ).length;
+        const da = parseTrekDate(a.date)?.getTime() ?? null;
+        const db = parseTrekDate(b.date)?.getTime() ?? null;
 
-        if (regsA > 0 && regsB === 0) return -1;
-        if (regsB > 0 && regsA === 0) return 1;
+        const aIsUpcoming = da !== null && da >= todayMs;
+        const bIsUpcoming = db !== null && db >= todayMs;
 
-        // Otherwise sort by numeric hike number descending if available
-        const numA = parseInt(getHikeNumberFromAny(a) || '0', 10);
-        const numB = parseInt(getHikeNumberFromAny(b) || '0', 10);
-        if (numA && numB && numA !== numB) return numB - numA;
+        if (aIsUpcoming && !bIsUpcoming) return -1;
+        if (!aIsUpcoming && bIsUpcoming) return 1;
 
-        const da = parseTrekDate(a.date)?.getTime() || 0;
-        const db = parseTrekDate(b.date)?.getTime() || 0;
-        return db - da; // newest / nearest first
+        if (aIsUpcoming && bIsUpcoming) {
+          if (da !== db) return da - db;
+          return getHikeNum(b) - getHikeNum(a);
+        }
+
+        if (da !== null && db === null) return -1;
+        if (da === null && db !== null) return 1;
+        if (da !== null && db !== null && da !== db) {
+          return db - da;
+        }
+
+        return getHikeNum(b) - getHikeNum(a);
       });
   }, [allAvailableTreks, registrations]);
 
@@ -296,11 +335,15 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   // 3. Auto-select first trek with bookings or first available event
   React.useEffect(() => {
     if (upcomingTreks.length > 0) {
-      const isCurrentValid = upcomingTreks.some(
-        (t) =>
-          t.id === selectedTrekId ||
-          (t.hike_number && t.hike_number === selectedTrekId) ||
-          getHikeNumberFromAny(t) === getHikeNumberFromAny(selectedTrekId)
+      const selHikeNum = getHikeNumberFromAny(selectedTrekId);
+      const isCurrentValid = Boolean(
+        selectedTrekId &&
+          upcomingTreks.some(
+            (t) =>
+              t.id === selectedTrekId ||
+              (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === selectedTrekId) ||
+              (selHikeNum && getHikeNumberFromAny(t) === selHikeNum)
+          )
       );
 
       if (!selectedTrekId || !isCurrentValid) {
@@ -324,13 +367,13 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   // Selected Active Trek
   const currentTrek = useMemo(() => {
     if (upcomingTreks.length === 0) return null;
+    const selHikeNum = getHikeNumberFromAny(selectedTrekId);
     return (
       upcomingTreks.find(
         (t) =>
           t.id === selectedTrekId ||
-          t.hike_number === selectedTrekId ||
-          (selectedTrekId &&
-            getHikeNumberFromAny(t) === getHikeNumberFromAny(selectedTrekId))
+          (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === selectedTrekId) ||
+          (selHikeNum && getHikeNumberFromAny(t) === selHikeNum)
       ) ||
       upcomingTreks[0] ||
       null
@@ -596,13 +639,16 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       {/* ── TOP EVENT CARDS STRIP ── */}
       <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200 print:hidden">
         {upcomingTreks.map((t) => {
+          const curHikeNum = getHikeNumberFromAny(currentTrek);
+          const tHikeNum = getHikeNumberFromAny(t);
           const isSelected =
             currentTrek?.id === t.id ||
-            (t.hike_number && currentTrek?.hike_number === t.hike_number) ||
-            getHikeNumberFromAny(currentTrek) === getHikeNumberFromAny(t);
-          const tRegsCount = registrations.filter(
+            (t.hike_number && t.hike_number !== 'TBD' && currentTrek?.hike_number === t.hike_number) ||
+            Boolean(curHikeNum && tHikeNum && curHikeNum === tHikeNum);
+          const matchedRegs = registrations.filter(
             (r) => doesRegistrationMatchTrek(r, t)
-          ).length;
+          );
+          const tRegsCount = matchedRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
 
           return (
             <div
@@ -615,7 +661,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
               }`}
             >
               <div className="flex items-center justify-between text-[11px] font-bold text-stone-400 mb-1">
-                <span>{t.date || '18 Sept 2026'} • {t.days}D</span>
+                <span>{t.date || 'Flexible'} • {t.days}D</span>
                 {t.is_cancelled && (
                   <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 text-[9px] font-extrabold border border-rose-200">
                     CANCELLED
@@ -627,7 +673,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
               </h3>
               <div className="flex items-center gap-1.5 mb-3">
                 <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[#2563EB] text-[10px] font-bold border border-blue-100 flex items-center gap-1">
-                  <Compass className="w-3 h-3 text-[#2563EB]" /> Trek
+                  <Compass className="w-3 h-3 text-[#2563EB]" /> Hike #{t.hike_number || tHikeNum || 'N/A'}
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[10px] font-bold">
                   {t.difficulty || 'Moderate'}
@@ -831,7 +877,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         {/* Table Header Bar */}
         <div className="p-4 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h2 className="text-base font-extrabold text-[#1F2937]">
-            {currentTrek?.name || 'Pachpokhari'} ({currentTrek?.date || '18 Sep 2026'}) — {trekRegistrations.length} hikers
+            {currentTrek?.hike_number && currentTrek.hike_number !== 'TBD' ? `Hike #${currentTrek.hike_number} - ` : ''}
+            {currentTrek?.name || 'Pachpokhari'} ({currentTrek?.date || 'Flexible'}) — {totalRegistered} hikers
           </h2>
 
           {/* Filter Chips */}
@@ -979,7 +1026,14 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
                       {/* NAME */}
                       <td className="py-3 px-3 font-extrabold text-[#1F2937]">
-                        {r.full_name}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span>{r.full_name}</span>
+                          {r.paxCount && r.paxCount > 1 && (
+                            <span className="font-bold text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.5 rounded text-[10px]">
+                              {r.paxCount} Pax
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* PHONE */}
@@ -1053,8 +1107,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                       </td>
 
                       {/* UPDATES */}
-                      <td className="py-3 px-3 text-stone-500 max-w-[150px] truncate" title={r.admin_notes}>
-                        {r.admin_notes || '—'}
+                      <td className="py-3 px-3 text-stone-500 max-w-[150px] truncate" title={r.admin_notes || r.person_remarks}>
+                        {r.admin_notes || r.person_remarks || '—'}
                       </td>
 
                       {/* MEDICAL */}
@@ -1062,7 +1116,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                         {r.has_medical && r.has_medical.toLowerCase() !== 'no' && r.has_medical.toLowerCase() !== 'none' ? (
                           <span className="text-rose-600 font-extrabold flex items-center gap-1">
                             <AlertTriangle className="w-3.5 h-3.5" />
-                            <span>{r.has_medical}</span>
+                            <span>{r.specify_medical || r.has_medical}</span>
                           </span>
                         ) : (
                           <span className="text-stone-400 font-medium">None</span>

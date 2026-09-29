@@ -351,22 +351,25 @@ function MainApp() {
         }
       } catch {}
 
-      // A. Populate from local saved itineraries cache (Admin Panel published/saved treks)
+      const deletedIds = new Set<string>();
       try {
-        const localSaved = localStorage.getItem('wnw_saved_itineraries_cache');
-        if (localSaved) {
-          const parsed = JSON.parse(localSaved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            parsed.forEach((item) => {
-              const norm = normalizeTrek(item);
-              const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
-              trekMap.set(key, norm);
-            });
+        const rawDeleted = localStorage.getItem('wnw_deleted_hike_ids');
+        if (rawDeleted) {
+          const parsedDeleted = JSON.parse(rawDeleted);
+          if (Array.isArray(parsedDeleted)) {
+            parsedDeleted.forEach((id) => deletedIds.add(String(id).toLowerCase()));
           }
         }
       } catch {}
 
-      // B. Fetch from Cloudflare Worker & D1 (Default / Zero-Quota Mode)
+      const getTrekMapKey = (norm: Trek) => {
+        const normDate = (norm.date || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return norm.hike_number && norm.hike_number !== 'TBD'
+          ? `num:${norm.hike_number}:${normDate}`
+          : `id:${norm.id}`;
+      };
+
+      // A. Fetch from Cloudflare Worker & D1 (Default / Zero-Quota Mode)
       if (currentSource !== 'firebase') {
         try {
           const res = await apiFetch('/treks', { forceFresh: isForce });
@@ -377,7 +380,8 @@ function MainApp() {
             if (Array.isArray(trekItems) && trekItems.length > 0) {
               trekItems.forEach((t) => {
                 const norm = normalizeTrek(t);
-                const key = norm.hike_number && norm.hike_number !== 'TBD' ? `num:${norm.hike_number}` : `id:${norm.id}`;
+                if (deletedIds.has(String(norm.id).toLowerCase())) return;
+                const key = getTrekMapKey(norm);
                 trekMap.set(key, norm);
               });
             }
@@ -386,6 +390,46 @@ function MainApp() {
           console.warn('[Cloudflare Treks] Network issue fetching treks from Cloudflare:', err);
         }
       }
+
+      // B. Merge with local saved itineraries cache (Admin Panel published/saved treks & execution updates)
+      try {
+        const localSaved = localStorage.getItem('wnw_saved_itineraries_cache');
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            parsed.forEach((item) => {
+              const norm = normalizeTrek(item);
+              const key = getTrekMapKey(norm);
+              const itemStatus = String(item?.status || item?.data?.status || 'published').toLowerCase();
+
+              // Exclude deleted, draft, or archived hikes from public display
+              if (
+                deletedIds.has(String(norm.id).toLowerCase()) ||
+                itemStatus === 'draft' ||
+                itemStatus === 'archived'
+              ) {
+                trekMap.delete(key);
+                return;
+              }
+
+              const existing = trekMap.get(key);
+              if (!existing) {
+                trekMap.set(key, norm);
+              } else {
+                const localTime = Date.parse(item?.updatedAt || item?.data?.updatedAt || '') || 0;
+                const serverTime = Date.parse(existing.data?.updatedAt || '') || 0;
+                if (localTime >= serverTime) {
+                  trekMap.set(key, {
+                    ...existing,
+                    ...norm,
+                    participants: Math.max(Number(existing.participants || 0), Number(norm.participants || 0)),
+                  });
+                }
+              }
+            });
+          }
+        }
+      } catch {}
 
       let baseTreks = deduplicateTreks(Array.from(trekMap.values()));
       if (baseTreks.length > 0) {
@@ -829,21 +873,61 @@ function MainApp() {
 
   const handleRegisterSubmit = async (formData: BookingFormData) => {
     const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const trek = treks.find(
-      (t) =>
-        t.id === formData.trek_id ||
-        t.hike_number === formData.trek_id ||
-        (t.name && formData.trek_name && norm(t.name) === norm(formData.trek_name))
-    );
+    const targetDateNorm = norm(formData.trek_date);
+
+    // 1. Exact ID + Date match first
+    // 2. Exact ID match
+    // 3. Name/HikeNumber + Date match
+    // 4. Fallback to selectedTrekForRegister
+    const trek =
+      (targetDateNorm
+        ? treks.find((t) => t.id === formData.trek_id && norm(t.date) === targetDateNorm)
+        : undefined) ||
+      treks.find((t) => t.id === formData.trek_id) ||
+      (targetDateNorm
+        ? treks.find(
+            (t) =>
+              (t.hike_number === formData.trek_id ||
+                (t.name && formData.trek_name && norm(t.name) === norm(formData.trek_name))) &&
+              norm(t.date) === targetDateNorm
+          )
+        : undefined) ||
+      (selectedTrekForRegister &&
+      (selectedTrekForRegister.id === formData.trek_id ||
+        norm(selectedTrekForRegister.name) === norm(formData.trek_name))
+        ? selectedTrekForRegister
+        : undefined) ||
+      treks.find(
+        (t) =>
+          (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === formData.trek_id) ||
+          (t.name && formData.trek_name && norm(t.name) === norm(formData.trek_name))
+      );
 
     if (!trek) {
       throw new Error('Trek not found');
     }
 
+    const resolvedTrekDate = formData.trek_date || trek.date || '';
+    const resolvedTrekName = trek.name || formData.trek_name || 'Himalayan Trek';
+    const resolvedHikeNumber =
+      trek.hike_number && trek.hike_number.toUpperCase() !== 'TBD'
+        ? trek.hike_number
+        : trek.id;
+    const trekWithDateLabel = resolvedTrekDate
+      ? `${resolvedTrekName} (${resolvedTrekDate})`
+      : resolvedTrekName;
+    const groupRemarks =
+      formData.team_members && formData.team_members.length > 0
+        ? `${trekWithDateLabel} • Primary contact with ${formData.team_members.length} companion(s): ${formData.team_members.map((m) => m.full_name).join(', ')}`
+        : `${trekWithDateLabel} • Solo registration`;
+
     const totalNewPeople = 1 + (Array.isArray(formData.team_members) ? formData.team_members.length : 0);
     const primaryPayload = {
-      hike_number: trek.hike_number || trek.id,
-      trek_name: trek.name,
+      trek_id: trek.id,
+      hike_number: resolvedHikeNumber,
+      trek_name: resolvedTrekName,
+      trek_date: resolvedTrekDate,
+      date: resolvedTrekDate,
       full_name: formData.full_name,
       pax: totalNewPeople,
       phone: formData.phone,
@@ -860,12 +944,10 @@ function MainApp() {
       paid: '',
       agreement: formData.agree_rules || 'Yes',
       suggestions: formData.suggestions || '',
-      person_remarks: formData.team_members && formData.team_members.length > 0
-        ? `Primary contact with ${formData.team_members.length} companion(s): ${formData.team_members.map(m => m.full_name).join(', ')}`
-        : 'Solo registration',
+      person_remarks: groupRemarks,
       updates: '',
       pickup_point: '',
-      list_name: `${trek.name} (${trek.date})`,
+      list_name: trekWithDateLabel,
       fitness: trek.fitness_level || '',
       medical_condition: formData.has_medical === 'Yes' ? (formData.specify_medical || 'Yes') : 'No',
       recent_hikes: formData.recent_hikes || '',
@@ -901,8 +983,11 @@ function MainApp() {
       for (const tm of formData.team_members) {
         if (tm.full_name) {
           const companionPayload = {
-            hike_number: trek.hike_number || trek.id,
-            trek_name: trek.name,
+            trek_id: trek.id,
+            hike_number: resolvedHikeNumber,
+            trek_name: resolvedTrekName,
+            trek_date: resolvedTrekDate,
+            date: resolvedTrekDate,
             full_name: tm.full_name,
             pax: 1,
             phone: tm.phone || '',
@@ -919,10 +1004,10 @@ function MainApp() {
             paid: '',
             agreement: 'Yes',
             suggestions: '',
-            person_remarks: `Companion of ${formData.full_name}`,
+            person_remarks: `${trekWithDateLabel} • Companion of ${formData.full_name}`,
             updates: '',
             pickup_point: '',
-            list_name: `${trek.name} (${trek.date})`,
+            list_name: trekWithDateLabel,
             fitness: trek.fitness_level || '',
             medical_condition: 'No',
             recent_hikes: '',
@@ -974,8 +1059,8 @@ function MainApp() {
       age_group: formData.age_group,
       gender: formData.gender,
       joined_at: new Date().toISOString(),
-      trek_name: trek.name,
-      trek_date: trek.date,
+      trek_name: resolvedTrekName,
+      trek_date: resolvedTrekDate,
       trek_difficulty: trek.difficulty,
       trek_days: trek.days,
       pax: totalNewPeople,

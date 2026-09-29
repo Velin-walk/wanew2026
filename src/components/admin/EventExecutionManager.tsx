@@ -51,9 +51,28 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
     return !q || t.name.toLowerCase().includes(q) || (t.hike_number && t.hike_number.includes(q));
   });
 
-  const activeCount = treks.filter((t) => !t.data?.is_cancelled && t.participants < t.capacity).length;
-  const fullCount = treks.filter((t) => t.participants >= t.capacity).length;
-  const cancelledCount = treks.filter((t) => !!t.data?.is_cancelled).length;
+  const resolveTrekExecStatus = (
+    t: Trek,
+    overrideCapacity?: number
+  ): 'Active' | 'Registration Closed' | 'Completed' | 'Cancelled' => {
+    const cap = overrideCapacity !== undefined ? Number(overrideCapacity) : Number(t.capacity || 25);
+    const savedStatus = t.data?.execution_status;
+    if (savedStatus === 'Cancelled' || t.data?.is_cancelled || t.is_cancelled) return 'Cancelled';
+    if (savedStatus === 'Completed') return 'Completed';
+    if (savedStatus === 'Registration Closed') {
+      // If admin increased capacity above current participants, allow it to reopen unless manually kept closed
+      if (overrideCapacity !== undefined && cap > (t.capacity || 25) && t.participants < cap) {
+        return 'Active';
+      }
+      return 'Registration Closed';
+    }
+    if (t.participants >= cap) return 'Registration Closed';
+    return 'Active';
+  };
+
+  const activeCount = treks.filter((t) => resolveTrekExecStatus(t) === 'Active').length;
+  const fullCount = treks.filter((t) => resolveTrekExecStatus(t) === 'Registration Closed').length;
+  const cancelledCount = treks.filter((t) => resolveTrekExecStatus(t) === 'Cancelled').length;
 
   const handleRowChange = (id: string, field: string, value: any) => {
     setRowDrafts((prev) => ({
@@ -67,16 +86,12 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
 
   const handleSaveRow = async (t: Trek) => {
     const draft = rowDrafts[t.id] || {};
+    const curCapacity = draft.capacity !== undefined ? Number(draft.capacity) : Number(t.capacity || 25);
     const curStatus =
       draft.status !== undefined
         ? draft.status
-        : t.data?.is_cancelled
-        ? 'Cancelled'
-        : t.participants >= t.capacity
-        ? 'Registration Closed'
-        : 'Active';
+        : resolveTrekExecStatus(t, curCapacity);
 
-    const curCapacity = draft.capacity !== undefined ? Number(draft.capacity) : t.capacity || 25;
     const curLeader = draft.leader !== undefined ? draft.leader : t.leader || 'Walk Nepal Walk Guide';
     const curReason = draft.cancellation_reason !== undefined ? draft.cancellation_reason : t.data?.cancellation_reason || '';
 
@@ -212,16 +227,12 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                 {filteredTreks.map((t) => {
                   const draft = rowDrafts[t.id] || {};
 
+                  const curCapacity = draft.capacity !== undefined ? draft.capacity : t.capacity || 25;
                   const curStatus =
                     draft.status !== undefined
                       ? draft.status
-                      : t.data?.is_cancelled
-                      ? 'Cancelled'
-                      : t.participants >= t.capacity
-                      ? 'Registration Closed'
-                      : 'Active';
+                      : resolveTrekExecStatus(t, Number(curCapacity));
 
-                  const curCapacity = draft.capacity !== undefined ? draft.capacity : t.capacity || 25;
                   const curLeader = draft.leader !== undefined ? draft.leader : t.leader || 'Walk Nepal Walk Guide';
                   const curReason = draft.cancellation_reason !== undefined ? draft.cancellation_reason : t.data?.cancellation_reason || '';
 
@@ -346,7 +357,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => onSelectViewRoster(t.hike_number || t.id)}
+                            onClick={() => onSelectViewRoster(t.id || t.hike_number)}
                             className="px-2.5 py-2 bg-[#F9F7F5] hover:bg-[#EFEAE4] text-[#1F1F1F] font-bold text-xs rounded-xl border border-[#E5E1DB] flex items-center gap-1 transition-all cursor-pointer"
                             title="View Hike Roster"
                           >

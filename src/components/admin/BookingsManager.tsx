@@ -74,6 +74,7 @@ interface BookingsManagerProps {
   onRefresh: () => void;
   onDeleteRegistration: (id: string) => Promise<void>;
   onUpdateRegistration: (id: string, updates: Partial<AdminRegistration>) => Promise<void>;
+  initialTrekFilter?: string;
 }
 
 export const BookingsManager: React.FC<BookingsManagerProps> = ({
@@ -83,11 +84,23 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   onRefresh,
   onDeleteRegistration,
   onUpdateRegistration,
+  initialTrekFilter,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTrekFilter, setSelectedTrekFilter] = useState<string>('all');
+  const [selectedTrekFilter, setSelectedTrekFilter] = useState<string>(initialTrekFilter || 'all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [bookingTypeFilter, setBookingTypeFilter] = useState<'all' | 'public' | 'private'>('all');
+
+  React.useEffect(() => {
+    if (initialTrekFilter) {
+      setSelectedTrekFilter(initialTrekFilter);
+      if (initialTrekFilter === 'PRIVATE') {
+        setBookingTypeFilter('private');
+      } else {
+        setBookingTypeFilter('all');
+      }
+    }
+  }, [initialTrekFilter]);
   const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(null);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
   const [viewingAdminVoucherUrl, setViewingAdminVoucherUrl] = useState<string | null>(null);
@@ -265,12 +278,53 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       reg.hike_number?.toLowerCase().includes(q) ||
       reg.person_remarks?.toLowerCase().includes(q);
 
+    const extractDigits = (val?: string): string => {
+      if (!val) return '';
+      const s = String(val).trim();
+      if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
+      const m = s.match(/^\d{1,4}$/) || s.match(/^hike-(\d{1,4})$/i) || s.match(/^#?(\d{1,4})$/);
+      return m ? m[1] || m[0] : '';
+    };
+
+    const matchesRegistrationToTrek = (r: AdminRegistration, t?: Trek): boolean => {
+      if (!t) return false;
+      const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      const tId = (t.id || '').toLowerCase().trim();
+      const tHikeNum = (t.hike_number || '').toLowerCase().trim();
+      const tDigits = extractDigits(t.hike_number) || extractDigits(t.id);
+
+      const rTrekId = (r.trek_id || '').toLowerCase().trim();
+      const rHikeNum = (r.hike_number || '').toLowerCase().trim();
+      const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
+
+      if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
+      if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
+      if (tDigits && rDigits) return tDigits === rDigits;
+
+      const tNameNorm = normStr(t.name);
+      const rNameNorm = normStr(r.trek_name);
+      if (tNameNorm && rNameNorm && tNameNorm === rNameNorm) {
+        return true;
+      }
+      return false;
+    };
+
+    const selectedTrekObj =
+      selectedTrekFilter !== 'all' && selectedTrekFilter !== 'PRIVATE'
+        ? treks.find(
+            (t) =>
+              t.id === selectedTrekFilter ||
+              (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === selectedTrekFilter)
+          )
+        : undefined;
+
     const matchesTrek =
       selectedTrekFilter === 'all' ||
       (selectedTrekFilter === 'PRIVATE' && isPrivate) ||
       reg.trek_id === selectedTrekFilter ||
-      reg.hike_number === selectedTrekFilter ||
-      reg.trek_name?.toLowerCase().includes(selectedTrekFilter.toLowerCase());
+      (reg.hike_number && reg.hike_number !== 'TBD' && reg.hike_number === selectedTrekFilter) ||
+      matchesRegistrationToTrek(reg, selectedTrekObj);
 
     const regStatus = reg.status || 'Confirmed';
     const regStatusLower = regStatus.toLowerCase();
@@ -451,25 +505,66 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                 Main Ledger
               </span>
             </div>
-            <div className="text-xl font-black text-[#1F2937]">{registrations.length}</div>
+            <div className="text-xl font-black text-[#1F2937]">
+              {
+                registrations.filter((r) => {
+                  const isPriv = r.hike_number === 'PRIVATE' || r.trek_name?.toLowerCase().includes('private');
+                  if (isPriv) return false;
+                  const st = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
+                  return !st.includes('cancelled') && st !== 'waitlisted';
+                }).length
+              }
+            </div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              TOTAL BOOKINGS
+              ACTIVE BOOKINGS
             </div>
           </div>
 
           {/* Individual Trek Cards */}
           {upcomingTreks.map((t) => {
-            const isSelected = (selectedTrekFilter === t.id) || (selectedTrekFilter === t.hike_number);
-            const tRegsCount = registrations.filter((r) => {
-              const regTrekId = (r.trek_id || r.hike_number || '').toLowerCase();
-              const queryId = (t.hike_number || t.id).toLowerCase();
-              return regTrekId && queryId && (regTrekId.includes(queryId) || queryId.includes(regTrekId));
-            }).length;
+            const filterKey = t.id || t.hike_number;
+            const isSelected = (selectedTrekFilter === filterKey) || (t.hike_number && t.hike_number !== 'TBD' && selectedTrekFilter === t.hike_number);
+            const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const tDateNorm = normStr(t.date);
+            const tNameNorm = normStr(t.name);
+            const extractDigits = (val?: string): string => {
+              if (!val) return '';
+              const s = String(val).trim();
+              if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
+              const m = s.match(/^\d{1,4}$/) || s.match(/^hike-(\d{1,4})$/i) || s.match(/^#?(\d{1,4})$/);
+              return m ? m[1] || m[0] : '';
+            };
+            const tDigits = extractDigits(t.hike_number) || extractDigits(t.id);
+
+            const matchedActiveRegs = registrations.filter((r) => {
+              const effStatus = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
+              if (effStatus.includes('cancelled') || effStatus === 'waitlisted') {
+                return false;
+              }
+
+              const tId = (t.id || '').toLowerCase().trim();
+              const tHikeNum = (t.hike_number || '').toLowerCase().trim();
+              const rTrekId = (r.trek_id || '').toLowerCase().trim();
+              const rHikeNum = (r.hike_number || '').toLowerCase().trim();
+              const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
+
+              if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
+              if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
+              if (tDigits && rDigits) return tDigits === rDigits;
+
+              const rNameNorm = normStr(r.trek_name);
+              if (tNameNorm && rNameNorm && rNameNorm === tNameNorm) {
+                return true;
+              }
+              return false;
+            });
+
+            const tRegsCount = matchedActiveRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
 
             return (
               <div
                 key={t.id}
-                onClick={() => setSelectedTrekFilter(isSelected ? 'all' : (t.hike_number || t.id))}
+                onClick={() => setSelectedTrekFilter(isSelected ? 'all' : filterKey)}
                 className={`p-4 rounded-2xl min-w-[210px] max-w-[230px] shrink-0 cursor-pointer transition-all border ${
                   isSelected
                     ? 'border-2 border-[#16A34A] bg-white shadow-md ring-2 ring-[#16A34A]/10'
@@ -590,8 +685,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                 <option value="PRIVATE">⭐ Private Requests ({privateCount})</option>
                 <optgroup label="Public Treks">
                   {treks.map((t) => (
-                    <option key={t.id} value={t.hike_number || t.id}>
-                      Hike #{t.hike_number} - {t.name}
+                    <option key={t.id} value={t.id || t.hike_number}>
+                      Hike #{t.hike_number || 'TBD'} - {t.name}{t.date ? ` (${t.date})` : ''}
                     </option>
                   ))}
                 </optgroup>

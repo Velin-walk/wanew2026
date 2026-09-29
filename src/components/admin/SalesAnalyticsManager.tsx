@@ -37,34 +37,57 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
   let totalCollectedRevenue = 0;
   let totalConfirmedPax = 0;
 
-  // Map of trek ID / hike number to revenue and pax counts
+  const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // Map of trek ID to revenue and pax counts
   const trekSalesMap: Record<
     string,
     { projectedRev: number; collectedRev: number; confirmedPax: number; totalRegs: number }
   > = {};
 
   registrations.forEach((reg) => {
-    const status = reg.status || 'Confirmed';
-    if (status === 'Cancelled') return;
+    const status = (reg.status || 'Confirmed').toLowerCase();
+    if (status.includes('cancelled')) return;
 
-    const key = reg.hike_number || reg.trek_id || reg.trek_name || 'unknown';
+    const regDateNorm = normStr(reg.trek_date);
+    const regNameNorm = normStr(reg.trek_name);
+    const regHikeNum = (reg.hike_number || '').trim();
+    const regTrekId = (reg.trek_id || '').trim();
+
+    const matchingTrek =
+      treks.find((t) => {
+        const tDateNorm = normStr(t.date);
+        if (tDateNorm && regDateNorm && tDateNorm !== regDateNorm) return false;
+        if (regTrekId && t.id === regTrekId) return true;
+        if (regHikeNum && regHikeNum !== 'TBD' && t.hike_number === regHikeNum) return true;
+        if (regNameNorm && normStr(t.name) === regNameNorm) return true;
+        return false;
+      }) ||
+      treks.find(
+        (t) =>
+          (regHikeNum && regHikeNum !== 'TBD' && t.hike_number === regHikeNum) ||
+          (regTrekId && t.id === regTrekId)
+      );
+
+    const key = matchingTrek?.id || (regHikeNum && regHikeNum !== 'TBD' ? regHikeNum : regTrekId || reg.trek_name || 'unknown');
     if (!trekSalesMap[key]) {
       trekSalesMap[key] = { projectedRev: 0, collectedRev: 0, confirmedPax: 0, totalRegs: 0 };
     }
 
-    const pax = 1 + (Array.isArray(reg.team_members) ? reg.team_members.length : 0);
-    const matchingTrek = treks.find(
-      (t) => (t.hike_number && t.hike_number === reg.hike_number) || t.id === reg.trek_id
-    );
+    const companionCount = Array.isArray(reg.team_members) ? reg.team_members.length : 0;
+    const pax = Math.max(Number(reg.paxCount) || 1, 1 + companionCount);
     const unitPrice = parsePrice(typeof matchingTrek?.price === 'string' ? matchingTrek.price : String(matchingTrek?.price || '1500'));
 
     const regProjected = unitPrice * pax;
-    let regCollected = 0;
+    let regCollected = Number(reg.paid_amount) || 0;
 
-    if (reg.payment_status === 'Fully Paid') {
-      regCollected = regProjected;
-    } else if (reg.payment_status === 'Deposit Paid') {
-      regCollected = Math.round(regProjected * 0.4); // 40% deposit estimate
+    if (regCollected <= 0) {
+      const payStatus = (reg.payment_status || '').toLowerCase();
+      if (payStatus === 'fully paid' || payStatus === 'paid') {
+        regCollected = regProjected;
+      } else if (payStatus === 'deposit paid' || payStatus === 'partial') {
+        regCollected = Math.round(regProjected * 0.4);
+      }
     }
 
     trekSalesMap[key].projectedRev += regProjected;
@@ -181,9 +204,8 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
             </thead>
             <tbody className="divide-y divide-[#F0EBE5]">
               {treks.map((t) => {
-                const hikeKey = String(t.hike_number || t.id);
                 const priceStr = typeof t.price === 'string' ? t.price : String(t.price || '1500');
-                const metrics = trekSalesMap[hikeKey] || {
+                const metrics = trekSalesMap[t.id] || (t.hike_number && t.hike_number !== 'TBD' ? trekSalesMap[t.hike_number] : undefined) || {
                   projectedRev: (t.participants || 0) * parsePrice(priceStr),
                   collectedRev: 0,
                   confirmedPax: t.participants || 0,
@@ -193,7 +215,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
                 const cap = t.capacity || 25;
                 const pax = t.participants || metrics.confirmedPax;
                 const pct = Math.min(Math.round((pax / cap) * 100), 100);
-                const isCancelled = !!t.data?.is_cancelled;
+                const isCancelled = !!t.data?.is_cancelled || !!t.is_cancelled;
 
                 return (
                   <tr key={t.id} className="hover:bg-[#FAF8F5] transition-colors">
@@ -250,7 +272,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
 
                     <td className="p-4 text-right">
                       <button
-                        onClick={() => onSelectTrekRoster(t.hike_number || t.id)}
+                        onClick={() => onSelectTrekRoster(t.id || t.hike_number)}
                         className="px-3 py-1.5 bg-[#F9F7F5] hover:bg-[#EFEAE4] border border-[#E5E1DB] text-[#1F1F1F] font-bold text-xs rounded-xl transition-all cursor-pointer"
                       >
                         Roster ({pax})

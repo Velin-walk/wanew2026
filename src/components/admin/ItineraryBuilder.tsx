@@ -50,6 +50,7 @@ import {
 
 interface ItineraryBuilderProps {
   initialRecord?: SavedHikeRecord | null;
+  initialViewMode?: 'edit' | 'preview';
   onBackToList?: () => void;
   onSaveRecord?: (record: SavedHikeRecord) => void;
   onCloneHike?: (hikeId: string) => void;
@@ -57,6 +58,7 @@ interface ItineraryBuilderProps {
 
 export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   initialRecord,
+  initialViewMode = 'edit',
   onBackToList,
   onSaveRecord,
   onCloneHike,
@@ -84,7 +86,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   );
   const [recordId, setRecordId] = useState<string | undefined>(initialRecord?.id);
 
-  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>(initialViewMode);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -418,7 +420,10 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     setIsSaving(true);
     const statusToSave = targetStatus || currentStatus;
     const updatedFormData = {
+      ...(initialRecord?.data || {}),
       ...formData,
+      maxCapacity: Number(formData.maxCapacity) || 25,
+      teamLeader: formData.teamLeader || 'Walk Nepal Walk Guide',
       status: statusToSave,
     };
     setFormData(updatedFormData);
@@ -454,7 +459,8 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         difficulty: updatedFormData.overview?.difficulty || 'Moderate',
         approx_distance: updatedFormData.overview?.approxDistance || '',
         elevation_range: updatedFormData.overview?.elevationRange || '',
-        max_capacity: updatedFormData.maxCapacity || 25,
+        max_capacity: Number(updatedFormData.maxCapacity) || 25,
+        team_leader: updatedFormData.teamLeader || 'Walk Nepal Walk Guide',
         data: updatedFormData,
         author_email: 'walknepalwalk@gmail.com',
       };
@@ -467,6 +473,18 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
           body: JSON.stringify(syncPayload),
           forceFresh: true,
         });
+        // Keep event_executions table in sync so capacity & leader never conflict with Event Execution tab
+        await apiFetch(`admin/itineraries/${encodeURIComponent(trekFinalId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            capacity: Number(updatedFormData.maxCapacity) || 25,
+            leader: updatedFormData.teamLeader || 'Walk Nepal Walk Guide',
+            status: statusToSave,
+            data: updatedFormData,
+          }),
+          forceFresh: true,
+        }).catch(() => {});
       } catch (cfErr) {
         console.warn('[ItineraryBuilder] Failed direct Cloudflare save:', cfErr);
       }

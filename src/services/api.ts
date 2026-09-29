@@ -304,17 +304,24 @@ export function normalizeTrek(row: any): Trek {
     }
   }
   
+  let rawJsonData: any = {};
+  if (typeof row.data_json === 'string') {
+    try {
+      rawJsonData = JSON.parse(row.data_json);
+    } catch (_) {}
+  }
+
   // Prefer values from the nested data object if they exist
-  const title = d.title || row.title || row.name || row.trek_name || "";
-  const hikeNum = d.hikeNumber || row.hike_number || row.hikeNumber || "";
-  const date = d.hikeDate || row.hike_date || row.date || "";
-  const category = d.category || row.category || "";
+  const title = d.title || rawJsonData.title || row.title || row.name || row.trek_name || "";
+  const hikeNum = d.hikeNumber || rawJsonData.hikeNumber || row.hike_number || row.hikeNumber || "";
+  const date = d.hikeDate || rawJsonData.hikeDate || row.hike_date || row.date || "";
+  const category = d.category || rawJsonData.category || row.category || "";
   
-  const difficulty = String(d.overview?.difficulty || row.difficulty || "Easy").toLowerCase();
+  const difficulty = String(d.overview?.difficulty || rawJsonData.overview?.difficulty || row.difficulty || "Easy").toLowerCase();
   
   // Price logic: Prefer calculating from priceTiers in 'data' object
   let displayPrice = row.price || "";
-  const prices = (d.priceTiers || []).map((t: any) => Number(t.price) || 0).filter((p: number) => p > 0);
+  const prices = (d.priceTiers || rawJsonData.priceTiers || []).map((t: any) => Number(t.price) || 0).filter((p: number) => p > 0);
   
   if (prices.length > 0) {
     const min = Math.min(...prices);
@@ -328,15 +335,74 @@ export function normalizeTrek(row: any): Trek {
       : `NPR ${row.min_price}+`;
   }
 
+  const rawRowId = row.id || row.trek_id || d.id || rawJsonData.id || "";
+  const fallbackUniqueId = `${hikeNum && hikeNum !== 'TBD' ? hikeNum : title}-${date}`.replace(/\s+/g, '-').toLowerCase();
+
+  // Strip null/undefined values from d (which can come from unmatched LEFT JOIN event_executions in worker.js)
+  const cleanD: Record<string, any> = {};
+  if (d && typeof d === 'object') {
+    for (const [k, v] of Object.entries(d)) {
+      if (v !== null && v !== undefined) {
+        cleanD[k] = v;
+      }
+    }
+  }
+
+  // Prefer explicit values in rawJsonData (treks.data_json) over null/defaulted JOIN columns
+  const resolvedCapacity =
+    Number(
+      rawJsonData.maxCapacity ||
+        cleanD.maxCapacity ||
+        row.exec_capacity ||
+        row.max_capacity ||
+        row.capacity
+    ) || 25;
+  const resolvedLeader =
+    rawJsonData.teamLeader ||
+    cleanD.teamLeader ||
+    row.exec_assigned_leader ||
+    row.team_leader ||
+    row.leader ||
+    "Walk Nepal Walk Guide";
+  const resolvedExecStatus =
+    rawJsonData.execution_status ||
+    cleanD.execution_status ||
+    row.execution_status ||
+    "Active";
+  const resolvedIsCancelled = Boolean(
+    rawJsonData.is_cancelled ??
+      (row.exec_is_cancelled !== null && row.exec_is_cancelled !== undefined
+        ? row.exec_is_cancelled === 1 || row.exec_is_cancelled === true
+        : cleanD.is_cancelled) ??
+      row.is_cancelled ??
+      String(resolvedExecStatus).toLowerCase() === 'cancelled'
+  );
+  const resolvedCancelReason =
+    rawJsonData.cancellation_reason ||
+    cleanD.cancellation_reason ||
+    row.exec_cancellation_reason ||
+    row.cancellation_reason ||
+    "";
+
+  const mergedData = {
+    ...cleanD,
+    ...rawJsonData,
+    maxCapacity: resolvedCapacity,
+    teamLeader: resolvedLeader,
+    execution_status: resolvedExecStatus,
+    is_cancelled: resolvedIsCancelled,
+    cancellation_reason: resolvedCancelReason,
+  };
+
   return {
-    id: String(row.id || hikeNum || row.trek_id || title),
+    id: String(rawRowId || fallbackUniqueId || title),
     hike_number: String(hikeNum),
     name: title,
     date: date,
-    days: d.overview?.expectedDuration || row.expected_duration || row.days || "1",
+    days: d.overview?.expectedDuration || rawJsonData.overview?.expectedDuration || row.expected_duration || row.days || "1",
     difficulty: (difficulty === "hard" || difficulty === "difficult") ? "difficult" : (difficulty === "moderate" ? "moderate" : (difficulty === "extreme" ? "extreme" : (difficulty === "easy" ? "easy" : difficulty))),
-    leader: row.team_leader || row.leader || "Walk Nepal Walk Guide",
-    capacity: Number(row.max_capacity || row.capacity) || 25,
+    leader: resolvedLeader,
+    capacity: resolvedCapacity,
     participants: Number(row.participants ?? row.registered_pax) || 0,
     participants_by_gender: row.participants_by_gender,
     recent_participants: row.recent_participants,
@@ -344,17 +410,17 @@ export function normalizeTrek(row: any): Trek {
     faq_link: row.faq_link || "",
     whatsapp_link: row.whatsapp_link || "",
     price: displayPrice,
-    featured_image: d.cardImageUrl || d.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",
-    fitness_level: d.overview?.difficulty || row.fitness_level || "All fitness levels",
+    featured_image: d.cardImageUrl || d.coverImageUrl || rawJsonData.cardImageUrl || rawJsonData.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",
+    fitness_level: d.overview?.difficulty || rawJsonData.overview?.difficulty || row.fitness_level || "All fitness levels",
     season: row.season || "Autumn / Year-round",
     type_of_trail: row.type_of_trail || "",
-    start_location: d.overview?.meetingPoint || row.meeting_point || row.start_location || "",
-    elevation: d.overview?.elevationRange || row.elevation_range || row.elevation || "",
+    start_location: d.overview?.meetingPoint || rawJsonData.overview?.meetingPoint || row.meeting_point || row.start_location || "",
+    elevation: d.overview?.elevationRange || rawJsonData.overview?.elevationRange || row.elevation_range || row.elevation || "",
     itinerary: row.itinerary || "",
-    is_cancelled: Boolean(d.is_cancelled || row.exec_is_cancelled || row.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled')),
-    cancellation_reason: d.cancellation_reason || row.exec_cancellation_reason || row.cancellation_reason || "",
-    status: (row.status || d.status || 'published').toString().toLowerCase(),
-    data: d,
+    is_cancelled: resolvedIsCancelled,
+    cancellation_reason: resolvedCancelReason,
+    status: (row.status || d.status || rawJsonData.status || 'published').toString().toLowerCase(),
+    data: mergedData,
   };
 }
 
@@ -363,25 +429,41 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
   if (!Array.isArray(registrations) || registrations.length === 0) return treks;
 
   const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const extractDigits = (s?: string) => (s || '').match(/\d+/)?.[0] || '';
+  const extractValidHikeDigits = (s?: string) => {
+    const raw = String(s || '').trim();
+    if (!raw || raw.toLowerCase() === 'tbd') return '';
+    // Avoid extracting digits from UUIDs or auto-generated IDs
+    if (raw.length > 12 || raw.includes('-')) return '';
+    return raw.match(/^\d+$/)?.[0] || raw.match(/^#?(\d+)$/)?.[1] || '';
+  };
+  const extractParenDate = (s?: string) => {
+    const m = String(s || '').match(/\(([^)]+)\)/);
+    return m ? m[1].trim() : '';
+  };
 
   return treks.map((trek) => {
-    const tDigits = extractDigits(trek.hike_number || trek.id);
+    const tDigits = extractValidHikeDigits(trek.hike_number);
     const tNum = String(trek.hike_number || trek.id || '').trim().toLowerCase();
     const tName = norm(trek.name);
+    const tDateNorm = norm(trek.date);
     const isGenericTName = !tName || tName === 'himalayantrek' || tName === 'hikeevent' || tName === 'untitledhike';
 
     const matched = registrations.filter((r) => {
-      const rDigits = extractDigits(r.hike_number || r.trek_id);
+      const regStatus = String(r.status || r.registration_status || r.roster_registration_status || 'Confirmed').toLowerCase().trim();
+      if (regStatus.includes('cancelled') || regStatus === 'waitlisted') {
+        return false;
+      }
+
+      const rDigits = extractValidHikeDigits(r.hike_number || r.trek_id);
       const rNum = String(r.hike_number || r.trek_id || '').trim().toLowerCase();
 
-      // 1. If both have digits, compare hike numbers strictly
+      // 1. If both have valid hike digits, compare hike numbers strictly
       if (tDigits && rDigits) {
         return tDigits === rDigits;
       }
 
-      // 2. Direct string ID match
-      if (rNum && tNum && rNum === tNum) return true;
+      // 2. Direct string ID match (excluding generic 'tbd')
+      if (rNum && tNum && rNum !== 'tbd' && rNum === tNum) return true;
 
       // 3. Name match only if not generic
       if (!isGenericTName) {
@@ -678,23 +760,25 @@ export async function fetchLeaderboard(forceFresh = false) {
 export function deduplicateTreks(treksList: Trek[]): Trek[] {
   if (!Array.isArray(treksList)) return [];
   const seenIds = new Set<string>();
-  const seenHikeNums = new Set<string>();
+  const seenHikeDateKeys = new Set<string>();
   const unique: Trek[] = [];
 
   for (const t of treksList) {
     if (!t) continue;
     const tid = String(t.id || '').trim();
     const hNum = String(t.hike_number || '').trim();
+    const tDate = String(t.date || '').trim().toLowerCase();
+    const hikeDateKey = hNum && hNum !== 'TBD' ? `${hNum}__${tDate}` : '';
 
     if (tid && seenIds.has(tid)) {
       continue;
     }
-    if (hNum && hNum !== 'TBD' && seenHikeNums.has(hNum)) {
+    if (hikeDateKey && seenHikeDateKeys.has(hikeDateKey)) {
       continue;
     }
 
     if (tid) seenIds.add(tid);
-    if (hNum && hNum !== 'TBD') seenHikeNums.add(hNum);
+    if (hikeDateKey) seenHikeDateKeys.add(hikeDateKey);
 
     unique.push(t);
   }

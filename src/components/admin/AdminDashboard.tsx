@@ -91,6 +91,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const [hikes, setHikes] = useState<SavedHikeRecord[]>(DEFAULT_SAVED_HIKES);
   const [loadingHikes, setLoadingHikes] = useState(true);
   const [editingHike, setEditingHike] = useState<SavedHikeRecord | null>(null);
+  const [editorViewMode, setEditorViewMode] = useState<'edit' | 'preview'>('edit');
 
   // Registrations state
   const [registrations, setRegistrations] = useState<AdminRegistration[]>([]);
@@ -187,6 +188,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const handleForceLeaderboardSync = async () => {
     setSyncingLeaderboard(true);
     try {
+      await apiFetch('admin/recompute-leaderboard', { method: 'POST', forceFresh: true }).catch(() => {});
+      await apiFetch('admin/recompute-participant-summary', { method: 'POST', forceFresh: true }).catch(() => {});
       const res = await apiFetch('leaderboard', { forceFresh: true });
       if (res.ok) {
         setSyncMessage('Master Leaderboard aggregated & CDN Edge cache successfully rebuilt!');
@@ -220,7 +223,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
     // 1. Try Cloudflare Worker API
     try {
-      const res = await apiFetch('registrations', { forceFresh: true });
+      const res = await apiFetch('registrations?limit=2000', { forceFresh: true });
       if (res.ok) {
         const json = await res.json();
         const items = Array.isArray(json) ? json : json?.data;
@@ -229,26 +232,32 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           loaded = items.map((r: any) => {
             const extractHikeNum = (obj: any): string => {
               if (!obj) return '';
+              // Only inspect dedicated hike number fields — never obj.id, trek_name, or list_name (which contain row IDs or dates like Oct 2 / Oct 22)
               const fields = [
                 obj.hike_number,
                 obj.hikeNumber,
                 obj.trek_id,
                 obj.hike_id,
-                obj.id,
-                obj.trek_name,
-                obj.trekName,
-                obj.hike_name,
-                obj.list_name,
-                obj.person_remarks,
-                obj.suggestions,
               ];
               for (const f of fields) {
-                if (f) {
-                  const m = String(f).match(/\b\d{1,4}\b/) || String(f).match(/\d+/);
-                  if (m && parseInt(m[0], 10) > 0) return m[0];
+                if (f !== undefined && f !== null) {
+                  const s = String(f).trim();
+                  if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') continue;
+                  const hikePrefixMatch = s.match(/^hike-(\d{1,4})$/i);
+                  if (hikePrefixMatch) return hikePrefixMatch[1];
+                  // Skip UUIDs or long composite IDs
+                  if (s.length > 12 || s.includes('-')) continue;
+                  const m = s.match(/^\d{1,4}$/) || s.match(/^#?(\d{1,4})$/) || s.match(/\b(\d{1,4})\b/);
+                  if (m && parseInt(m[1] || m[0], 10) > 0) return m[1] || m[0];
                 }
               }
               return '';
+            };
+
+            const extractDateFromRemarks = (text?: string): string => {
+              if (!text) return '';
+              const m = String(text).match(/\(([^)]+)\)/);
+              return m ? m[1].trim() : '';
             };
 
             const hNum = extractHikeNum(r);
@@ -269,7 +278,15 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               ? rawName
               : hist?.title || (hNum ? `Hike #${hNum}` : 'Himalayan Trek');
 
-            const rawDate = r.trek_date || r.trekDate || r.hike_date || r.date || '';
+            const rawDate =
+              r.trek_date ||
+              r.trekDate ||
+              r.hike_date ||
+              r.date ||
+              r.roster_trek_date ||
+              extractDateFromRemarks(r.list_name) ||
+              extractDateFromRemarks(r.person_remarks) ||
+              '';
             const resolvedDate = rawDate || hist?.hike_date || '';
 
             return {
@@ -472,84 +489,126 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
   };
 
+  const [selectedBookingsTrekFilter, setSelectedBookingsTrekFilter] = useState<string>('all');
+
   const handleUpdateTrekExecution = async (
     trekId: string,
     updates: Partial<Trek> & { is_cancelled?: boolean; cancellation_reason?: string }
   ) => {
-    // Update local hikes cache and persist to localStorage
-    const hNumMatch = String(trekId).match(/\d+/);
-    const targetHNum = hNumMatch ? hNumMatch[0] : '';
+    const cleanTrekId = String(trekId || '').trim();
+    // Only treat trekId as a numeric hike number if it is purely digits (not a composite ID like hike-draft-1759... or v-8a2b)
+    const targetHNum = /^\d{1,4}$/.test(cleanTrekId) ? cleanTrekId : '';
 
-    setHikes((prev) => {
-      let found = false;
-      const next = prev.map((h) => {
-        const itemHNum = String(h.hikeNumber || h.data?.hikeNumber || h.id || '').match(/\d+/)?.[0] || '';
-        if (h.id === trekId || (targetHNum && itemHNum === targetHNum)) {
-          found = true;
-          const data = h.data || ({} as any);
-          const isCancelled = updates.data?.is_cancelled !== undefined
-            ? updates.data.is_cancelled
-            : (updates.is_cancelled !== undefined ? updates.is_cancelled : data.is_cancelled);
-          const cancelReason = updates.data?.cancellation_reason !== undefined
-            ? updates.data.cancellation_reason
-            : (updates.cancellation_reason !== undefined ? updates.cancellation_reason : data.cancellation_reason);
+    let found = false;
+    let updatedRecordForSync: SavedHikeRecord | null = null;
 
-          return {
-            ...h,
-            data: {
-              ...data,
-              maxCapacity: updates.capacity ?? data.maxCapacity,
-              teamLeader: updates.leader ?? data.teamLeader,
-              is_cancelled: isCancelled,
-              cancellation_reason: cancelReason,
-              execution_status: updates.data?.execution_status ?? data.execution_status,
-            },
-          };
-        }
-        return h;
-      });
+    const nextHikes = hikes.map((h) => {
+      const hNumClean = String(h.hikeNumber || h.data?.hikeNumber || '').trim();
+      const isExactMatch =
+        h.id === cleanTrekId ||
+        (targetHNum && hNumClean !== 'TBD' && hNumClean === targetHNum);
 
-      if (!found) {
-        const hist = targetHNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === targetHNum) : null;
-        const newRecord: SavedHikeRecord = {
-          id: trekId,
-          hikeNumber: targetHNum || trekId,
+      if (isExactMatch && !found) {
+        found = true;
+        const data = h.data || ({} as any);
+        const isCancelled = updates.data?.is_cancelled !== undefined
+          ? updates.data.is_cancelled
+          : (updates.is_cancelled !== undefined ? updates.is_cancelled : data.is_cancelled);
+        const cancelReason = updates.data?.cancellation_reason !== undefined
+          ? updates.data.cancellation_reason
+          : (updates.cancellation_reason !== undefined ? updates.cancellation_reason : data.cancellation_reason);
+        const updatedCap = updates.capacity !== undefined ? Number(updates.capacity) : Number(data.maxCapacity || 25);
+        const updatedLeader = updates.leader !== undefined ? updates.leader : (data.teamLeader || 'Walk Nepal Walk Guide');
+        const updatedExecStatus = updates.data?.execution_status ?? data.execution_status ?? (isCancelled ? 'Cancelled' : 'Active');
+
+        const nowIso = new Date().toISOString();
+        const updatedItem: SavedHikeRecord = {
+          ...h,
+          updatedAt: nowIso,
+          data: {
+            ...data,
+            maxCapacity: updatedCap,
+            teamLeader: updatedLeader,
+            is_cancelled: isCancelled,
+            cancellation_reason: cancelReason,
+            execution_status: updatedExecStatus,
+            updatedAt: nowIso,
+          } as any,
+        };
+        updatedRecordForSync = updatedItem;
+        return updatedItem;
+      }
+      return h;
+    });
+
+    if (!found) {
+      const nowIso = new Date().toISOString();
+      const hist = targetHNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === targetHNum) : null;
+      const newRecord: SavedHikeRecord = {
+        id: cleanTrekId,
+        hikeNumber: targetHNum || 'TBD',
+        title: updates.name || hist?.title || (targetHNum ? `Hike #${targetHNum}` : 'Hike Event'),
+        category: 'Overnight Bus Hikes',
+        status: 'published',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        authorEmail: 'walknepalwalk@gmail.com',
+        data: {
+          hikeNumber: targetHNum || 'TBD',
           title: updates.name || hist?.title || (targetHNum ? `Hike #${targetHNum}` : 'Hike Event'),
           category: 'Overnight Bus Hikes',
           status: 'published',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          authorEmail: 'walknepalwalk@gmail.com',
-          data: {
-            hikeNumber: targetHNum || trekId,
-            title: updates.name || hist?.title || (targetHNum ? `Hike #${targetHNum}` : 'Hike Event'),
-            category: 'Overnight Bus Hikes',
-            status: 'published',
-            maxCapacity: updates.capacity ?? 25,
-            teamLeader: updates.leader ?? 'Walk Nepal Walk Guide',
-            is_cancelled: !!updates.data?.is_cancelled,
-            cancellation_reason: updates.data?.cancellation_reason || '',
-            execution_status: updates.data?.execution_status || 'Active',
-            ...(updates.data || {}),
-          }
-        };
-        next.push(newRecord);
-      }
+          maxCapacity: updates.capacity !== undefined ? Number(updates.capacity) : 25,
+          teamLeader: updates.leader ?? 'Walk Nepal Walk Guide',
+          is_cancelled: !!updates.data?.is_cancelled,
+          cancellation_reason: updates.data?.cancellation_reason || '',
+          execution_status: updates.data?.execution_status || 'Active',
+          ...(updates.data || {}),
+          updatedAt: nowIso,
+        } as any,
+      };
+      updatedRecordForSync = newRecord;
+      nextHikes.push(newRecord);
+    }
 
-      try {
-        localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
-        window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
-      } catch (_) {}
-
-      return next;
-    });
-
-    // Save to server
+    setHikes(nextHikes);
     try {
-      await apiFetch(`admin/itineraries/${targetHNum || trekId}`, {
+      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(nextHikes));
+      window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
+    } catch (_) {}
+
+    // Save to server: update both PUT (treks data_json + max_capacity + edge cache purge) and PATCH (event_executions)
+    const rec = updatedRecordForSync as SavedHikeRecord | null;
+    const serverTargetId = rec ? rec.id : cleanTrekId;
+    try {
+      if (rec) {
+        await apiFetch(`admin/itineraries/${encodeURIComponent(rec.id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: rec.id,
+            hike_number: rec.hikeNumber,
+            title: rec.title,
+            category: rec.category,
+            status: rec.status,
+            hike_date: rec.data?.hikeDate,
+            max_capacity: rec.data?.maxCapacity,
+            team_leader: rec.data?.teamLeader,
+            data: rec.data,
+          }),
+          forceFresh: true,
+        });
+      }
+      await apiFetch(`admin/itineraries/${encodeURIComponent(serverTargetId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify({
+          ...updates,
+          capacity: rec?.data?.maxCapacity ?? updates.capacity,
+          leader: rec?.data?.teamLeader ?? updates.leader,
+          data: rec?.data ?? updates.data,
+        }),
+        forceFresh: true,
       });
       clearApiCache('admin/itineraries');
       clearApiCache('treks');
@@ -578,14 +637,19 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const deduplicateHikesList = (records: SavedHikeRecord[]): SavedHikeRecord[] => {
-    const seen = new Set<string>();
+    const seenIds = new Set<string>();
+    const seenKeys = new Set<string>();
     const result: SavedHikeRecord[] = [];
     for (const r of records) {
       if (!r || !r.id) continue;
+      const idKey = String(r.id).trim().toLowerCase();
+      if (seenIds.has(idKey)) continue;
       const hNum = (r.hikeNumber || r.data?.hikeNumber || '').trim();
-      const key = (hNum && hNum !== 'TBD') ? `num:${hNum}` : `id:${r.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const hDate = (r.data?.hikeDate || (r.data as any)?.date || '').trim().toLowerCase();
+      const key = (hNum && hNum !== 'TBD') ? `num:${hNum}:date:${hDate}` : `id:${idKey}`;
+      if (seenKeys.has(key)) continue;
+      seenIds.add(idKey);
+      seenKeys.add(key);
       result.push(ensureHikeData(r));
     }
     return result.sort((a, b) => {
@@ -600,23 +664,41 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     });
   };
 
+  const getDeletedHikeIds = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('wnw_deleted_hike_ids');
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? new Set(parsed.map(String)) : new Set();
+    } catch {
+      return new Set();
+    }
+  };
+
   const getUnsyncedLocalHikes = (serverHikes: SavedHikeRecord[]): SavedHikeRecord[] => {
     const cached = localStorage.getItem('wnw_saved_itineraries_cache');
     if (!cached) return [];
     try {
       const parsed = JSON.parse(cached);
       if (!Array.isArray(parsed)) return [];
+      const deletedIds = getDeletedHikeIds();
       const serverIds = new Set(serverHikes.map(h => h.id));
-      const serverHikeNums = new Set(
+      const serverHikeDateKeys = new Set(
         serverHikes
-          .map(h => (h.hikeNumber || '').trim())
-          .filter(num => num && num !== 'TBD')
+          .map(h => {
+            const num = (h.hikeNumber || '').trim();
+            const dt = (h.data?.hikeDate || '').trim().toLowerCase();
+            return num && num !== 'TBD' ? `${num}__${dt}` : '';
+          })
+          .filter(Boolean)
       );
       return parsed.filter(h => {
         if (!h || !h.id) return false;
+        if (deletedIds.has(String(h.id))) return false;
         if (serverIds.has(h.id)) return false;
         const hNum = (h.hikeNumber || '').trim();
-        if (hNum && hNum !== 'TBD' && serverHikeNums.has(hNum)) return false;
+        const hDate = (h.data?.hikeDate || '').trim().toLowerCase();
+        if (hNum && hNum !== 'TBD' && serverHikeDateKeys.has(`${hNum}__${hDate}`)) return false;
         return true;
       });
     } catch {
@@ -625,33 +707,52 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const convertTrekToSavedHikeRecord = (t: any): SavedHikeRecord => {
-    let d: any = {};
-    const rawData = t.data_json || t.data;
-    if (rawData) {
-      if (typeof rawData === 'string') {
+    let parsedJson: any = {};
+    if (typeof t.data_json === 'string') {
+      try {
+        parsedJson = JSON.parse(t.data_json);
+      } catch (_) {}
+    }
+    let parsedDataObj: any = {};
+    if (t.data) {
+      if (typeof t.data === 'string') {
         try {
-          d = JSON.parse(rawData);
-        } catch (e) {
-          console.warn('Failed to parse t.data JSON string in AdminDashboard:', rawData, e);
-          d = {};
-        }
-      } else {
-        d = rawData;
+          parsedDataObj = JSON.parse(t.data);
+        } catch (_) {}
+      } else if (typeof t.data === 'object') {
+        parsedDataObj = t.data;
       }
     }
-    const rawStatus = (t.status || d.status || 'published').toString().toLowerCase();
+
+    // Strip null/undefined keys from parsedDataObj so unmatched LEFT JOIN event_executions columns never overwrite parsedJson
+    const cleanDataObj: Record<string, any> = {};
+    for (const [k, v] of Object.entries(parsedDataObj || {})) {
+      if (v !== null && v !== undefined) {
+        cleanDataObj[k] = v;
+      }
+    }
+
+    const d: any = { ...cleanDataObj, ...parsedJson };
+
+    const rawStatus = (t.status || parsedJson.status || cleanDataObj.status || 'published').toString().toLowerCase();
     const status: 'draft' | 'published' | 'archived' =
       rawStatus === 'draft' ? 'draft' : rawStatus === 'archived' ? 'archived' : 'published';
 
     const hNum = (t.hike_number && t.hike_number !== 'TBD')
       ? t.hike_number
-      : (d.hikeNumber && d.hikeNumber !== 'TBD' ? d.hikeNumber : (t.hike_number || d.hikeNumber || ''));
+      : (d.hikeNumber && d.hikeNumber !== 'TBD' ? d.hikeNumber : (t.hike_number || d.hikeNumber || parsedJson.hikeNumber || ''));
 
-    const maxCap = Number(d.maxCapacity ?? t.max_capacity ?? 25);
-    const leader = d.teamLeader || t.team_leader || 'Walk Nepal Walk Guide';
-    const isCancelled = d.is_cancelled !== undefined ? !!d.is_cancelled : false;
-    const cancelReason = d.cancellation_reason || '';
-    const execStatus = d.execution_status || (isCancelled ? 'Cancelled' : 'Active');
+    const maxCap = Number(parsedJson.maxCapacity || cleanDataObj.maxCapacity || t.exec_capacity || t.max_capacity || t.capacity || 25);
+    const leader = parsedJson.teamLeader || cleanDataObj.teamLeader || t.exec_assigned_leader || t.team_leader || t.leader || 'Walk Nepal Walk Guide';
+    const execStatus = parsedJson.execution_status || cleanDataObj.execution_status || (parsedJson.is_cancelled ? 'Cancelled' : 'Active');
+    const isCancelled = Boolean(
+      parsedJson.is_cancelled ??
+        (t.exec_is_cancelled !== null && t.exec_is_cancelled !== undefined
+          ? t.exec_is_cancelled === 1 || t.exec_is_cancelled === true
+          : cleanDataObj.is_cancelled) ??
+        (String(execStatus).toLowerCase() === 'cancelled')
+    );
+    const cancelReason = parsedJson.cancellation_reason || cleanDataObj.cancellation_reason || '';
 
     return {
       id: t.id,
@@ -659,8 +760,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       title: t.name || t.title || d.title || '',
       category: t.category || d.category || 'Overnight Bus Hikes',
       status: status,
-      createdAt: t.created_at || t.createdAt || new Date().toISOString(),
-      updatedAt: t.updated_at || t.updatedAt || new Date().toISOString(),
+      createdAt: t.created_at || t.createdAt || d.createdAt || '2025-01-01T00:00:00.000Z',
+      updatedAt: d.updatedAt || t.updated_at || t.updatedAt || '2025-01-01T00:00:00.000Z',
       authorEmail: t.author_email || t.authorEmail || 'walknepalwalk@gmail.com',
       data: {
         ...d,
@@ -730,16 +831,45 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         } catch (_) {}
       }
 
-      // 3. Merge local cached drafts that haven't synced yet
+      // 3. Merge local cached records: keep local version if newer, and append unsynced local hikes
+      try {
+        const rawCached = localStorage.getItem('wnw_saved_itineraries_cache');
+        if (rawCached) {
+          const parsedCached = JSON.parse(rawCached);
+          if (Array.isArray(parsedCached)) {
+            for (let i = 0; i < allCollectedHikes.length; i++) {
+              const srv = allCollectedHikes[i];
+              const srvNum = (srv.hikeNumber || '').trim();
+              const srvDate = (srv.data?.hikeDate || '').trim().toLowerCase();
+              const localMatch = parsedCached.find((loc: any) => {
+                if (!loc || !loc.id) return false;
+                if (loc.id === srv.id) return true;
+                const locNum = (loc.hikeNumber || '').trim();
+                const locDate = (loc.data?.hikeDate || '').trim().toLowerCase();
+                return srvNum && srvNum !== 'TBD' && locNum === srvNum && locDate === srvDate;
+              });
+              if (localMatch) {
+                const localTime = Date.parse(localMatch.updatedAt || (localMatch.data as any)?.updatedAt || '') || 0;
+                const serverTime = Date.parse(srv.updatedAt || (srv.data as any)?.updatedAt || '') || 0;
+                if (localTime >= serverTime && localTime > 0) {
+                  allCollectedHikes[i] = ensureHikeData(localMatch);
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
       const unsynced = getUnsyncedLocalHikes(allCollectedHikes);
       allCollectedHikes.push(...unsynced);
 
-      // 4. If total list is empty, seed with default templates
+      // 4. If total list is empty, seed with default templates (excluding deleted ones)
+      const deletedIds = getDeletedHikeIds();
       if (allCollectedHikes.length === 0) {
-        allCollectedHikes.push(...DEFAULT_SAVED_HIKES);
+        allCollectedHikes.push(...DEFAULT_SAVED_HIKES.filter(h => !deletedIds.has(String(h.id))));
       }
 
-      const merged = deduplicateHikesList(allCollectedHikes);
+      const merged = deduplicateHikesList(allCollectedHikes.filter(h => !deletedIds.has(String(h.id))));
       setServerHikeIds(Array.from(foundServerIds));
       setHikes(merged);
       localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(merged));
@@ -1015,55 +1145,76 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const handleCreateNew = () => {
     setEditingHike(null);
+    setEditorViewMode('edit');
     setActiveTab('editor');
   };
 
   const handleSelectEdit = (hike: SavedHikeRecord) => {
     setEditingHike(hike);
+    setEditorViewMode('edit');
     setActiveTab('editor');
   };
 
   const handleSelectPreview = (hike: SavedHikeRecord) => {
     setEditingHike(hike);
+    setEditorViewMode('preview');
     setActiveTab('editor');
   };
 
   const handleCloneHike = async (hikeId: string) => {
     try {
-      const res = await apiFetch(`admin/itineraries/${hikeId}/clone`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          const newRecord = ensureHikeData(json.data);
-          const deduped = deduplicateHikesList([newRecord, ...hikes]);
-          setHikes(deduped);
-          localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
-          return;
-        }
-      }
       const source = hikes.find((h) => h.id === hikeId);
-      if (source) {
-        const randomSuffix = Math.random().toString(36).substring(2, 8);
-        const cloned: SavedHikeRecord = {
-          ...source,
-          id: `hike-copy-${Date.now()}-${randomSuffix}`,
-          hikeNumber: 'TBD',
-          title: `${source.title} (Copy)`,
-          status: 'draft',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          data: {
-            ...source.data,
-            hikeNumber: 'TBD',
-            title: `${source.title} (Copy)`,
-          },
-        };
-        const deduped = deduplicateHikesList([cloned, ...hikes]);
-        setHikes(deduped);
-        localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
-      }
+      if (!source) return;
+
+      const randomSuffix = Math.random().toString(36).substring(2, 8);
+      const newCloneId = `hike-copy-${Date.now()}-${randomSuffix}`;
+      const newCloneTitle = `${source.title} (Copy)`;
+      const clonedData = {
+        ...JSON.parse(JSON.stringify(source.data || {})),
+        hikeNumber: 'TBD',
+        title: newCloneTitle,
+        status: 'draft' as const,
+        is_cancelled: false,
+        cancellation_reason: '',
+        execution_status: 'Active',
+      };
+
+      const cloned: SavedHikeRecord = {
+        ...source,
+        id: newCloneId,
+        hikeNumber: 'TBD',
+        title: newCloneTitle,
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        data: clonedData,
+      };
+
+      try {
+        const res = await apiFetch('admin/itineraries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: cloned.id,
+            hike_number: 'TBD',
+            title: cloned.title,
+            category: cloned.category,
+            status: 'draft',
+            data: cloned.data,
+            authorEmail: currentUserEmail || 'walknepalwalk@gmail.com',
+          }),
+        });
+        if (res.ok) {
+          setServerHikeIds((prev) => Array.from(new Set([...prev, cloned.id])));
+        }
+      } catch (_) {}
+
+      clearApiCache('admin/itineraries');
+      clearApiCache('treks');
+      const deduped = deduplicateHikesList([cloned, ...hikes]);
+      setHikes(deduped);
+      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
+      window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
     } catch (e) {
       console.error('Error cloning hike:', e);
     }
@@ -1071,11 +1222,25 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const handleDeleteHike = async (hikeId: string) => {
     clearApiCache();
+    const targetHike = hikes.find((h) => h.id === hikeId);
     try {
-      await apiFetch(`admin/itineraries/${hikeId}`, {
+      const deletedSet = getDeletedHikeIds();
+      deletedSet.add(String(hikeId));
+      localStorage.setItem('wnw_deleted_hike_ids', JSON.stringify(Array.from(deletedSet)));
+    } catch (_) {}
+
+    try {
+      await apiFetch(`admin/itineraries/${encodeURIComponent(hikeId)}`, {
         method: 'DELETE',
         forceFresh: true,
       });
+      const hNum = (targetHike?.hikeNumber || targetHike?.data?.hikeNumber || '').trim();
+      if (hNum && hNum !== 'TBD' && hNum !== hikeId) {
+        await apiFetch(`admin/itineraries/${encodeURIComponent(hNum)}`, {
+          method: 'DELETE',
+          forceFresh: true,
+        }).catch(() => {});
+      }
     } catch (e) {
       console.warn('Network delete error:', e);
     }
@@ -1092,28 +1257,53 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     newStatus: 'draft' | 'published' | 'archived'
   ) => {
     clearApiCache();
-    try {
-      await apiFetch(`admin/itineraries/${hikeId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-        forceFresh: true,
-      });
-    } catch (e) {
-      console.warn('Network status update error:', e);
-    }
+    let updatedTarget: SavedHikeRecord | null = null;
     const next = hikes.map((h) => {
-      const isTarget = h.id === hikeId || (h.hikeNumber && h.hikeNumber === hikeId);
+      const isTarget = h.id === hikeId || (h.hikeNumber && h.hikeNumber !== 'TBD' && h.hikeNumber === hikeId);
       if (!isTarget) return h;
-      return {
+      const updated: SavedHikeRecord = {
         ...h,
         status: newStatus,
         data: h.data ? { ...h.data, status: newStatus } : h.data,
         updatedAt: new Date().toISOString(),
       };
+      updatedTarget = updated;
+      return updated;
     });
     setHikes(next);
     localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
+
+    try {
+      const res = await apiFetch(`admin/itineraries/${encodeURIComponent(hikeId)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+        forceFresh: true,
+      });
+      // If hike wasn't in D1 yet (e.g. 404 on a template hike), upsert the full record
+      if (!res.ok && updatedTarget) {
+        const rec = updatedTarget as SavedHikeRecord;
+        await apiFetch(`admin/itineraries/${encodeURIComponent(rec.id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: rec.id,
+            hike_number: rec.hikeNumber || 'TBD',
+            title: rec.title,
+            category: rec.category,
+            status: newStatus,
+            hike_date: rec.data?.hikeDate,
+            max_capacity: rec.data?.maxCapacity,
+            team_leader: rec.data?.teamLeader,
+            data: rec.data,
+          }),
+          forceFresh: true,
+        });
+      }
+    } catch (e) {
+      console.warn('Network status update error:', e);
+    }
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
     }
@@ -1121,23 +1311,32 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const handleSaveRecord = (savedRecord: SavedHikeRecord) => {
     clearApiCache();
-    setServerHikeIds((prev) => Array.from(new Set([...prev, savedRecord.id])));
-    setHikes((prev) => {
-      const idx = prev.findIndex((h) => 
-        h.id === savedRecord.id || 
-        (savedRecord.hikeNumber && savedRecord.hikeNumber !== 'TBD' && (h.hikeNumber || '').trim() === (savedRecord.hikeNumber || '').trim())
-      );
-      let next: SavedHikeRecord[];
-      if (idx !== -1) {
-        next = [...prev];
-        next[idx] = savedRecord;
-      } else {
-        next = [savedRecord, ...prev];
+    try {
+      const deletedSet = getDeletedHikeIds();
+      if (deletedSet.has(String(savedRecord.id))) {
+        deletedSet.delete(String(savedRecord.id));
+        localStorage.setItem('wnw_deleted_hike_ids', JSON.stringify(Array.from(deletedSet)));
       }
-      const deduped = deduplicateHikesList(next);
-      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
-      return deduped;
+    } catch (_) {}
+    setServerHikeIds((prev) => Array.from(new Set([...prev, savedRecord.id])));
+    const savedNum = (savedRecord.hikeNumber || savedRecord.data?.hikeNumber || '').trim();
+    const savedDate = (savedRecord.data?.hikeDate || '').trim().toLowerCase();
+    const idx = hikes.findIndex((h) => {
+      if (h.id === savedRecord.id) return true;
+      const hNum = (h.hikeNumber || h.data?.hikeNumber || '').trim();
+      const hDate = (h.data?.hikeDate || '').trim().toLowerCase();
+      return Boolean(savedNum && savedNum !== 'TBD' && hNum === savedNum && (!savedDate || !hDate || savedDate === hDate));
     });
+    let next: SavedHikeRecord[];
+    if (idx !== -1) {
+      next = [...hikes];
+      next[idx] = savedRecord;
+    } else {
+      next = [savedRecord, ...hikes];
+    }
+    const deduped = deduplicateHikesList(next);
+    setHikes(deduped);
+    localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
     setEditingHike(savedRecord);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
@@ -1193,34 +1392,46 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     const existingIds = new Set<string>();
 
     convertedTreks.forEach((t) => {
-      if (t.id) existingIds.add(t.id.toLowerCase());
-      const hNumMatch = String(t.hike_number || t.id).match(/\d+/);
-      if (hNumMatch) existingHikeNums.add(hNumMatch[0]);
+      if (t.id) existingIds.add(String(t.id).trim().toLowerCase());
+      const rawHNum = String(t.hike_number || '').trim();
+      const hNumMatch = rawHNum && rawHNum !== 'TBD' ? rawHNum.match(/^\d{1,4}$/) : null;
+      if (hNumMatch) {
+        existingHikeNums.add(hNumMatch[0]);
+      }
     });
 
     const virtualTreks: Trek[] = [];
     const seenVirtual = new Set<string>();
 
     registrations.forEach((r) => {
-      const hNumMatch = String(r.hike_number || r.trek_id || '').match(/\d+/);
+      const rawHNum = String(r.hike_number || '').trim();
+      const hNumMatch = rawHNum && rawHNum !== 'TBD' && rawHNum !== 'PRIVATE' ? rawHNum.match(/^\d{1,4}$/) : null;
       const hNum = hNumMatch ? hNumMatch[0] : '';
       const rawId = (r.trek_id || r.hike_number || '').trim();
       const trekKey = hNum || rawId || (r.trek_name || '').trim();
 
-      if (!trekKey || seenVirtual.has(trekKey)) return;
+      if (!trekKey || seenVirtual.has(trekKey.toLowerCase())) return;
 
       const isCovered =
         (hNum && existingHikeNums.has(hNum)) ||
         (rawId && existingIds.has(rawId.toLowerCase()));
 
       if (!isCovered) {
-        seenVirtual.add(trekKey);
+        const resolvedId = rawId || (hNum ? `hike-${hNum}` : `v-${Math.random().toString(36).substring(2, 7)}`);
+        if (existingIds.has(resolvedId.toLowerCase())) return;
+
+        seenVirtual.add(trekKey.toLowerCase());
+        existingIds.add(resolvedId.toLowerCase());
+        if (hNum) existingHikeNums.add(hNum);
+
         const hist = hNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === hNum) : null;
-        const trekTitle = hist?.title || (hNum ? `Hike #${hNum}` : (r.trek_name || 'Himalayan Trek'));
+        const trekTitle = r.trek_name && r.trek_name !== 'Himalayan Trek'
+          ? r.trek_name
+          : (hist?.title || (hNum ? `Hike #${hNum}` : 'Himalayan Trek'));
         const trekDate = r.trek_date || hist?.hike_date || '';
 
         virtualTreks.push({
-          id: rawId || (hNum ? `hike-${hNum}` : `v-${Math.random().toString(36).substring(2, 7)}`),
+          id: resolvedId,
           hike_number: hNum || rawId || '',
           name: trekTitle,
           date: trekDate,
@@ -1431,6 +1642,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             onRefresh={fetchRegistrations}
             onDeleteRegistration={handleDeleteRegistration}
             onUpdateRegistration={handleUpdateRegistration}
+            initialTrekFilter={selectedBookingsTrekFilter}
           />
         )}
 
@@ -1440,7 +1652,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             loading={loadingHikes}
             onRefresh={fetchItineraries}
             onUpdateTrekExecution={handleUpdateTrekExecution}
-            onSelectViewRoster={() => setActiveTab('bookings')}
+            onSelectViewRoster={(trekFilterId) => {
+              setSelectedBookingsTrekFilter(trekFilterId || 'all');
+              setActiveTab('bookings');
+            }}
           />
         )}
 
@@ -1457,7 +1672,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           <SalesAnalyticsManager
             treks={enrichedTreks}
             registrations={registrations}
-            onSelectTrekRoster={() => setActiveTab('bookings')}
+            onSelectTrekRoster={(trekFilterId) => {
+              setSelectedBookingsTrekFilter(trekFilterId || 'all');
+              setActiveTab('bookings');
+            }}
           />
         )}
 
@@ -1480,8 +1698,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
         {activeTab === 'editor' && (
           <ItineraryBuilder
-            key={editingHike?.id || 'new'}
+            key={`${editingHike?.id || 'new'}-${editorViewMode}`}
             initialRecord={editingHike}
+            initialViewMode={editorViewMode}
             onBackToList={() => setActiveTab('library')}
             onSaveRecord={handleSaveRecord}
             onCloneHike={handleCloneHike}

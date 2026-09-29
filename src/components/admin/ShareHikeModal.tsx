@@ -194,16 +194,17 @@ export const ShareHikeModal: React.FC<ShareHikeModalProps> = ({
                 )}
               </button>
 
-              <button
+              <a
                 id="btn-open-whatsapp-direct"
-                type="button"
-                onClick={handleOpenWhatsAppDirect}
+                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappSummary)}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-[#E5E1DB] text-[#25D366] hover:bg-[#F9F7F5] rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 title="Send directly via WhatsApp Web/App"
               >
                 <ExternalLink className="w-4 h-4" />
                 <span className="hidden sm:inline">Open App</span>
-              </button>
+              </a>
             </div>
           </div>
 
