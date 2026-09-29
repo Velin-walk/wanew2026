@@ -769,8 +769,14 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-4 md:p-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl md:rounded-none w-full max-w-4xl md:max-w-none md:w-screen md:h-screen md:max-h-screen max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-[#E5E1DB] md:border-0">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 md:top-16 z-[1000] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-3xl w-full max-w-5xl h-[88vh] md:h-full max-h-[88vh] overflow-hidden flex flex-col shadow-2xl border border-[#E5E1DB]"
+      >
         
         {/* Modal Top Bar */}
         <div className="px-5 py-4 border-b border-[#F0EBE5] flex items-center justify-between bg-[#FDFBF9] shrink-0">

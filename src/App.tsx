@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Trek, Booking, TeamMember, BookingFormData } from './types';
-import { Navbar } from './components/Navbar';
+import { Navbar, DesktopResourcesBar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { TrekListScreen } from './screens/TrekListScreen';
 import { MyBookingsScreen } from './screens/MyBookingsScreen';
@@ -162,17 +162,51 @@ function MainApp() {
     showMapMinerContribute,
   ]);
 
-  // Arm or disarm the browser history guard entry so mobile Back button steps back one layer at a time
+  // Arm browser history guard entry when user opens a modal or navigates away from root tab
   useEffect(() => {
     if (!isAtRootScreen && !hasHistoryGuardRef.current) {
       window.history.pushState({ wnwStepGuard: true }, '');
       hasHistoryGuardRef.current = true;
-    } else if (isAtRootScreen && hasHistoryGuardRef.current) {
-      ignoringPopStateRef.current = true;
-      hasHistoryGuardRef.current = false;
-      window.history.back();
     }
   }, [isAtRootScreen, hasAnyModalOpen, currentTab]);
+
+  const closeAllOverlays = useCallback(() => {
+    setItineraryModalTrek(null);
+    setInfoModalPage(null);
+    setSelectedTrekForRegister(null);
+    setShowInviteModal(false);
+    setSelectedTrekForInvite(null);
+    setShowFeedbackModal(false);
+    setFeedbackModalTrek(null);
+    setFeedbackModalBooking(null);
+    setShowVoucherModal(false);
+    setVoucherTargetBooking(null);
+    setProfileModalOpen(false);
+    setShowMapMinerContribute(false);
+  }, []);
+
+  const handleMainTabChange = useCallback(
+    (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin') => {
+      closeAllOverlays();
+      setCurrentTab(tab);
+    },
+    [closeAllOverlays]
+  );
+
+  const handleOpenInfoPage = useCallback((page: SubPageType) => {
+    setItineraryModalTrek(null);
+    setSelectedTrekForRegister(null);
+    setShowInviteModal(false);
+    setSelectedTrekForInvite(null);
+    setShowFeedbackModal(false);
+    setFeedbackModalTrek(null);
+    setFeedbackModalBooking(null);
+    setShowVoucherModal(false);
+    setVoucherTargetBooking(null);
+    setProfileModalOpen(false);
+    setShowMapMinerContribute(false);
+    setInfoModalPage(page);
+  }, []);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -1122,13 +1156,20 @@ function MainApp() {
         {/* Top Header */}
         <Navbar
           currentTab={currentTab}
-          onTabChange={setCurrentTab}
+          activeInfoPage={infoModalPage}
+          onTabChange={handleMainTabChange}
           bookingCount={bookings.length}
           savedCount={favorites.length}
-          onOpenContribute={() => setShowMapMinerContribute(true)}
-          onOpenInfoPage={(page) => setInfoModalPage(page)}
+          onOpenContribute={() => {
+            closeAllOverlays();
+            setShowMapMinerContribute(true);
+          }}
+          onOpenInfoPage={handleOpenInfoPage}
           userEmail={activeUserEmail}
-          onOpenProfile={() => setProfileModalOpen(true)}
+          onOpenProfile={() => {
+            closeAllOverlays();
+            setProfileModalOpen(true);
+          }}
         />
 
         {/* Content Area - Full width responsive screen */}
@@ -1157,6 +1198,8 @@ function MainApp() {
                 setFeedbackModalBooking(null);
                 setShowFeedbackModal(true);
               }}
+              activeInfoPage={infoModalPage}
+              onOpenInfoPage={handleOpenInfoPage}
             />
           )}
 
@@ -1186,6 +1229,8 @@ function MainApp() {
                 setFeedbackModalBooking(null);
                 setShowFeedbackModal(true);
               }}
+              activeInfoPage={infoModalPage}
+              onOpenInfoPage={handleOpenInfoPage}
             />
           )}
 
@@ -1298,11 +1343,14 @@ function MainApp() {
         <BottomNav
           userEmail={activeUserEmail}
           currentTab={currentTab}
-          onTabChange={setCurrentTab}
+          onTabChange={handleMainTabChange}
           bookingCount={bookings.length}
           savedCount={favorites.length}
-          onOpenInfoPage={(page) => setInfoModalPage(page)}
-          onOpenProfile={() => setProfileModalOpen(true)}
+          onOpenInfoPage={handleOpenInfoPage}
+          onOpenProfile={() => {
+            closeAllOverlays();
+            setProfileModalOpen(true);
+          }}
         />
 
         {/* Booking Registration Modal (Mobile Bottom Sheet) */}

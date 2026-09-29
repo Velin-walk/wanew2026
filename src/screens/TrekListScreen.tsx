@@ -3,6 +3,8 @@ import { Trek } from '../types';
 import { TrekCard } from '../components/TrekCard';
 import { PastEventListItem } from '../components/PastEventListItem';
 import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFlags';
+import { DesktopResourcesBar } from '../components/Navbar';
+import { SubPageType } from '../components/InfoPagesModal';
 import {
   Search,
   Mountain,
@@ -29,6 +31,8 @@ interface TrekListScreenProps {
   savedOnly?: boolean;
   onExploreAll?: () => void;
   onLeaveFeedback?: (trek: Trek) => void;
+  activeInfoPage?: SubPageType | null;
+  onOpenInfoPage?: (page: SubPageType) => void;
 }
 
 export const TrekListScreen: React.FC<TrekListScreenProps> = ({
@@ -43,6 +47,8 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
   savedOnly = false,
   onExploreAll,
   onLeaveFeedback,
+  activeInfoPage,
+  onOpenInfoPage,
 }) => {
   const [tripTypeFilter, setTripTypeFilter] = useState<'all' | 'treks' | 'overnight' | 'day'>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'easy' | 'moderate' | 'difficult'>('all');

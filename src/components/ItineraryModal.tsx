@@ -60,6 +60,16 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
     }
   }, [isOpen, trek?.id]);
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   const switchTab = (tab: 'experience' | 'logistics') => {
     setActiveTab(tab);
     if (contentScrollRef.current) {
@@ -126,8 +136,14 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-[#FAF8F5] w-full max-w-4xl h-[92vh] sm:h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-[#E5E1DB]">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 md:top-16 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#FAF8F5] w-full max-w-4xl h-[90vh] md:h-full max-h-[88vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-[#E5E1DB]"
+      >
         
         {/* Header Bar */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-[#E5E1DB] bg-white shrink-0">
