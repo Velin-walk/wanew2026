@@ -654,9 +654,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     }
     return result.sort((a, b) => {
       const matchA = String(a.hikeNumber || a.data?.hikeNumber || '').match(/\d+/);
-      const numA = matchA ? parseInt(matchA[0], 10) : -1;
+      const numA = matchA ? parseInt(matchA[0], 10) : Infinity;
       const matchB = String(b.hikeNumber || b.data?.hikeNumber || '').match(/\d+/);
-      const numB = matchB ? parseInt(matchB[0], 10) : -1;
+      const numB = matchB ? parseInt(matchB[0], 10) : Infinity;
       if (numA !== numB) return numB - numA;
       const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
       const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();

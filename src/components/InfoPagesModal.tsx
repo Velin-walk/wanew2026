@@ -41,6 +41,7 @@ interface InfoPagesModalProps {
   onSuccessSubmitted?: () => void;
   onNavigateToBookings?: () => void;
   onOpenVoucherUpload?: () => void;
+  onLeaveFeedback?: () => void;
 }
 
 export const PaymentAndPricingSection: React.FC<{
@@ -83,7 +84,8 @@ export const PaymentAndPricingSection: React.FC<{
 
 export const HikerReviewsSection: React.FC<{
   onNavigateToBookings?: () => void;
-}> = ({ onNavigateToBookings }) => {
+  onLeaveFeedback?: () => void;
+}> = ({ onNavigateToBookings, onLeaveFeedback }) => {
   const [liveReviews, setLiveReviews] = useState<any[]>(() => {
     try {
       const local = localStorage.getItem('wnw_user_feedbacks');
@@ -98,6 +100,20 @@ export const HikerReviewsSection: React.FC<{
   const [selectedTrekPill, setSelectedTrekPill] = useState<string>('');
   const [starRatingFilter, setStarRatingFilter] = useState<number | 'all'>('all');
   const [visibleReviewsCount, setVisibleReviewsCount] = useState<number>(20);
+
+  // Sync local feedbacks when a new review is submitted
+  useEffect(() => {
+    const syncLocalFeedbacks = () => {
+      try {
+        const local = localStorage.getItem('wnw_user_feedbacks');
+        if (local) {
+          setLiveReviews(JSON.parse(local));
+        }
+      } catch {}
+    };
+    window.addEventListener('wnw-feedback-updated', syncLocalFeedbacks);
+    return () => window.removeEventListener('wnw-feedback-updated', syncLocalFeedbacks);
+  }, []);
 
   // Reset visible count to 20 when filters or search change
   useEffect(() => {
@@ -193,25 +209,37 @@ export const HikerReviewsSection: React.FC<{
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
       {/* Header & Refresh */}
-      <div className="border-b border-[#F0EBE5] pb-3 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-extrabold text-[#1F1F1F] flex items-center gap-2">
-            <span>Hiker Reviews &amp; Community Stories</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-              Verified
-            </span>
+      <div className="border-b border-[#F0EBE5] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="text-base sm:text-lg font-extrabold text-[#1F1F1F] leading-snug">
+            Hiker Reviews &amp; Community Stories
           </h3>
+          <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+            Verified
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={fetchReviews}
-          disabled={loadingReviews}
-          className="p-2 rounded-xl border border-[#E5E1DB] bg-white hover:bg-[#F9F7F5] text-[#5A5551] text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
-          title="Reload latest reviews"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loadingReviews ? 'animate-spin text-amber-600' : ''}`} />
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          {onLeaveFeedback && (
+            <button
+              type="button"
+              onClick={onLeaveFeedback}
+              className="h-8 sm:h-9 px-3 bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border border-[#7ABA42]/30 rounded-lg sm:rounded-xl text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+            >
+              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+              <span>Rate &amp; Review</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={fetchReviews}
+            disabled={loadingReviews}
+            className="h-8 sm:h-9 px-2.5 rounded-lg sm:rounded-xl border border-[#E5E1DB] bg-white hover:bg-[#F9F7F5] text-[#5A5551] text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
+            title="Reload latest reviews"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingReviews ? 'animate-spin text-amber-600' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Analytics Dashboard Board */}
@@ -475,19 +503,31 @@ export const HikerReviewsSection: React.FC<{
         <div>
           <h5 className="font-bold text-sm text-[#1F1F1F]">Hiked with Walk Nepal Walk recently?</h5>
           <p className="text-[11px] text-[#8B8680] mt-0.5">
-            Your feedback helps our community flourish. Head to <strong>My Bookings</strong> to rate your completed trek.
+            Your feedback helps our community flourish. Rate your completed trek directly or head to <strong>My Bookings</strong>.
           </p>
         </div>
-        {onNavigateToBookings && (
-          <button
-            type="button"
-            onClick={onNavigateToBookings}
-            className="px-3.5 py-2 rounded-xl bg-[#7ABA42] hover:bg-[#6AA836] text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
-          >
-            <span>Go to My Bookings</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {onLeaveFeedback && (
+            <button
+              type="button"
+              onClick={onLeaveFeedback}
+              className="h-8 sm:h-9 px-2.5 sm:px-3 bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border border-[#7ABA42]/30 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0"
+            >
+              <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+              <span>Rate &amp; Review</span>
+            </button>
+          )}
+          {onNavigateToBookings && (
+            <button
+              type="button"
+              onClick={onNavigateToBookings}
+              className="px-3.5 py-2 rounded-xl bg-[#7ABA42] hover:bg-[#6AA836] text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
+            >
+              <span>Go to My Bookings</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -500,6 +540,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   onSuccessSubmitted,
   onNavigateToBookings,
   onOpenVoucherUpload,
+  onLeaveFeedback,
 }) => {
   const [activeTab, setActiveTab] = useState<SubPageType>(initialPage);
 
@@ -1621,6 +1662,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                       }
                     : undefined
                 }
+                onLeaveFeedback={onLeaveFeedback}
               />
             )}
 

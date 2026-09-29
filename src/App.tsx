@@ -1516,6 +1516,12 @@ function MainApp() {
               setVoucherTargetBooking(bookings[0] || null);
               setShowVoucherModal(true);
             }}
+            onLeaveFeedback={() => {
+              const latestBooking = bookings[0] || latestUserBooking || null;
+              setFeedbackModalBooking(latestBooking);
+              setFeedbackModalTrek(latestBooking ? findTrekForBooking(latestBooking) : null);
+              setShowFeedbackModal(true);
+            }}
             onSuccessSubmitted={async () => {
               await refreshData({ force: true });
               showToast('Private Trek Request saved to Cloudflare!', 'success');

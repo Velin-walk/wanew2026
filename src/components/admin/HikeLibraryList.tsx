@@ -105,6 +105,15 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
       const numA = parseHikeNum(a);
       const numB = parseHikeNum(b);
 
+      // Place duplicated / unnumbered (TBD) itineraries at the top of the catalog (newest first)
+      if (numA === -1 && numB !== -1) return -1;
+      if (numA !== -1 && numB === -1) return 1;
+      if (numA === -1 && numB === -1) {
+        const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return dateB - dateA;
+      }
+
       if (numA !== numB) {
         return sortOrder === 'desc' ? numB - numA : numA - numB;
       }

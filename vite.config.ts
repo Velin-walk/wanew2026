@@ -85,8 +85,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    sourcemap: false,
     reportCompressedSize: false,
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 3000,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -99,6 +100,9 @@ export default defineConfig({
               id.includes('react-leaflet')
             ) {
               return 'vendor-core';
+            }
+            if (id.includes('lucide-react') || id.includes('motion') || id.includes('framer-motion')) {
+              return 'vendor-ui';
             }
             if (id.includes('firebase')) {
               return 'vendor-firebase';
