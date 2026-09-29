@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Send, Trash2, MessageSquare, Loader2, User, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { fetchPhotoComments, postPhotoComment, deletePhotoComment } from '../services/api';
+import { logUserActivity } from '../services/userActivityNotifier';
 import { PhotoComment } from '../types';
 
 interface PhotoCommentsSectionProps {
@@ -95,6 +96,18 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
       if (newComment) {
         setComments((prev) => [...prev, newComment]);
         setCommentText('');
+        logUserActivity({
+          type: 'gallery_comment_posted',
+          title: 'Gallery Photo Comment Posted',
+          actorName: authorName,
+          actorContact: user.email || undefined,
+          targetName: `Photo #${photoId.slice(-6)}`,
+          summary: `${authorName} commented on a gallery photo: "${trimmed.slice(0, 120)}${trimmed.length > 120 ? '...' : ''}"`,
+          details: {
+            Author: authorName,
+            Comment: trimmed,
+          },
+        });
       }
     } catch (err) {
       console.error('Failed to post comment:', err);

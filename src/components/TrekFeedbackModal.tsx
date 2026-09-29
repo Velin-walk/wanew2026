@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Star, X, CheckCircle2, User, MessageSquare, Heart, Award, Shield } from 'lucide-react';
 import { Trek, Booking } from '../types';
 import { apiFetch } from '../services/api';
+import { logUserActivity } from '../services/userActivityNotifier';
 
 interface TrekFeedbackModalProps {
   isOpen: boolean;
@@ -105,6 +106,21 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
       }
 
       setIsSuccess(true);
+      logUserActivity({
+        type: 'feedback_submitted',
+        title: 'Hiker Review / Feedback Submitted',
+        actorName: payload.name || 'Verified Hiker',
+        actorContact: payload.email,
+        targetName: payload.recentWalk,
+        summary: `${payload.name || 'Verified Hiker'} rated ${payload.recentWalk} ${payload.overallRating}★: "${payload.overallFeedback.slice(0, 120)}${payload.overallFeedback.length > 120 ? '...' : ''}"`,
+        details: {
+          Reviewer: payload.name || 'Verified Hiker',
+          Trek: payload.recentWalk,
+          'Overall Rating': `${payload.overallRating}/5 Stars`,
+          'Team Rating': `${payload.teamRating}/5 Stars`,
+          Review: payload.overallFeedback || payload.teamFeedback || undefined,
+        },
+      });
       if (onSubmitSuccess) onSubmitSuccess();
       setTimeout(() => {
         onClose();

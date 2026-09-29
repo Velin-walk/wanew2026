@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Booking } from '../types';
 import { apiFetch } from '../services/api';
+import { logUserActivity } from '../services/userActivityNotifier';
 import {
   UploadCloud,
   X,
@@ -241,6 +242,22 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
       setStagedFiles([]);
 
       setSuccessMsg('Payment Voucher Forwarded Successfully! Our coordinators will verify and approve your booking status shortly.');
+      logUserActivity({
+        type: 'voucher_uploaded',
+        title: 'Payment Voucher Uploaded',
+        actorName: activeBooking.full_name || 'Hiker',
+        actorContact: activeBooking.phone || activeBooking.email || userEmail,
+        targetName: activeBooking.trek_name,
+        summary: `${activeBooking.full_name || 'Hiker'} uploaded a payment receipt voucher for ${activeBooking.trek_name}.`,
+        details: {
+          Hiker: activeBooking.full_name || 'Hiker',
+          Phone: activeBooking.phone || 'N/A',
+          Trek: activeBooking.trek_name,
+          Files: `${uploadedUrls.length} receipt(s)`,
+        },
+        linkUrl: uploadedUrls[0] || allUrls[0],
+        imageUrl: uploadedUrls[0] || allUrls[0],
+      });
       onVoucherUploaded?.(updatedRecord);
     } catch (err: any) {
       console.error('Voucher upload error:', err);

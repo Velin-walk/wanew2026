@@ -235,15 +235,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
               <button
                 type="button"
-                onClick={() => {
-                  setDropdownOpen(false);
-                  onTabChange('saved');
-                }}
+                onClick={() => handleSubPageClick('reviews')}
                 className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Heart className="w-4 h-4 text-rose-500 fill-rose-500/30" />
-                  <span>Saved Hikes ({savedCount})</span>
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                  <span>Hiker Reviews</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
               </button>
@@ -256,6 +253,21 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 <div className="flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-[#E08828]" />
                   <span>Payment & Pricing</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDropdownOpen(false);
+                  onTabChange('saved');
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-rose-500 fill-rose-500/30" />
+                  <span>Saved Hikes ({savedCount})</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
               </button>
@@ -280,18 +292,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-[#E08828]" />
                   <span>Safety & Refund</span>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSubPageClick('reviews')}
-                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                  <span>Hiker Reviews</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
               </button>

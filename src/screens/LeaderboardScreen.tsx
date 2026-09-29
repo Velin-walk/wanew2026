@@ -26,6 +26,7 @@ import { HikerStats, LeaderboardResponse } from '../types/leaderboard';
 import { fetchLeaderboardData } from '../services/api';
 import { Himalayan3DBackground } from '../components/3d/Himalayan3DBackground';
 import { LowPolyMountainTrailChart } from '../components/3d/LowPolyMountainTrailChart';
+import { HikerReviewsSection } from '../components/InfoPagesModal';
 
 type TimePeriod = 't30' | 't60' | 't90' | 't365' | 'overall';
 type SortMetric = 'dist' | 'count';
@@ -683,6 +684,11 @@ export const LeaderboardScreen: React.FC = () => {
             {data?.hikers ? data.hikers.filter((h) => h.d >= 100 && h.d < 200).length : 0} Century Walkers
           </p>
         </div>
+      </div>
+
+      {/* Attached Hiker Reviews Extension */}
+      <div className="relative z-10 bg-white rounded-3xl border border-[#E5E1DB] p-4 sm:p-6 shadow-md mt-6">
+        <HikerReviewsSection />
       </div>
 
       {/* Hiker Detail Modal */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, MessageSquare, Sparkles, RotateCcw, Trash2 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
+import { logUserActivity } from '../../services/userActivityNotifier';
 
 const GLOBAL_CHAT_TRAIL_ID = 'global_trail_chat';
 
@@ -167,6 +168,20 @@ export default function MapChat({ currentUserEmail }: MapChatProps) {
         localStorage.setItem('wnw_mapchat_messages', JSON.stringify(updated));
       } catch {}
       return updated;
+    });
+
+    logUserActivity({
+      type: 'mapminers_comment_posted',
+      title: 'MapMiners Trail Condition Report',
+      actorName: payload.senderName,
+      actorContact: currentUserEmail || undefined,
+      targetName: 'MapMiners Trail Chat',
+      summary: `${payload.senderName} posted a trail condition update: "${payload.text.slice(0, 120)}${payload.text.length > 120 ? '...' : ''}"`,
+      details: {
+        Author: payload.senderName,
+        Channel: 'MapMiners Trail Chat',
+        Message: payload.text,
+      },
     });
 
     // 2. Persist to Cloudflare D1 via existing mapminers/comments endpoint

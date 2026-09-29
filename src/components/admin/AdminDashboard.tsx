@@ -40,6 +40,11 @@ import { CoordinatorHub } from './CoordinatorHub';
 import { CloudflareRegistrationsTable } from './CloudflareRegistrationsTable';
 import { AdminActivityLogs } from './AdminActivityLogs';
 import { PWAInstallStats } from './PWAInstallStats';
+import { UserActivityNotificationsPanel } from './UserActivityNotificationsPanel';
+import {
+  fetchAllUserActivities,
+  getAdminLastSeenTimestamp,
+} from '../../services/userActivityNotifier';
 import {
   SavedHikeRecord,
   DEFAULT_SAVED_HIKES,
@@ -56,9 +61,33 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<
-    'bookings' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps' | 'system'
+    'bookings' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps' | 'notifications' | 'system'
   >('bookings');
   const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa'>('applications');
+  const [unreadActivityCount, setUnreadActivityCount] = useState<number>(0);
+
+  useEffect(() => {
+    const refreshUnreadCount = async () => {
+      try {
+        const items = await fetchAllUserActivities(false);
+        const lastSeen = getAdminLastSeenTimestamp();
+        if (!lastSeen) {
+          setUnreadActivityCount(items.length);
+        } else {
+          setUnreadActivityCount(
+            items.filter((i) => (new Date(i.createdAt || 0).getTime() || 0) > lastSeen).length
+          );
+        }
+      } catch {}
+    };
+    refreshUnreadCount();
+    window.addEventListener('wnw-user-activity-logged', refreshUnreadCount);
+    window.addEventListener('wnw-user-activity-seen', refreshUnreadCount);
+    return () => {
+      window.removeEventListener('wnw-user-activity-logged', refreshUnreadCount);
+      window.removeEventListener('wnw-user-activity-seen', refreshUnreadCount);
+    };
+  }, []);
   const [hikes, setHikes] = useState<SavedHikeRecord[]>(DEFAULT_SAVED_HIKES);
   const [loadingHikes, setLoadingHikes] = useState(true);
   const [editingHike, setEditingHike] = useState<SavedHikeRecord | null>(null);
@@ -1331,6 +1360,32 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             )}
           </button>
 
+          {/* User Activity Notifications Tab */}
+          <button
+            id="admin-tab-notifications"
+            type="button"
+            onClick={() => setActiveTab('notifications')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'notifications'
+                ? 'bg-[#E08828] text-white shadow-xs'
+                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+            }`}
+          >
+            <Zap className={`w-4 h-4 ${activeTab === 'notifications' ? 'text-white' : 'text-[#E08828]'}`} />
+            <span>User Activity</span>
+            {unreadActivityCount > 0 && (
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                  activeTab === 'notifications'
+                    ? 'bg-white text-[#E08828]'
+                    : 'bg-[#E08828] text-white'
+                }`}
+              >
+                {unreadActivityCount}
+              </span>
+            )}
+          </button>
+
           {/* System Zone Tab */}
           <button
             id="admin-tab-system"
@@ -1537,6 +1592,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'notifications' && (
+          <UserActivityNotificationsPanel
+            onNavigateTab={(tab) => setActiveTab(tab)}
+            onUnreadCountChange={(count) => setUnreadActivityCount(count)}
+          />
         )}
 
         {activeTab === 'system' && (

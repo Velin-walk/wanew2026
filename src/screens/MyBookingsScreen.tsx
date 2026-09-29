@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Booking } from '../types';
 import { HISTORICAL_TREKS } from '../data/historicalTreks';
+import { PaymentAndPricingSection } from '../components/InfoPagesModal';
 import {
   Calendar,
   Phone,
@@ -221,6 +222,15 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
             Explore Available Treks
           </button>
         </div>
+
+        {/* Attached Payment & Pricing Extension */}
+        <div className="bg-white rounded-2xl border border-[#E5E1DB] p-4 sm:p-6 shadow-xs mt-6">
+          <PaymentAndPricingSection
+            onOpenVoucherUpload={
+              onUploadVoucher && bookings[0] ? () => onUploadVoucher(bookings[0]) : undefined
+            }
+          />
+        </div>
       </div>
     );
   }
@@ -414,6 +424,70 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                     </span>
                   </div>
                 </div>
+
+                {/* Default Quick Actions: Pay, Forward Voucher, Rate & Review (Single Line) */}
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="pt-2.5 mt-0.5 border-t border-[#F0EBE5] flex items-center gap-1.5 sm:gap-2 flex-nowrap"
+                >
+                  {onOpenPaymentPage && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenPaymentPage();
+                      }}
+                      className="h-8 sm:h-9 px-2.5 sm:px-3.5 bg-[#E08828] hover:bg-[#cc781f] text-white font-bold rounded-lg sm:rounded-xl text-[11px] sm:text-xs whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
+                    >
+                      <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      <span>Pay</span>
+                    </button>
+                  )}
+
+                  {onUploadVoucher && (
+                    <div className="inline-flex items-center rounded-lg sm:rounded-xl overflow-hidden shadow-xs shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUploadVoucher(booking);
+                        }}
+                        className="h-8 sm:h-9 px-2.5 sm:px-3.5 bg-[#2B6CB0] hover:bg-[#235896] text-white font-bold text-[11px] sm:text-xs whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer"
+                      >
+                        <UploadCloud className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                        <span>Forward Voucher</span>
+                      </button>
+
+                      {booking.payment_voucher_url && (
+                        <button
+                          type="button"
+                          title="View uploaded payment voucher"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewingVoucherUrl(booking.payment_voucher_url || null);
+                          }}
+                          className="h-8 sm:h-9 px-2 bg-[#1e4e8c] hover:bg-[#163b6b] border-l border-white/20 text-amber-300 hover:text-amber-200 inline-flex items-center justify-center transition-all cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {onLeaveFeedback && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLeaveFeedback(booking);
+                      }}
+                      className="h-8 sm:h-9 px-2.5 sm:px-3 bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border border-[#7ABA42]/30 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0"
+                    >
+                      <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                      <span>Rate &amp; Review</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Expanded Details */}
@@ -503,47 +577,9 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                       </div>
                     </div>
 
-                  {/* Actions */}
+                  {/* Secondary Actions (Share & Cancel) */}
                   <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 border-t border-[#F0EBE5]">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {onOpenPaymentPage && (
-                        <button
-                          type="button"
-                          onClick={onOpenPaymentPage}
-                          className="min-h-[40px] px-3.5 bg-[#E08828] hover:bg-[#cc781f] text-white font-bold rounded-xl text-xs active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" />
-                          <span>Pay</span>
-                        </button>
-                      )}
-
-                      {onUploadVoucher && (
-                        <button
-                          type="button"
-                          onClick={() => onUploadVoucher(booking)}
-                          className="min-h-[40px] px-3.5 bg-[#2B6CB0] hover:bg-[#235896] text-white font-bold rounded-xl text-xs active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                        >
-                          <UploadCloud className="w-3.5 h-3.5" />
-                          <span>Forward Voucher</span>
-                        </button>
-                      )}
-
-                      {booking.payment_voucher_url && (
-                        <button
-                          type="button"
-                          onClick={() => setViewingVoucherUrl(booking.payment_voucher_url || null)}
-                          className="min-h-[40px] px-3 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-xs font-extrabold active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-[#E08828]" />
-                          <span>
-                            View My Voucher
-                            {booking.payment_voucher_url.split(',').filter(Boolean).length > 1
-                              ? `s (${booking.payment_voucher_url.split(',').filter(Boolean).length})`
-                              : ''}
-                          </span>
-                        </button>
-                      )}
-
                       <button
                         type="button"
                         onClick={() => onShare(booking)}
@@ -552,17 +588,6 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
                         <Share2 className="w-3.5 h-3.5 text-[#E08828]" />
                         <span>Share Booking</span>
                       </button>
-
-                      {onLeaveFeedback && (
-                        <button
-                          type="button"
-                          onClick={() => onLeaveFeedback(booking)}
-                          className="min-h-[40px] px-3 bg-[#7ABA42]/10 hover:bg-[#7ABA42]/20 border border-[#7ABA42]/30 rounded-xl text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                        >
-                          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                          <span>Rate &amp; Review</span>
-                        </button>
-                      )}
                     </div>
 
                     {(booking.status || '').toLowerCase().includes('cancelled') ? (
@@ -610,6 +635,15 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
             </div>
           );
         })}
+      </div>
+
+      {/* Attached Payment & Pricing Extension */}
+      <div className="bg-white rounded-2xl border border-[#E5E1DB] p-4 sm:p-6 shadow-xs mt-6">
+        <PaymentAndPricingSection
+          onOpenVoucherUpload={
+            onUploadVoucher && activeBookings[0] ? () => onUploadVoucher(activeBookings[0]) : undefined
+          }
+        />
       </div>
 
       {/* Lightbox Modal for User Viewing Uploaded Voucher */}

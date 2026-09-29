@@ -130,17 +130,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-2.5 cursor-pointer select-none group"
             aria-label="Walk Nepal Walk - Go to Treks"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-transparent border border-[#E5E1DB] flex items-center justify-center shrink-0 overflow-hidden group-hover:border-[#7ABA42]/40 transition-colors shadow-xs">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-transparent flex items-center justify-center shrink-0 overflow-hidden transition-transform group-hover:scale-105">
               <img
                 src="/logo.png"
                 alt="Walk Nepal Walk Logo"
-                className="w-full h-full object-cover rounded-xl"
+                className="w-full h-full object-contain rounded-lg"
                 onError={(e) => {
                   // Fallback to vector mountain if logo image fails
                   e.currentTarget.style.display = 'none';
                   const parent = e.currentTarget.parentElement;
                   if (parent) {
-                    parent.classList.add('bg-[#E08828]/10', 'border-[#E08828]/20');
+                    parent.classList.add('bg-[#E08828]/10', 'border', 'border-[#E08828]/20');
                   }
                 }}
               />
@@ -279,6 +279,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => handleSubPageClick('reviews')}
+                  className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Star className="w-4 h-4 text-amber-500 fill-amber-500 group-hover:scale-110 transition-transform" />
+                    <span>Hiker Reviews</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => handleSubPageClick('payment')}
                   className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group"
                 >
@@ -309,18 +321,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="flex items-center gap-2.5">
                     <ShieldCheck className="w-4 h-4 text-[#E08828] group-hover:scale-110 transition-transform" />
                     <span>Safety & Refund</span>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSubPageClick('reviews')}
-                  className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Star className="w-4 h-4 text-amber-500 fill-amber-500 group-hover:scale-110 transition-transform" />
-                    <span>Hiker Reviews</span>
                   </div>
                   <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
                 </button>

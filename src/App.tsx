@@ -32,10 +32,11 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
 import { db } from './lib/firebase';
+import { logUserActivity } from './services/userActivityNotifier';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 
 function MainApp() {
-  const { user, userEmail, userPhone, isAdmin, openAuthModal } = useAuth();
+  const { user, userEmail, userPhone, isAdmin, openAuthModal, authModalOpen, closeAuthModal } = useAuth();
   const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
@@ -85,6 +86,168 @@ function MainApp() {
   const [infoModalPage, setInfoModalPage] = useState<SubPageType | null>(null);
   const [showVoucherModal, setShowVoucherModal] = useState(false);
   const [voucherTargetBooking, setVoucherTargetBooking] = useState<Booking | null>(null);
+
+  // Step-by-step hardware Back button handling for mobile phones
+  const tabHistoryRef = useRef<Array<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>>(['treks']);
+  const hasHistoryGuardRef = useRef<boolean>(false);
+  const ignoringPopStateRef = useRef<boolean>(false);
+  const isSteppingBackTabRef = useRef<boolean>(false);
+
+  // Track user tab navigation stack
+  useEffect(() => {
+    if (isSteppingBackTabRef.current) {
+      isSteppingBackTabRef.current = false;
+      return;
+    }
+    const stack = tabHistoryRef.current;
+    if (stack[stack.length - 1] !== currentTab) {
+      if (currentTab === 'treks') {
+        tabHistoryRef.current = ['treks'];
+      } else {
+        tabHistoryRef.current = [...stack.filter((t) => t !== currentTab), currentTab];
+      }
+    }
+  }, [currentTab]);
+
+  const hasAnyModalOpen = Boolean(
+    authModalOpen ||
+      showVoucherModal ||
+      showFeedbackModal ||
+      showInviteModal ||
+      selectedTrekForRegister ||
+      itineraryModalTrek ||
+      infoModalPage ||
+      profileModalOpen ||
+      showMapMinerContribute
+  );
+
+  const isAtRootScreen = currentTab === 'treks' && !hasAnyModalOpen && tabHistoryRef.current.length <= 1;
+
+  const navStateRef = useRef({
+    currentTab,
+    authModalOpen,
+    showVoucherModal,
+    showFeedbackModal,
+    showInviteModal,
+    selectedTrekForRegister,
+    itineraryModalTrek,
+    infoModalPage,
+    profileModalOpen,
+    showMapMinerContribute,
+  });
+
+  useEffect(() => {
+    navStateRef.current = {
+      currentTab,
+      authModalOpen,
+      showVoucherModal,
+      showFeedbackModal,
+      showInviteModal,
+      selectedTrekForRegister,
+      itineraryModalTrek,
+      infoModalPage,
+      profileModalOpen,
+      showMapMinerContribute,
+    };
+  }, [
+    currentTab,
+    authModalOpen,
+    showVoucherModal,
+    showFeedbackModal,
+    showInviteModal,
+    selectedTrekForRegister,
+    itineraryModalTrek,
+    infoModalPage,
+    profileModalOpen,
+    showMapMinerContribute,
+  ]);
+
+  // Arm or disarm the browser history guard entry so mobile Back button steps back one layer at a time
+  useEffect(() => {
+    if (!isAtRootScreen && !hasHistoryGuardRef.current) {
+      window.history.pushState({ wnwStepGuard: true }, '');
+      hasHistoryGuardRef.current = true;
+    } else if (isAtRootScreen && hasHistoryGuardRef.current) {
+      ignoringPopStateRef.current = true;
+      hasHistoryGuardRef.current = false;
+      window.history.back();
+    }
+  }, [isAtRootScreen, hasAnyModalOpen, currentTab]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (ignoringPopStateRef.current) {
+        ignoringPopStateRef.current = false;
+        return;
+      }
+
+      hasHistoryGuardRef.current = false;
+      const s = navStateRef.current;
+
+      const openModalsCount = [
+        s.authModalOpen,
+        s.showVoucherModal,
+        s.showFeedbackModal,
+        s.showInviteModal,
+        Boolean(s.selectedTrekForRegister),
+        Boolean(s.itineraryModalTrek),
+        Boolean(s.infoModalPage),
+        s.profileModalOpen,
+        s.showMapMinerContribute,
+      ].filter(Boolean).length;
+
+      // 1. Close topmost open modal first (one step at a time)
+      if (s.authModalOpen) {
+        closeAuthModal();
+      } else if (s.showVoucherModal) {
+        setShowVoucherModal(false);
+        setVoucherTargetBooking(null);
+      } else if (s.showFeedbackModal) {
+        setShowFeedbackModal(false);
+        setFeedbackModalTrek(null);
+        setFeedbackModalBooking(null);
+      } else if (s.showInviteModal) {
+        setShowInviteModal(false);
+        setSelectedTrekForInvite(null);
+      } else if (s.selectedTrekForRegister) {
+        setSelectedTrekForRegister(null);
+      } else if (s.itineraryModalTrek) {
+        setItineraryModalTrek(null);
+      } else if (s.infoModalPage) {
+        setInfoModalPage(null);
+      } else if (s.profileModalOpen) {
+        setProfileModalOpen(false);
+      } else if (s.showMapMinerContribute) {
+        setShowMapMinerContribute(false);
+      } else if (tabHistoryRef.current.length > 1) {
+        // 2. Step back to the previous tab
+        const nextStack = tabHistoryRef.current.slice(0, -1);
+        const prevTab = nextStack[nextStack.length - 1] || 'treks';
+        tabHistoryRef.current = nextStack.length > 0 ? nextStack : ['treks'];
+        isSteppingBackTabRef.current = true;
+        setCurrentTab(prevTab);
+        if (prevTab !== 'treks' || tabHistoryRef.current.length > 1) {
+          window.history.pushState({ wnwStepGuard: true }, '');
+          hasHistoryGuardRef.current = true;
+        }
+        return;
+      } else if (s.currentTab !== 'treks') {
+        tabHistoryRef.current = ['treks'];
+        isSteppingBackTabRef.current = true;
+        setCurrentTab('treks');
+        return;
+      }
+
+      // If we just closed a modal and there are still more modals open or we're not on the Home ('treks') tab, re-arm the guard
+      if (openModalsCount > 1 || s.currentTab !== 'treks' || tabHistoryRef.current.length > 1) {
+        window.history.pushState({ wnwStepGuard: true }, '');
+        hasHistoryGuardRef.current = true;
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [closeAuthModal]);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -845,6 +1008,21 @@ function MainApp() {
 
     setBookings((prev) => [newBooking, ...prev.filter(b => String(b.id) !== String(primaryId))]);
 
+    logUserActivity({
+      type: 'trek_registration',
+      title: 'Trek Registration Submitted',
+      actorName: formData.full_name,
+      actorContact: formData.phone || formData.email || activeUserEmail,
+      targetName: trek.name,
+      summary: `${formData.full_name} registered for ${trek.name} (${totalNewPeople} Pax).`,
+      details: {
+        Hiker: formData.full_name,
+        Phone: formData.phone,
+        Trek: trek.name,
+        'Group Size': `${totalNewPeople} Pax`,
+      },
+    });
+
     const toastMsg = isCloudflareDown
       ? `Booking recorded for ${trek.name}! (Backup mode)`
       : `Registered for ${trek.name}! See you on the trail!`;
@@ -1106,7 +1284,7 @@ function MainApp() {
           {currentTab !== 'mapminers' && (
             <div className="mt-8 pt-6 border-t border-[#EFEAE4] text-center text-[11px] text-[#8B8680] space-y-1">
               <div className="flex items-center justify-center gap-1.5 font-bold text-[#1F1F1F]">
-                <img src="/logo.png" className="w-5 h-5 object-cover rounded-md" alt="WNW Logo" referrerPolicy="no-referrer" />
+                <img src="/logo.png" className="w-5 h-5 object-contain rounded-sm" alt="WNW Logo" referrerPolicy="no-referrer" />
                 <span>Walk Nepal Walk Mobile App</span>
               </div>
               <p className="text-[10px] text-[#8B8680] flex items-center justify-center gap-1">

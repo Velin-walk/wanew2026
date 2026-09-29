@@ -29,6 +29,7 @@ import {
 import { Trek } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, fetchPhotoComments } from '../services/api';
+import { logUserActivity } from '../services/userActivityNotifier';
 import { PhotoCommentsSection } from '../components/PhotoCommentsSection';
 import galleryHeroImg from '../assets/images/gallery_trail_hero_1790246900034.jpg';
 
@@ -378,6 +379,26 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       // Update local state
       setPhotos((prev) => [...newPhotosToAppend, ...prev]);
       localStorage.setItem(uploadCountKey, String(currentCount + uploadedThisBatch));
+
+      if (newPhotosToAppend.length > 0) {
+        const uploaderName = user.displayName || user.email?.split('@')[0] || 'Nepal Hiker';
+        logUserActivity({
+          type: 'gallery_photo_uploaded',
+          title: 'Gallery Photo Uploaded',
+          actorName: uploaderName,
+          actorContact: user.email || undefined,
+          targetName: targetTrek.name,
+          summary: `${uploaderName} uploaded ${uploadedThisBatch} photo(s) to ${targetTrek.name}${uploadCaption.trim() ? `: "${uploadCaption.trim()}"` : '.'}`,
+          details: {
+            Uploader: uploaderName,
+            Trek: targetTrek.name,
+            Photos: `${uploadedThisBatch} photo(s)`,
+            Caption: uploadCaption.trim() || undefined,
+          },
+          imageUrl: newPhotosToAppend[0].url,
+          linkUrl: newPhotosToAppend[0].url,
+        });
+      }
 
       setUploadSuccessMsg(`Post Shared Successfully! ${uploadedThisBatch} photo(s) published.`);
       setTimeout(() => {

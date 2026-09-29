@@ -3,6 +3,7 @@ import { X, TrendingUp, TrendingDown, Download, MapPin, Share2, Check, ChevronUp
 import ElevationChart from './ElevationChart';
 import { routeToGPX } from './kmlParser';
 import { apiFetch } from '../../services/api';
+import { logUserActivity } from '../../services/userActivityNotifier';
 
 interface RouteDetailProps {
   route: any;
@@ -135,6 +136,19 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
       }
 
       setDownloadProgress(100);
+      logUserActivity({
+        type: 'mapminers_map_downloaded',
+        title: 'MapMiners Offline Map Downloaded',
+        actorName: currentUserEmail ? currentUserEmail.split('@')[0] : localStorage.getItem('chat_guest_name') || 'Guest Hiker',
+        actorContact: currentUserEmail || undefined,
+        targetName: route.name,
+        summary: `${currentUserEmail ? currentUserEmail.split('@')[0] : 'Hiker'} cached offline map tiles for "${route.name}".`,
+        details: {
+          Trail: route.name,
+          Type: 'Offline Map Tiles',
+          User: currentUserEmail || 'Guest Hiker',
+        },
+      });
       if (route?.id && onToggleSave) {
         onToggleSave(String(route.id), true);
       }
@@ -221,6 +235,21 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+
+    logUserActivity({
+      type: 'mapminers_map_downloaded',
+      title: 'MapMiners GPX File Downloaded',
+      actorName: currentUserEmail ? currentUserEmail.split('@')[0] : localStorage.getItem('chat_guest_name') || 'Guest Hiker',
+      actorContact: currentUserEmail || undefined,
+      targetName: route.name,
+      summary: `${currentUserEmail ? currentUserEmail.split('@')[0] : 'Hiker'} downloaded the GPX file for "${route.name}".`,
+      details: {
+        Trail: route.name,
+        Type: 'GPX Track File',
+        User: currentUserEmail || 'Guest Hiker',
+        Distance: route.stats?.distance ? `${Number(route.stats.distance).toFixed(1)} km` : undefined,
+      },
+    });
   };
 
   const handleShareRoute = (e: React.MouseEvent) => {
@@ -265,6 +294,20 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
       return updated;
     });
     setCommentInput('');
+
+    logUserActivity({
+      type: 'mapminers_comment_posted',
+      title: 'MapMiners Trail Comment Posted',
+      actorName: authorName,
+      actorContact: currentUserEmail || undefined,
+      targetName: route.name,
+      summary: `${authorName} commented on trail "${route.name}": "${newComment.text.slice(0, 120)}${newComment.text.length > 120 ? '...' : ''}"`,
+      details: {
+        Trail: route.name,
+        Author: authorName,
+        Comment: newComment.text,
+      },
+    });
 
     // 2. Post to Cloudflare Worker backend
     try {

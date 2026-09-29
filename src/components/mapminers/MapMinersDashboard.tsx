@@ -7,6 +7,7 @@ import { parseGPX, parseKML, parseRouteFile, routeToGPX, simplifyLineSegments } 
 import { resolveAssetUrl } from './assetUrl';
 import { generateDemoRoutes } from './demoData';
 import { apiFetch, clearApiCache, CLOUDFLARE_WORKER_URL } from '../../services/api';
+import { logUserActivity } from '../../services/userActivityNotifier';
 import { isAdminEmail } from '../../adminUtils';
 import { db } from '../../lib/firebase';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
@@ -619,6 +620,20 @@ export default function MapMinersDashboard({
       setRoutes(prev => {
         const filtered = prev.filter(r => r.id !== sessionRoute.id);
         return [sessionRoute, ...filtered];
+      });
+      logUserActivity({
+        type: 'mapminers_gpx_uploaded',
+        title: 'MapMiners GPX Trail Uploaded',
+        actorName: sessionRoute.contributorName,
+        actorContact: sessionRoute.contributorEmail || undefined,
+        targetName: sessionRoute.name,
+        summary: `${sessionRoute.contributorName} uploaded GPX trail "${sessionRoute.name}" (${(sessionRoute.stats?.distance || 0).toFixed(1)} km).`,
+        details: {
+          'Trail Name': sessionRoute.name,
+          Uploader: sessionRoute.contributorName,
+          Distance: `${(sessionRoute.stats?.distance || 0).toFixed(2)} km`,
+          Difficulty: sessionRoute.difficulty || 'Moderate',
+        },
       });
       setActiveRoute(sessionRoute);
       setSidebarOpen(false);
