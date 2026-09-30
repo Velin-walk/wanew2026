@@ -147,7 +147,7 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] bg-[#7ABA42]/10 hover:bg-[#7ABA42]/20 border border-[#7ABA42]/30 rounded-lg transition-all cursor-pointer"
           >
             <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-            <span>Rate Trek</span>
+            <span>Rate &amp; Review</span>
           </button>
         )}
       </div>
