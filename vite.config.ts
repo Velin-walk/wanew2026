@@ -101,9 +101,6 @@ export default defineConfig({
             ) {
               return 'vendor-core';
             }
-            if (id.includes('lucide-react') || id.includes('motion') || id.includes('framer-motion')) {
-              return 'vendor-ui';
-            }
             if (id.includes('firebase')) {
               return 'vendor-firebase';
             }
