@@ -8,6 +8,7 @@ interface ImageCropperModalProps {
   onCropComplete: (croppedImage: string) => void;
   aspectRatio?: number;
   maxDimension?: number;
+  quality?: number;
   title?: string;
   subtitle?: string;
 }
@@ -18,6 +19,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   onCropComplete,
   aspectRatio = 1200 / 600, // Default 2:1 for banners
   maxDimension = 1200,
+  quality = 0.85,
   title = 'Adjust Trek Card Preview',
   subtitle = 'Drag & zoom to frame the Home Page Trek Card • Full image is kept for Itinerary display',
 }) => {
@@ -76,7 +78,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       let targetWidth = canvas.width;
       let targetHeight = canvas.height;
 
-      if (targetWidth > maxDimension) {
+      if (maxDimension > 0 && targetWidth > maxDimension) {
         targetHeight = (maxDimension / targetWidth) * targetHeight;
         targetWidth = maxDimension;
       }
@@ -85,7 +87,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       finalCanvas.height = targetHeight;
       finalCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
 
-      const base64Image = finalCanvas.toDataURL('image/jpeg', 0.85);
+      const base64Image = finalCanvas.toDataURL('image/jpeg', quality);
       onCropComplete(base64Image);
     } catch (e) {
       console.error('Error cropping image:', e);
