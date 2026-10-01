@@ -154,7 +154,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       } catch (e) {}
     }
 
-    // Sort newest first
+    // Exclude system homepage hero banners & sort newest first
+    list = list.filter((p) => p && p.trekId !== 'HOMEPAGE_HERO');
     list.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
     setPhotos(list);
     setLoading(false);

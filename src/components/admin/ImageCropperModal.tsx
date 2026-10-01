@@ -7,6 +7,9 @@ interface ImageCropperModalProps {
   onClose: () => void;
   onCropComplete: (croppedImage: string) => void;
   aspectRatio?: number;
+  maxDimension?: number;
+  title?: string;
+  subtitle?: string;
 }
 
 export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
@@ -14,6 +17,9 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   onClose,
   onCropComplete,
   aspectRatio = 1200 / 600, // Default 2:1 for banners
+  maxDimension = 1200,
+  title = 'Adjust Trek Card Preview',
+  subtitle = 'Drag & zoom to frame the Home Page Trek Card • Full image is kept for Itinerary display',
 }) => {
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -67,7 +73,6 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       const finalCtx = finalCanvas.getContext('2d');
       if (!finalCtx) return;
 
-      const maxDimension = 1200;
       let targetWidth = canvas.width;
       let targetHeight = canvas.height;
 
@@ -93,9 +98,9 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-black text-stone-900 leading-tight">Adjust Trek Card Preview</h3>
+            <h3 className="text-lg font-black text-stone-900 leading-tight">{title}</h3>
             <p className="text-[11px] text-stone-500 font-bold uppercase tracking-wider mt-0.5">
-              Drag & zoom to frame the Home Page Trek Card • Full image is kept for Itinerary display
+              {subtitle}
             </p>
           </div>
           <button

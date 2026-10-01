@@ -3,6 +3,7 @@ import { Trek } from '../types';
 import { TrekCard } from '../components/TrekCard';
 import { PastEventListItem } from '../components/PastEventListItem';
 import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFlags';
+import { HomepageHeroBanner } from '../components/HomepageHeroBanner';
 import { DesktopResourcesBar } from '../components/Navbar';
 import { SubPageType } from '../components/InfoPagesModal';
 import {
@@ -232,41 +233,13 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
       )}
 
-      {/* Quick Roster Stats Bar */}
+      {/* Hourly Rotating Homepage Hero Banner (with embedded Upcoming, Completed, and Reviews stats) */}
       {!savedOnly && (
-        <div className="relative grid grid-cols-3 gap-1 sm:gap-2 bg-white rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#E5E1DB] shadow-2xs overflow-hidden">
-          {/* Subtle miniature prayer flags draped across top-right of stats bar */}
-          <div className="absolute -top-1 right-2 sm:right-6 w-24 xs:w-32 sm:w-36 pointer-events-none z-10 opacity-80 hidden xs:block">
-            <MiniPrayerFlags variant="draped" count={5} />
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-[#E08828]/10 text-[#E08828] shrink-0">
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            </div>
-            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-medium whitespace-nowrap leading-none">
-              <strong className="text-[#1F1F1F] font-black text-[10.5px] xs:text-xs sm:text-sm">{upcomingTreks.length}</strong> Upcoming
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-[#7ABA42]/10 text-[#7ABA42] shrink-0">
-              <History className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            </div>
-            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-medium whitespace-nowrap leading-none">
-              <strong className="text-[#1F1F1F] font-black text-[10.5px] xs:text-xs sm:text-sm">{pastTreks.length}</strong> Completed
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
-              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            </div>
-            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-semibold whitespace-nowrap leading-none">
-              Friendly Team
-            </span>
-          </div>
-        </div>
+        <HomepageHeroBanner
+          upcomingCount={upcomingTreks.length}
+          completedCount={pastTreks.length}
+          onOpenReviews={() => onOpenInfoPage?.('reviews')}
+        />
       )}
 
       {/* Saved header if in saved mode */}
