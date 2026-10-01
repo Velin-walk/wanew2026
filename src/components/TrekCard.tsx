@@ -155,6 +155,11 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   const hasDbCustomData = trek.data && typeof trek.data === 'object' && (trek.data as any).title;
   const dbData = hasDbCustomData ? (trek.data as any) : null;
   const effectiveDifficulty = dbData?.overview?.difficulty || trek.difficulty;
+  const effectiveDistance =
+    dbData?.overview?.approxDistance ||
+    trek.data?.overview?.approxDistance ||
+    trek.distance ||
+    '';
 
   const badge = getDifficultyBadge(effectiveDifficulty);
   const currentParticipants = trek.participants || 0;
@@ -183,6 +188,49 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   };
 
   const borderClass = getBorderColor(effectiveDifficulty);
+
+  const getCalendarDaysLabel = (): string => {
+    const rawDate = String(dbData?.hikeDate || trek.date || '').trim();
+    if (!rawDate) return '1D';
+
+    const parenMatch = rawDate.match(/\((\d+)\s*days?\)/i);
+    if (parenMatch && parenMatch[1]) {
+      const d = parseInt(parenMatch[1], 10);
+      if (d > 1) return `${d}D ${d - 1}N`;
+      if (d === 1) return '1D';
+    }
+
+    const cleanStr = rawDate.replace(/\(.*?\)/g, '').trim();
+    const rangeParts = cleanStr.split(/\s*(?:[–—]|\bto\b)\s*|\s+-\s+/i);
+    if (rangeParts.length === 2) {
+      const yearMatch = cleanStr.match(/\b(20\d\d)\b/);
+      const fallbackYear = yearMatch ? yearMatch[1] : String(new Date().getFullYear());
+      const stripWeekday = (s: string) =>
+        s.replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+/i, '').trim();
+
+      const parsePart = (part: string): Date | null => {
+        const s = stripWeekday(part);
+        const withYear = /\b20\d\d\b/.test(s) ? s : `${s} ${fallbackYear}`;
+        const parsed = new Date(withYear);
+        if (!isNaN(parsed.getTime())) return parsed;
+        return null;
+      };
+
+      const d1 = parsePart(rangeParts[0]);
+      const d2 = parsePart(rangeParts[1]);
+      if (d1 && d2) {
+        d1.setHours(0, 0, 0, 0);
+        d2.setHours(0, 0, 0, 0);
+        const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        if (diff > 1) return `${diff}D ${diff - 1}N`;
+        if (diff === 1) return '1D';
+      }
+    }
+
+    return '1D';
+  };
+
+  const calendarDaysLabel = getCalendarDaysLabel();
 
   return (
     <div className={`bg-white rounded-2xl border-2 ${borderClass} shadow-[0_6px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.11)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between w-full max-w-full overflow-hidden`}>
@@ -245,10 +293,10 @@ export const TrekCard: React.FC<TrekCardProps> = ({
                   Hike #{trek.hike_number}
                 </span>
               )}
-              {trek.elevation && (
+              {(effectiveDistance || trek.elevation) && (
                 <span className="text-[10px] font-semibold text-[#8B8680] flex items-center gap-0.5 bg-[#F9F7F5] px-1.5 py-0.5 rounded-md border border-[#E5E1DB]">
                   <Mountain className="w-3 h-3 text-[#E08828]" />
-                  {trek.elevation}
+                  {[effectiveDistance, trek.elevation].filter(Boolean).join(' ')}
                 </span>
               )}
             </div>
@@ -285,7 +333,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         <div className="grid grid-cols-3 gap-1.5 my-3 py-2 px-2.5 bg-[#F5F2ED] rounded-xl border border-[#E2DDD5] text-center">
           <div>
             <span className="text-[9px] font-bold uppercase text-[#8B8680] tracking-wider block truncate">
-              Type / Duration
+              Duration
             </span>
             <span className="text-xs font-bold text-[#1F1F1F] flex items-center justify-center gap-1 mt-0.5 truncate">
               <Clock className="w-3 h-3 text-[#E08828] shrink-0" />
@@ -295,10 +343,10 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 
           <div className="border-x border-[#E5E1DB]">
             <span className="text-[9px] font-bold uppercase text-[#8B8680] tracking-wider block">
-              Grade
+              Days
             </span>
-            <span className={`text-xs font-black capitalize mt-0.5 block truncate ${badge.text}`}>
-              {badge.label}
+            <span className="text-xs font-bold text-[#1F1F1F] mt-0.5 block truncate">
+              {calendarDaysLabel}
             </span>
           </div>
 

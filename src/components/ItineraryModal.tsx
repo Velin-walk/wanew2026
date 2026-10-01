@@ -338,7 +338,14 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                     <span className="text-[10px] text-[#8B8680] font-bold flex items-center gap-1">
                       <Layers className="w-3.5 h-3.5 text-[#E08828]" /> Elevation
                     </span>
-                    <p className="text-xs font-extrabold text-[#1F1F1F] mt-1">{dbData?.overview?.elevationGross || trek.elevation || 'TBD'}</p>
+                    <p className="text-xs font-extrabold text-[#1F1F1F] mt-1">
+                      {[
+                        dbData?.overview?.approxDistance || trek.distance,
+                        dbData?.overview?.elevationRange || trek.elevation || dbData?.overview?.elevationGross,
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || 'TBD'}
+                    </p>
                   </div>
 
                   <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E5E1DB]">

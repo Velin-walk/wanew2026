@@ -416,6 +416,7 @@ export function normalizeTrek(row: any): Trek {
     type_of_trail: row.type_of_trail || "",
     start_location: d.overview?.meetingPoint || rawJsonData.overview?.meetingPoint || row.meeting_point || row.start_location || "",
     elevation: d.overview?.elevationRange || rawJsonData.overview?.elevationRange || row.elevation_range || row.elevation || "",
+    distance: d.overview?.approxDistance || rawJsonData.overview?.approxDistance || row.approx_distance || row.distance || "",
     itinerary: row.itinerary || "",
     is_cancelled: resolvedIsCancelled,
     cancellation_reason: resolvedCancelReason,
