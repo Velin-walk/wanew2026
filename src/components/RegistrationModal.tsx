@@ -524,7 +524,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         )}
 
         {/* Scrollable Form Body */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4 space-y-3.5 text-xs text-[#1F1F1F]">
+        <div className="flex-1 overflow-y-auto px-4 pt-3 pb-24 sm:px-5 sm:py-4 space-y-3.5 text-xs text-[#1F1F1F]">
           {submitting ? (
             /* ===== SUBMISSION PROGRESS VIEW ===== */
             <div className="py-12 flex flex-col items-center justify-center space-y-6 text-center animate-in fade-in duration-200">

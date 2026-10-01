@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Sparkles, History, Star } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
@@ -139,25 +139,66 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const activeItem: HeroBannerItem =
+  const displayImages: HeroBannerItem[] =
     images.length > 0
-      ? images[hourIndex % images.length]
-      : {
-          id: 'default-hero',
-          trekId: HERO_TREK_ID,
-          url: defaultHeroImg,
-          uploadedAt: '',
-        };
+      ? images
+      : [
+          {
+            id: 'default-hero',
+            trekId: HERO_TREK_ID,
+            url: defaultHeroImg,
+            uploadedAt: '',
+          },
+        ];
+
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+
+  useEffect(() => {
+    const idx = displayImages.length > 0 ? hourIndex % displayImages.length : 0;
+    setCurrentIndex(idx);
+    const el = scrollerRef.current;
+    if (el && el.clientWidth > 0) {
+      el.scrollTo({
+        left: idx * el.clientWidth,
+        behavior: 'smooth',
+      });
+    }
+  }, [hourIndex, displayImages.length]);
+
+  const handleScroll = () => {
+    const el = scrollerRef.current;
+    if (!el || el.clientWidth === 0) return;
+    const idx = Math.round(el.scrollLeft / el.clientWidth);
+    if (idx >= 0 && idx < displayImages.length && idx !== currentIndex) {
+      setCurrentIndex(idx);
+    }
+  };
+
+  const activeItem: HeroBannerItem = displayImages[currentIndex] || displayImages[0];
 
   return (
     <div className="relative w-full aspect-[2/1] rounded-xl sm:rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-xs bg-stone-900 select-none">
-      <img
-        key={activeItem.id || activeItem.url}
-        src={activeItem.url}
-        alt={activeItem.caption || 'Walk Nepal Walk Himalayan Trail'}
-        className="w-full h-full object-cover object-center transition-opacity duration-500"
-        referrerPolicy="no-referrer"
-      />
+      <div
+        ref={scrollerRef}
+        onScroll={handleScroll}
+        className="flex w-full h-full overflow-x-auto snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {displayImages.map((item) => (
+          <div
+            key={item.id || item.url}
+            className="w-full h-full shrink-0 snap-center relative"
+          >
+            <img
+              src={item.url}
+              alt={item.caption || 'Walk Nepal Walk Himalayan Trail'}
+              className="w-full h-full object-cover object-center block"
+              referrerPolicy="no-referrer"
+              draggable={false}
+            />
+          </div>
+        ))}
+      </div>
       <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent pointer-events-none" />
 
       {/* Bottom Overlay: Optional Caption + Roster & Reviews Stats Bar */}
@@ -170,7 +211,7 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
           </div>
         )}
 
-        <div className="relative grid grid-cols-3 gap-1 sm:gap-2 bg-white/50 backdrop-blur-md rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 border border-[#E5E1DB] shadow-sm overflow-hidden">
+        <div className="relative grid grid-cols-3 gap-1 sm:gap-2 bg-white/35 backdrop-blur-md rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 border border-[#E5E1DB] shadow-sm overflow-hidden">
           <div className="absolute -top-1 right-2 sm:right-6 w-24 xs:w-32 sm:w-36 pointer-events-none z-10 opacity-80 hidden xs:block">
             <MiniPrayerFlags variant="draped" count={5} />
           </div>
