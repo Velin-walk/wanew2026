@@ -12,7 +12,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
-import { ImageCropperModal } from './ImageCropperModal';
 import {
   HeroBannerItem,
   HERO_TREK_ID,
@@ -34,7 +33,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
   const [uploading, setUploading] = useState(false);
   const [caption, setCaption] = useState('');
   const [directUrl, setDirectUrl] = useState('');
-  const [rawSelectedImage, setRawSelectedImage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [croppedPreview, setCroppedPreview] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{
     text: string;
@@ -94,10 +93,12 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     setStatusMsg(null);
+    setSelectedFile(file);
+    setDirectUrl('');
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        setRawSelectedImage(reader.result);
+        setCroppedPreview(reader.result);
       }
     };
     reader.readAsDataURL(file);
@@ -126,11 +127,15 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
       let finalImageUrl = sourceImage;
       let publicId = '';
 
-      // Upload data URLs / cropped images to Cloudinary
-      if (sourceImage.startsWith('data:') || sourceImage.startsWith('blob:')) {
-        const blob = await dataUrlToBlob(sourceImage);
+      // Upload original file or data URLs to Cloudinary without cropping or compression
+      if (selectedFile || sourceImage.startsWith('data:') || sourceImage.startsWith('blob:')) {
+        const fileOrBlob = selectedFile || (await dataUrlToBlob(sourceImage));
         const formData = new FormData();
-        formData.append('file', blob, `hero_${Date.now()}.jpg`);
+        formData.append(
+          'file',
+          fileOrBlob,
+          selectedFile ? selectedFile.name : `hero_${Date.now()}.jpg`
+        );
         formData.append('upload_preset', UPLOAD_PRESET);
 
         const uploadRes = await fetch(
@@ -184,7 +189,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
       window.dispatchEvent(new CustomEvent('wnw-hero-images-updated'));
 
       setCroppedPreview(null);
-      setRawSelectedImage(null);
+      setSelectedFile(null);
       setDirectUrl('');
       setCaption('');
       setStatusMsg({
@@ -305,7 +310,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
             {/* File Upload Trigger */}
             <div>
               <label className="block text-[11px] font-bold text-[#5A5551] mb-1.5">
-                1. Upload &amp; Crop Banner (3:1.5 / 2:1 Ratio)
+                1. Upload Banner Image (Original Uncropped Quality)
               </label>
               <input
                 ref={fileInputRef}
@@ -335,7 +340,10 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
                   value={directUrl}
                   onChange={(e) => {
                     setDirectUrl(e.target.value);
-                    if (e.target.value.trim()) setCroppedPreview(null);
+                    if (e.target.value.trim()) {
+                      setCroppedPreview(null);
+                      setSelectedFile(null);
+                    }
                   }}
                   placeholder="https://..."
                   className="w-full pl-9 pr-3 py-2.5 bg-white border border-[#E5E1DB] rounded-xl text-xs focus:ring-2 focus:ring-[#7ABA42]/20 focus:border-[#7ABA42] outline-hidden"
@@ -370,6 +378,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
                   type="button"
                   onClick={() => {
                     setCroppedPreview(null);
+                    setSelectedFile(null);
                     setDirectUrl('');
                   }}
                   className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
@@ -528,25 +537,6 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
           )}
         </div>
       </div>
-
-      {/* 3:1.5 (2:1) Hero Cropper Modal */}
-      {rawSelectedImage && (
-        <ImageCropperModal
-          image={rawSelectedImage}
-          aspectRatio={3 / 1.5}
-          maxDimension={1800}
-          title="Adjust Homepage Hero Banner (3:1.5)"
-          subtitle="Drag & zoom to frame the 1800×900 (3:1.5 / 2:1) homepage hero banner"
-          onClose={() => {
-            setCroppedPreview(rawSelectedImage);
-            setRawSelectedImage(null);
-          }}
-          onCropComplete={(cropped) => {
-            setCroppedPreview(cropped);
-            setRawSelectedImage(null);
-          }}
-        />
-      )}
     </div>
   );
 };
