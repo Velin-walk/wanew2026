@@ -175,6 +175,19 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
     }
   };
 
+  const handlePhotoClick = () => {
+    if (displayImages.length <= 1) return;
+    const nextIdx = (currentIndex + 1) % displayImages.length;
+    setCurrentIndex(nextIdx);
+    const el = scrollerRef.current;
+    if (el && el.clientWidth > 0) {
+      el.scrollTo({
+        left: nextIdx * el.clientWidth,
+        behavior: 'smooth',
+      });
+    }
+  };
+
   const activeItem: HeroBannerItem = displayImages[currentIndex] || displayImages[0];
 
   return (
@@ -182,7 +195,10 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="flex w-full h-full overflow-x-auto snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        onClick={handlePhotoClick}
+        className={`flex w-full h-full overflow-x-auto snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+          displayImages.length > 1 ? 'cursor-pointer' : ''
+        }`}
       >
         {displayImages.map((item) => (
           <div
