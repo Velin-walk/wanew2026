@@ -218,15 +218,21 @@ export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsP
   const formatDateTime = (iso: string) => {
     if (!iso) return '';
     try {
-      const d = new Date(iso);
+      const trimmed = String(iso).trim();
+      const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed)
+        ? `${trimmed.replace(' ', 'T')}Z`
+        : trimmed;
+      const d = new Date(normalized);
       if (isNaN(d.getTime())) return iso;
-      return d.toLocaleString('en-US', {
+      return `${d.toLocaleString('en-US', {
+        timeZone: 'Asia/Kathmandu',
         month: 'short',
         day: 'numeric',
         year: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-      });
+        hour12: true,
+      })} NPT`;
     } catch {
       return iso;
     }
