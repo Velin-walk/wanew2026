@@ -56,6 +56,7 @@ export default function MapMinersDashboard({
   const [contributionFile, setContributionFile] = useState<File | null>(null);
   const [contributionError, setContributionError] = useState('');
   const [isContributing, setIsContributing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   const savedStorageKey = `wnw_saved_trails_${(currentUserEmail || 'guest').toLowerCase()}`;
@@ -554,17 +555,30 @@ export default function MapMinersDashboard({
     }
 
     setIsContributing(true);
+    setUploadProgress(5);
     setContributionError('');
+
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
 
     try {
       const fileText = await contributionFile.text();
+      setUploadProgress(15);
       const parsedRoute = parseRouteFile(fileText, contributionFile.name, contributionName.trim());
+      setUploadProgress(30);
       
       if (!parsedRoute) {
         throw new Error('No valid coordinate tracks (<trkpt>, <rtept>, <coordinates>, <wpt>) were found in this file.');
       }
 
       const defaultStartPos = (parsedRoute as any).startPos || (parsedRoute.coordinates?.[0] ? { lat: parsedRoute.coordinates[0].lat, lng: parsedRoute.coordinates[0].lng } : { lat: 27.7, lng: 85.3 });
+
+      progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 95) return prev;
+          const step = Math.max(1, Math.round((95 - prev) * 0.2));
+          return Math.min(95, prev + step);
+        });
+      }, 120);
 
       // Call the Cloudflare Worker API which stores file in R2 and metadata in D1
       const response = await apiFetch('mapminers/upload', {
@@ -591,6 +605,11 @@ export default function MapMinersDashboard({
         })
       });
 
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `Server upload failed with status ${response.status}`);
@@ -600,6 +619,9 @@ export default function MapMinersDashboard({
       if (uploadResult && uploadResult.success === false) {
         throw new Error(uploadResult.error || 'The server rejected this file.');
       }
+
+      setUploadProgress(100);
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Signal cache invalidation
       clearApiCache('mapminers');
@@ -644,7 +666,9 @@ export default function MapMinersDashboard({
     } catch (err: any) {
       setContributionError(err?.message || 'Could not parse or process this trail file.');
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
       setIsContributing(false);
+      setUploadProgress(0);
     }
   };
 
@@ -1076,6 +1100,27 @@ export default function MapMinersDashboard({
                 </div>
               </div>
 
+              {isContributing && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-[#5C942D]">
+                    <span>
+                      {uploadProgress < 30
+                        ? 'Parsing trail file...'
+                        : uploadProgress < 100
+                        ? 'Uploading map...'
+                        : 'Upload complete!'}
+                    </span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-neutral-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#7ABA42] transition-all duration-150 rounded-full"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="pt-2 flex gap-2">
                 <button
                   type="button"
@@ -1089,7 +1134,7 @@ export default function MapMinersDashboard({
                   disabled={isContributing || !contributionFile || !contributionName.trim()}
                   className="flex-1 py-2.5 bg-[#7ABA42] hover:bg-[#6CA838] disabled:opacity-50 text-white font-bold rounded-xl transition-colors min-h-[44px]"
                 >
-                  {isContributing ? 'Parsing Trail...' : 'Process & Load'}
+                  {isContributing ? `Uploading... ${uploadProgress}%` : 'Process & Load'}
                 </button>
               </div>
             </form>

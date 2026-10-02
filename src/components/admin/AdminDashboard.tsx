@@ -63,9 +63,53 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<
     'bookings' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps' | 'notifications' | 'system'
-  >('bookings');
-  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero'>('applications');
+  >(() => {
+    try {
+      const saved = sessionStorage.getItem('wnw_admin_active_tab');
+      if (
+        saved === 'bookings' ||
+        saved === 'execution' ||
+        saved === 'coordinator' ||
+        saved === 'sales' ||
+        saved === 'library' ||
+        saved === 'editor' ||
+        saved === 'maps' ||
+        saved === 'notifications' ||
+        saved === 'system'
+      ) {
+        return saved;
+      }
+    } catch {}
+    return 'bookings';
+  });
+  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero'>(() => {
+    try {
+      const saved = sessionStorage.getItem('wnw_admin_system_subtab');
+      if (
+        saved === 'applications' ||
+        saved === 'audit' ||
+        saved === 'leaderboard' ||
+        saved === 'pwa' ||
+        saved === 'hero'
+      ) {
+        return saved;
+      }
+    } catch {}
+    return 'applications';
+  });
   const [unreadActivityCount, setUnreadActivityCount] = useState<number>(0);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('wnw_admin_active_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('wnw_admin_system_subtab', systemSubTab);
+    } catch {}
+  }, [systemSubTab]);
 
   useEffect(() => {
     const refreshUnreadCount = async () => {

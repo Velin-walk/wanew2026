@@ -44,6 +44,18 @@ function MainApp() {
       const tabParam = searchParams.get('tab');
       if (tabParam === 'admin' || hash === '#admin') return 'admin';
       if (tabParam === 'mapminers' || searchParams.has('route') || hash === '#mapminers') return 'mapminers';
+      const savedTab = sessionStorage.getItem('wnw_active_tab');
+      if (
+        savedTab === 'treks' ||
+        savedTab === 'bookings' ||
+        savedTab === 'saved' ||
+        savedTab === 'mapminers' ||
+        savedTab === 'gallery' ||
+        savedTab === 'leaderboard' ||
+        savedTab === 'admin'
+      ) {
+        return savedTab;
+      }
     } catch {}
     return 'treks';
   });
@@ -95,6 +107,9 @@ function MainApp() {
 
   // Track user tab navigation stack
   useEffect(() => {
+    try {
+      sessionStorage.setItem('wnw_active_tab', currentTab);
+    } catch {}
     if (isSteppingBackTabRef.current) {
       isSteppingBackTabRef.current = false;
       return;
