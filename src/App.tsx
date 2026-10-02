@@ -438,6 +438,14 @@ function MainApp() {
                     ...existing,
                     ...norm,
                     participants: Math.max(Number(existing.participants || 0), Number(norm.participants || 0)),
+                    participants_by_gender:
+                      (norm.participants_by_gender && (norm.participants_by_gender.total > 0 || norm.participants_by_gender.male > 0 || norm.participants_by_gender.female > 0))
+                        ? norm.participants_by_gender
+                        : existing.participants_by_gender,
+                    recent_participants:
+                      (Array.isArray(norm.recent_participants) && norm.recent_participants.length > 0)
+                        ? norm.recent_participants
+                        : existing.recent_participants,
                   });
                 }
               }

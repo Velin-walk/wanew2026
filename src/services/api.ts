@@ -404,8 +404,20 @@ export function normalizeTrek(row: any): Trek {
     leader: resolvedLeader,
     capacity: resolvedCapacity,
     participants: Number(row.participants ?? row.registered_pax) || 0,
-    participants_by_gender: row.participants_by_gender,
-    recent_participants: row.recent_participants,
+    participants_by_gender: (() => {
+      const rawG = row.participants_by_gender || row.participantsByGender || d.participants_by_gender || rawJsonData.participants_by_gender;
+      if (typeof rawG === 'string') {
+        try { return JSON.parse(rawG); } catch (_) { return undefined; }
+      }
+      return rawG;
+    })(),
+    recent_participants: (() => {
+      const rawR = row.recent_participants || row.recentParticipants || d.recent_participants || rawJsonData.recent_participants;
+      if (typeof rawR === 'string') {
+        try { return JSON.parse(rawR); } catch (_) { return []; }
+      }
+      return Array.isArray(rawR) ? rawR : undefined;
+    })(),
     itinerary_link: row.itinerary_link || "",
     faq_link: row.faq_link || "",
     whatsapp_link: row.whatsapp_link || "",

@@ -388,6 +388,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         <ParticipantStack
           participantsCount={trek.participants_by_gender}
           recentParticipants={trek.recent_participants}
+          totalCount={currentParticipants}
         />
 
         {/* Leader Info */}
