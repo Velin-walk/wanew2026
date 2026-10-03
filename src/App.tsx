@@ -348,6 +348,7 @@ function MainApp() {
   // Pull-to-refresh mobile gesture state
   const [pullDistance, setPullDistance] = useState(0);
   const touchStartY = useRef(0);
+  const touchStartX = useRef(0);
   const isPullingRef = useRef(false);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -851,8 +852,10 @@ function MainApp() {
 
   // Mobile pull-to-refresh touch event handlers
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (window.scrollY <= 2 && !isRefreshing) {
+    const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    if (scrollY <= 1 && !isRefreshing) {
       touchStartY.current = e.touches[0].clientY;
+      touchStartX.current = e.touches[0].clientX;
       isPullingRef.current = true;
     } else {
       isPullingRef.current = false;
@@ -861,17 +864,25 @@ function MainApp() {
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isPullingRef.current || isRefreshing) return;
-    if (window.scrollY > 2) {
-      isPullingRef.current = false;
-      setPullDistance(0);
+    const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    if (scrollY > 1) {
+      if (isPullingRef.current) {
+        isPullingRef.current = false;
+        setPullDistance(0);
+      }
       return;
     }
     const currentY = e.touches[0].clientY;
-    const diff = currentY - touchStartY.current;
-    if (diff > 0) {
-      // Damped elastic resistance
-      const damped = Math.min(diff * 0.4, 75);
+    const currentX = e.touches[0].clientX;
+    const diffY = currentY - touchStartY.current;
+    const diffX = Math.abs(currentX - touchStartX.current);
+
+    // Only engage if intentionally pulling downwards more than horizontally (prevents tap jitter & swipe interference)
+    if (diffY > 15 && diffY > diffX) {
+      const damped = Math.min((diffY - 15) * 0.4, 75);
       setPullDistance(damped);
+    } else if (diffY <= 0) {
+      if (pullDistance > 0) setPullDistance(0);
     }
   };
 
@@ -881,7 +892,7 @@ function MainApp() {
     if (pullDistance >= 48) {
       setPullDistance(0);
       await refreshData({ force: true });
-    } else {
+    } else if (pullDistance > 0) {
       setPullDistance(0);
     }
   };

@@ -5,7 +5,20 @@ import { Download, X, Smartphone, ArrowUpFromLine, PlusSquare } from 'lucide-rea
 export const PWAInstallPrompt: React.FC = () => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem('wnw_pwa_dismissed') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismiss = () => {
+    try {
+      sessionStorage.setItem('wnw_pwa_dismissed', '1');
+    } catch {}
+    setDismissed(true);
+  };
 
   // If already installed, dismissed, or neither installable nor iOS, render nothing
   if (isInstalled || dismissed || (!isInstallable && !isIOS)) {
@@ -15,7 +28,7 @@ export const PWAInstallPrompt: React.FC = () => {
   return (
     <>
       {/* Sticky Bottom Prompt Banner */}
-      <div className="fixed bottom-18 sm:bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-90 max-w-sm bg-white border border-[#EFEAE4] rounded-2xl shadow-xl p-4.5 animate-in slide-in-from-bottom-5 duration-300">
+      <div className="fixed bottom-20 sm:bottom-4 left-3.5 right-3.5 sm:left-auto sm:right-4 z-40 max-w-sm bg-white border border-[#EFEAE4] rounded-2xl shadow-xl p-4 animate-in slide-in-from-bottom-5 duration-300 pointer-events-auto">
         <div className="flex items-start gap-3">
           {/* App Logo Emblem */}
           <div className="w-10 h-10 rounded-xl bg-[#7ABA42]/10 border border-[#7ABA42]/20 flex items-center justify-center shrink-0">
@@ -32,7 +45,7 @@ export const PWAInstallPrompt: React.FC = () => {
 
           {/* Dismiss button */}
           <button
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             className="p-1 rounded-lg text-stone-400 hover:text-stone-600 transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
@@ -42,7 +55,7 @@ export const PWAInstallPrompt: React.FC = () => {
         {/* Action Buttons */}
         <div className="mt-3.5 flex items-center justify-end gap-2">
           <button
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             className="px-3 py-1.5 text-[10px] font-extrabold text-stone-500 hover:text-stone-700 transition-colors cursor-pointer"
           >
             Maybe Later
