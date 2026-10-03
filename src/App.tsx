@@ -198,6 +198,7 @@ function MainApp() {
     setVoucherTargetBooking(null);
     setProfileModalOpen(false);
     setShowMapMinerContribute(false);
+    document.body.style.overflow = '';
   }, []);
 
   const handleMainTabChange = useCallback(

@@ -88,16 +88,12 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
 
   // 1. Prevent background page scrolling when modal is open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      console.log('[TrekPhotosModal] opened, trekId:', trek?.id);
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+    if (!isOpen) return;
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     };
-  }, [isOpen, trek?.id]);
+  }, [isOpen]);
 
   // 2. Load photos from Cloudflare D1 API with Local Storage fallback (optimized no-flash loading)
   const fetchPhotos = async () => {

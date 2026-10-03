@@ -178,10 +178,9 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
   // Lock body scroll while modal is active
   useEffect(() => {
     if (!isOpen) return;
-    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = prevOverflow;
+      document.body.style.overflow = '';
     };
   }, [isOpen]);
 
