@@ -389,6 +389,9 @@ export const TrekCard: React.FC<TrekCardProps> = ({
           participantsCount={trek.participants_by_gender}
           recentParticipants={trek.recent_participants}
           totalCount={currentParticipants}
+          trekName={trek.name}
+          hikeNumber={trek.hike_number}
+          trekId={trek.id}
         />
 
         {/* Leader Info */}
