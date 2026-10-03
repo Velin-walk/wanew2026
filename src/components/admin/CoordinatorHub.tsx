@@ -25,6 +25,8 @@ import {
 import { Trek } from '../../types';
 import { AdminRegistration } from './BookingsManager';
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
+import { fetchLeaderboardData } from '../../services/api';
+import { HikerStats } from '../../types/leaderboard';
 
 interface CoordinatorHubProps {
   treks: Trek[];
@@ -151,6 +153,27 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   onRefresh,
 }) => {
   // Exclude Cancelled, Waitlisted, and Cancelled by User from Coordinator Hub
+  const [leaderboardHikers, setLeaderboardHikers] = useState<HikerStats[]>([]);
+
+  // Load Leaderboard data for lifetime hikes and phone matching
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadLeaderboard = async () => {
+      try {
+        const res = await fetchLeaderboardData(false);
+        if (isMounted && res && Array.isArray(res.hikers)) {
+          setLeaderboardHikers(res.hikers);
+        }
+      } catch (err) {
+        console.warn('[CoordinatorHub] Could not load leaderboard data:', err);
+      }
+    };
+    loadLeaderboard();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const registrations = useMemo(() => {
     return rawRegistrations.filter((r) => {
       const st = (r.status || 'Confirmed').toLowerCase().trim();
@@ -386,11 +409,38 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return registrations.filter((r) => doesRegistrationMatchTrek(r, currentTrek));
   }, [currentTrek, registrations]);
 
-  // Lifetime Hike Count Map
+  // Lifetime Leaderboard Phone & Name Map
+  const leaderboardPhoneMap = useMemo(() => {
+    const phoneMap = new Map<string, number>();
+    const nameMap = new Map<string, number>();
+
+    leaderboardHikers.forEach((h) => {
+      const rawPhone = (h.phone || h.p || '').replace(/[^0-9]/g, '');
+      const count = Number(h.c || (Array.isArray(h.hikes) ? h.hikes.length : 0)) || 0;
+      if (count <= 0) return;
+
+      if (rawPhone.length >= 7) {
+        phoneMap.set(rawPhone, Math.max(phoneMap.get(rawPhone) || 0, count));
+        if (rawPhone.length > 10) {
+          const last10 = rawPhone.slice(-10);
+          phoneMap.set(last10, Math.max(phoneMap.get(last10) || 0, count));
+        }
+      }
+
+      const cleanName = (h.n || '').toLowerCase().trim();
+      if (cleanName.length >= 3) {
+        nameMap.set(cleanName, Math.max(nameMap.get(cleanName) || 0, count));
+      }
+    });
+
+    return { phoneMap, nameMap };
+  }, [leaderboardHikers]);
+
+  // Lifetime Hike Count Map from local registrations
   const hikerPastHikesMap = useMemo(() => {
     const map = new Map<string, number>();
     registrations.forEach((r) => {
-      const ph = (r.phone || r.whatsapp || '').trim();
+      const ph = (r.phone || r.whatsapp || (r as any).whatsapp_number || '').trim();
       const nameKey = (r.full_name || '').toLowerCase().trim();
       if (ph) {
         map.set(ph, (map.get(ph) || 0) + 1);
@@ -403,8 +453,33 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   }, [registrations]);
 
   const getHikerPastCount = (phone: string, name: string): number => {
+    const cleanPh = phone.replace(/[^0-9]/g, '');
+    const last10 = cleanPh.length >= 10 ? cleanPh.slice(-10) : cleanPh;
+    const cleanName = (name || '').toLowerCase().trim();
+
+    // 1. Primary: Match by phone number in Leaderboard (lifetime master data)
+    if (cleanPh.length >= 7) {
+      if (leaderboardPhoneMap.phoneMap.has(cleanPh)) {
+        return leaderboardPhoneMap.phoneMap.get(cleanPh)!;
+      }
+      if (last10.length >= 7 && leaderboardPhoneMap.phoneMap.has(last10)) {
+        return leaderboardPhoneMap.phoneMap.get(last10)!;
+      }
+      for (const [key, count] of leaderboardPhoneMap.phoneMap.entries()) {
+        if (cleanPh.endsWith(key) || key.endsWith(cleanPh) || (last10.length >= 8 && key.endsWith(last10))) {
+          return count;
+        }
+      }
+    }
+
+    // 2. Secondary: Match by exact name in Leaderboard
+    if (cleanName && leaderboardPhoneMap.nameMap.has(cleanName)) {
+      return leaderboardPhoneMap.nameMap.get(cleanName)!;
+    }
+
+    // 3. Fallback: Local registrations count
     const ph = phone.trim();
-    const nameKey = `name:${name.toLowerCase().trim()}`;
+    const nameKey = `name:${cleanName}`;
     if (ph && hikerPastHikesMap.has(ph)) {
       return hikerPastHikesMap.get(ph) || 1;
     }
@@ -423,7 +498,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   const dueCount = trekRegistrations.filter((r) => r.due_amount > 0).length;
 
   const returningCount = trekRegistrations.filter(
-    (r) => getHikerPastCount(r.phone || '', r.full_name) > 1
+    (r) => getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name) > 1
   ).length;
   const firstTimersCount = trekRegistrations.length - returningCount;
 
@@ -518,8 +593,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           valB = (b.admin_notes || '').toLowerCase();
           break;
         case 'totalHikes':
-          valA = getHikerPastCount(a.phone || '', a.full_name);
-          valB = getHikerPastCount(b.phone || '', b.full_name);
+          valA = getHikerPastCount(a.phone || a.whatsapp || (a as any).whatsapp_number || '', a.full_name);
+          valB = getHikerPastCount(b.phone || b.whatsapp || (b as any).whatsapp_number || '', b.full_name);
           break;
         default:
           valA = a.full_name.toLowerCase();
@@ -532,7 +607,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     });
 
     return result;
-  }, [trekRegistrations, tableFilter, sortCol, sortAsc]);
+  }, [trekRegistrations, tableFilter, sortCol, sortAsc, leaderboardPhoneMap]);
 
   const totalRows = filteredAndSortedRegistrations.length;
   const totalPages = Math.ceil(totalRows / pageSize) || 1;
@@ -1008,7 +1083,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                     (r.gender || '').toLowerCase().includes('female') ||
                     (r.gender || '').toLowerCase() === 'f';
 
-                  const pastHikes = getHikerPastCount(r.phone || '', r.full_name);
+                  const pastHikes = getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name);
 
                   const sn = (currentPage - 1) * pageSize + index + 1;
 

@@ -3,6 +3,7 @@ import { Trek } from '../types';
 import { ParticipantStack } from './ParticipantStack';
 import { useAuth } from '../context/AuthContext';
 import { TrekPhotosModal } from './TrekPhotosModal';
+import { GuideProfileModal } from './GuideProfileModal';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import {
   Calendar,
@@ -42,6 +43,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 }) => {
   const [showItinerary, setShowItinerary] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
+  const [guideModalOpen, setGuideModalOpen] = useState(false);
   const { isAdmin } = useAuth();
 
   const isEventDayOrOnward = () => {
@@ -400,7 +402,14 @@ export const TrekCard: React.FC<TrekCardProps> = ({
             <div className="flex items-center gap-1.5 min-w-0">
               <UserCheck className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
               <span className="font-medium text-[#8B8680]">Lead Guide:</span>
-              <span className="font-semibold text-[#1F1F1F] truncate">{trek.leader}</span>
+              <button
+                type="button"
+                onClick={() => setGuideModalOpen(true)}
+                className="font-bold text-[#E08828] hover:text-[#C86B1A] underline decoration-[#E08828]/60 hover:decoration-[#C86B1A] underline-offset-2 transition-colors truncate cursor-pointer text-left"
+                title={`View guide profile for ${trek.leader}`}
+              >
+                <span className="truncate">{trek.leader}</span>
+              </button>
             </div>
             
             {/* Photos / Gallery Button */}
@@ -447,6 +456,15 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         onClose={() => setPhotosOpen(false)}
         trek={trek}
       />
+
+      {trek.leader && (
+        <GuideProfileModal
+          isOpen={guideModalOpen}
+          onClose={() => setGuideModalOpen(false)}
+          guideName={trek.leader}
+          currentTrek={trek}
+        />
+      )}
 
       {/* Action Buttons */}
       <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4 pt-1">
