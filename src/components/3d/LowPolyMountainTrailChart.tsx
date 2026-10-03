@@ -179,7 +179,7 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
                     <circle
                       cx={coord.x}
                       cy={coord.y}
-                      r="10"
+                      r="7"
                       fill="#7ABA42"
                       opacity="0.3"
                       className="animate-ping"
@@ -190,10 +190,10 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
                   <circle
                     cx={coord.x}
                     cy={coord.y}
-                    r={isActive ? "6" : "4.5"}
+                    r={isActive ? "4" : "1.8"}
                     fill={isActive ? "#E08828" : "#7ABA42"}
                     stroke="white"
-                    strokeWidth="2"
+                    strokeWidth={isActive ? "1.5" : "0.75"}
                     className="transition-all duration-150 group-hover:scale-125"
                   />
                 </g>

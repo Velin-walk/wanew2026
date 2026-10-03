@@ -252,6 +252,21 @@ CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_
 CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id);
 CREATE INDEX IF NOT EXISTS idx_community_trails_status ON community_trails (status);
 CREATE INDEX IF NOT EXISTS idx_system_snapshots_key ON system_snapshots (key);
-CREATE INDEX IF NOT EXISTS idx_regs_hike_timestamp ON registrations (hike_number, timestamp DESC);
+-- 14. User Behavior Analytics Table (Lightweight Interaction Telemetry)
+CREATE TABLE IF NOT EXISTS user_behavior_events (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  user_email TEXT,
+  event_type TEXT NOT NULL,
+  category TEXT NOT NULL,
+  target_id TEXT,
+  metadata TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_behavior_event_type ON user_behavior_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_behavior_session ON user_behavior_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_behavior_created_at ON user_behavior_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_behavior_target ON user_behavior_events(target_id);
 
 

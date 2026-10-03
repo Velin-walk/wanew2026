@@ -2256,6 +2256,85 @@ export default {
         }
       }
 
+      // ===== USER BEHAVIOR ANALYTICS ENDPOINTS =====
+      // POST /behavior_events - Record anonymous interaction telemetry in Cloudflare D1
+      if (method === 'POST' && path === '/behavior_events') {
+        if (!env.DB) return jsonResponse({ success: true, count: 0, note: 'Database binding DB missing' });
+
+        try {
+          const body = await request.json().catch(() => ({}));
+          const rawEvents = Array.isArray(body.events) ? body.events : (body.eventType ? [body] : []);
+          if (rawEvents.length === 0) {
+            return jsonResponse({ success: true, count: 0 });
+          }
+
+          // Ensure table exists on first write (safe SQLite DDL)
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS user_behavior_events (
+              id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              user_email TEXT,
+              event_type TEXT NOT NULL,
+              category TEXT NOT NULL,
+              target_id TEXT,
+              metadata TEXT,
+              created_at TEXT NOT NULL
+            )
+          `).run().catch((ddlErr) => {
+            console.warn('D1 user_behavior_events DDL check:', ddlErr.message);
+          });
+
+          // Insert batch of up to 50 events atomically
+          const statements = rawEvents.slice(0, 50).map((evt) => {
+            const id = evt.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            const sessionId = String(evt.sessionId || evt.session_id || 'anonymous').substring(0, 100);
+            const userEmail = evt.userEmail || evt.user_email ? String(evt.userEmail || evt.user_email).substring(0, 150) : null;
+            const eventType = String(evt.eventType || evt.event_type || 'unknown').substring(0, 60);
+            const category = String(evt.category || 'general').substring(0, 60);
+            const targetId = evt.targetId || evt.target_id ? String(evt.targetId || evt.target_id).substring(0, 100) : null;
+            const metadataStr = typeof evt.metadata === 'object' ? JSON.stringify(evt.metadata) : (typeof evt.metadata === 'string' ? evt.metadata : '{}');
+            const createdAt = evt.createdAt || evt.created_at || new Date().toISOString();
+
+            return env.DB.prepare(`
+              INSERT INTO user_behavior_events (
+                id, session_id, user_email, event_type, category, target_id, metadata, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(id, sessionId, userEmail, eventType, category, targetId, metadataStr, createdAt);
+          });
+
+          await env.DB.batch(statements);
+          return jsonResponse({ success: true, count: statements.length });
+        } catch (err) {
+          console.error('Error logging user behavior event:', err);
+          return jsonResponse({ success: false, error: err.message }, 500);
+        }
+      }
+
+      // GET /admin/behavior_events/summary - Simple aggregate statistics (Admin overview)
+      if (method === 'GET' && path === '/admin/behavior_events/summary') {
+        if (!env.DB) return jsonResponse({ success: true, total: 0 });
+        try {
+          const { results: countRes } = await env.DB.prepare(
+            'SELECT COUNT(*) as total FROM user_behavior_events'
+          ).all();
+          const { results: topEvents } = await env.DB.prepare(
+            'SELECT event_type, COUNT(*) as count FROM user_behavior_events GROUP BY event_type ORDER BY count DESC LIMIT 10'
+          ).all();
+          const { results: topTreks } = await env.DB.prepare(
+            "SELECT target_id, COUNT(*) as count FROM user_behavior_events WHERE event_type IN ('trek_card_click', 'itinerary_view') AND target_id IS NOT NULL GROUP BY target_id ORDER BY count DESC LIMIT 10"
+          ).all();
+
+          return jsonResponse({
+            success: true,
+            total: countRes?.[0]?.total || 0,
+            topEvents: topEvents || [],
+            topTreks: topTreks || [],
+          });
+        } catch (err) {
+          return jsonResponse({ success: true, total: 0, note: err.message });
+        }
+      }
+
       return errorResponse(`Route ${method} ${path} not found`, 404);
     } catch (err) {
       return errorResponse(err.message || 'Server error', 500);

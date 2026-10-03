@@ -6,6 +6,7 @@ import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFl
 import { HomepageHeroBanner } from '../components/HomepageHeroBanner';
 import { DesktopResourcesBar } from '../components/Navbar';
 import { SubPageType } from '../components/InfoPagesModal';
+import { trackFilterChange, trackSearchQuery } from '../services/behaviorTracker';
 import {
   Search,
   Mountain,
@@ -224,6 +225,15 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
     return { upcomingTreks: upcoming, pastTreks: past };
   }, [filteredTreks]);
 
+  // Debounced search query telemetry
+  React.useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) return;
+    const timer = setTimeout(() => {
+      trackSearchQuery(searchQuery.trim(), filteredTreks.length);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [searchQuery, filteredTreks.length]);
+
   return (
     <div className="space-y-4 w-full">
       {/* Authentic Nepali Lungta Prayer Flags Garland (Sticky Top) */}
@@ -296,7 +306,10 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setTripTypeFilter(item.id)}
+                onClick={() => {
+                  setTripTypeFilter(item.id);
+                  trackFilterChange('trip_type', item.id);
+                }}
                 className={`flex-1 sm:flex-initial text-center px-1.5 sm:px-2.5 py-1 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
                   tripTypeFilter === item.id
                     ? 'bg-[#7ABA42] text-white shadow-sm ring-1 sm:ring-2 ring-[#7ABA42]/30 font-black'
@@ -320,7 +333,10 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                 <button
                   key={diff}
                   type="button"
-                  onClick={() => setDifficultyFilter(diff)}
+                  onClick={() => {
+                    setDifficultyFilter(diff);
+                    trackFilterChange('difficulty', diff);
+                  }}
                   className={`flex-1 sm:flex-initial text-center px-1.5 sm:px-2.5 py-1 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold capitalize transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
                     difficultyFilter === diff
                       ? 'bg-[#1F1F1F] text-white shadow-xs font-black'

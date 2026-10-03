@@ -33,6 +33,12 @@ import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
 import { db } from './lib/firebase';
 import { logUserActivity } from './services/userActivityNotifier';
+import {
+  trackItineraryView,
+  trackFaqView,
+  trackRegistrationStart,
+  trackRegistrationComplete,
+} from './services/behaviorTracker';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 
 function MainApp() {
@@ -198,7 +204,6 @@ function MainApp() {
     setVoucherTargetBooking(null);
     setProfileModalOpen(false);
     setShowMapMinerContribute(false);
-    document.body.style.overflow = '';
   }, []);
 
   const handleMainTabChange = useCallback(
@@ -1151,6 +1156,9 @@ function MainApp() {
 
     setBookings((prev) => [newBooking, ...prev.filter(b => String(b.id) !== String(primaryId))]);
 
+    // Record registration conversion telemetry
+    trackRegistrationComplete(resolvedHikeNumber, totalNewPeople);
+
     logUserActivity({
       type: 'trek_registration',
       title: 'Trek Registration Submitted',
@@ -1289,16 +1297,21 @@ function MainApp() {
               loading={loadingTreks}
               favorites={favorites}
               onToggleFavorite={toggleFavorite}
-              onRegister={(trek) => setSelectedTrekForRegister(trek)}
+              onRegister={(trek) => {
+                trackRegistrationStart(trek.hike_number || trek.id, trek.name);
+                setSelectedTrekForRegister(trek);
+              }}
               onShare={(trek) => {
                 setSelectedTrekForInvite(trek);
                 setShowInviteModal(true);
               }}
               onViewItinerary={(trek) => {
+                trackItineraryView(trek.hike_number || trek.id, trek.name);
                 setItineraryModalTrek(trek);
                 setItineraryModalType('itinerary');
               }}
               onViewFaq={(trek) => {
+                trackFaqView(trek.hike_number || trek.id, trek.name);
                 setItineraryModalTrek(trek);
                 setItineraryModalType('faq');
               }}
@@ -1318,16 +1331,21 @@ function MainApp() {
               loading={loadingTreks}
               favorites={favorites}
               onToggleFavorite={toggleFavorite}
-              onRegister={(trek) => setSelectedTrekForRegister(trek)}
+              onRegister={(trek) => {
+                trackRegistrationStart(trek.hike_number || trek.id, trek.name);
+                setSelectedTrekForRegister(trek);
+              }}
               onShare={(trek) => {
                 setSelectedTrekForInvite(trek);
                 setShowInviteModal(true);
               }}
               onViewItinerary={(trek) => {
+                trackItineraryView(trek.hike_number || trek.id, trek.name);
                 setItineraryModalTrek(trek);
                 setItineraryModalType('itinerary');
               }}
               onViewFaq={(trek) => {
+                trackFaqView(trek.hike_number || trek.id, trek.name);
                 setItineraryModalTrek(trek);
                 setItineraryModalType('faq');
               }}
