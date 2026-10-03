@@ -79,8 +79,11 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
     };
   }, [liveReviews]);
 
-  const [hourIndex, setHourIndex] = useState<number>(() =>
-    Math.floor(Date.now() / 3600000)
+  // Hero image rotation interval: 15 minutes (15 * 60 * 1000 ms)
+  const ROTATION_INTERVAL_MS = 15 * 60 * 1000;
+
+  const [slotIndex, setSlotIndex] = useState<number>(() =>
+    Math.floor(Date.now() / ROTATION_INTERVAL_MS)
   );
 
   const loadHeroImages = useCallback(async (forceFresh = false) => {
@@ -130,14 +133,14 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
     return () => window.removeEventListener('wnw-hero-images-updated', handleUpdated);
   }, [loadHeroImages]);
 
-  // Check every 30s if the clock crossed into a new hour
+  // Check every 15s if the clock crossed into a new 15-minute slot
   useEffect(() => {
     const timer = setInterval(() => {
-      const nextHour = Math.floor(Date.now() / 3600000);
-      setHourIndex((prev) => (prev !== nextHour ? nextHour : prev));
-    }, 30000);
+      const nextSlot = Math.floor(Date.now() / ROTATION_INTERVAL_MS);
+      setSlotIndex((prev) => (prev !== nextSlot ? nextSlot : prev));
+    }, 15000);
     return () => clearInterval(timer);
-  }, []);
+  }, [ROTATION_INTERVAL_MS]);
 
   const displayImages: HeroBannerItem[] =
     images.length > 0
@@ -155,7 +158,7 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
   const [currentIndex, setCurrentIndex] = useState<number>(0);
 
   useEffect(() => {
-    const idx = displayImages.length > 0 ? hourIndex % displayImages.length : 0;
+    const idx = displayImages.length > 0 ? slotIndex % displayImages.length : 0;
     setCurrentIndex(idx);
     const el = scrollerRef.current;
     if (el && el.clientWidth > 0) {
@@ -164,7 +167,7 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
         behavior: 'smooth',
       });
     }
-  }, [hourIndex, displayImages.length]);
+  }, [slotIndex, displayImages.length]);
 
   const handleScroll = () => {
     const el = scrollerRef.current;

@@ -43,7 +43,8 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const hourIndex = Math.floor(Date.now() / 3600000);
+  const ROTATION_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+  const slotIndex = Math.floor(Date.now() / ROTATION_INTERVAL_MS);
 
   const fetchHeroImages = useCallback(async (forceFresh = true) => {
     setLoading(true);
@@ -109,6 +110,69 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
     return await res.blob();
   };
 
+  const optimizeHeroImage = async (blob: Blob): Promise<Blob> => {
+    // If already safely under Cloudinary's 10MB limit (e.g. <= 8MB), keep original
+    if (blob.size <= 8 * 1024 * 1024) {
+      return blob;
+    }
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const maxDim = 2880;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(blob);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let quality = 0.92;
+        const tryExport = (q: number) => {
+          canvas.toBlob(
+            (optimizedBlob) => {
+              if (optimizedBlob) {
+                if (optimizedBlob.size < 9.5 * 1024 * 1024 || q <= 0.5) {
+                  resolve(optimizedBlob);
+                } else {
+                  tryExport(q - 0.1);
+                }
+              } else {
+                resolve(blob);
+              }
+            },
+            'image/jpeg',
+            q
+          );
+        };
+        tryExport(quality);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(blob);
+      };
+      img.src = url;
+    });
+  };
+
   const handlePublishHero = async () => {
     const sourceImage = croppedPreview || directUrl.trim();
     if (!sourceImage) {
@@ -126,9 +190,12 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
       let finalImageUrl = sourceImage;
       let publicId = '';
 
-      // Upload data URLs / cropped images to Cloudinary at full quality
+      // Upload data URLs / cropped images to Cloudinary (auto-optimized so size limits are never exceeded)
       if (sourceImage.startsWith('data:') || sourceImage.startsWith('blob:')) {
-        const blob = await dataUrlToBlob(sourceImage);
+        let blob = await dataUrlToBlob(sourceImage);
+        if (blob.size >= 8 * 1024 * 1024) {
+          blob = await optimizeHeroImage(blob);
+        }
         const formData = new FormData();
         formData.append('file', blob, `hero_${Date.now()}.jpg`);
         formData.append('upload_preset', UPLOAD_PRESET);
@@ -188,7 +255,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
       setDirectUrl('');
       setCaption('');
       setStatusMsg({
-        text: 'Hero image added to the hourly rotation!',
+        text: 'Hero image added to the 15-minute rotation!',
         type: 'success',
       });
     } catch (err: any) {
@@ -229,7 +296,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
     }
   };
 
-  const activeIndex = images.length > 0 ? hourIndex % images.length : -1;
+  const activeIndex = images.length > 0 ? slotIndex % images.length : -1;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -245,7 +312,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
                 Homepage Hero Banner Manager
               </h2>
               <p className="text-xs sm:text-sm text-[#8B8680] font-medium">
-                Upload panoramic banners that automatically rotate every hour on the homepage
+                Upload panoramic banners that automatically rotate every 15 minutes on the homepage
               </p>
             </div>
           </div>
@@ -253,7 +320,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
           <div className="flex items-center gap-2 self-start sm:self-center">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">
               <Clock className="w-3.5 h-3.5 text-[#E08828]" />
-              <span>1-Hour Rotation ({images.length} Active)</span>
+              <span>15-Minute Rotation ({images.length} Active)</span>
             </span>
             <button
               type="button"
@@ -289,7 +356,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
               Rotation Logic
             </span>
             <strong className="text-[#1F1F1F] font-extrabold">
-              Changes automatically at the top of each hour
+              Changes automatically every 15 minutes
             </strong>
           </div>
         </div>
@@ -410,7 +477,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
               ) : (
                 <>
                   <Upload className="w-4 h-4" />
-                  <span>Publish to Hourly Rotation</span>
+                  <span>Publish to 15-Minute Rotation</span>
                 </>
               )}
             </button>
@@ -463,7 +530,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
                 No custom Hero images uploaded yet
               </p>
               <p className="text-[11px] text-[#8B8680]">
-                Upload 2 or more banners above to start the automatic hourly rotation on the homepage.
+                Upload 2 or more banners above to start the automatic 15-minute rotation on the homepage.
               </p>
             </div>
           ) : (
@@ -494,7 +561,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
                         </span>
                         {isLiveNow && (
                           <span className="px-2 py-0.5 rounded-md bg-[#7ABA42] text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
-                            Live This Hour
+                            Live Now
                           </span>
                         )}
                       </div>
@@ -529,15 +596,15 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
         </div>
       </div>
 
-      {/* 3:1.5 (2:1) Hero Cropper Modal (Full Resolution, 100% Quality) */}
+      {/* 3:1.5 (2:1) Hero Cropper Modal (Ultra HD 2.8K Resolution) */}
       {rawSelectedImage && (
         <ImageCropperModal
           image={rawSelectedImage}
           aspectRatio={3 / 1.5}
-          maxDimension={0}
-          quality={1}
+          maxDimension={2880}
+          quality={0.92}
           title="Adjust Homepage Hero Banner (2:1)"
-          subtitle="Drag & zoom to frame the 2:1 homepage hero banner • Full unscaled resolution & 100% quality"
+          subtitle="Drag & zoom to frame the 2:1 homepage hero banner • Ultra HD 2.8K resolution"
           onClose={() => {
             setCroppedPreview(rawSelectedImage);
             setRawSelectedImage(null);
