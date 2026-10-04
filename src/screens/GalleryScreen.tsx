@@ -51,6 +51,50 @@ interface GalleryScreenProps {
   onOpenAuthModal?: (reason?: string) => void;
 }
 
+function uploadToCloudinaryWithProgress(
+  formData: FormData,
+  cloudName: string,
+  onProgress?: (percent: number) => void
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const pct = Math.round((event.loaded / event.total) * 100);
+          onProgress(pct);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const resData = JSON.parse(xhr.responseText);
+          resolve(resData);
+        } catch (e) {
+          reject(new Error('Invalid response from Cloudinary'));
+        }
+      } else {
+        try {
+          const errBody = JSON.parse(xhr.responseText);
+          reject(new Error(errBody.error?.message || xhr.statusText));
+        } catch (_) {
+          reject(new Error(xhr.statusText || 'Upload failed'));
+        }
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during photo upload'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   treks,
   onOpenAuthModal,
@@ -69,6 +113,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selectedUploadTrekId, setSelectedUploadTrekId] = useState<string>('');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
   const [uploadCaption, setUploadCaption] = useState('');
@@ -300,39 +345,32 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     }
 
     setUploading(true);
+    setUploadProgress(0);
     setUploadError(null);
     setUploadSuccessMsg(null);
 
     try {
       let uploadedThisBatch = 0;
       const newPhotosToAppend: GalleryPhoto[] = [];
+      const totalFiles = stagedFiles.length;
 
-      for (let i = 0; i < stagedFiles.length; i++) {
+      for (let i = 0; i < totalFiles; i++) {
         const staged = stagedFiles[i];
 
         // 1. Compress
+        setUploadProgress(Math.round(((i + 0.1) / totalFiles) * 100));
         const compressedBlob = await compressImage(staged.file);
 
-        // 2. Upload to Cloudinary
+        // 2. Upload to Cloudinary with real-time percentage
         const formData = new FormData();
         formData.append('file', compressedBlob, staged.file.name);
         formData.append('upload_preset', UPLOAD_PRESET);
 
-        const response = await fetch(
-          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-          {
-            method: 'POST',
-            body: formData,
-          }
-        );
+        const resData = await uploadToCloudinaryWithProgress(formData, CLOUD_NAME, (filePct) => {
+          const currentOverall = Math.round(((i + 0.15 + (filePct / 100) * 0.75) / totalFiles) * 100);
+          setUploadProgress(Math.min(99, Math.max(1, currentOverall)));
+        });
 
-        if (!response.ok) {
-          const errBody = await response.json().catch(() => ({}));
-          const errorDetails = errBody.error?.message || response.statusText;
-          throw new Error(`Cloudinary upload failed: ${errorDetails}`);
-        }
-
-        const resData = await response.json();
         const imageUrl = resData.secure_url;
         const publicId = resData.public_id;
 
@@ -362,7 +400,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
         newPhotosToAppend.push(photoRecord);
         uploadedThisBatch++;
+        setUploadProgress(Math.round(((i + 1) / totalFiles) * 100));
       }
+
+      setUploadProgress(100);
 
       // Clean up object URLs
       stagedFiles.forEach((p) => URL.revokeObjectURL(p.url));
@@ -1173,6 +1214,27 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 </div>
               )}
 
+              {/* Upload Progress Bar */}
+              {uploading && (
+                <div className="space-y-1.5 p-3.5 bg-stone-50 border border-stone-200 rounded-xl">
+                  <div className="flex justify-between items-center text-xs font-bold text-stone-700">
+                    <span className="flex items-center gap-2 text-[#7ABA42]">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                      <span>Uploading to gallery...</span>
+                    </span>
+                    <span className="font-mono text-xs font-extrabold text-[#7ABA42] bg-[#7ABA42]/10 px-2 py-0.5 rounded-md">
+                      {uploadProgress}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#7ABA42] transition-all duration-150 ease-out rounded-full"
+                      style={{ width: `${Math.max(3, uploadProgress)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Feedbacks */}
               {uploadError && (
                 <div className="flex items-center gap-2 p-3.5 bg-red-50 border border-red-100 text-red-700 rounded-xl text-xs font-bold leading-relaxed shadow-2xs">
@@ -1209,12 +1271,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                   type="button"
                   onClick={handlePublishUpload}
                   disabled={uploading}
-                  className="px-6 py-2.5 bg-[#7ABA42] hover:bg-[#6AA437] disabled:bg-stone-300 text-white text-xs font-black rounded-xl shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 min-w-[120px]"
+                  className="px-6 py-2.5 bg-[#7ABA42] hover:bg-[#6AA437] disabled:bg-stone-300 text-white text-xs font-black rounded-xl shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 min-w-[140px]"
                 >
                   {uploading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                      <span>Sharing Post...</span>
+                      <span>Uploading ({uploadProgress}%)...</span>
                     </>
                   ) : (
                     <span>Publish Post</span>

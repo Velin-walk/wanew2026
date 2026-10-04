@@ -57,6 +57,50 @@ const safeSetItem = (key: string, value: string): void => {
   } catch (e) {}
 };
 
+function uploadToCloudinaryWithProgress(
+  formData: FormData,
+  cloudName: string,
+  onProgress?: (percent: number) => void
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const pct = Math.round((event.loaded / event.total) * 100);
+          onProgress(pct);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const resData = JSON.parse(xhr.responseText);
+          resolve(resData);
+        } catch (e) {
+          reject(new Error('Invalid response from Cloudinary'));
+        }
+      } else {
+        try {
+          const errBody = JSON.parse(xhr.responseText);
+          reject(new Error(errBody.error?.message || xhr.statusText));
+        } catch (_) {
+          reject(new Error(xhr.statusText || 'Upload failed'));
+        }
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during photo upload'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
 export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   isOpen,
   onClose,
@@ -66,6 +110,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   const [photos, setPhotos] = useState<TrekPhoto[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
   const [activePhoto, setActivePhoto] = useState<TrekPhoto | null>(null);
@@ -283,39 +328,32 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
     }
 
     setUploading(true);
+    setUploadProgress(0);
     setUploadError(null);
     setUploadSuccessMsg(null);
 
     try {
       let uploadedThisBatch = 0;
       const newPhotosToAppend: TrekPhoto[] = [];
+      const totalFiles = stagedFiles.length;
 
-      for (let i = 0; i < stagedFiles.length; i++) {
+      for (let i = 0; i < totalFiles; i++) {
         const staged = stagedFiles[i];
 
         // 1. Compress image in browser (fast zero-base64)
+        setUploadProgress(Math.round(((i + 0.1) / totalFiles) * 100));
         const compressedBlob = await compressImage(staged.file);
 
-        // 2. Upload directly to Cloudinary
+        // 2. Upload directly to Cloudinary with real-time percentage
         const formData = new FormData();
         formData.append('file', compressedBlob, staged.file.name);
         formData.append('upload_preset', UPLOAD_PRESET);
 
-        const response = await fetch(
-          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-          {
-            method: 'POST',
-            body: formData,
-          }
-        );
+        const resData = await uploadToCloudinaryWithProgress(formData, CLOUD_NAME, (filePct) => {
+          const currentOverall = Math.round(((i + 0.15 + (filePct / 100) * 0.75) / totalFiles) * 100);
+          setUploadProgress(Math.min(99, Math.max(1, currentOverall)));
+        });
 
-        if (!response.ok) {
-          const errBody = await response.json().catch(() => ({}));
-          const errorDetails = errBody.error?.message || response.statusText;
-          throw new Error(`Cloudinary upload failed: ${errorDetails}`);
-        }
-
-        const resData = await response.json();
         const imageUrl = resData.secure_url;
         const publicId = resData.public_id;
 
@@ -345,7 +383,10 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
 
         newPhotosToAppend.push(photoRecord);
         uploadedThisBatch++;
+        setUploadProgress(Math.round(((i + 1) / totalFiles) * 100));
       }
+
+      setUploadProgress(100);
 
       // Clean up object URLs
       stagedFiles.forEach((p) => URL.revokeObjectURL(p.url));
@@ -677,6 +718,27 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
                 )}
               </div>
 
+              {/* Upload Progress Bar */}
+              {uploading && (
+                <div className="space-y-1.5 p-3 bg-stone-50 border border-stone-200 rounded-xl my-2">
+                  <div className="flex justify-between items-center text-xs font-bold text-stone-700">
+                    <span className="flex items-center gap-1.5 text-[#7ABA42]">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                      <span>Uploading photo memories...</span>
+                    </span>
+                    <span className="font-mono text-xs font-extrabold text-[#7ABA42] bg-[#7ABA42]/10 px-2 py-0.5 rounded-md">
+                      {uploadProgress}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#7ABA42] transition-all duration-150 ease-out rounded-full"
+                      style={{ width: `${Math.max(3, uploadProgress)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Composer actions */}
               <div className="flex justify-between items-center pt-3 border-t border-[#F7F4EF]">
                 <button
@@ -695,12 +757,12 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
                   type="button"
                   onClick={handlePublishUpload}
                   disabled={uploading}
-                  className="px-5 py-2 bg-[#7ABA42] hover:bg-[#6AA437] disabled:bg-stone-300 text-white text-[11px] font-black rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  className="px-5 py-2 bg-[#7ABA42] hover:bg-[#6AA437] disabled:bg-stone-300 text-white text-[11px] font-black rounded-xl transition-all flex items-center justify-center gap-1.5 min-w-[130px]"
                 >
                   {uploading ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                      <span>Sharing...</span>
+                      <span>Uploading ({uploadProgress}%)...</span>
                     </>
                   ) : (
                     <span>Publish Hike Post</span>

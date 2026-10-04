@@ -19,11 +19,12 @@ import { SubPageType } from './InfoPagesModal';
 import { isAdminEmail } from '../adminUtils';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, User as UserIcon } from 'lucide-react';
+import { NavigationNotifications } from '../services/notificationService';
 
 interface NavbarProps {
   currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin';
   activeInfoPage?: SubPageType | null;
-  onTabChange: (tab: any) => void;
+  onTabChange: (tab: any, targetId?: string) => void;
   bookingCount: number;
   savedCount: number;
   onOpenInvite?: () => void;
@@ -31,6 +32,7 @@ interface NavbarProps {
   onOpenContribute?: () => void;
   onOpenInfoPage?: (page: SubPageType) => void;
   onOpenProfile?: () => void;
+  notifications?: NavigationNotifications;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -43,6 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenContribute,
   onOpenInfoPage,
   onOpenProfile,
+  notifications,
 }) => {
   const { user, userEmail, isAdmin, showProfileImage, openAuthModal, signOutUser } = useAuth();
   const isMapMiners = currentTab === 'mapminers';
@@ -51,16 +54,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
   const avatarDropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin') => {
+  const handleTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin', targetId?: string) => {
     if (tab === 'mapminers' && !user) {
-      openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers'));
+      openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers', targetId));
       return;
     }
     if (tab === 'admin' && (!user || !isAdmin)) {
       openAuthModal('Sign in with Admin email (walknepalwalk@gmail.com) to access the Admin Panel', () => onTabChange('admin'));
       return;
     }
-    onTabChange(tab);
+    onTabChange(tab, targetId);
   };
 
   // Close dropdown on click outside
@@ -168,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             id="nav-tab-treks"
             onClick={() => handleTabClick('treks')}
-            className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all relative whitespace-nowrap cursor-pointer ${
               currentTab === 'treks' && !activeInfoPage
                 ? 'bg-white text-[#E08828] shadow-xs font-bold'
                 : 'text-[#5A5551] hover:text-[#1F1F1F]'
@@ -176,6 +179,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Home className="w-4 h-4 shrink-0" />
             <span>Home</span>
+            {notifications?.treks?.hasUnread && (
+              <span className="w-2 h-2 rounded-full bg-[#E08828] animate-pulse ring-2 ring-white shrink-0 ml-0.5" title="New trek event update" />
+            )}
           </button>
 
           <button
@@ -209,13 +215,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Trophy className={`w-4 h-4 shrink-0 ${currentTab === 'leaderboard' && !activeInfoPage ? 'text-amber-500 fill-amber-100' : 'text-[#8B8680]'}`} />
             <span>Leaderboard</span>
+            {notifications?.leaderboard?.hasUnread && (
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse ring-2 ring-white shrink-0 ml-0.5" title="Leaderboard rankings update" />
+            )}
           </button>
 
           <button
             type="button"
             id="nav-tab-mapminers"
-            onClick={() => handleTabClick('mapminers')}
-            className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+            onClick={() => handleTabClick('mapminers', notifications?.mapminers?.targetId)}
+            className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all relative whitespace-nowrap cursor-pointer ${
               currentTab === 'mapminers' && !activeInfoPage
                 ? 'bg-white text-[#7ABA42] shadow-xs font-bold'
                 : 'text-[#5A5551] hover:text-[#1F1F1F]'
@@ -235,13 +244,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Compass className="w-4 h-4 text-[#7ABA42] hidden" />
             </div>
             <span>MapMiners</span>
+            {notifications?.mapminers?.hasUnread && (
+              <span className="w-2 h-2 rounded-full bg-[#7ABA42] animate-pulse ring-2 ring-white shrink-0 ml-0.5" title="New map contribution" />
+            )}
           </button>
 
           <button
             type="button"
             id="nav-tab-gallery"
-            onClick={() => handleTabClick('gallery')}
-            className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+            onClick={() => handleTabClick('gallery', notifications?.gallery?.targetId)}
+            className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all relative whitespace-nowrap cursor-pointer ${
               currentTab === 'gallery' && !activeInfoPage
                 ? 'bg-white text-[#7ABA42] shadow-xs font-bold'
                 : 'text-[#5A5551] hover:text-[#1F1F1F]'
@@ -249,6 +261,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Camera className="w-4 h-4 text-[#7ABA42] shrink-0" />
             <span>Gallery</span>
+            {notifications?.gallery?.hasUnread && (
+              <span className="w-2 h-2 rounded-full bg-[#7ABA42] animate-pulse ring-2 ring-white shrink-0 ml-0.5" title="New photos uploaded" />
+            )}
           </button>
 
           {(isAdmin || isAdminEmail(userEmail)) && (

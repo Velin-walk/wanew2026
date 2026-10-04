@@ -219,16 +219,6 @@ export const HikerReviewsSection: React.FC<{
           </span>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-          {onLeaveFeedback && (
-            <button
-              type="button"
-              onClick={onLeaveFeedback}
-              className="h-8 sm:h-9 px-3 bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border border-[#7ABA42]/30 rounded-lg sm:rounded-xl text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
-            >
-              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
-              <span>Rate &amp; Review</span>
-            </button>
-          )}
           <button
             type="button"
             onClick={fetchReviews}
@@ -498,25 +488,15 @@ export const HikerReviewsSection: React.FC<{
         )}
       </div>
 
-      {/* Bottom Call to Action: Invite Hikers to Rate */}
+      {/* Bottom Call to Action: Go to My Bookings */}
       <div className="p-4 sm:p-5 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
         <div>
           <h5 className="font-bold text-sm text-[#1F1F1F]">Hiked with Walk Nepal Walk recently?</h5>
           <p className="text-[11px] text-[#8B8680] mt-0.5">
-            Your feedback helps our community flourish. Rate your completed trek directly or head to <strong>My Bookings</strong>.
+            Your feedback helps our community flourish. Share your review for completed treks in <strong>My Bookings</strong>.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
-          {onLeaveFeedback && (
-            <button
-              type="button"
-              onClick={onLeaveFeedback}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border border-[#7ABA42]/30 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0"
-            >
-              <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 fill-amber-500 shrink-0" />
-              <span>Rate &amp; Review</span>
-            </button>
-          )}
           {onNavigateToBookings && (
             <button
               type="button"

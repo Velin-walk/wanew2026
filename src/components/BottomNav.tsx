@@ -17,15 +17,17 @@ import {
 import { SubPageType } from './InfoPagesModal';
 import { useAuth } from '../context/AuthContext';
 import { User, LogOut } from 'lucide-react';
+import { NavigationNotifications } from '../services/notificationService';
 
 interface BottomNavProps {
   currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin';
-  onTabChange: (tab: any) => void;
+  onTabChange: (tab: any, targetId?: string) => void;
   userEmail?: string;
   bookingCount: number;
   savedCount: number;
   onOpenInfoPage?: (page: SubPageType) => void;
   onOpenProfile?: () => void;
+  notifications?: NavigationNotifications;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -35,21 +37,22 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   savedCount,
   onOpenInfoPage,
   onOpenProfile,
+  notifications,
 }) => {
   const { user, isAdmin, openAuthModal } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleMobileTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin') => {
+  const handleMobileTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin', targetId?: string) => {
     if (tab === 'mapminers' && !user) {
-      openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers'));
+      openAuthModal('Sign in to access Map Miners community trail intelligence and GPX uploads', () => onTabChange('mapminers', targetId));
       return;
     }
     if (tab === 'admin' && (!user || !isAdmin)) {
       openAuthModal('Sign in with Admin email (walknepalwalk@gmail.com) to access the Admin Panel', () => onTabChange('admin'));
       return;
     }
-    onTabChange(tab);
+    onTabChange(tab, targetId);
   };
 
   // Close dropdown on click outside
@@ -92,11 +95,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           }`}
         >
           <div
-            className={`p-1 rounded-lg transition-transform ${
+            className={`p-1 rounded-lg transition-transform relative ${
               currentTab === 'treks' ? 'bg-[#E08828]/10 scale-105' : ''
             }`}
           >
             <Home className="w-5 h-5" />
+            {notifications?.treks?.hasUnread && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#E08828] rounded-full ring-2 ring-white animate-pulse" />
+            )}
           </div>
           <span className="text-[10px] tracking-tight mt-0.5">Home</span>
         </button>
@@ -144,6 +150,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             }`}
           >
             <Trophy className={`w-5 h-5 ${currentTab === 'leaderboard' ? 'text-amber-500 fill-amber-100' : ''}`} />
+            {notifications?.leaderboard?.hasUnread && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white animate-pulse" />
+            )}
           </div>
           <span className="text-[10px] tracking-tight mt-0.5">Leaderboard</span>
         </button>
@@ -152,7 +161,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           id="tab-mapminers"
-          onClick={() => handleMobileTabClick('mapminers')}
+          onClick={() => handleMobileTabClick('mapminers', notifications?.mapminers?.targetId)}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all relative ${
             currentTab === 'mapminers'
               ? 'text-[#7ABA42] font-bold'
@@ -160,7 +169,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           }`}
         >
           <div
-            className={`p-1 rounded-lg transition-transform flex items-center justify-center ${
+            className={`p-1 rounded-lg transition-transform flex items-center justify-center relative ${
               currentTab === 'mapminers' ? 'bg-[#7ABA42]/10 scale-105' : ''
             }`}
           >
@@ -177,6 +186,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               />
               <Compass className="w-5 h-5 text-[#7ABA42] hidden" />
             </div>
+            {notifications?.mapminers?.hasUnread && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#7ABA42] rounded-full ring-2 ring-white animate-pulse" />
+            )}
           </div>
           <span className="text-[10px] tracking-tight mt-0.5">MapMiners</span>
         </button>
@@ -185,7 +197,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           id="tab-gallery"
-          onClick={() => handleMobileTabClick('gallery')}
+          onClick={() => handleMobileTabClick('gallery', notifications?.gallery?.targetId)}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all relative ${
             currentTab === 'gallery'
               ? 'text-[#7ABA42] font-bold'
@@ -193,11 +205,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           }`}
         >
           <div
-            className={`p-1 rounded-lg transition-transform flex items-center justify-center ${
+            className={`p-1 rounded-lg transition-transform flex items-center justify-center relative ${
               currentTab === 'gallery' ? 'bg-[#7ABA42]/10 scale-105' : ''
             }`}
           >
             <Camera className="w-5 h-5 text-[#7ABA42]" />
+            {notifications?.gallery?.hasUnread && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#7ABA42] rounded-full ring-2 ring-white animate-pulse" />
+            )}
           </div>
           <span className="text-[10px] tracking-tight mt-0.5">Gallery</span>
         </button>

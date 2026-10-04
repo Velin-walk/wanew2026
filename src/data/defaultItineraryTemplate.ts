@@ -164,7 +164,7 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
     'Get added to the hike-specific WhatsApp group for live coordination, packing tips, and weather updates.',
   ],
   bookingNotes: [
-    'Payment screenshot must be forwarded to WhatsApp (+977-9803568612) only for user data privacy.',
+    'Payment screenshot must be forwarded via WalkNepalWalk site/app only for user data privacy.',
     'Booking deposit is non-transferable to another event after roster confirmation.',
   ],
   participationGuidelines:
@@ -241,7 +241,13 @@ export const normalizeItineraryData = (raw?: Partial<TrekItineraryData> | null):
       ? d.itineraryDays
       : [...INITIAL_ITINERARY_TEMPLATE.itineraryDays],
     bookingProcessSteps: Array.isArray(d.bookingProcessSteps) ? d.bookingProcessSteps : [...INITIAL_ITINERARY_TEMPLATE.bookingProcessSteps],
-    bookingNotes: Array.isArray(d.bookingNotes) ? d.bookingNotes : [...INITIAL_ITINERARY_TEMPLATE.bookingNotes],
+    bookingNotes: Array.isArray(d.bookingNotes)
+      ? d.bookingNotes.map((note: string) =>
+          note.includes('WhatsApp (+977-9803568612)') || (note.includes('Payment screenshot must be forwarded') && note.includes('WhatsApp'))
+            ? 'Payment screenshot must be forwarded via WalkNepalWalk site/app only for user data privacy.'
+            : note
+        )
+      : [...INITIAL_ITINERARY_TEMPLATE.bookingNotes],
     participationGuidelines: d.participationGuidelines ?? INITIAL_ITINERARY_TEMPLATE.participationGuidelines,
     safetyRules: Array.isArray(d.safetyRules) ? d.safetyRules : [...INITIAL_ITINERARY_TEMPLATE.safetyRules],
     helpContacts: Array.isArray(d.helpContacts) ? d.helpContacts : [...INITIAL_ITINERARY_TEMPLATE.helpContacts],

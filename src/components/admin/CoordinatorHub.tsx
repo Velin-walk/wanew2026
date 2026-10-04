@@ -712,7 +712,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       </div>
 
       {/* ── TOP EVENT CARDS STRIP ── */}
-      <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200 print:hidden">
+      <div className="grid grid-rows-2 grid-flow-col auto-cols-[125px] sm:auto-cols-[135px] gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200 print:hidden">
         {upcomingTreks.map((t) => {
           const curHikeNum = getHikeNumberFromAny(currentTrek);
           const tHikeNum = getHikeNumberFromAny(t);
@@ -729,34 +729,38 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <div
               key={t.id}
               onClick={() => setSelectedTrekId(t.id || t.hike_number || '')}
-              className={`p-4 rounded-2xl min-w-[210px] max-w-[230px] shrink-0 cursor-pointer transition-all border ${
+              className={`p-2 rounded-xl w-[125px] sm:w-[135px] shrink-0 cursor-pointer transition-all border flex flex-col justify-between overflow-hidden ${
                 isSelected
-                  ? 'border-2 border-[#16A34A] bg-white shadow-md ring-2 ring-[#16A34A]/10'
+                  ? 'border-2 border-[#16A34A] bg-white shadow-xs ring-2 ring-[#16A34A]/10'
                   : 'border-stone-200 bg-white hover:border-stone-300 shadow-2xs'
               }`}
             >
-              <div className="flex items-center justify-between text-[11px] font-bold text-stone-400 mb-1">
-                <span>{t.date || 'Flexible'} • {t.days}D</span>
-                {t.is_cancelled && (
-                  <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 text-[9px] font-extrabold border border-rose-200">
-                    CANCELLED
+              <div className="min-w-0">
+                <div className="flex items-center justify-between text-[9px] font-bold text-stone-400 mb-0.5">
+                  <span className="truncate">{t.date || 'Flexible'}</span>
+                  {t.is_cancelled && (
+                    <span className="px-1 py-0.2 rounded bg-rose-100 text-rose-700 text-[7.5px] font-extrabold border border-rose-200 shrink-0 ml-1">
+                      CANCELLED
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-[11px] font-bold text-[#1F2937] truncate mb-0.5" title={t.name}>
+                  {t.name}
+                </h3>
+                <div className="flex items-center gap-1 mb-1 overflow-hidden">
+                  <span className="px-1 py-0.2 rounded bg-blue-50 text-[#2563EB] text-[8.5px] font-bold border border-blue-100 flex items-center gap-0.5 truncate shrink-0">
+                    <Compass className="w-2.5 h-2.5 text-[#2563EB] shrink-0" /> #{t.hike_number || tHikeNum || 'N/A'}
                   </span>
-                )}
+                  <span className="px-1 py-0.2 rounded bg-stone-100 text-stone-600 text-[8.5px] font-bold truncate">
+                    {t.difficulty || 'Mod'}
+                  </span>
+                </div>
               </div>
-              <h3 className="text-sm font-extrabold text-[#1F2937] truncate mb-2">
-                {t.name}
-              </h3>
-              <div className="flex items-center gap-1.5 mb-3">
-                <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[#2563EB] text-[10px] font-bold border border-blue-100 flex items-center gap-1">
-                  <Compass className="w-3 h-3 text-[#2563EB]" /> Hike #{t.hike_number || tHikeNum || 'N/A'}
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[10px] font-bold">
-                  {t.difficulty || 'Moderate'}
-                </span>
-              </div>
-              <div className="text-xl font-black text-[#1F2937]">{tRegsCount || 0}</div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                REGISTERED
+              <div className="flex items-baseline justify-between pt-1 border-t border-stone-100 min-w-0">
+                <div className="text-xs font-black text-[#1F2937]">{tRegsCount || 0}</div>
+                <div className="text-[8px] font-bold uppercase tracking-wider text-stone-400 truncate">
+                  REGISTERED
+                </div>
               </div>
             </div>
           );

@@ -16,6 +16,33 @@ const defaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = defaultIcon;
 
+// Safely guard L.DomUtil.getPosition and setPosition against undefined elements during unmounting or animation
+if (typeof window !== 'undefined' && L && L.DomUtil) {
+  const originalGetPosition = L.DomUtil.getPosition;
+  L.DomUtil.getPosition = function (el: any) {
+    if (!el) {
+      return new L.Point(0, 0);
+    }
+    try {
+      return originalGetPosition ? originalGetPosition(el) || new L.Point(0, 0) : (el._leaflet_pos || new L.Point(0, 0));
+    } catch (_) {
+      return (el && el._leaflet_pos) || new L.Point(0, 0);
+    }
+  };
+
+  const originalSetPosition = L.DomUtil.setPosition;
+  L.DomUtil.setPosition = function (el: any, point: any) {
+    if (!el) return;
+    try {
+      if (originalSetPosition) {
+        originalSetPosition(el, point);
+      } else {
+        el._leaflet_pos = point;
+      }
+    } catch (_) {}
+  };
+}
+
 interface MapViewProps {
   routes: any[];
   activeRoute: any;
@@ -80,6 +107,7 @@ class MapErrorBoundary extends Component<MapErrorBoundaryProps, MapErrorBoundary
 function FitBounds({ route, bottomPadding }: { route: any; bottomPadding?: number }) {
   const map = useMap();
   useEffect(() => {
+    if (!map) return;
     if (route?.bounds && Array.isArray(route.bounds) && route.bounds.length === 2) {
       const [[lat1, lng1], [lat2, lng2]] = route.bounds;
       if (
@@ -90,12 +118,14 @@ function FitBounds({ route, bottomPadding }: { route: any; bottomPadding?: numbe
       ) {
         const pad = bottomPadding || 0;
         try {
-          map.fitBounds(route.bounds, {
-            paddingTopLeft: [40, 40],
-            paddingBottomRight: [40, pad + 40],
-            animate: true,
-            duration: 0.8,
-          });
+          const container = map.getContainer?.();
+          if (container && container.offsetWidth > 0 && container.offsetHeight > 0) {
+            map.fitBounds(route.bounds, {
+              paddingTopLeft: [40, 40],
+              paddingBottomRight: [40, pad + 40],
+              animate: false,
+            });
+          }
         } catch (e) {
           console.warn('[FitBounds] Error fitting bounds:', e);
         }
@@ -110,6 +140,7 @@ function AllRoutesBounds({ routes }: { routes: any[] }) {
   const hasFittedInitialRef = useRef(false);
 
   useEffect(() => {
+    if (!map) return;
     if (hasFittedInitialRef.current) return;
     if (!routes || routes.length === 0) return;
     const allLats: number[] = [];
@@ -130,8 +161,11 @@ function AllRoutesBounds({ routes }: { routes: any[] }) {
       [Math.max(...allLats), Math.max(...allLngs)]
     ];
     try {
-      hasFittedInitialRef.current = true;
-      map.fitBounds(bounds, { padding: [40, 40], animate: true, duration: 0.8 });
+      const container = map.getContainer?.();
+      if (container && container.offsetWidth > 0 && container.offsetHeight > 0) {
+        hasFittedInitialRef.current = true;
+        map.fitBounds(bounds, { padding: [40, 40], animate: false });
+      }
     } catch (e) {
       console.warn('[AllRoutesBounds] Error fitting bounds:', e);
     }
@@ -413,9 +447,9 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
 
             if (isActive) {
               return (
-                <div key={route.id || idx}>
+                <React.Fragment key={route.id || idx}>
                   {validSegments.map((positions: [number, number][], segmentIdx: number) => (
-                    <div key={`${route.id || idx}-seg-${segmentIdx}`}>
+                    <React.Fragment key={`${route.id || idx}-seg-${segmentIdx}`}>
                       <Polyline
                         positions={positions}
                         pathOptions={{ color: color, weight: 10, opacity: 0.15 }}
@@ -431,7 +465,7 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                           <div className="text-[10px] text-neutral-500 p-1 mt-0.5">{route.stats?.distance ?? 0}km • {route.difficulty}</div>
                         </Tooltip>
                       </Polyline>
-                    </div>
+                    </React.Fragment>
                   ))}
 
                   <CircleMarker
@@ -464,7 +498,7 @@ export default function MapView({ routes, activeRoute, onRouteClick, detailPanel
                     pathOptions={{ color: '#fff', weight: 2, fillColor: '#1e293b', fillOpacity: 1 }}
                     eventHandlers={{ click: () => onRouteClick(route) }}
                   />
-                </div>
+                </React.Fragment>
               );
             } else {
               return (
@@ -499,6 +533,7 @@ function HoverDot() {
   const dotRef = useRef<L.CircleMarker | null>(null);
 
   useEffect(() => {
+    if (!map) return;
     const glow = L.circleMarker([0, 0], {
       radius: 14, color: 'transparent', fillColor: '#f97316', fillOpacity: 0.25, weight: 0, interactive: false,
     });
@@ -512,19 +547,23 @@ function HoverDot() {
       const coord = e.detail;
       if (coord && typeof coord.lat === 'number' && !isNaN(coord.lat) && typeof coord.lng === 'number' && !isNaN(coord.lng)) {
         const latlng: [number, number] = [coord.lat, coord.lng];
-        glow.setLatLng(latlng).addTo(map);
-        dot.setLatLng(latlng).addTo(map);
+        glow.setLatLng(latlng);
+        if (map && !map.hasLayer(glow)) glow.addTo(map);
+        dot.setLatLng(latlng);
+        if (map && !map.hasLayer(dot)) dot.addTo(map);
       } else {
-        glow.remove();
-        dot.remove();
+        if (map && map.hasLayer(glow)) glow.remove();
+        if (map && map.hasLayer(dot)) dot.remove();
       }
     };
 
     window.addEventListener('chart-hover', handler);
     return () => {
       window.removeEventListener('chart-hover', handler);
-      glow.remove();
-      dot.remove();
+      try {
+        if (map && map.hasLayer(glow)) glow.remove();
+        if (map && map.hasLayer(dot)) dot.remove();
+      } catch (_) {}
     };
   }, [map]);
 

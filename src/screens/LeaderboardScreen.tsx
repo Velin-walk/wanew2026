@@ -27,6 +27,7 @@ import { fetchLeaderboardData } from '../services/api';
 import { Himalayan3DBackground } from '../components/3d/Himalayan3DBackground';
 import { LowPolyMountainTrailChart } from '../components/3d/LowPolyMountainTrailChart';
 import { HikerReviewsSection } from '../components/InfoPagesModal';
+import { MapContributionBoard } from '../components/MapContributionBoard';
 
 type TimePeriod = 't30' | 't60' | 't90' | 't365' | 'overall';
 type SortMetric = 'dist' | 'count';
@@ -325,7 +326,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
   );
 };
 
-export const LeaderboardScreen: React.FC = () => {
+export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }> = ({ onNavigateToMapMiners }) => {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -652,6 +653,9 @@ export const LeaderboardScreen: React.FC = () => {
           getKeys={getKeys}
         />
       </div>
+
+      {/* Map Miners Community Contribution Board */}
+      <MapContributionBoard onNavigateToMapMiners={onNavigateToMapMiners} />
 
       {/* Clubs & Milestones Showcase */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

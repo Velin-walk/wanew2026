@@ -30,6 +30,19 @@ import {
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+// Safely guard L.DomUtil.getPosition and setPosition against undefined elements
+if (typeof window !== 'undefined' && L && L.DomUtil) {
+  const originalGetPosition = L.DomUtil.getPosition;
+  L.DomUtil.getPosition = function (el: any) {
+    if (!el) return new L.Point(0, 0);
+    try {
+      return originalGetPosition ? originalGetPosition(el) || new L.Point(0, 0) : (el._leaflet_pos || new L.Point(0, 0));
+    } catch (_) {
+      return (el && el._leaflet_pos) || new L.Point(0, 0);
+    }
+  };
+}
 import { parseGPX, parseKML } from '../mapminers/kmlParser';
 import { ItineraryBuilder } from './ItineraryBuilder';
 import { HikeLibraryList } from './HikeLibraryList';

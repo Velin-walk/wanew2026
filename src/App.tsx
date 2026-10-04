@@ -39,6 +39,14 @@ import {
   trackRegistrationStart,
   trackRegistrationComplete,
 } from './services/behaviorTracker';
+import {
+  NavigationNotifications,
+  checkTreksNotification,
+  checkGalleryNotification,
+  checkLeaderboardNotification,
+  checkMapMinersNotification,
+  markNotificationAsRead,
+} from './services/notificationService';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 
 function MainApp() {
@@ -206,13 +214,62 @@ function MainApp() {
     setShowMapMinerContribute(false);
   }, []);
 
+  // In-app contextual navigation notifications
+  const [notifications, setNotifications] = useState<NavigationNotifications>({
+    treks: { hasUnread: false, count: 0 },
+    gallery: { hasUnread: false, count: 0 },
+    leaderboard: { hasUnread: false, count: 0 },
+    mapminers: { hasUnread: false, count: 0 },
+  });
+
   const handleMainTabChange = useCallback(
-    (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin') => {
+    (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin', targetId?: string) => {
       closeAllOverlays();
+
+      // Clear notification for this tab
+      if (tab === 'treks' || tab === 'gallery' || tab === 'leaderboard' || tab === 'mapminers') {
+        markNotificationAsRead(tab, targetId);
+        setNotifications((prev) => ({
+          ...prev,
+          [tab]: { hasUnread: false, count: 0 },
+        }));
+      }
+
       setCurrentTab(tab);
     },
     [closeAllOverlays]
   );
+
+  // Sync contextual notification status across tabs
+  useEffect(() => {
+    let isMounted = true;
+    const fetchNotifications = async () => {
+      const treksNotif = checkTreksNotification(treks);
+      const galleryNotif = await checkGalleryNotification();
+      const mapNotif = await checkMapMinersNotification();
+      const leadNotif = checkLeaderboardNotification();
+      if (isMounted) {
+        setNotifications({
+          treks: treksNotif,
+          gallery: galleryNotif,
+          leaderboard: leadNotif,
+          mapminers: mapNotif,
+        });
+      }
+    };
+
+    fetchNotifications();
+
+    const handleNotifEvent = () => {
+      fetchNotifications();
+    };
+
+    window.addEventListener('wnw_notifications_changed', handleNotifEvent);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('wnw_notifications_changed', handleNotifEvent);
+    };
+  }, [treks]);
 
   const handleOpenInfoPage = useCallback((page: SubPageType) => {
     setItineraryModalTrek(null);
@@ -1298,6 +1355,7 @@ function MainApp() {
             closeAllOverlays();
             setProfileModalOpen(true);
           }}
+          notifications={notifications}
         />
 
         {/* Content Area - Full width responsive screen */}
@@ -1460,7 +1518,7 @@ function MainApp() {
           )}
 
           {currentTab === 'leaderboard' && (
-            <LeaderboardScreen />
+            <LeaderboardScreen onNavigateToMapMiners={() => handleMainTabChange('mapminers')} />
           )}
 
           {/* Micro App Footer inside shell */}
@@ -1489,6 +1547,7 @@ function MainApp() {
             closeAllOverlays();
             setProfileModalOpen(true);
           }}
+          notifications={notifications}
         />
 
         {/* Booking Registration Modal (Mobile Bottom Sheet) */}
