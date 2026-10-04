@@ -30,6 +30,14 @@ interface TrekPhotosModalProps {
   trek: Trek;
 }
 
+const optimizeCloudinaryUrl = (url?: string, width = 600): string => {
+  if (!url) return '';
+  if (url.includes('res.cloudinary.com') && url.includes('/upload/') && !url.includes('/f_auto')) {
+    return url.replace('/upload/', `/upload/f_auto,q_auto,w_${width}/`);
+  }
+  return url;
+};
+
 interface TrekPhoto {
   id: string;
   trekId: string;
@@ -205,8 +213,8 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   // Ultra-fast, zero-flicker image downscaling using direct Blob Object URLs (No Base64 thread locking)
   const compressImage = (file: File): Promise<Blob> => {
     return new Promise((resolve) => {
-      // Small images (under 1.2MB) don't need heavy canvas scaling
-      if (file.size <= 1.2 * 1024 * 1024) {
+      // Small already-compressed files under 150KB don't need further compression
+      if (file.size <= 150 * 1024) {
         resolve(file);
         return;
       }
@@ -240,7 +248,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
               resolve(blob || file);
             },
             'image/jpeg',
-            0.82
+            0.78
           );
         } else {
           resolve(file);
@@ -860,7 +868,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
                     onClick={() => handleOpenLightbox(photo, idx)}
                   >
                     <img
-                      src={photo.url}
+                      src={optimizeCloudinaryUrl(photo.url, 600)}
                       alt={`${photo.trekName} photo by ${photo.uploadedBy}`}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"
