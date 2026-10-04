@@ -27,6 +27,9 @@ import {
   Compass,
   AlertTriangle,
   Eye,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { Trek } from '../../types';
 
@@ -90,6 +93,22 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [selectedTrekFilter, setSelectedTrekFilter] = useState<string>(initialTrekFilter || 'all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [bookingTypeFilter, setBookingTypeFilter] = useState<'all' | 'public' | 'private'>('all');
+  const [sortField, setSortField] = useState<'participant' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: 'participant' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point') => {
+    if (sortField === field) {
+      if (sortOrder === 'asc') {
+        setSortOrder('desc');
+      } else {
+        setSortField(null);
+        setSortOrder('asc');
+      }
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   React.useEffect(() => {
     if (initialTrekFilter) {
@@ -337,6 +356,50 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
     return matchesSearch && matchesTrek && matchesStatus;
   });
+
+  // Sort registrations according to active column sort
+  const sortedRegistrations = useMemo(() => {
+    if (!sortField) return filteredRegistrations;
+
+    return [...filteredRegistrations].sort((a, b) => {
+      const draftA = rowDrafts[a.id] || {};
+      const draftB = rowDrafts[b.id] || {};
+
+      let valA: any = '';
+      let valB: any = '';
+
+      if (sortField === 'participant') {
+        valA = (a.full_name || '').toLowerCase();
+        valB = (b.full_name || '').toLowerCase();
+      } else if (sortField === 'status') {
+        valA = String(draftA.status ?? a.status ?? 'Confirmed').toLowerCase();
+        valB = String(draftB.status ?? b.status ?? 'Confirmed').toLowerCase();
+      } else if (sortField === 'payment_status') {
+        valA = String(draftA.payment_status ?? a.payment_status ?? 'Unpaid').toLowerCase();
+        valB = String(draftB.payment_status ?? b.payment_status ?? 'Unpaid').toLowerCase();
+      } else if (sortField === 'paid_amount') {
+        valA = Number(draftA.paid_amount !== undefined ? draftA.paid_amount : (a.paid_amount ?? 0));
+        valB = Number(draftB.paid_amount !== undefined ? draftB.paid_amount : (b.paid_amount ?? 0));
+        if (isNaN(valA)) valA = 0;
+        if (isNaN(valB)) valB = 0;
+      } else if (sortField === 'due_amount') {
+        valA = Number(draftA.due_amount !== undefined ? draftA.due_amount : (a.due_amount ?? 0));
+        valB = Number(draftB.due_amount !== undefined ? draftB.due_amount : (b.due_amount ?? 0));
+        if (isNaN(valA)) valA = 0;
+        if (isNaN(valB)) valB = 0;
+      } else if (sortField === 'pickup_point') {
+        valA = String(draftA.pickup_point !== undefined ? draftA.pickup_point : (a.pickup_point ?? '')).toLowerCase();
+        valB = String(draftB.pickup_point !== undefined ? draftB.pickup_point : (b.pickup_point ?? '')).toLowerCase();
+      }
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+
+      const cmp = String(valA).localeCompare(String(valB));
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredRegistrations, sortField, sortOrder, rowDrafts]);
 
   // Calculate totals
   const totalPax = filteredRegistrations.reduce((acc, r) => {
@@ -807,18 +870,120 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                       className="rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer"
                     />
                   </th>
-                  <th className="py-3 px-4 min-w-[260px]">Participant &amp; Trek</th>
-                  <th className="py-3 px-3 w-[140px]">Reg Status</th>
-                  <th className="py-3 px-3 w-[140px]">Payment Status</th>
-                  <th className="py-3 px-3 w-[110px]">Paid (NPR)</th>
-                  <th className="py-3 px-3 w-[110px]">Due (NPR)</th>
-                  <th className="py-3 px-3 w-[150px]">Pickup Point</th>
+                  <th
+                    onClick={() => handleSort('participant')}
+                    className="py-3 px-4 min-w-[260px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    title="Click to sort by Participant & Trek"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Participant &amp; Trek</span>
+                      {sortField === 'participant' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('status')}
+                    className="py-3 px-3 w-[140px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    title="Click to sort by Reg Status"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Reg Status</span>
+                      {sortField === 'status' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('payment_status')}
+                    className="py-3 px-3 w-[140px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    title="Click to sort by Payment Status"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Payment Status</span>
+                      {sortField === 'payment_status' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('paid_amount')}
+                    className="py-3 px-3 w-[110px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    title="Click to sort by Paid (NPR)"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Paid (NPR)</span>
+                      {sortField === 'paid_amount' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('due_amount')}
+                    className="py-3 px-3 w-[110px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    title="Click to sort by Due (NPR)"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Due (NPR)</span>
+                      {sortField === 'due_amount' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('pickup_point')}
+                    className="py-3 px-3 w-[150px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    title="Click to sort by Pickup Point"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Pickup Point</span>
+                      {sortField === 'pickup_point' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
                   <th className="py-3 px-3 min-w-[200px]">Internal Admin Notes</th>
                   <th className="py-3 px-4 w-[110px] text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0EBE5]">
-                {filteredRegistrations.map((reg) => {
+                {sortedRegistrations.map((reg) => {
                   const draft = rowDrafts[reg.id] || {};
                   const curStatus = draft.status !== undefined ? draft.status : reg.status || 'Confirmed';
                   const curPayment = draft.payment_status !== undefined ? draft.payment_status : reg.payment_status || 'Unpaid';
