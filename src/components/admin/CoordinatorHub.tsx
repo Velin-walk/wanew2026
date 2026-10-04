@@ -27,6 +27,7 @@ import { AdminRegistration } from './BookingsManager';
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { fetchLeaderboardData } from '../../services/api';
 import { HikerStats } from '../../types/leaderboard';
+import { AdminHikerProfileModal } from './AdminHikerProfileModal';
 
 interface CoordinatorHubProps {
   treks: Trek[];
@@ -154,6 +155,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 }) => {
   // Exclude Cancelled, Waitlisted, and Cancelled by User from Coordinator Hub
   const [leaderboardHikers, setLeaderboardHikers] = useState<HikerStats[]>([]);
+  const [activeProfileHiker, setActiveProfileHiker] = useState<{ name: string; phone?: string; email?: string } | null>(null);
 
   // Load Leaderboard data for lifetime hikes and phone matching
   React.useEffect(() => {
@@ -1106,7 +1108,20 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                       {/* NAME */}
                       <td className="py-3 px-3 font-extrabold text-[#1F2937]">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span>{r.full_name}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActiveProfileHiker({
+                                name: r.full_name,
+                                phone: r.phone || r.whatsapp,
+                                email: r.email || r.email_address || r.user_email,
+                              })
+                            }
+                            className="hover:text-[#E08828] hover:underline cursor-pointer text-left transition-colors font-extrabold"
+                            title="Click to view full hiker profile, stats & lifetime records"
+                          >
+                            {r.full_name}
+                          </button>
                           {r.paxCount && r.paxCount > 1 && (
                             <span className="font-bold text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.5 rounded text-[10px]">
                               {r.paxCount} Pax
@@ -1339,6 +1354,23 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Full Hiker Profile Intelligence Modal */}
+      {activeProfileHiker && (
+        <AdminHikerProfileModal
+          isOpen={Boolean(activeProfileHiker)}
+          onClose={() => setActiveProfileHiker(null)}
+          hikerName={activeProfileHiker.name}
+          hikerPhone={activeProfileHiker.phone}
+          hikerEmail={activeProfileHiker.email}
+          allRegistrations={rawRegistrations}
+          treks={treks}
+          onViewVoucher={(url, reg) => {
+            setViewingVoucherUrl(url);
+            setViewingVoucherReg(reg);
+          }}
+        />
       )}
     </div>
   );

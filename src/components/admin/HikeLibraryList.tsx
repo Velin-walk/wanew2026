@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   SavedHikeRecord,
   TrekItineraryData
@@ -26,7 +26,9 @@ import {
   CloudUpload,
   LayoutGrid,
   List,
-  ArrowUpDown
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { ShareHikeModal } from './ShareHikeModal';
 import { apiFetch } from '../../services/api';
@@ -68,10 +70,64 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
   const [sharingHike, setSharingHike] = useState<SavedHikeRecord | null>(null);
   const [deletingHike, setDeletingHike] = useState<SavedHikeRecord | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [showAllTableEvents, setShowAllTableEvents] = useState(false);
 
   const showToast = (msg: string) => {
     setActionFeedback(msg);
     setTimeout(() => setActionFeedback(null), 3000);
+  };
+
+  // Helper to parse event date safely
+  const parseEventDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+    if (!trimmed || trimmed.toLowerCase() === 'tbd' || trimmed.toLowerCase() === 'flexible') return null;
+
+    if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+      const delimiter = trimmed.includes('-') ? '-' : '.';
+      const parts = trimmed.split(delimiter);
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) return d;
+
+    try {
+      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+      const year = yearMatch ? yearMatch[1] : '';
+      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+      const parts = cleanRange.split(/[–—\-]/);
+      if (parts.length > 1 && year) {
+        const firstPart = parts[0]
+          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+          .trim();
+        const rangeDate = new Date(`${firstPart} ${year}`);
+        if (!isNaN(rangeDate.getTime())) return rangeDate;
+      }
+    } catch {}
+
+    return null;
   };
 
   // Helper to extract numeric hike number from string (e.g., "253", "Hike 192", "#108")
@@ -123,6 +179,39 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
       const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
       return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
     });
+
+  // Table view: split into upcoming + last 5 events by default
+  const { upcomingTableHikes, pastTableHikes, tableDisplayedHikes } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
+
+    const upcoming: SavedHikeRecord[] = [];
+    const past: SavedHikeRecord[] = [];
+
+    filteredHikes.forEach((h) => {
+      const rawDate = h.data?.hikeDate || (h.data as any)?.date || h.data?.schedule?.eventDate || '';
+      const dt = parseEventDate(rawDate);
+      if (dt && dt.getTime() >= todayMs) {
+        upcoming.push(h);
+      } else {
+        past.push(h);
+      }
+    });
+
+    const isFiltered = Boolean(searchQuery.trim()) || selectedCategory !== 'all' || selectedStatus !== 'all';
+    const displayed = isFiltered || showAllTableEvents
+      ? filteredHikes
+      : [...upcoming, ...past.slice(0, 5)];
+
+    return {
+      upcomingTableHikes: upcoming,
+      pastTableHikes: past,
+      tableDisplayedHikes: displayed,
+    };
+  }, [filteredHikes, searchQuery, selectedCategory, selectedStatus, showAllTableEvents]);
+
+  const hasMoreTablePast = !searchQuery && selectedCategory === 'all' && selectedStatus === 'all' && pastTableHikes.length > 5;
 
   const publishedCount = hikes.filter((h) => h.status === 'published').length;
   const draftCount = hikes.filter((h) => h.status === 'draft').length;
@@ -377,7 +466,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
             <div>
               <h3 className="text-sm font-black text-[#1F1F1F] tracking-tight">Itinerary Catalog Table</h3>
               <p className="text-[11px] text-[#8B8680] mt-0.5">
-                Showing {filteredHikes.length} itinerary record(s) • Sorted by Hike # ({sortOrder === 'desc' ? 'Highest at Top' : 'Lowest at Top'})
+                Showing {tableDisplayedHikes.length} of {filteredHikes.length} itinerary record(s) {(!showAllTableEvents && hasMoreTablePast) ? '• (Upcoming + Last 5 Events)' : ''} • Sorted by Hike # ({sortOrder === 'desc' ? 'Highest at Top' : 'Lowest at Top'})
               </p>
             </div>
           </div>
@@ -406,7 +495,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0EBE5]">
-                {filteredHikes.map((hike, index) => {
+                {tableDisplayedHikes.map((hike, index) => {
                   const priceTiers = hike.data?.priceTiers || [];
                   const minPrice =
                     priceTiers.length > 0
@@ -569,6 +658,29 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
               </tbody>
             </table>
           </div>
+
+          {/* View More / Less Toggle Button for Table */}
+          {hasMoreTablePast && (
+            <div className="p-3 border-t border-[#F0EBE5] bg-[#FAF8F5] flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowAllTableEvents((prev) => !prev)}
+                className="px-4 py-2 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-[#1F1F1F] shadow-2xs flex items-center gap-2 transition-all cursor-pointer"
+              >
+                {showAllTableEvents ? (
+                  <>
+                    <ChevronUp className="w-4 h-4 text-stone-500" />
+                    <span>Show Less (Upcoming + Last 5 Events Only)</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4 text-[#E08828]" />
+                    <span>View More Past Events ({pastTableHikes.length - 5} more)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         /* GRID CARDS VIEW */

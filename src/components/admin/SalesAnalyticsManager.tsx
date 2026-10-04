@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   DollarSign,
   TrendingUp,
@@ -9,7 +9,9 @@ import {
   CheckCircle,
   FileSpreadsheet,
   Calendar,
-  Layers
+  Layers,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Trek } from '../../types';
 import { AdminRegistration } from './BookingsManager';
@@ -25,6 +27,109 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
   registrations,
   onSelectTrekRoster,
 }) => {
+  const [showAllEvents, setShowAllEvents] = useState(false);
+
+  // Helper to parse event date safely
+  const parseEventDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+    if (!trimmed || trimmed.toLowerCase() === 'tbd' || trimmed.toLowerCase() === 'flexible') return null;
+
+    if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+      const delimiter = trimmed.includes('-') ? '-' : '.';
+      const parts = trimmed.split(delimiter);
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) return d;
+
+    try {
+      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+      const year = yearMatch ? yearMatch[1] : '';
+      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+      const parts = cleanRange.split(/[–—\-]/);
+      if (parts.length > 1 && year) {
+        const firstPart = parts[0]
+          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+          .trim();
+        const rangeDate = new Date(`${firstPart} ${year}`);
+        if (!isNaN(rangeDate.getTime())) return rangeDate;
+      }
+    } catch {}
+
+    return null;
+  };
+
+  const getHikeNum = (t: Trek) => {
+    const m = String(t.hike_number || t.id || '').match(/\d+/);
+    return m ? parseInt(m[0], 10) : 0;
+  };
+
+  // Split treks into upcoming + past
+  const { upcomingTreks, pastTreks, displayedTreks } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
+
+    const upcoming: Trek[] = [];
+    const past: Trek[] = [];
+
+    treks.forEach((t) => {
+      const dt = parseEventDate(t.date);
+      if (dt && dt.getTime() >= todayMs) {
+        upcoming.push(t);
+      } else {
+        past.push(t);
+      }
+    });
+
+    upcoming.sort((a, b) => {
+      const da = parseEventDate(a.date)?.getTime() ?? 0;
+      const db = parseEventDate(b.date)?.getTime() ?? 0;
+      if (da !== db) return da - db;
+      return getHikeNum(b) - getHikeNum(a);
+    });
+
+    past.sort((a, b) => {
+      const da = parseEventDate(a.date)?.getTime() ?? 0;
+      const db = parseEventDate(b.date)?.getTime() ?? 0;
+      if (da !== db) return db - da;
+      return getHikeNum(b) - getHikeNum(a);
+    });
+
+    const displayed = showAllEvents ? [...upcoming, ...past] : [...upcoming, ...past.slice(0, 5)];
+
+    return {
+      upcomingTreks: upcoming,
+      pastTreks: past,
+      displayedTreks: displayed,
+    };
+  }, [treks, showAllEvents]);
+
+  const hasMorePastEvents = pastTreks.length > 5;
+
   // Helper to extract numerical price from price string (e.g., "NPR 1,500" -> 1500)
   const parsePrice = (priceStr?: string): number => {
     if (!priceStr) return 1500;
@@ -186,7 +291,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
           </div>
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#E08828] bg-[#FFF9F2] px-3 py-1.5 rounded-xl border border-[#FFE7CC]">
             <FileSpreadsheet className="w-4 h-4" />
-            <span>{treks.length} Treks Monitored</span>
+            <span>Showing {displayedTreks.length} of {treks.length} Treks {(!showAllEvents && hasMorePastEvents) ? '(Upcoming + Last 5)' : ''}</span>
           </div>
         </div>
 
@@ -203,7 +308,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EBE5]">
-              {treks.map((t) => {
+              {displayedTreks.map((t) => {
                 const priceStr = typeof t.price === 'string' ? t.price : String(t.price || '1500');
                 const metrics = trekSalesMap[t.id] || (t.hike_number && t.hike_number !== 'TBD' ? trekSalesMap[t.hike_number] : undefined) || {
                   projectedRev: (t.participants || 0) * parsePrice(priceStr),
@@ -284,6 +389,29 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* View More / Less Toggle Button */}
+        {hasMorePastEvents && (
+          <div className="p-3 border-t border-[#F0EBE5] bg-[#FAF8F5] flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowAllEvents((prev) => !prev)}
+              className="px-4 py-2 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-[#1F1F1F] shadow-2xs flex items-center gap-2 transition-all cursor-pointer"
+            >
+              {showAllEvents ? (
+                <>
+                  <ChevronUp className="w-4 h-4 text-stone-500" />
+                  <span>Show Less (Upcoming + Last 5 Events Only)</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4 text-[#E08828]" />
+                  <span>View More Past Events ({pastTreks.length - 5} more)</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

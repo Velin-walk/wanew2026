@@ -32,6 +32,7 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import { Trek } from '../../types';
+import { AdminHikerProfileModal } from './AdminHikerProfileModal';
 
 export interface AdminRegistration {
   id: string;
@@ -124,6 +125,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
   const [viewingAdminVoucherUrl, setViewingAdminVoucherUrl] = useState<string | null>(null);
   const [viewingAdminVoucherReg, setViewingAdminVoucherReg] = useState<AdminRegistration | null>(null);
+  const [activeProfileHiker, setActiveProfileHiker] = useState<{ name: string; phone?: string; email?: string } | null>(null);
 
   // Filter for upcoming events + last 2 months hikes in Bookings & Roster
   // Ordered with upcoming events first (closest upcoming first), then recent past events (most recent first)
@@ -1022,7 +1024,20 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                         <td className="py-3 px-4 align-middle">
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="font-extrabold text-xs text-[#1F1F1F]">{reg.full_name}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setActiveProfileHiker({
+                                    name: reg.full_name,
+                                    phone: reg.phone || reg.whatsapp,
+                                    email: reg.email || reg.email_address || reg.user_email,
+                                  })
+                                }
+                                className="font-extrabold text-xs text-[#1F1F1F] hover:text-[#E08828] hover:underline cursor-pointer text-left transition-colors"
+                                title="Click to view full hiker profile, stats & lifetime records"
+                              >
+                                {reg.full_name}
+                              </button>
                               
                               {/* Distinctive Purple/Blue Private Trek Badge */}
                               {isPrivate && (
@@ -1072,19 +1087,6 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                               )}
                             </div>
 
-                            {/* Contact Info */}
-                            <div className="flex flex-wrap items-center gap-x-3 text-[11px] text-[#8B8680]">
-                              <a href={`tel:${reg.phone}`} className="flex items-center gap-0.5 hover:text-[#E08828]">
-                                <Phone className="w-3 h-3 text-[#8B8680]" />
-                                <span>{reg.phone}</span>
-                              </a>
-
-                              <a href={`mailto:${reg.email}`} className="flex items-center gap-0.5 hover:text-[#E08828]">
-                                <Mail className="w-3 h-3 text-[#8B8680]" />
-                                <span className="truncate max-w-[140px]">{reg.email}</span>
-                              </a>
-                            </div>
-
                             {/* View Payment Voucher for Admins */}
                             {reg.payment_voucher_url && (
                               <div className="pt-0.5">
@@ -1104,25 +1106,6 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                                       : ''}{' '}
                                     📄
                                   </span>
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Toggle Details for Private Inquiries or Custom Remarks */}
-                            {(isPrivate || reg.person_remarks) && (
-                              <div className="pt-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedDetailsId(isExpanded ? null : reg.id)}
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer border ${
-                                    isExpanded
-                                      ? 'bg-purple-700 text-white border-purple-700'
-                                      : 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100'
-                                  }`}
-                                >
-                                  <FileText className="w-3 h-3" />
-                                  <span>{isExpanded ? 'Hide Specifications' : 'View Specifications & Notes'}</span>
-                                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                                 </button>
                               </div>
                             )}
@@ -1539,6 +1522,23 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Full Hiker Profile Intelligence Modal */}
+      {activeProfileHiker && (
+        <AdminHikerProfileModal
+          isOpen={Boolean(activeProfileHiker)}
+          onClose={() => setActiveProfileHiker(null)}
+          hikerName={activeProfileHiker.name}
+          hikerPhone={activeProfileHiker.phone}
+          hikerEmail={activeProfileHiker.email}
+          allRegistrations={registrations}
+          treks={treks}
+          onViewVoucher={(url, reg) => {
+            setViewingAdminVoucherUrl(url);
+            setViewingAdminVoucherReg(reg);
+          }}
+        />
       )}
     </div>
   );

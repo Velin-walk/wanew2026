@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Mountain,
   AlertTriangle,
@@ -9,7 +9,9 @@ import {
   Search,
   Compass,
   Save,
-  Check
+  Check,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Trek } from '../../types';
 
@@ -45,11 +47,119 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
 
   const [savingRowIds, setSavingRowIds] = useState<Record<string, boolean>>({});
   const [justSavedRowIds, setJustSavedRowIds] = useState<Record<string, boolean>>({});
+  const [showAllEvents, setShowAllEvents] = useState(false);
 
-  const filteredTreks = treks.filter((t) => {
+  // Helper to parse event date safely
+  const parseEventDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+    if (!trimmed || trimmed.toLowerCase() === 'tbd' || trimmed.toLowerCase() === 'flexible') return null;
+
+    if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+      const delimiter = trimmed.includes('-') ? '-' : '.';
+      const parts = trimmed.split(delimiter);
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) return d;
+
+    try {
+      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+      const year = yearMatch ? yearMatch[1] : '';
+      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+      const parts = cleanRange.split(/[–—\-]/);
+      if (parts.length > 1 && year) {
+        const firstPart = parts[0]
+          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+          .trim();
+        const rangeDate = new Date(`${firstPart} ${year}`);
+        if (!isNaN(rangeDate.getTime())) return rangeDate;
+      }
+    } catch {}
+
+    return null;
+  };
+
+  const getHikeNum = (t: Trek) => {
+    const m = String(t.hike_number || t.id || '').match(/\d+/);
+    return m ? parseInt(m[0], 10) : 0;
+  };
+
+  // Filter and split into upcoming + past events
+  const { upcomingTreks, pastTreks, displayedTreks, totalMatchingCount } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
+
     const q = searchTerm.toLowerCase().trim();
-    return !q || t.name.toLowerCase().includes(q) || (t.hike_number && t.hike_number.includes(q));
-  });
+    const matching = treks.filter((t) => {
+      return !q || t.name.toLowerCase().includes(q) || (t.hike_number && t.hike_number.includes(q));
+    });
+
+    const upcoming: Trek[] = [];
+    const past: Trek[] = [];
+
+    matching.forEach((t) => {
+      const dt = parseEventDate(t.date);
+      if (dt && dt.getTime() >= todayMs) {
+        upcoming.push(t);
+      } else {
+        past.push(t);
+      }
+    });
+
+    // Upcoming: nearest date first
+    upcoming.sort((a, b) => {
+      const da = parseEventDate(a.date)?.getTime() ?? 0;
+      const db = parseEventDate(b.date)?.getTime() ?? 0;
+      if (da !== db) return da - db;
+      return getHikeNum(b) - getHikeNum(a);
+    });
+
+    // Past: most recent past date first
+    past.sort((a, b) => {
+      const da = parseEventDate(a.date)?.getTime() ?? 0;
+      const db = parseEventDate(b.date)?.getTime() ?? 0;
+      if (da !== db) return db - da;
+      return getHikeNum(b) - getHikeNum(a);
+    });
+
+    const isFilteredBySearch = Boolean(q);
+    const displayed = isFilteredBySearch || showAllEvents
+      ? [...upcoming, ...past]
+      : [...upcoming, ...past.slice(0, 5)];
+
+    return {
+      upcomingTreks: upcoming,
+      pastTreks: past,
+      displayedTreks: displayed,
+      totalMatchingCount: matching.length,
+    };
+  }, [treks, searchTerm, showAllEvents]);
+
+  const hasMorePastEvents = !searchTerm && pastTreks.length > 5;
 
   const resolveTrekExecStatus = (
     t: Trek,
@@ -196,7 +306,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
           <div>
             <h3 className="text-sm font-black text-[#1F1F1F] tracking-tight">Event Execution Roster</h3>
             <p className="text-[11px] text-[#8B8680] mt-0.5">
-              Showing {filteredTreks.length} event(s) • Inline status, leader assignment &amp; capacity controls
+              Showing {displayedTreks.length} of {totalMatchingCount} event(s) {(!showAllEvents && !searchTerm && hasMorePastEvents) ? '• (Upcoming + Last 5 Events)' : ''} • Inline status, leader assignment &amp; capacity controls
             </p>
           </div>
         </div>
@@ -205,7 +315,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
           <div className="flex justify-center items-center py-16">
             <RefreshCw className="w-6 h-6 animate-spin text-[#E08828]" />
           </div>
-        ) : filteredTreks.length === 0 ? (
+        ) : displayedTreks.length === 0 ? (
           <div className="text-center py-12 px-4">
             <Mountain className="w-10 h-10 text-[#D8D2C9] mx-auto mb-2" />
             <p className="text-xs font-bold text-[#5A5551]">No events found matching search criteria</p>
@@ -224,7 +334,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0EBE5]">
-                {filteredTreks.map((t) => {
+                {displayedTreks.map((t) => {
                   const draft = rowDrafts[t.id] || {};
 
                   const curCapacity = draft.capacity !== undefined ? draft.capacity : t.capacity || 25;
@@ -399,6 +509,29 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* View More / Less Toggle Button */}
+        {hasMorePastEvents && (
+          <div className="p-3 border-t border-[#F0EBE5] bg-[#FAF8F5] flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowAllEvents((prev) => !prev)}
+              className="px-4 py-2 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-[#1F1F1F] shadow-2xs flex items-center gap-2 transition-all cursor-pointer"
+            >
+              {showAllEvents ? (
+                <>
+                  <ChevronUp className="w-4 h-4 text-stone-500" />
+                  <span>Show Less (Upcoming + Last 5 Events Only)</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4 text-[#E08828]" />
+                  <span>View More Past Events ({pastTreks.length - 5} more)</span>
+                </>
+              )}
+            </button>
           </div>
         )}
       </div>
