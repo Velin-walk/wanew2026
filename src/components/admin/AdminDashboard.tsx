@@ -1425,6 +1425,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       name: h.title || d.title || 'Himalayan Trek',
       date: d.hikeDate || d.date || d.schedule?.eventDate || '',
       days: d.overview?.expectedDuration || (d.itineraryDays?.length ? String(d.itineraryDays.length) : '1'),
+      days_label: d.overview?.days || '',
       difficulty: (d.overview?.difficulty || d.difficulty || 'moderate').toLowerCase() as any,
       leader: d.teamLeader || 'Walk Nepal Walk Guide',
       capacity: Number(d.maxCapacity) || 25,

@@ -400,6 +400,7 @@ export function normalizeTrek(row: any): Trek {
     name: title,
     date: date,
     days: d.overview?.expectedDuration || rawJsonData.overview?.expectedDuration || row.expected_duration || row.days || "1",
+    days_label: d.overview?.days || rawJsonData.overview?.days || row.days || "",
     difficulty: (difficulty === "hard" || difficulty === "difficult") ? "difficult" : (difficulty === "moderate" ? "moderate" : (difficulty === "extreme" ? "extreme" : (difficulty === "easy" ? "easy" : difficulty))),
     leader: resolvedLeader,
     capacity: resolvedCapacity,

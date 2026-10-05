@@ -456,6 +456,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         meeting_point: updatedFormData.overview?.meetingPoint || '',
         meeting_time: updatedFormData.overview?.meetingTime || '',
         expected_duration: updatedFormData.overview?.expectedDuration || '',
+        days: updatedFormData.overview?.days || '',
         difficulty: updatedFormData.overview?.difficulty || 'Moderate',
         approx_distance: updatedFormData.overview?.approxDistance || '',
         elevation_range: updatedFormData.overview?.elevationRange || '',
@@ -1388,6 +1389,25 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                   }))
                 }
                 placeholder="e.g. 6 Hours or 2 Days"
+                className="w-full px-3 py-2 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
+              />
+            </div>
+
+            {/* Days (example 3D 2N) */}
+            <div>
+              <label className="text-[11px] font-bold text-[#5A5551] uppercase tracking-wider block mb-1">
+                Days (e.g. 3D 2N)
+              </label>
+              <input
+                type="text"
+                value={formData.overview.days || ''}
+                onChange={(e) =>
+                  updateData((prev) => ({
+                    ...prev,
+                    overview: { ...prev.overview, days: e.target.value }
+                  }))
+                }
+                placeholder="e.g. 3D 2N"
                 className="w-full px-3 py-2 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
               />
             </div>

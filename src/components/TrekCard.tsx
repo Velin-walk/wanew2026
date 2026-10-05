@@ -192,6 +192,14 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   const borderClass = getBorderColor(effectiveDifficulty);
 
   const getCalendarDaysLabel = (): string => {
+    // 1. Prioritize configured Days (example 3D 2N) from Section 2 & 3
+    if (dbData?.overview?.days && String(dbData.overview.days).trim()) {
+      return String(dbData.overview.days).trim();
+    }
+    if ((trek as any)?.days_label && String((trek as any).days_label).trim()) {
+      return String((trek as any).days_label).trim();
+    }
+
     const rawDate = String(dbData?.hikeDate || trek.date || '').trim();
     if (!rawDate) return '1D';
 

@@ -30,9 +30,12 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  UserPlus,
 } from 'lucide-react';
-import { Trek } from '../../types';
+import { Trek, BookingFormData } from '../../types';
 import { AdminHikerProfileModal } from './AdminHikerProfileModal';
+import { RegistrationModal } from '../RegistrationModal';
+import { apiFetch } from '../../services/api';
 
 export interface AdminRegistration {
   id: string;
@@ -127,67 +130,67 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [viewingAdminVoucherReg, setViewingAdminVoucherReg] = useState<AdminRegistration | null>(null);
   const [activeProfileHiker, setActiveProfileHiker] = useState<{ name: string; phone?: string; email?: string } | null>(null);
 
-  // Filter for upcoming events + last 2 months hikes in Bookings & Roster
+  const parseTrekDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+
+    if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+      const delimiter = trimmed.includes('-') ? '-' : '.';
+      const parts = trimmed.split(delimiter);
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) return d;
+
+    try {
+      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+      const year = yearMatch ? yearMatch[1] : '';
+      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+      const parts = cleanRange.split(/[–—\-]/);
+      if (parts.length > 1 && year) {
+        const firstPart = parts[0]
+          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+          .trim();
+        const rangeDate = new Date(`${firstPart} ${year}`);
+        if (!isNaN(rangeDate.getTime())) return rangeDate;
+      }
+    } catch {}
+
+    return null;
+  };
+
+  // Filter for upcoming events + last 1 month hikes in Bookings & Roster
   // Ordered with upcoming events first (closest upcoming first), then recent past events (most recent first)
   const upcomingTreks = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayMs = today.getTime();
 
-    const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    twoMonthsAgo.setHours(0, 0, 0, 0);
-
-    const parseTrekDate = (dateStr?: string): Date | null => {
-      if (!dateStr) return null;
-      const trimmed = dateStr.trim();
-
-      if (trimmed.includes('/')) {
-        const parts = trimmed.split('/');
-        if (parts.length === 3) {
-          if (parts[0].length === 4) {
-            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-            if (!isNaN(d.getTime())) return d;
-          } else {
-            const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-            if (!isNaN(d.getTime())) return d;
-          }
-        }
-      }
-
-      if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
-        const delimiter = trimmed.includes('-') ? '-' : '.';
-        const parts = trimmed.split(delimiter);
-        if (parts.length === 3) {
-          if (parts[2].length === 4) {
-            const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-            if (!isNaN(d.getTime())) return d;
-          } else if (parts[0].length === 4) {
-            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-            if (!isNaN(d.getTime())) return d;
-          }
-        }
-      }
-
-      const d = new Date(trimmed);
-      if (!isNaN(d.getTime())) return d;
-
-      try {
-        const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-        const year = yearMatch ? yearMatch[1] : '';
-        const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-        const parts = cleanRange.split(/[–—\-]/);
-        if (parts.length > 1 && year) {
-          const firstPart = parts[0]
-            .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
-            .trim();
-          const rangeDate = new Date(`${firstPart} ${year}`);
-          if (!isNaN(rangeDate.getTime())) return rangeDate;
-        }
-      } catch {}
-
-      return null;
-    };
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    oneMonthAgo.setHours(0, 0, 0, 0);
 
     const getHikeNum = (t: Trek) => {
       const m = String(t.hike_number || t.id || '').match(/\d+/);
@@ -197,7 +200,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     return treks
       .filter((t) => {
         const dt = parseTrekDate(t.date);
-        return !dt || dt.getTime() >= twoMonthsAgo.getTime();
+        return !dt || dt.getTime() >= oneMonthAgo.getTime();
       })
       .sort((a, b) => {
         const da = parseTrekDate(a.date)?.getTime() ?? null;
@@ -273,6 +276,149 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     onRefresh();
     setToastMessage(`Updated ${total} registration(s) to Cancelled by User.`);
     setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  // Add Participant (Admin Quick Entry Modal) state & logic
+  const [isAddParticipantOpen, setIsAddParticipantOpen] = useState(false);
+
+  const activeSelectedTrek = useMemo(() => {
+    if (selectedTrekFilter && selectedTrekFilter !== 'all') {
+      return (
+        treks.find(
+          (t) =>
+            t.id === selectedTrekFilter ||
+            t.hike_number === selectedTrekFilter
+        ) || null
+      );
+    }
+    return upcomingTreks[0] || treks[0] || null;
+  }, [selectedTrekFilter, treks, upcomingTreks]);
+
+  const handleAdminSubmitRegistration = async (formData: BookingFormData) => {
+    const targetTrek =
+      treks.find(
+        (t) =>
+          t.id === formData.trek_id ||
+          t.hike_number === formData.trek_id ||
+          (t.name && formData.trek_name && t.name.toLowerCase() === formData.trek_name.toLowerCase())
+      ) ||
+      treks.find((t) => t.id === selectedTrekFilter || t.hike_number === selectedTrekFilter) ||
+      treks[0];
+
+    const resolvedTrekDate = formData.trek_date || targetTrek?.date || '';
+    const resolvedTrekName = targetTrek?.name || formData.trek_name || 'Himalayan Trek';
+    const resolvedHikeNumber =
+      targetTrek?.hike_number && targetTrek.hike_number.toUpperCase() !== 'TBD'
+        ? targetTrek.hike_number
+        : targetTrek?.id || 'TBD';
+    const trekWithDateLabel = resolvedTrekDate
+      ? `${resolvedTrekName} (${resolvedTrekDate})`
+      : resolvedTrekName;
+    const totalNewPeople = 1 + (Array.isArray(formData.team_members) ? formData.team_members.length : 0);
+
+    const groupRemarks =
+      formData.team_members && formData.team_members.length > 0
+        ? `${trekWithDateLabel} • Admin manual entry: Primary contact with ${formData.team_members.length} companion(s): ${formData.team_members.map((m) => m.full_name).join(', ')}`
+        : `${trekWithDateLabel} • Admin manual entry: Solo participant`;
+
+    const primaryPayload = {
+      trek_id: targetTrek?.id || formData.trek_id,
+      hike_number: resolvedHikeNumber,
+      trek_name: resolvedTrekName,
+      trek_date: resolvedTrekDate,
+      date: resolvedTrekDate,
+      full_name: formData.full_name,
+      pax: totalNewPeople,
+      phone: formData.phone,
+      whatsapp: formData.whatsapp || formData.phone,
+      email_address: formData.email,
+      emergency_backup_contact: formData.emergency_contact || '',
+      profession: formData.profession || '',
+      part_of_group: formData.is_group || (formData.team_members && formData.team_members.length > 0 ? 'Group' : 'Solo'),
+      age_group: formData.age_group,
+      gender: formData.gender,
+      guide_mode: formData.guide_preference || 'Guided',
+      transport_mode: formData.transport_preference || 'Bus',
+      due: targetTrek?.price ? `NPR ${targetTrek.price}` : '',
+      paid: '',
+      agreement: formData.agree_rules || 'Yes',
+      suggestions: formData.suggestions || '',
+      person_remarks: groupRemarks,
+      updates: '',
+      pickup_point: '',
+      list_name: trekWithDateLabel,
+      fitness: targetTrek?.fitness_level || '',
+      medical_condition: formData.has_medical === 'Yes' ? (formData.specify_medical || 'Yes') : 'No',
+      recent_hikes: formData.recent_hikes || '',
+      distance: targetTrek?.distance || '',
+      difficulty: targetTrek?.difficulty || '',
+      season: targetTrek?.season || '',
+      type_of_trail: targetTrek?.type_of_trail || '',
+      source: 'admin_manual',
+      status: 'Confirmed',
+    };
+
+    try {
+      await apiFetch('/registrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(primaryPayload),
+      });
+
+      // Submit companions if any
+      if (formData.team_members && formData.team_members.length > 0) {
+        for (const tm of formData.team_members) {
+          if (tm.full_name) {
+            const companionPayload = {
+              trek_id: targetTrek?.id || formData.trek_id,
+              hike_number: resolvedHikeNumber,
+              trek_name: resolvedTrekName,
+              trek_date: resolvedTrekDate,
+              date: resolvedTrekDate,
+              full_name: tm.full_name,
+              pax: 1,
+              phone: tm.phone || '',
+              whatsapp: tm.phone || '',
+              email_address: formData.email,
+              emergency_backup_contact: formData.phone,
+              profession: '',
+              part_of_group: 'Group',
+              age_group: tm.age_group || '20-30',
+              gender: tm.gender || 'Female',
+              guide_mode: formData.guide_preference || 'Guided',
+              transport_mode: formData.transport_preference || 'Bus',
+              due: '',
+              paid: '',
+              agreement: 'Yes',
+              suggestions: '',
+              person_remarks: `${trekWithDateLabel} • Admin manual entry: Companion of ${formData.full_name}`,
+              updates: '',
+              pickup_point: '',
+              list_name: trekWithDateLabel,
+              fitness: targetTrek?.fitness_level || '',
+              medical_condition: 'No',
+              recent_hikes: '',
+              distance: targetTrek?.distance || '',
+              difficulty: targetTrek?.difficulty || '',
+              season: targetTrek?.season || '',
+              type_of_trail: targetTrek?.type_of_trail || '',
+              source: 'admin_manual',
+              status: 'Confirmed',
+            };
+            await apiFetch('/registrations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(companionPayload),
+            }).catch(() => {});
+          }
+        }
+      }
+
+      await onRefresh();
+    } catch (err: any) {
+      console.error('Failed to save manual admin registration:', err);
+      throw err;
+    }
   };
 
   // Private vs Public counts
@@ -533,11 +679,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         </div>
       </div>
 
-      {/* ── TOP EVENT CARDS STRIP (UPCOMING + LAST 2 MONTHS HIKES) ── */}
+      {/* ── TOP EVENT CARDS STRIP (UPCOMING + LAST 1 MONTH HIKES) ── */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider">
-            Active &amp; Recent Expeditions (Upcoming + Last 2 Months)
+            Active &amp; Recent Expeditions (Upcoming + Last 1 Month)
           </h3>
           {selectedTrekFilter !== 'all' && (
             <button
@@ -548,13 +694,13 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
             </button>
           )}
         </div>
-        <div className="grid grid-rows-2 grid-flow-col auto-cols-[125px] sm:auto-cols-[135px] gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(125px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(135px,1fr))] gap-2">
           {/* "All Bookings" Card */}
           <div
             onClick={() => setSelectedTrekFilter('all')}
-            className={`p-2 rounded-xl w-[125px] sm:w-[135px] shrink-0 cursor-pointer transition-all border flex flex-col justify-between overflow-hidden ${
+            className={`p-2 rounded-xl w-full cursor-pointer transition-all border flex flex-col justify-between overflow-hidden ${
               selectedTrekFilter === 'all'
-                ? 'border-2 border-amber-600 bg-amber-50/20 shadow-xs ring-2 ring-amber-600/10'
+                ? 'border-2 border-amber-600 bg-amber-500/20 shadow-xs ring-2 ring-amber-600/10'
                 : 'border-stone-200 bg-white hover:border-stone-300 shadow-2xs'
             }`}
           >
@@ -563,28 +709,23 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                 <span className="truncate">ALL TIME</span>
                 <Compass className="w-2.5 h-2.5 text-stone-400 shrink-0" />
               </div>
-              <h3 className="text-[11px] font-bold text-[#1F2937] truncate mb-0.5" title="All Public Expeditions">
+              <h3 className="text-[11px] font-bold text-[#1F2937] truncate mb-1" title="All Public Expeditions">
                 All Expeditions
               </h3>
-              <div className="flex items-center gap-1 mb-1">
-                <span className="px-1 py-0.2 rounded bg-stone-100 text-stone-600 text-[8.5px] font-bold truncate">
-                  Main Ledger
+              <div className="flex items-center gap-1.5 text-[9.5px] font-bold min-w-0">
+                <span className="px-1.5 py-0.5 rounded bg-black/5 text-stone-800 font-extrabold shrink-0">
+                  ALL
                 </span>
-              </div>
-            </div>
-            <div className="flex items-baseline justify-between pt-1 border-t border-stone-100 min-w-0">
-              <div className="text-xs font-black text-[#1F2937]">
-                {
-                  registrations.filter((r) => {
-                    const isPriv = r.hike_number === 'PRIVATE' || r.trek_name?.toLowerCase().includes('private');
-                    if (isPriv) return false;
-                    const st = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
-                    return !st.includes('cancelled') && st !== 'waitlisted';
-                  }).length
-                }
-              </div>
-              <div className="text-[8px] font-bold uppercase tracking-wider text-stone-400 truncate">
-                ACTIVE
+                <span className="px-1.5 py-0.5 rounded bg-stone-200/70 text-stone-900 font-black truncate">
+                  {
+                    registrations.filter((r) => {
+                      const isPriv = r.hike_number === 'PRIVATE' || r.trek_name?.toLowerCase().includes('private');
+                      if (isPriv) return false;
+                      const st = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
+                      return !st.includes('cancelled') && st !== 'waitlisted';
+                    }).length
+                  } JOINED
+                </span>
               </div>
             </div>
           </div>
@@ -630,18 +771,27 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
             const tRegsCount = matchedActiveRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
 
+            const dt = parseTrekDate(t.date);
+            const todayStartMs = new Date().setHours(0, 0, 0, 0);
+            const isPast = dt !== null && dt.getTime() < todayStartMs;
+            const isUpcoming = !isPast;
+
+            const cardThemeClass = isUpcoming
+              ? isSelected
+                ? 'border-2 border-orange-500 bg-orange-500/20 shadow-xs ring-2 ring-orange-500/20'
+                : 'border border-orange-300/60 bg-orange-500/10 hover:bg-orange-500/15 hover:border-orange-400/70 shadow-2xs'
+              : isSelected
+                ? 'border-2 border-blue-500 bg-blue-500/20 shadow-xs ring-2 ring-blue-500/20'
+                : 'border border-blue-300/60 bg-blue-500/10 hover:bg-blue-500/15 hover:border-blue-400/70 shadow-2xs';
+
             return (
               <div
                 key={t.id}
                 onClick={() => setSelectedTrekFilter(isSelected ? 'all' : filterKey)}
-                className={`p-2 rounded-xl w-[125px] sm:w-[135px] shrink-0 cursor-pointer transition-all border flex flex-col justify-between overflow-hidden ${
-                  isSelected
-                    ? 'border-2 border-[#16A34A] bg-white shadow-xs ring-2 ring-[#16A34A]/10'
-                    : 'border-stone-200 bg-white hover:border-stone-300 shadow-2xs'
-                }`}
+                className={`p-2 rounded-xl w-full cursor-pointer transition-all flex flex-col justify-between overflow-hidden ${cardThemeClass}`}
               >
                 <div className="min-w-0">
-                  <div className="flex items-center justify-between text-[9px] font-bold text-stone-400 mb-0.5">
+                  <div className="flex items-center justify-between text-[9px] font-bold text-stone-500 mb-0.5">
                     <span className="truncate">{t.date || 'Flexible'}</span>
                     {t.is_cancelled && (
                       <span className="px-1 py-0.2 rounded bg-rose-100 text-rose-700 text-[7.5px] font-extrabold border border-rose-200 shrink-0 ml-1">
@@ -649,22 +799,18 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                       </span>
                     )}
                   </div>
-                  <h3 className="text-[11px] font-bold text-[#1F2937] truncate mb-0.5" title={t.name}>
+                  <h3 className="text-[11px] font-bold text-[#1F2937] truncate mb-1" title={t.name}>
                     {t.name}
                   </h3>
-                  <div className="flex items-center gap-1 mb-1 overflow-hidden">
-                    <span className="px-1 py-0.2 rounded bg-blue-50 text-[#2563EB] text-[8.5px] font-bold border border-blue-100 flex items-center gap-0.5 truncate shrink-0">
-                      <Compass className="w-2.5 h-2.5 text-[#2563EB] shrink-0" /> #{t.hike_number || 'N/A'}
+                  <div className="flex items-center gap-1.5 text-[9.5px] font-bold min-w-0">
+                    <span className="px-1.5 py-0.5 rounded bg-black/5 text-stone-800 font-extrabold shrink-0">
+                      #{t.hike_number || 'N/A'}
                     </span>
-                    <span className="px-1 py-0.2 rounded bg-stone-100 text-stone-600 text-[8.5px] font-bold truncate">
-                      {t.difficulty || 'Mod'}
+                    <span className={`px-1.5 py-0.5 rounded font-black truncate ${
+                      isUpcoming ? 'bg-orange-500/20 text-orange-950' : 'bg-blue-500/20 text-blue-950'
+                    }`}>
+                      {tRegsCount || 0} JOINED
                     </span>
-                  </div>
-                </div>
-                <div className="flex items-baseline justify-between pt-1 border-t border-stone-100 min-w-0">
-                  <div className="text-xs font-black text-[#1F2937]">{tRegsCount || 0}</div>
-                  <div className="text-[8px] font-bold uppercase tracking-wider text-stone-400 truncate">
-                    REGISTERED
                   </div>
                 </div>
               </div>
@@ -1335,6 +1481,22 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
             </table>
           </div>
         )}
+
+        {/* Bottom of List of Participants */}
+        <div className="p-4 border-t border-[#F0EBE5] bg-[#FAF8F5] flex items-center justify-between flex-wrap gap-3">
+          <div className="text-[11px] font-semibold text-[#8B8680]">
+            Showing <strong className="text-[#1F1F1F]">{filteredRegistrations.length}</strong> participant(s) in roster
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAddParticipantOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#E08828] hover:bg-[#c9741b] active:scale-[0.98] text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+            title="Add Participant / Manual Booking Entry"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ Add Participant</span>
+          </button>
+        </div>
       </div>
 
       {/* Toast Notification */}
@@ -1538,6 +1700,19 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
             setViewingAdminVoucherUrl(url);
             setViewingAdminVoucherReg(reg);
           }}
+        />
+      )}
+
+      {/* Registration Modal in Admin Proxy Mode (+ Add Participant) */}
+      {isAddParticipantOpen && (
+        <RegistrationModal
+          trek={activeSelectedTrek}
+          allTreks={upcomingTreks.length > 0 ? upcomingTreks : treks}
+          isOpen={isAddParticipantOpen}
+          onClose={() => setIsAddParticipantOpen(false)}
+          onSubmit={handleAdminSubmitRegistration}
+          isAdminProxy={true}
+          pastHikers={registrations}
         />
       )}
     </div>

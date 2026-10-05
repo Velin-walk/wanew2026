@@ -54,6 +54,7 @@ export interface TrekItineraryData {
     meetingTime: string;
     meetingPoint: string;
     expectedDuration: string;
+    days?: string;
     difficulty: string;
     approxDistance: string;
     elevationRange: string;
@@ -104,6 +105,7 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
     meetingTime: '8:00 AM',
     meetingPoint: '',
     expectedDuration: '',
+    days: '',
     difficulty: 'Moderate',
     approxDistance: '',
     elevationRange: '',
@@ -227,6 +229,7 @@ export const normalizeItineraryData = (raw?: Partial<TrekItineraryData> | null):
       meetingTime: d.overview?.meetingTime ?? '',
       meetingPoint: d.overview?.meetingPoint ?? '',
       expectedDuration: d.overview?.expectedDuration ?? '',
+      days: d.overview?.days ?? '',
       difficulty: d.overview?.difficulty ?? 'Moderate',
       approxDistance: d.overview?.approxDistance ?? '',
       elevationRange: d.overview?.elevationRange ?? '',

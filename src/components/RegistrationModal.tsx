@@ -33,6 +33,8 @@ interface RegistrationModalProps {
   userEmail?: string;
   latestBooking?: any;
   onNavigateToPayment?: () => void;
+  isAdminProxy?: boolean;
+  pastHikers?: any[];
 }
 
 export const RegistrationModal: React.FC<RegistrationModalProps> = ({
@@ -44,6 +46,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   userEmail = '',
   latestBooking,
   onNavigateToPayment,
+  isAdminProxy = false,
+  pastHikers = [],
 }) => {
   // Helper to accurately parse trek date
   const parseTrekDate = (dateStr?: string): Date | null => {
@@ -129,6 +133,50 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [isAutoFilled, setIsAutoFilled] = useState(false);
   const [submissionProgress, setSubmissionProgress] = useState<number>(0);
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
+  const [matchedHiker, setMatchedHiker] = useState<{ name: string; phone?: string } | null>(null);
+
+  const handlePhoneChange = (inputVal: string) => {
+    setPhone(inputVal);
+
+    if (!pastHikers || pastHikers.length === 0) return;
+
+    const cleanInput = inputVal.replace(/\D/g, '');
+    if (cleanInput.length >= 8) {
+      const targetDigits = cleanInput.slice(-10);
+      const match = pastHikers.find((h) => {
+        const p1 = (h.phone || h.whatsapp || '').replace(/\D/g, '');
+        return p1.length >= 8 && (p1.slice(-10) === targetDigits || p1.includes(targetDigits) || targetDigits.includes(p1));
+      });
+
+      if (match) {
+        if (match.full_name) setFullName(match.full_name);
+        if (match.email || match.email_address) setEmail(match.email || match.email_address);
+        if (match.whatsapp || match.phone) setWhatsapp(match.whatsapp || match.phone);
+        if (match.emergency_contact || match.emergency_backup_contact) {
+          setEmergencyContact(match.emergency_contact || match.emergency_backup_contact);
+        }
+        if (match.profession) setProfession(match.profession);
+        if (match.age_group) setAgeGroup(match.age_group);
+        if (match.gender) setGender(match.gender);
+        if (match.has_medical === 'Yes' || (match.specify_medical && match.specify_medical !== 'No')) {
+          setHasMedical('Yes');
+          setSpecifyMedical(match.specify_medical || '');
+        }
+        if (match.recent_hikes) setRecentHikes(match.recent_hikes);
+        if (match.guide_preference) setGuidePreference(match.guide_preference as any);
+        if (match.transport_preference) setTransportPreference(match.transport_preference as any);
+
+        setMatchedHiker({
+          name: match.full_name,
+          phone: match.phone,
+        });
+      } else {
+        setMatchedHiker(null);
+      }
+    } else {
+      setMatchedHiker(null);
+    }
+  };
 
   // Helper to load saved profile data from localStorage or passed props
   const getSavedProfile = () => {
@@ -159,6 +207,26 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   // Auto-fill when modal opens from latestBooking, localStorage, or user profile
   useEffect(() => {
     if (isOpen) {
+      if (isAdminProxy) {
+        setFullName('');
+        setPhone('');
+        setWhatsapp('');
+        setEmergencyContact('');
+        setEmail('');
+        setProfession('');
+        setTeamMembers([]);
+        setIsGroup('Solo');
+        setHasMedical('No');
+        setSpecifyMedical('');
+        setRecentHikes('');
+        setSuggestions('');
+        setIsReviewMode(false);
+        setError(null);
+        setMatchedHiker(null);
+        setIsSubmitted(false);
+        setSubmitting(false);
+        return;
+      }
       const saved = getSavedProfile();
       const source = latestBooking || saved;
 
@@ -401,14 +469,16 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         guidePreference: payload.guide_preference,
         transportPreference: payload.transport_preference,
       };
-      try {
-        localStorage.setItem('wnw_user_registration_profile', JSON.stringify(profileToSave));
-        localStorage.setItem('wnw_last_registration_data', JSON.stringify(profileToSave));
-        if (payload.phone) {
-          localStorage.setItem('wnw_user_phone', payload.phone.trim());
+      if (!isAdminProxy) {
+        try {
+          localStorage.setItem('wnw_user_registration_profile', JSON.stringify(profileToSave));
+          localStorage.setItem('wnw_last_registration_data', JSON.stringify(profileToSave));
+          if (payload.phone) {
+            localStorage.setItem('wnw_user_phone', payload.phone.trim());
+          }
+        } catch (e) {
+          console.warn('Could not save profile to localStorage:', e);
         }
-      } catch (e) {
-        console.warn('Could not save profile to localStorage:', e);
       }
 
       await onSubmit(payload);
@@ -484,9 +554,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[#EBE7E1] bg-white shrink-0">
           <div className="min-w-0 flex-1 mr-2">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#7ABA42]/15 text-[#5C942D] text-[10px] font-bold uppercase tracking-wider">
-                <Sparkles className="w-2.5 h-2.5" /> Hike Registration
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                isAdminProxy
+                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                  : 'bg-[#7ABA42]/15 text-[#5C942D]'
+              }`}>
+                <Sparkles className="w-2.5 h-2.5" />
+                {isAdminProxy ? 'Admin Quick Entry' : 'Hike Registration'}
               </span>
               {activeTrek?.hike_number && (
                 <span className="text-[10px] font-bold text-[#8B8680]">
@@ -495,7 +570,9 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
               )}
             </div>
             <h2 className="text-base sm:text-lg font-bold text-[#1F1F1F] truncate mt-0.5">
-              {activeTrek ? activeTrek.name : 'Adventure Registration'}
+              {isAdminProxy
+                ? `Add Participant: ${activeTrek ? activeTrek.name : 'New Event'}`
+                : activeTrek ? activeTrek.name : 'Adventure Registration'}
             </h2>
             <p className="text-[11px] text-[#78716C] flex items-center gap-1">
               <Calendar className="w-3 h-3 text-[#E08828]" />
@@ -569,37 +646,57 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
               
               <div className="space-y-2 max-w-sm">
                 <h3 className="text-lg font-black text-[#1F1F1F] tracking-tight">
-                  Registration Confirmed!
+                  {isAdminProxy ? 'Participant Added to Roster!' : 'Registration Confirmed!'}
                 </h3>
                 <p className="text-xs text-[#5A5551] leading-relaxed">
-                  Hi <strong className="text-[#1F1F1F]">{fullName}</strong>, your spot on the <strong className="text-[#1F1F1F]">{activeTrek?.name}</strong> expedition has been secured successfully.
+                  {isAdminProxy ? (
+                    <>
+                      <strong className="text-[#1F1F1F]">{fullName}</strong> has been successfully added to the <strong className="text-[#1F1F1F]">{activeTrek?.name}</strong> roster.
+                    </>
+                  ) : (
+                    <>
+                      Hi <strong className="text-[#1F1F1F]">{fullName}</strong>, your spot on the <strong className="text-[#1F1F1F]">{activeTrek?.name}</strong> expedition has been secured successfully.
+                    </>
+                  )}
                 </p>
-
               </div>
 
               {/* Success Call to Actions */}
               <div className="w-full max-w-xs space-y-2.5 pt-4 mx-auto">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onNavigateToPayment) {
-                      onNavigateToPayment();
-                    } else {
-                      onClose();
-                    }
-                  }}
-                  className="w-full py-3 px-5 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>Pay Now (Pricing & Payment)</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full py-2.5 px-5 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#5A5551] font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
-                >
-                  Pay Later (Return to Homepage)
-                </button>
+                {isAdminProxy ? (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full py-3 px-5 bg-[#E08828] hover:bg-[#c9741b] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>Done (Return to Roster)</span>
+                    <CheckCircle2 className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onNavigateToPayment) {
+                          onNavigateToPayment();
+                        } else {
+                          onClose();
+                        }
+                      }}
+                      className="w-full py-3 px-5 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <span>Pay Now (Pricing & Payment)</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="w-full py-2.5 px-5 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#5A5551] font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                    >
+                      Pay Later (Return to Homepage)
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ) : !isReviewMode ? (
@@ -699,10 +796,23 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                       name="phoneNumber"
                       required
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
                       placeholder="e.g. 98XXXXXXXX"
                       className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
                     />
+                    {matchedHiker && (
+                      <div className="mt-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[10.5px] font-bold text-emerald-800 flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="truncate">
+                            Past hiker found: <strong>{matchedHiker.name}</strong> (Auto-filled)
+                          </span>
+                        </div>
+                        <span className="text-[8.5px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-200 text-emerald-900 rounded font-black shrink-0">
+                          Matched
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div>

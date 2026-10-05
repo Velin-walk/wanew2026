@@ -254,66 +254,66 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return [...enrichedTreksList, ...virtualTreks];
   }, [treks, registrations]);
 
-  // 2. Filter for upcoming events, events in last 2 months, OR any event that has active registrations
+  const parseTrekDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+
+    if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+      const delimiter = trimmed.includes('-') ? '-' : '.';
+      const parts = trimmed.split(delimiter);
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(d.getTime())) return d;
+        } else if (parts[0].length === 4) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) return d;
+
+    try {
+      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+      const year = yearMatch ? yearMatch[1] : '';
+      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+      const parts = cleanRange.split(/[–—\-]/);
+      if (parts.length > 1 && year) {
+        const firstPart = parts[0]
+          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+          .trim();
+        const rangeDate = new Date(`${firstPart} ${year}`);
+        if (!isNaN(rangeDate.getTime())) return rangeDate;
+      }
+    } catch {}
+
+    return null;
+  };
+
+  // 2. Filter for upcoming events + events in last 1 month
   const upcomingTreks = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayMs = today.getTime();
 
-    const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    twoMonthsAgo.setHours(0, 0, 0, 0);
-
-    const parseTrekDate = (dateStr?: string): Date | null => {
-      if (!dateStr) return null;
-      const trimmed = dateStr.trim();
-
-      if (trimmed.includes('/')) {
-        const parts = trimmed.split('/');
-        if (parts.length === 3) {
-          if (parts[0].length === 4) {
-            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-            if (!isNaN(d.getTime())) return d;
-          } else {
-            const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-            if (!isNaN(d.getTime())) return d;
-          }
-        }
-      }
-
-      if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
-        const delimiter = trimmed.includes('-') ? '-' : '.';
-        const parts = trimmed.split(delimiter);
-        if (parts.length === 3) {
-          if (parts[2].length === 4) {
-            const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-            if (!isNaN(d.getTime())) return d;
-          } else if (parts[0].length === 4) {
-            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-            if (!isNaN(d.getTime())) return d;
-          }
-        }
-      }
-
-      const d = new Date(trimmed);
-      if (!isNaN(d.getTime())) return d;
-
-      try {
-        const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-        const year = yearMatch ? yearMatch[1] : '';
-        const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-        const parts = cleanRange.split(/[–—\-]/);
-        if (parts.length > 1 && year) {
-          const firstPart = parts[0]
-            .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
-            .trim();
-          const rangeDate = new Date(`${firstPart} ${year}`);
-          if (!isNaN(rangeDate.getTime())) return rangeDate;
-        }
-      } catch {}
-
-      return null;
-    };
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    oneMonthAgo.setHours(0, 0, 0, 0);
 
     const getHikeNum = (t: Trek) => {
       const m = String(t.hike_number || t.id || '').match(/\d+/);
@@ -322,13 +322,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
     return allAvailableTreks
       .filter((t) => {
-        const hasRegistrations = registrations.some(
-          (r) => doesRegistrationMatchTrek(r, t)
-        );
-        if (hasRegistrations) return true;
-
         const dt = parseTrekDate(t.date);
-        return !dt || dt.getTime() >= twoMonthsAgo.getTime();
+        return !dt || dt.getTime() >= oneMonthAgo.getTime();
       })
       .sort((a, b) => {
         const da = parseTrekDate(a.date)?.getTime() ?? null;
@@ -714,7 +709,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       </div>
 
       {/* ── TOP EVENT CARDS STRIP ── */}
-      <div className="grid grid-rows-2 grid-flow-col auto-cols-[125px] sm:auto-cols-[135px] gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200 print:hidden">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(125px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(135px,1fr))] gap-2.5 print:hidden">
         {upcomingTreks.map((t) => {
           const curHikeNum = getHikeNumberFromAny(currentTrek);
           const tHikeNum = getHikeNumberFromAny(t);
@@ -727,18 +722,27 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           );
           const tRegsCount = matchedRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
 
+          const dt = parseTrekDate(t.date);
+          const todayStartMs = new Date().setHours(0, 0, 0, 0);
+          const isPast = dt !== null && dt.getTime() < todayStartMs;
+          const isUpcoming = !isPast;
+
+          const cardThemeClass = isUpcoming
+            ? isSelected
+              ? 'border-2 border-orange-500 bg-orange-500/25 shadow-md ring-2 ring-orange-500/25 -translate-y-0.5'
+              : 'border border-orange-300/60 bg-orange-500/15 shadow-[0_4px_14px_rgba(234,88,12,0.12)] hover:shadow-[0_6px_20px_rgba(234,88,12,0.22)] hover:bg-orange-500/20 hover:-translate-y-0.5'
+            : isSelected
+              ? 'border-2 border-blue-500 bg-blue-500/25 shadow-md ring-2 ring-blue-500/25 -translate-y-0.5'
+              : 'border border-blue-300/60 bg-blue-500/15 shadow-[0_4px_14px_rgba(37,99,235,0.12)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.22)] hover:bg-blue-500/20 hover:-translate-y-0.5';
+
           return (
             <div
               key={t.id}
               onClick={() => setSelectedTrekId(t.id || t.hike_number || '')}
-              className={`p-2 rounded-xl w-[125px] sm:w-[135px] shrink-0 cursor-pointer transition-all border flex flex-col justify-between overflow-hidden ${
-                isSelected
-                  ? 'border-2 border-[#16A34A] bg-white shadow-xs ring-2 ring-[#16A34A]/10'
-                  : 'border-stone-200 bg-white hover:border-stone-300 shadow-2xs'
-              }`}
+              className={`p-2 sm:p-2.5 rounded-xl w-full cursor-pointer transition-all flex flex-col justify-between overflow-hidden backdrop-blur-xs ${cardThemeClass}`}
             >
               <div className="min-w-0">
-                <div className="flex items-center justify-between text-[9px] font-bold text-stone-400 mb-0.5">
+                <div className="flex items-center justify-between text-[9px] font-bold text-stone-500 mb-0.5">
                   <span className="truncate">{t.date || 'Flexible'}</span>
                   {t.is_cancelled && (
                     <span className="px-1 py-0.2 rounded bg-rose-100 text-rose-700 text-[7.5px] font-extrabold border border-rose-200 shrink-0 ml-1">
@@ -746,22 +750,18 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                     </span>
                   )}
                 </div>
-                <h3 className="text-[11px] font-bold text-[#1F2937] truncate mb-0.5" title={t.name}>
+                <h3 className="text-[11px] font-bold text-[#1F2937] truncate mb-1" title={t.name}>
                   {t.name}
                 </h3>
-                <div className="flex items-center gap-1 mb-1 overflow-hidden">
-                  <span className="px-1 py-0.2 rounded bg-blue-50 text-[#2563EB] text-[8.5px] font-bold border border-blue-100 flex items-center gap-0.5 truncate shrink-0">
-                    <Compass className="w-2.5 h-2.5 text-[#2563EB] shrink-0" /> #{t.hike_number || tHikeNum || 'N/A'}
+                <div className="flex items-center gap-1.5 text-[9.5px] font-bold min-w-0">
+                  <span className="px-1.5 py-0.5 rounded bg-black/5 text-stone-800 font-extrabold shrink-0">
+                    #{t.hike_number || tHikeNum || 'N/A'}
                   </span>
-                  <span className="px-1 py-0.2 rounded bg-stone-100 text-stone-600 text-[8.5px] font-bold truncate">
-                    {t.difficulty || 'Mod'}
+                  <span className={`px-1.5 py-0.5 rounded font-black truncate ${
+                    isUpcoming ? 'bg-orange-500/20 text-orange-950' : 'bg-blue-500/20 text-blue-950'
+                  }`}>
+                    {tRegsCount || 0} JOINED
                   </span>
-                </div>
-              </div>
-              <div className="flex items-baseline justify-between pt-1 border-t border-stone-100 min-w-0">
-                <div className="text-xs font-black text-[#1F2937]">{tRegsCount || 0}</div>
-                <div className="text-[8px] font-bold uppercase tracking-wider text-stone-400 truncate">
-                  REGISTERED
                 </div>
               </div>
             </div>
