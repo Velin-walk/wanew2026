@@ -24,8 +24,62 @@ import {
 } from 'lucide-react';
 import { AdminRegistration } from './BookingsManager';
 import { Trek } from '../../types';
-import { HikerStats } from '../../types/leaderboard';
-import { apiFetch } from '../../services/api';
+import { HikerStats, HikerCompletedEvent } from '../../types/leaderboard';
+import { fetchLeaderboardData } from '../../services/api';
+
+/**
+ * Exact matching function from public trek card (GuideProfileModal.tsx)
+ */
+function findLeaderboardGuide(guideName: string, hikers: HikerStats[]): HikerStats | null {
+  if (!guideName || !hikers || hikers.length === 0) return null;
+
+  const clean = guideName.trim().toLowerCase();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return null;
+
+  // 1. Exact match
+  const exact = hikers.find((h) => (h.n || '').toLowerCase().trim() === clean);
+  if (exact) return exact;
+
+  // 2. Both first and last name match or phonetics (e.g. "biraj thing" <-> "biraj theeng")
+  if (parts.length >= 2) {
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+
+    const match = hikers.find((h) => {
+      const hn = (h.n || '').toLowerCase().trim();
+      const hParts = hn.split(/\s+/).filter(Boolean);
+      if (hParts.length < 2) return false;
+      const hFirst = hParts[0];
+      const hLast = hParts[hParts.length - 1];
+
+      if (hFirst !== first) return false;
+      if (hLast === last) return true;
+      if (last.startsWith('th') && hLast.startsWith('th')) return true;
+      return hLast.includes(last) || last.includes(hLast);
+    });
+
+    if (match) return match;
+  }
+
+  // 3. Single name match (e.g. "Salina")
+  if (parts.length === 1) {
+    const first = parts[0];
+    const candidates = hikers.filter((h) => (h.n || '').toLowerCase().startsWith(first + ' '));
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => (b.d || 0) - (a.d || 0));
+      return candidates[0];
+    }
+  }
+
+  // 4. Substring fallback
+  const fallback = hikers.find((h) => {
+    const hn = (h.n || '').toLowerCase().trim();
+    return hn.includes(clean) || clean.includes(hn);
+  });
+
+  return fallback || null;
+}
 
 interface AdminHikerProfileModalProps {
   isOpen: boolean;
@@ -50,32 +104,32 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
 }) => {
   const [leaderboardData, setLeaderboardData] = useState<HikerStats[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
-  const [activeTab, setActiveTab] = useState<'history' | 'medical' | 'leaderboard'>('history');
+  const [activeTab, setActiveTab] = useState<'leaderboard' | 'history' | 'medical'>('leaderboard');
 
-  // Normalize phone for comparison
-  const normalizePhone = (num?: string) => {
-    if (!num) return '';
-    const digits = num.replace(/\D/g, '');
-    return digits.slice(-10);
+  // Flexible phone digits helper
+  const cleanPhoneDigits = (num?: string) => (num || '').replace(/\D/g, '');
+
+  const isPhoneMatch = (p1?: string, p2?: string) => {
+    const d1 = cleanPhoneDigits(p1);
+    const d2 = cleanPhoneDigits(p2);
+    if (!d1 || !d2 || d1.length < 7 || d2.length < 7) return false;
+    return d1 === d2 || d1.endsWith(d2) || d2.endsWith(d1);
   };
 
-  const normTargetPhone = normalizePhone(hikerPhone);
   const normTargetEmail = (hikerEmail || '').toLowerCase().trim();
   const normTargetName = (hikerName || '').toLowerCase().trim();
 
-  // Lazy fetch leaderboard data once if opened
+  // Fetch leaderboard data on open (Primary Source of Truth - matching public trek card)
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
     setLoadingLeaderboard(true);
-    apiFetch('leaderboard')
-      .then((res: any) => {
+    fetchLeaderboardData(false)
+      .then((data: any) => {
         if (!isMounted) return;
-        if (res && Array.isArray(res.hikers)) {
-          setLeaderboardData(res.hikers);
-        } else if (Array.isArray(res)) {
-          setLeaderboardData(res);
+        if (data && Array.isArray(data.hikers)) {
+          setLeaderboardData(data.hikers);
         }
       })
       .catch((err) => {
@@ -92,20 +146,24 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
 
   // Match all registrations across the platform
   const hikerRegistrations = useMemo(() => {
-    if (!normTargetName && !normTargetPhone && !normTargetEmail) return [];
+    if (!normTargetName && !hikerPhone && !normTargetEmail) return [];
 
     return allRegistrations.filter((reg) => {
-      const regPhone = normalizePhone(reg.phone || reg.whatsapp || (reg as any).whatsapp_number);
+      const regPhone = reg.phone || reg.whatsapp || (reg as any).whatsapp_number;
       const regEmail = (reg.email || reg.email_address || reg.user_email || '').toLowerCase().trim();
       const regName = (reg.full_name || '').toLowerCase().trim();
 
-      if (normTargetPhone && regPhone && normTargetPhone === regPhone) return true;
+      if (hikerPhone && regPhone && isPhoneMatch(hikerPhone, regPhone)) return true;
       if (normTargetEmail && regEmail && normTargetEmail === regEmail) return true;
-      if (normTargetName && regName && normTargetName === regName) return true;
+      if (normTargetName && regName && (normTargetName === regName || normTargetName.includes(regName) || regName.includes(normTargetName))) return true;
 
       // Check team members
       if (Array.isArray(reg.team_members)) {
-        return reg.team_members.some((m) => (m.full_name || '').toLowerCase().trim() === normTargetName);
+        return reg.team_members.some((m) => {
+          const mName = (m.full_name || '').toLowerCase().trim();
+          const mPhone = (m as any).phone;
+          return (mPhone && isPhoneMatch(hikerPhone, mPhone)) || (mName && (mName === normTargetName || normTargetName.includes(mName)));
+        });
       }
 
       return false;
@@ -114,46 +172,49 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
       const db = new Date(b.created_at || b.trek_date || 0).getTime();
       return db - da;
     });
-  }, [allRegistrations, normTargetName, normTargetPhone, normTargetEmail]);
+  }, [allRegistrations, hikerName, hikerPhone, hikerEmail, normTargetName, normTargetEmail]);
 
-  // Match leaderboard stats
-  const leaderboardMatch = useMemo(() => {
-    if (!leaderboardData.length) return null;
-
-    let matchedHiker: HikerStats | null = null;
-    let rank = 0;
-
-    for (let i = 0; i < leaderboardData.length; i++) {
-      const h = leaderboardData[i];
-      const hPhone = normalizePhone(h.phone || h.p);
-      const hName = (h.n || '').toLowerCase().trim();
-      const hEmail = (h.e || '').toLowerCase().trim();
-
-      if (normTargetPhone && hPhone && normTargetPhone === hPhone) {
-        matchedHiker = h;
-        rank = i + 1;
-        break;
-      }
-      if (normTargetEmail && hEmail && normTargetEmail === hEmail) {
-        matchedHiker = h;
-        rank = i + 1;
-        break;
-      }
-      if (normTargetName && hName && normTargetName === hName) {
-        matchedHiker = h;
-        rank = i + 1;
-        break;
-      }
-    }
-
-    return matchedHiker ? { stats: matchedHiker, rank } : null;
-  }, [leaderboardData, normTargetName, normTargetPhone, normTargetEmail]);
-
-  // Extract contact details
+  // Extract contact details (used to auto-fill missing profile info)
   const primaryPhone = hikerPhone || hikerRegistrations.find((r) => r.phone)?.phone || hikerRegistrations.find((r) => r.whatsapp)?.whatsapp || '';
   const primaryEmail = hikerEmail || hikerRegistrations.find((r) => r.email || r.email_address || r.user_email)?.email || '';
   const emergencyContact = hikerRegistrations.find((r) => r.emergency_contact)?.emergency_contact || '';
   const medicalDetails = hikerRegistrations.filter((r) => r.has_medical === 'Yes' || r.specify_medical);
+
+  // Match hiker with Leaderboard stats using EXACT public trek card logic
+  const matchedHiker: HikerStats | null = useMemo(() => {
+    if (!leaderboardData.length) return null;
+
+    // 1. Try phone match first if phone available
+    const cleanPh = cleanPhoneDigits(hikerPhone || primaryPhone);
+    if (cleanPh.length >= 7) {
+      const byPhone = leaderboardData.find((h) => {
+        const hp = cleanPhoneDigits(h.phone || h.p);
+        return hp.length >= 7 && (hp.endsWith(cleanPh) || cleanPh.endsWith(hp));
+      });
+      if (byPhone) return byPhone;
+    }
+
+    // 2. Use exact public trek card guide/leader name matcher
+    return findLeaderboardGuide(hikerName, leaderboardData);
+  }, [leaderboardData, hikerPhone, primaryPhone, hikerName]);
+
+  const leaderboardRank = useMemo(() => {
+    if (!matchedHiker || !leaderboardData.length) return 0;
+    const idx = leaderboardData.indexOf(matchedHiker);
+    return idx >= 0 ? idx + 1 : 0;
+  }, [matchedHiker, leaderboardData]);
+
+  const leaderboardMatch = matchedHiker ? { stats: matchedHiker, rank: leaderboardRank } : null;
+
+  // Completed hikes directly from master leaderboard (exact public trek card logic)
+  const completedHikes: HikerCompletedEvent[] = useMemo(() => {
+    if (!matchedHiker || !Array.isArray(matchedHiker.hikes)) return [];
+    return [...matchedHiker.hikes].sort((a, b) => {
+      const da = a.date ? Date.parse(a.date) : 0;
+      const db = b.date ? Date.parse(b.date) : 0;
+      return db - da;
+    });
+  }, [matchedHiker]);
 
   // Extract Gender and Age Range
   const primaryGender = hikerRegistrations.find((r) => r.gender)?.gender || '';
@@ -166,20 +227,19 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
     ? `Age ${primaryAgeGroup}`
     : '';
 
-  // Compute financial & attendance summary
+  // Compute financial & attendance summary from website registrations
   const totalBookings = hikerRegistrations.length;
   const confirmedBookings = hikerRegistrations.filter((r) => (r.status || 'Confirmed') === 'Confirmed').length;
   const cancelledBookings = hikerRegistrations.filter((r) => (r.status || '').toLowerCase().includes('cancelled')).length;
   const totalPaid = hikerRegistrations.reduce((acc, r) => acc + (Number(r.paid_amount) || 0), 0);
   const totalDue = hikerRegistrations.reduce((acc, r) => acc + (Number(r.due_amount) || 0), 0);
 
-  const reliabilityRate = totalBookings > 0
-    ? Math.round((confirmedBookings / totalBookings) * 100)
-    : 100;
-
-  // Hiker tier badge
-  const totalHikesCount = (leaderboardMatch?.stats?.c || 0) + confirmedBookings;
-  const totalDistanceKm = leaderboardMatch?.stats?.d || 0;
+  // Exact public stats
+  const totalDistance = matchedHiker?.d ? Math.round(matchedHiker.d * 10) / 10 : 0;
+  const totalEvents = matchedHiker?.c || completedHikes.length || 0;
+  const masterHikesCount = totalEvents || confirmedBookings;
+  const masterDistanceKm = totalDistance;
+  const totalHikesCount = masterHikesCount;
 
   const getHikerTier = (count: number) => {
     if (count >= 20) return { label: 'Himalayan Summit Legend', color: 'bg-purple-100 text-purple-800 border-purple-300' };
@@ -270,16 +330,21 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
           </button>
         </div>
 
-        {/* Quick KPI Stat Strip */}
+        {/* Quick KPI Stat Strip (Master Leaderboard Primary Source) */}
         <div className="bg-white border-b border-[#F0EBE5] px-5 py-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
           <div className="p-2 rounded-xl bg-[#FAF8F5] border border-[#F0EBE5]">
-            <div className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">Hikes Joined</div>
-            <div className="text-base font-black text-[#1F1F1F] mt-0.5">{totalBookings}</div>
+            <div className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">Master Hikes</div>
+            <div className="text-base font-black text-[#1F1F1F] mt-0.5">{masterHikesCount}</div>
           </div>
 
           <div className="p-2 rounded-xl bg-[#FAF8F5] border border-[#F0EBE5]">
-            <div className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">Confirmed</div>
-            <div className="text-base font-black text-emerald-700 mt-0.5">{confirmedBookings}</div>
+            <div className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">Master Distance</div>
+            <div className="text-base font-black text-[#E08828] mt-0.5">{masterDistanceKm ? `${masterDistanceKm} km` : '—'}</div>
+          </div>
+
+          <div className="p-2 rounded-xl bg-[#FAF8F5] border border-[#F0EBE5]">
+            <div className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">App Bookings</div>
+            <div className="text-base font-black text-emerald-700 mt-0.5">{totalBookings}</div>
           </div>
 
           <div className="p-2 rounded-xl bg-[#FAF8F5] border border-[#F0EBE5]">
@@ -287,21 +352,28 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
             <div className="text-base font-black text-[#1F1F1F] mt-0.5">NPR {totalPaid.toLocaleString()}</div>
           </div>
 
-          <div className="p-2 rounded-xl bg-[#FAF8F5] border border-[#F0EBE5]">
+          <div className="p-2 rounded-xl bg-[#FAF8F5] border border-[#F0EBE5] col-span-2 sm:col-span-1">
             <div className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">Balance Due</div>
             <div className={`text-base font-black mt-0.5 ${totalDue > 0 ? 'text-amber-700 font-black' : 'text-stone-500'}`}>
               NPR {totalDue.toLocaleString()}
             </div>
           </div>
-
-          <div className="p-2 rounded-xl bg-[#FAF8F5] border border-[#F0EBE5] col-span-2 sm:col-span-1">
-            <div className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider">Reliability</div>
-            <div className="text-base font-black text-[#E08828] mt-0.5">{reliabilityRate}%</div>
-          </div>
         </div>
 
         {/* Tab Navigation */}
         <div className="bg-white px-5 pt-3 border-b border-[#F0EBE5] flex items-center gap-4">
+          <button
+            onClick={() => setActiveTab('leaderboard')}
+            className={`pb-3 text-xs font-black tracking-tight border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'leaderboard'
+                ? 'border-[#E08828] text-[#E08828]'
+                : 'border-transparent text-[#8B8680] hover:text-[#1F1F1F]'
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-[#E08828]" />
+            <span>Master Leaderboard Ledger {leaderboardMatch ? `(${leaderboardMatch.stats.c || 0} events)` : ''}</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('history')}
             className={`pb-3 text-xs font-black tracking-tight border-b-2 transition-all cursor-pointer ${
@@ -310,18 +382,7 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
                 : 'border-transparent text-[#8B8680] hover:text-[#1F1F1F]'
             }`}
           >
-            Registrations Ledger ({hikerRegistrations.length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab('leaderboard')}
-            className={`pb-3 text-xs font-black tracking-tight border-b-2 transition-all cursor-pointer ${
-              activeTab === 'leaderboard'
-                ? 'border-[#E08828] text-[#E08828]'
-                : 'border-transparent text-[#8B8680] hover:text-[#1F1F1F]'
-            }`}
-          >
-            Leaderboard Records {leaderboardMatch ? `(${leaderboardMatch.stats.c || 0} events)` : ''}
+            Website Bookings ({hikerRegistrations.length})
           </button>
 
           <button
@@ -478,19 +539,32 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
                     </div>
                   </div>
 
-                  {Array.isArray(leaderboardMatch.stats.hikes) && leaderboardMatch.stats.hikes.length > 0 && (
+                  {completedHikes.length > 0 && (
                     <div className="bg-white rounded-2xl border border-[#E5E1DB] overflow-hidden">
-                      <div className="p-3 bg-[#FAF8F5] border-b border-[#F0EBE5] text-xs font-black text-[#1F1F1F]">
-                        Recorded Completed Events ({leaderboardMatch.stats.hikes.length})
+                      <div className="p-3 bg-[#FAF8F5] border-b border-[#F0EBE5] text-xs font-black text-[#1F1F1F] flex items-center justify-between">
+                        <span>Master Completed Events ({completedHikes.length})</span>
+                        <span className="text-[10px] text-[#7ABA42] font-bold">Verified Master Ledger</span>
                       </div>
-                      <div className="divide-y divide-[#F0EBE5] max-h-60 overflow-y-auto">
-                        {leaderboardMatch.stats.hikes.map((ev, idx) => (
-                          <div key={idx} className="p-3 flex items-center justify-between text-xs">
-                            <div className="font-semibold text-[#1F1F1F]">
-                              Hike #{ev.no || '—'}: {ev.name || 'Hike Event'}
+                      <div className="divide-y divide-[#F0EBE5] max-h-80 overflow-y-auto">
+                        {completedHikes.map((ev, idx) => (
+                          <div key={idx} className="p-3.5 flex items-center justify-between text-xs hover:bg-[#FAF8F5] transition-colors">
+                            <div className="space-y-0.5 min-w-0 pr-2">
+                              <div className="font-bold text-[#1F1F1F] flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#E08828]/10 text-[#E08828] border border-[#E08828]/20 shrink-0">
+                                  Hike #{ev.no || '—'}
+                                </span>
+                                <span className="truncate">{ev.name || 'Hike Event'}</span>
+                              </div>
                             </div>
-                            <div className="text-[#8B8680] font-bold">
-                              {ev.dist ? `${ev.dist} km` : ''} {ev.date ? `• ${ev.date}` : ''}
+                            <div className="text-right shrink-0">
+                              <div className="text-xs font-black text-[#1F1F1F]">
+                                {ev.dist ? `${ev.dist} km` : ''}
+                              </div>
+                              {ev.date && (
+                                <div className="text-[10px] text-[#8B8680] font-semibold mt-0.5">
+                                  {ev.date}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}

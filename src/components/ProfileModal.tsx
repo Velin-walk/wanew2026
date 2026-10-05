@@ -646,28 +646,32 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <div className="bg-gradient-to-br from-[#1C201C] via-[#242923] to-[#181B18] rounded-2xl p-4 sm:p-5 text-white shadow-md relative overflow-hidden border border-emerald-950/40">
                 <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-44 h-44 bg-[#7ABA42]/10 rounded-full blur-2xl pointer-events-none" />
                 
-                <div className="flex items-center justify-between mb-3.5 border-b border-white/10 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Award className="w-4 h-4 text-[#7ABA42]" />
-                    <span className="text-xs font-black tracking-wider uppercase text-stone-300">
+                <div className="flex items-center justify-between mb-3.5 border-b border-white/10 pb-3 gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Award className="w-4 h-4 text-[#7ABA42] shrink-0" />
+                    <span className="text-[11px] sm:text-xs font-black tracking-wider uppercase text-stone-300 truncate">
                       Lifetime Mountain Record
                     </span>
                   </div>
                   {lifetimeDistance >= 500 ? (
-                    <span className="px-2.5 py-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
-                      <Crown className="w-3 h-3 text-amber-300" /> 500KM Ultra Legend
+                    <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+                      <Crown className="w-3 h-3 text-amber-300 shrink-0" />
+                      <span>500KM Ultra Legend</span>
                     </span>
                   ) : lifetimeDistance >= 200 ? (
-                    <span className="px-2.5 py-1 bg-sky-400/20 border border-sky-400/40 text-sky-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
-                      <Gem className="w-3 h-3 text-sky-300" /> 200KM Summit Club
+                    <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-sky-400/20 border border-sky-400/40 text-sky-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+                      <Gem className="w-3 h-3 text-sky-300 shrink-0" />
+                      <span>200KM Summit Club</span>
                     </span>
                   ) : lifetimeDistance >= 100 ? (
-                    <span className="px-2.5 py-1 bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-emerald-300" /> 100KM Century Club
+                    <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-emerald-300 shrink-0" />
+                      <span>100KM Century Club</span>
                     </span>
                   ) : (
-                    <span className="px-2.5 py-1 bg-stone-800 border border-stone-700 text-stone-300 text-[10px] font-bold rounded-full flex items-center gap-1">
-                      <Compass className="w-3 h-3 text-stone-400" /> Active Explorer
+                    <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-stone-800 border border-stone-700 text-stone-300 text-[10px] font-bold rounded-full flex items-center gap-1">
+                      <Compass className="w-3 h-3 text-stone-400 shrink-0" />
+                      <span>Active Explorer</span>
                     </span>
                   )}
                 </div>

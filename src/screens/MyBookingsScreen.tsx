@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Booking } from '../types';
 import { HISTORICAL_TREKS } from '../data/historicalTreks';
 import { PaymentAndPricingSection } from '../components/InfoPagesModal';
+import { MyHikesView } from '../components/MyHikesView';
 import {
   Calendar,
   Phone,
@@ -53,6 +54,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   onOpenPaymentPage,
   onUploadVoucher,
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'active' | 'hikes'>('active');
   const [expandedId, setExpandedId] = useState<number | string | null>(null);
   const [cancelingId, setCancelingId] = useState<number | string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<number | string | null>(null);
@@ -180,91 +182,126 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
     );
   }
 
-  if (activeBookings.length === 0) {
-    return (
-      <div className="space-y-4 max-w-md md:max-w-none w-full mx-auto my-4">
-        {completedCount > 0 && (
-          <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 text-left space-y-2.5 shadow-xs">
-            <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{completedCount} Hike{completedCount > 1 ? 's' : ''} Completed &amp; Reconciled</span>
-            </div>
-            <p className="text-[11px] text-emerald-700 leading-relaxed">
-              Your completed hikes have been verified and archived to your permanent record in the community ledger! Check your lifetime stats, KM badges, and completed hike history.
-            </p>
-            {onViewMyHikes && (
+  return (
+    <div className="space-y-4 w-full">
+      {/* 2-Tab Segmented Control: Active Bookings (Left) vs My Hikes & Stats (Right) */}
+      <div className="flex items-center p-1 bg-[#EFEAE4]/80 rounded-2xl border border-[#E5E1DB] max-w-md mx-auto w-full shadow-2xs">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('active')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'active'
+              ? 'bg-white text-[#1F1F1F] shadow-xs font-black'
+              : 'text-[#6A645D] hover:text-[#1F1F1F]'
+          }`}
+        >
+          <Compass className="w-3.5 h-3.5 text-[#E08828]" />
+          <span>Active Bookings</span>
+          {activeBookings.length > 0 && (
+            <span className="px-1.5 py-0.2 bg-[#E08828] text-white text-[10px] font-black rounded-full">
+              {activeBookings.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('hikes')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'hikes'
+              ? 'bg-white text-[#1F5E20] shadow-xs font-black'
+              : 'text-[#6A645D] hover:text-[#1F1F1F]'
+          }`}
+        >
+          <Footprints className="w-3.5 h-3.5 text-[#7ABA42]" />
+          <span>My Hikes &amp; Stats</span>
+          {completedCount > 0 && (
+            <span className="px-1.5 py-0.2 bg-[#7ABA42] text-white text-[10px] font-black rounded-full">
+              {completedCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeSubTab === 'hikes' ? (
+        <MyHikesView userBookings={bookings} />
+      ) : activeBookings.length === 0 ? (
+        <div className="space-y-4 max-w-md md:max-w-none w-full mx-auto my-4">
+          {completedCount > 0 && (
+            <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 text-left space-y-2.5 shadow-xs">
+              <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{completedCount} Hike{completedCount > 1 ? 's' : ''} Completed &amp; Reconciled</span>
+              </div>
+              <p className="text-[11px] text-emerald-700 leading-relaxed">
+                Your completed hikes have been verified and archived to your permanent record in the community ledger! Check your lifetime stats, KM badges, and completed hike history.
+              </p>
               <button
                 type="button"
-                onClick={onViewMyHikes}
+                onClick={() => setActiveSubTab('hikes')}
                 className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Footprints className="w-3.5 h-3.5" />
                 <span>View My Hikes &amp; Stats</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
-        <div className="bg-white rounded-2xl border border-[#F0EBE5] p-8 text-center shadow-xs">
-          <div className="w-14 h-14 bg-[#F9F7F5] rounded-2xl flex items-center justify-center mx-auto mb-3.5 border border-[#E5E1DB]">
-            <Compass className="w-7 h-7 text-[#E08828]" />
-          </div>
-          <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F]">No Active Upcoming Bookings</h3>
-          <p className="text-xs text-[#8B8680] mt-1.5 leading-relaxed">
-            You don't have any pending or upcoming trek reservations. Browse upcoming hikes and claim your spot on the live roster!
-          </p>
-          <button
-            type="button"
-            onClick={onExploreTreks}
-            className="mt-5 w-full min-h-[44px] px-6 py-2.5 bg-[#7ABA42] hover:bg-[#6CA838] text-white text-xs font-bold rounded-xl transition-all shadow-xs active:scale-[0.99] cursor-pointer"
-          >
-            Explore Available Treks
-          </button>
-        </div>
-
-        {/* Attached Payment & Pricing Extension */}
-        <div className="bg-white rounded-2xl border border-[#E5E1DB] p-4 sm:p-6 shadow-xs mt-6">
-          <PaymentAndPricingSection
-            onOpenVoucherUpload={
-              onUploadVoucher && bookings[0] ? () => onUploadVoucher(bookings[0]) : undefined
-            }
-          />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4 w-full">
-      {completedCount > 0 && (
-        <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-emerald-800">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>
-              <strong>{completedCount} completed hike{completedCount > 1 ? 's' : ''}</strong> moved to your lifetime record in <strong>My Hikes</strong>.
-            </span>
-          </div>
-          {onViewMyHikes && (
+          <div className="bg-white rounded-2xl border border-[#F0EBE5] p-8 text-center shadow-xs">
+            <div className="w-14 h-14 bg-[#F9F7F5] rounded-2xl flex items-center justify-center mx-auto mb-3.5 border border-[#E5E1DB]">
+              <Compass className="w-7 h-7 text-[#E08828]" />
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F]">No Active Upcoming Bookings</h3>
+            <p className="text-xs text-[#8B8680] mt-1.5 leading-relaxed">
+              You don't have any pending or upcoming trek reservations. Browse upcoming hikes and claim your spot on the live roster!
+            </p>
             <button
               type="button"
-              onClick={onViewMyHikes}
-              className="shrink-0 px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
+              onClick={onExploreTreks}
+              className="mt-5 w-full min-h-[44px] px-6 py-2.5 bg-[#7ABA42] hover:bg-[#6CA838] text-white text-xs font-bold rounded-xl transition-all shadow-xs active:scale-[0.99] cursor-pointer"
             >
-              View My Hikes →
+              Explore Available Treks
             </button>
-          )}
-        </div>
-      )}
+          </div>
 
-      <div className="flex items-center justify-between px-1">
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-[#1F1F1F]">My Active Bookings</h2>
-          <p className="text-[11px] text-[#8B8680]">
+          {/* Attached Payment & Pricing Extension */}
+          <div className="bg-white rounded-2xl border border-[#E5E1DB] p-4 sm:p-6 shadow-xs mt-6">
+            <PaymentAndPricingSection
+              onOpenVoucherUpload={
+                onUploadVoucher && bookings[0] ? () => onUploadVoucher(bookings[0]) : undefined
+              }
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4 w-full">
+          {completedCount > 0 && (
+            <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  <strong>{completedCount} completed hike{completedCount > 1 ? 's' : ''}</strong> moved to your lifetime record in <strong>My Hikes</strong>.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveSubTab('hikes')}
+                className="shrink-0 px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
+              >
+                View My Hikes →
+              </button>
+            </div>
+          )}
+
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <h2 className="text-base sm:text-xl font-bold text-[#1F1F1F] truncate">My Active Bookings</h2>
+          <p className="text-[11px] text-[#8B8680] truncate">
             Confirmed upcoming Himalayan rosters and team details
           </p>
         </div>
-        <span className="px-2.5 py-1 bg-white border border-[#E5E1DB] rounded-full text-xs font-bold text-[#5A5551] shadow-xs">
+        <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-white border border-[#E5E1DB] rounded-full text-xs font-bold text-[#5A5551] shadow-xs">
           {activeBookings.length} Active {activeBookings.length === 1 ? 'Trip' : 'Trips'}
         </span>
       </div>
@@ -645,6 +682,8 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
           }
         />
       </div>
+        </div>
+      )}
 
       {/* Lightbox Modal for User Viewing Uploaded Voucher */}
       {viewingVoucherUrl && (
