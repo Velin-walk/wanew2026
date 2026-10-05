@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Sparkles, History, Star } from 'lucide-react';
+import { Sparkles, History, Star, Heart } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
@@ -192,9 +192,73 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
   };
 
   const activeItem: HeroBannerItem = displayImages[currentIndex] || displayImages[0];
+  const currentHeroId = activeItem.id || 'hero-main';
+
+  const [likesMap, setLikesMap] = useState<Record<string, { count: number; liked: boolean }>>(() => {
+    try {
+      const saved = localStorage.getItem('wnw_photo_likes_data');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const heroLikesData = likesMap[currentHeroId] || {
+    count: 28,
+    liked: false,
+  };
+
+  const handleToggleHeroLike = () => {
+    setLikesMap((prev) => {
+      const cur = prev[currentHeroId] || { count: 28, liked: false };
+      const nextLiked = !cur.liked;
+      const nextCount = Math.max(0, cur.count + (nextLiked ? 1 : -1));
+      const updated = {
+        ...prev,
+        [currentHeroId]: { count: nextCount, liked: nextLiked },
+      };
+      try {
+        localStorage.setItem('wnw_photo_likes_data', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('wnw-likes-updated', { detail: updated }));
+      } catch {}
+      return updated;
+    });
+  };
+
+  useEffect(() => {
+    const handleLikesSync = (e: any) => {
+      if (e.detail) {
+        setLikesMap(e.detail);
+      }
+    };
+    window.addEventListener('wnw-likes-updated', handleLikesSync);
+    return () => window.removeEventListener('wnw-likes-updated', handleLikesSync);
+  }, []);
 
   return (
     <div className="relative w-full aspect-[2/1] rounded-xl sm:rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-xs bg-stone-900 select-none">
+      {/* Floating Hero Like Button */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleToggleHeroLike();
+        }}
+        className={`absolute top-2 sm:top-2.5 right-2 sm:right-2.5 z-20 flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full backdrop-blur-md border transition-all duration-200 cursor-pointer shadow-md active:scale-95 opacity-60 hover:opacity-100 ${
+          heroLikesData.liked
+            ? 'bg-rose-600/60 border-rose-400/60 text-white shadow-rose-900/30'
+            : 'bg-black/60 hover:bg-black/80 border-white/20 text-white hover:text-rose-300'
+        }`}
+        title={heroLikesData.liked ? 'Unlike this photo' : 'Like this photo'}
+      >
+        <Heart
+          className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${
+            heroLikesData.liked ? 'fill-current scale-110 text-rose-200' : 'text-white'
+          }`}
+        />
+        <span className="text-[10px] sm:text-[11px] font-black tracking-tight">{heroLikesData.count}</span>
+      </button>
+
       <div
         ref={scrollerRef}
         onScroll={handleScroll}

@@ -24,7 +24,8 @@ import {
   FolderOpen,
   Plus,
   MapPin,
-  MessageSquare
+  MessageSquare,
+  Heart
 } from 'lucide-react';
 import { Trek } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -140,6 +141,56 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const [viewerPovMode, setViewerPovMode] = useState(false);
   const [uploadingPreviews, setUploadingPreviews] = useState<{ id: string; url: string; file: File }[]>([]);
   const [stagedFiles, setStagedFiles] = useState<{ id: string; url: string; file: File }[]>([]);
+
+  // Photo likes state (persisted in localStorage & synced across components)
+  const [likesMap, setLikesMap] = useState<Record<string, { count: number; liked: boolean }>>(() => {
+    try {
+      const saved = localStorage.getItem('wnw_photo_likes_data');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const getPhotoLikes = (photoId: string, photoUrl: string = '') => {
+    if (likesMap[photoId]) return likesMap[photoId];
+    let hash = 0;
+    const str = photoId || photoUrl || 'gallery';
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    const count = 5 + (Math.abs(hash) % 25);
+    return { count, liked: false };
+  };
+
+  const handleTogglePhotoLike = (photoId: string, photoUrl: string = '', e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setLikesMap((prev) => {
+      const cur = getPhotoLikes(photoId, photoUrl);
+      const nextLiked = !cur.liked;
+      const nextCount = Math.max(0, cur.count + (nextLiked ? 1 : -1));
+      const updated = {
+        ...prev,
+        [photoId]: { count: nextCount, liked: nextLiked },
+      };
+      try {
+        localStorage.setItem('wnw_photo_likes_data', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('wnw-likes-updated', { detail: updated }));
+      } catch {}
+      return updated;
+    });
+  };
+
+  useEffect(() => {
+    const handleLikesSync = (e: any) => {
+      if (e.detail) {
+        setLikesMap(e.detail);
+      }
+    };
+    window.addEventListener('wnw-likes-updated', handleLikesSync);
+    return () => window.removeEventListener('wnw-likes-updated', handleLikesSync);
+  }, []);
 
   const CLOUD_NAME = 'mx7cxnsf';
   const UPLOAD_PRESET = 'walknepalwalk';
@@ -884,6 +935,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                 {box.photos.map((photo) => {
                   const globalIdx = filteredPhotos.findIndex((p) => p.id === photo.id);
+                  const likes = getPhotoLikes(photo.id, photo.url);
                   return (
                     <div
                       key={photo.id}
@@ -896,6 +948,25 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
                       />
+
+                      {/* Floating Like Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleTogglePhotoLike(photo.id, photo.url, e)}
+                        className={`absolute top-2.5 right-2.5 z-20 flex items-center gap-1 px-2 py-1 rounded-full backdrop-blur-md border transition-all duration-200 cursor-pointer shadow-md active:scale-90 ${
+                          likes.liked
+                            ? 'bg-rose-600/90 border-rose-400 text-white'
+                            : 'bg-black/40 hover:bg-black/70 border-white/20 text-white hover:text-rose-300 opacity-90 sm:opacity-0 sm:group-hover:opacity-100'
+                        }`}
+                        title={likes.liked ? 'Unlike' : 'Like'}
+                      >
+                        <Heart
+                          className={`w-3 h-3 transition-transform ${
+                            likes.liked ? 'fill-current text-rose-200 scale-110' : 'text-white'
+                          }`}
+                        />
+                        <span className="text-[10px] font-black">{likes.count}</span>
+                      </button>
 
                       {/* Hover Overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3 text-white text-[11px]">
@@ -943,6 +1014,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
           {/* Live Community Photo Cards */}
           {filteredPhotos.map((photo, idx) => {
+            const likes = getPhotoLikes(photo.id, photo.url);
             return (
               <div
                 key={photo.id}
@@ -955,6 +1027,25 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   loading="lazy"
                 />
+
+                {/* Floating Like Button */}
+                <button
+                  type="button"
+                  onClick={(e) => handleTogglePhotoLike(photo.id, photo.url, e)}
+                  className={`absolute top-2.5 right-2.5 z-20 flex items-center gap-1 px-2 py-1 rounded-full backdrop-blur-md border transition-all duration-200 cursor-pointer shadow-md active:scale-90 ${
+                    likes.liked
+                      ? 'bg-rose-600/90 border-rose-400 text-white'
+                      : 'bg-black/40 hover:bg-black/70 border-white/20 text-white hover:text-rose-300 opacity-90 sm:opacity-0 sm:group-hover:opacity-100'
+                  }`}
+                  title={likes.liked ? 'Unlike' : 'Like'}
+                >
+                  <Heart
+                    className={`w-3 h-3 transition-transform ${
+                      likes.liked ? 'fill-current text-rose-200 scale-110' : 'text-white'
+                    }`}
+                  />
+                  <span className="text-[10px] font-black">{likes.count}</span>
+                </button>
 
                 {/* Gradient Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
@@ -1379,6 +1470,30 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Like Button */}
+                  {(() => {
+                    const likes = getPhotoLikes(activePhoto.id, activePhoto.url);
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => handleTogglePhotoLike(activePhoto.id, activePhoto.url, e)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-200 cursor-pointer active:scale-95 ${
+                          likes.liked
+                            ? 'bg-rose-600/90 border-rose-500 text-white shadow-lg shadow-rose-900/40'
+                            : 'bg-white/10 hover:bg-white/20 border-white/15 text-white hover:text-rose-300'
+                        }`}
+                        title={likes.liked ? 'Unlike photo' : 'Like photo'}
+                      >
+                        <Heart
+                          className={`w-4 h-4 transition-transform ${
+                            likes.liked ? 'fill-current text-rose-200 scale-110' : ''
+                          }`}
+                        />
+                        <span className="text-xs font-black">{likes.count}</span>
+                      </button>
+                    );
+                  })()}
+
                   <a
                     href={activePhoto.url}
                     target="_blank"
@@ -1502,6 +1617,30 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5">
+                {/* Mobile Like Button */}
+                {(() => {
+                  const likes = getPhotoLikes(activePhoto.id, activePhoto.url);
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => handleTogglePhotoLike(activePhoto.id, activePhoto.url, e)}
+                      className={`p-2 backdrop-blur-md rounded-full border transition-all shadow-lg active:scale-95 flex items-center gap-1 px-2.5 ${
+                        likes.liked
+                          ? 'bg-rose-600/90 border-rose-400 text-white'
+                          : 'bg-black/70 hover:bg-black/90 border-white/20 text-white'
+                      }`}
+                      title={likes.liked ? 'Unlike' : 'Like'}
+                    >
+                      <Heart
+                        className={`w-3.5 h-3.5 ${
+                          likes.liked ? 'fill-current text-rose-200' : ''
+                        }`}
+                      />
+                      <span className="text-[11px] font-black">{likes.count}</span>
+                    </button>
+                  );
+                })()}
+
                 <a
                   href={activePhoto.url}
                   target="_blank"
