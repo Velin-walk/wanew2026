@@ -631,7 +631,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
     setHikes(nextHikes);
     try {
-      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(nextHikes));
+      safeSaveItinerariesCache(nextHikes);
       window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
     } catch (_) {}
 
@@ -720,6 +720,42 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
       return dateB - dateA;
     });
+  };
+
+  const safeSaveItinerariesCache = (records: SavedHikeRecord[]) => {
+    try {
+      // Strip large base64 strings from local cache to prevent QuotaExceededError
+      const sanitized = records.map((rec) => {
+        if (!rec) return rec;
+        const d = rec.data ? { ...rec.data } : ({} as any);
+        if (typeof d.coverImageUrl === 'string' && d.coverImageUrl.startsWith('data:image')) {
+          d.coverImageUrl = '';
+        }
+        return { ...rec, data: d };
+      });
+      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(sanitized));
+    } catch (err) {
+      try {
+        localStorage.removeItem('wnw_saved_itineraries_cache');
+        localStorage.removeItem('wnw_itinerary_template_draft');
+        const compact = records.slice(0, 30).map((r) => ({
+          id: r.id,
+          hikeNumber: r.hikeNumber,
+          title: r.title,
+          category: r.category,
+          status: r.status,
+          updatedAt: r.updatedAt,
+          data: r.data ? {
+            title: r.data.title,
+            hikeNumber: r.data.hikeNumber,
+            category: r.data.category,
+            hikeDate: r.data.hikeDate,
+            status: r.data.status,
+          } : undefined,
+        }));
+        localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(compact));
+      } catch (_) {}
+    }
   };
 
   const getDeletedHikeIds = (): Set<string> => {
@@ -930,7 +966,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const merged = deduplicateHikesList(allCollectedHikes.filter(h => !deletedIds.has(String(h.id))));
       setServerHikeIds(Array.from(foundServerIds));
       setHikes(merged);
-      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(merged));
+      safeSaveItinerariesCache(merged);
     } catch (e) {
       console.warn('Error fetching itineraries, using default cache:', e);
       const cached = localStorage.getItem('wnw_saved_itineraries_cache');
@@ -939,8 +975,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           const parsed = JSON.parse(cached);
           const deduped = deduplicateHikesList(parsed);
           setHikes(deduped);
-          localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
-        } catch {}
+          safeSaveItinerariesCache(deduped);
+        } catch {
+          setHikes(deduplicateHikesList(DEFAULT_SAVED_HIKES));
+        }
       } else {
         setHikes(deduplicateHikesList(DEFAULT_SAVED_HIKES));
       }
@@ -1271,7 +1309,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       clearApiCache('treks');
       const deduped = deduplicateHikesList([cloned, ...hikes]);
       setHikes(deduped);
-      localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
+      safeSaveItinerariesCache(deduped);
       window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
     } catch (e) {
       console.error('Error cloning hike:', e);
@@ -1304,7 +1342,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     }
     const next = hikes.filter((h) => h.id !== hikeId);
     setHikes(next);
-    localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
+    safeSaveItinerariesCache(next);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
     }
@@ -1329,7 +1367,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       return updated;
     });
     setHikes(next);
-    localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(next));
+    safeSaveItinerariesCache(next);
 
     try {
       const res = await apiFetch(`admin/itineraries/${encodeURIComponent(hikeId)}/status`, {
@@ -1379,22 +1417,19 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     setServerHikeIds((prev) => Array.from(new Set([...prev, savedRecord.id])));
     const savedNum = (savedRecord.hikeNumber || savedRecord.data?.hikeNumber || '').trim();
     const savedDate = (savedRecord.data?.hikeDate || '').trim().toLowerCase();
-    const idx = hikes.findIndex((h) => {
-      if (h.id === savedRecord.id) return true;
+
+    // Filter out previous temporary clone/draft records that match this hike or were upgraded
+    const filteredHikes = hikes.filter((h) => {
+      if (h.id === savedRecord.id) return false;
       const hNum = (h.hikeNumber || h.data?.hikeNumber || '').trim();
-      const hDate = (h.data?.hikeDate || '').trim().toLowerCase();
-      return Boolean(savedNum && savedNum !== 'TBD' && hNum === savedNum && (!savedDate || !hDate || savedDate === hDate));
+      if (savedNum && savedNum !== 'TBD' && hNum === savedNum) return false;
+      return true;
     });
-    let next: SavedHikeRecord[];
-    if (idx !== -1) {
-      next = [...hikes];
-      next[idx] = savedRecord;
-    } else {
-      next = [savedRecord, ...hikes];
-    }
+
+    const next = [savedRecord, ...filteredHikes];
     const deduped = deduplicateHikesList(next);
     setHikes(deduped);
-    localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(deduped));
+    safeSaveItinerariesCache(deduped);
     setEditingHike(savedRecord);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('wnw-treks-updated'));

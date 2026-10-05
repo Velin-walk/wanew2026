@@ -14,7 +14,7 @@ import {
 import { ItineraryPreview } from './ItineraryPreview';
 import { ShareHikeModal } from './ShareHikeModal';
 import { ImageCropperModal } from './ImageCropperModal';
-import { apiFetch } from '../../services/api';
+import { apiFetch, clearApiCache } from '../../services/api';
 import { db } from '../../lib/firebase';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 import {
@@ -251,7 +251,11 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     setFormData((prev) => {
       const next = updater(prev);
       try {
-        localStorage.setItem(draftKey, JSON.stringify(next));
+        const sanitized = { ...next };
+        if (typeof sanitized.coverImageUrl === 'string' && sanitized.coverImageUrl.startsWith('data:image')) {
+          sanitized.coverImageUrl = '';
+        }
+        localStorage.setItem(draftKey, JSON.stringify(sanitized));
       } catch (_) {}
       return next;
     });
@@ -430,8 +434,15 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     setCurrentStatus(statusToSave);
 
     try {
-      localStorage.setItem('wnw_itinerary_template_draft', JSON.stringify(updatedFormData));
+      // Safe local draft backup (strip large base64 data to avoid quota errors)
+      const sanitizedDraft = { ...updatedFormData };
+      if (typeof sanitizedDraft.coverImageUrl === 'string' && sanitizedDraft.coverImageUrl.startsWith('data:image')) {
+        sanitizedDraft.coverImageUrl = '';
+      }
+      localStorage.setItem('wnw_itinerary_template_draft', JSON.stringify(sanitizedDraft));
+    } catch (_) {}
 
+    try {
       let res;
       
       // Calculate min/max price for D1 treks table matching server.ts
@@ -439,12 +450,26 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
       const minPrice = priceTiers.length > 0 ? Math.min(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
       const maxPrice = priceTiers.length > 0 ? Math.max(...priceTiers.map((t: any) => Number(t.price) || 0)) : 0;
 
-      const trekFinalId = recordId || `hike-${updatedFormData.hikeNumber ? updatedFormData.hikeNumber + '-' : ''}${Date.now()}`;
+      const cleanHikeNum = (updatedFormData.hikeNumber || '').trim();
+      let trekFinalId = recordId;
+      const previousTempId = recordId && (recordId.startsWith('hike-copy-') || recordId.startsWith('hike-clone-') || recordId.startsWith('hike-draft-')) ? recordId : null;
+
+      // When editing a clone/draft and assigning a real Hike Number (e.g. 205), update record ID to standard hike-205
+      if (cleanHikeNum && cleanHikeNum !== 'TBD') {
+        if (!trekFinalId || trekFinalId.startsWith('hike-copy-') || trekFinalId.startsWith('hike-clone-') || trekFinalId.startsWith('hike-draft-') || trekFinalId === 'TBD') {
+          trekFinalId = `hike-${cleanHikeNum}`;
+        }
+      } else if (!trekFinalId) {
+        trekFinalId = `hike-${Date.now()}`;
+      }
+
+      // Purge cached API responses before saving
+      clearApiCache();
 
       const syncPayload = {
         id: trekFinalId,
-        hike_number: (updatedFormData.hikeNumber || '').trim() || 'TBD',
-        hikeNumber: (updatedFormData.hikeNumber || '').trim() || 'TBD',
+        hike_number: cleanHikeNum || 'TBD',
+        hikeNumber: cleanHikeNum || 'TBD',
         title: updatedFormData.title || 'Walk Nepal Walk Hike',
         category: updatedFormData.category || 'Overnight Bus Hikes',
         status: statusToSave,
@@ -474,6 +499,15 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
           body: JSON.stringify(syncPayload),
           forceFresh: true,
         });
+
+        // If the ID was upgraded from a previous temporary clone/copy ID, clean up the obsolete temp clone row
+        if (previousTempId && previousTempId !== trekFinalId) {
+          await apiFetch(`admin/itineraries/${encodeURIComponent(previousTempId)}`, {
+            method: 'DELETE',
+            forceFresh: true,
+          }).catch(() => {});
+        }
+
         // Keep event_executions table in sync so capacity & leader never conflict with Event Execution tab
         await apiFetch(`admin/itineraries/${encodeURIComponent(trekFinalId)}`, {
           method: 'PATCH',
@@ -482,7 +516,6 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
             capacity: Number(updatedFormData.maxCapacity) || 25,
             leader: updatedFormData.teamLeader || 'Walk Nepal Walk Guide',
             status: statusToSave,
-            data: updatedFormData,
           }),
           forceFresh: true,
         }).catch(() => {});
@@ -493,6 +526,13 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
       if (res && res.ok) {
         const json = await res.json();
         const savedData = json.data || syncPayload;
+        const serverCoverUrl = json.data?.cover_image_url || json.data?.coverImageUrl || json.data?.data?.coverImageUrl || (typeof savedData.cover_image_url === 'string' && !savedData.cover_image_url.startsWith('data:') ? savedData.cover_image_url : null);
+        
+        if (serverCoverUrl) {
+          updatedFormData.coverImageUrl = serverCoverUrl;
+          updateData((prev) => ({ ...prev, coverImageUrl: serverCoverUrl }));
+        }
+
         const finalSavedRecord: SavedHikeRecord = {
           id: savedData.id || trekFinalId,
           hikeNumber: syncPayload.hikeNumber,
@@ -507,9 +547,11 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
 
         setRecordId(finalSavedRecord.id);
         setCurrentStatus(statusToSave);
+        clearApiCache();
         try {
           localStorage.removeItem(draftKey);
           localStorage.removeItem('wnw_itinerary_template_draft');
+          localStorage.removeItem('wnw_saved_itineraries_cache');
         } catch (_) {}
         if (onSaveRecord) {
           onSaveRecord(finalSavedRecord);
@@ -720,26 +762,34 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
       </div>
 
       {saveStatus && (
-        <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-2xl border flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200 ${
+        <div className={`fixed top-24 sm:top-28 left-1/2 -translate-x-1/2 z-[99999] max-w-[92vw] sm:max-w-2xl px-5 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md border flex items-center gap-3 animate-in fade-in slide-in-from-top-6 duration-200 ${
           saveStatus.toLowerCase().includes('locally') || saveStatus.toLowerCase().includes('failed') || saveStatus.toLowerCase().includes('error')
-            ? 'bg-[#2D1418] text-rose-100 border-rose-500/30'
-            : 'bg-[#1F1F1F] text-white border-white/10'
+            ? 'bg-[#2D1418]/95 text-rose-100 border-rose-500/40 shadow-rose-950/40'
+            : 'bg-[#1F1F1F]/95 text-white border-white/20 shadow-black/50'
         }`}>
           {saveStatus.toLowerCase().includes('locally') || saveStatus.toLowerCase().includes('failed') || saveStatus.toLowerCase().includes('error') ? (
             <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
           ) : (
             <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
           )}
-          <span className="text-xs sm:text-sm font-bold">{saveStatus}</span>
+          <span className="text-xs sm:text-sm font-bold leading-snug">{saveStatus}</span>
           {onBackToList && (
             <button
               type="button"
               onClick={onBackToList}
-              className="ml-2 text-[11px] font-bold text-[#E08828] hover:underline cursor-pointer"
+              className="ml-2 text-[11px] font-bold text-[#E08828] hover:underline cursor-pointer shrink-0"
             >
               View Catalog →
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setSaveStatus(null)}
+            className="ml-auto text-white/50 hover:text-white p-1 rounded-lg text-xs cursor-pointer"
+            title="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
 

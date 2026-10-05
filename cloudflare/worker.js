@@ -1001,9 +1001,16 @@ export default {
         const teamLeader = body.leader !== undefined ? body.leader : row.team_leader;
         
         if (body.data) {
+          const existingCover = row.cover_image_url || parsedData.coverImageUrl || parsedData.cover_image_url;
+          const incomingCover = body.data.coverImageUrl || body.data.cover_image_url;
+          const safeCover = (typeof incomingCover === 'string' && incomingCover.startsWith('data:image'))
+            ? (existingCover || incomingCover)
+            : (incomingCover || existingCover);
+
           parsedData = {
             ...parsedData,
             ...body.data,
+            coverImageUrl: safeCover || parsedData.coverImageUrl || '',
             maxCapacity: body.capacity !== undefined ? Number(body.capacity) : parsedData.maxCapacity,
             teamLeader: body.leader !== undefined ? body.leader : parsedData.teamLeader,
           };
