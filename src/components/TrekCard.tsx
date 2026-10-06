@@ -507,7 +507,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
                 ? 'bg-rose-100 text-rose-700 border-2 border-rose-300 cursor-not-allowed opacity-90'
                 : isRegistrationDisabled
                 ? 'bg-[#8B8680] text-white cursor-not-allowed opacity-75'
-                : 'bg-[#7ABA42] hover:bg-[#6AA437] hover:shadow-md active:scale-95 text-white cursor-pointer ring-2 ring-[#7ABA42]/30'
+                : 'bg-[#FC4C02] hover:bg-[#E03E00] hover:shadow-md active:scale-95 text-white cursor-pointer ring-2 ring-[#FC4C02]/25 shadow-orange-500/20'
             }`}
           >
             <span>

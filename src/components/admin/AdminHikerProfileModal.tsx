@@ -254,7 +254,7 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[2000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
       <div className="bg-[#FAF8F5] rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-[#E5E1DB] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Modal Header */}
         <div className="bg-white border-b border-[#F0EBE5] p-5 flex items-start justify-between gap-4">

@@ -476,7 +476,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const savedTreksList = allTreks.filter((t) => favorites.includes(t.id));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-0 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-2 sm:p-4 md:p-0 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl md:max-w-none md:w-screen md:h-screen bg-white rounded-3xl md:rounded-none shadow-2xl border border-[#EFEAE4] md:border-0 overflow-hidden flex flex-col max-h-[94vh] md:max-h-screen">
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-[#FAF6F0] via-white to-[#FAF6F0] p-4 sm:p-5 border-b border-[#EFEAE4] relative flex items-center justify-between">

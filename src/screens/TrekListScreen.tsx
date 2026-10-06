@@ -142,19 +142,27 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         return false;
       }
 
-      const daysStr = String(trek.days || '').toLowerCase();
-      const isDayHike =
-        daysStr.includes('subs') ||
-        daysStr.includes('sat') ||
-        daysStr.includes('day bus') ||
-        daysStr.includes('1 day') ||
-        daysStr === '1';
+      const catStr = String(trek.category || trek.data?.category || '').toLowerCase();
+      const daysStr = String(trek.days || trek.data?.days || trek.data?.overview?.days || '').toLowerCase();
       const isOvernight =
+        catStr.includes('overnight') ||
         daysStr.includes('overnight') ||
         daysStr.includes('1n') ||
         daysStr.includes('2d') ||
         daysStr === '2';
-      const isMultiDayTrek = !isDayHike && !isOvernight;
+      const isMultiDayTrek =
+        catStr.includes('multi') ||
+        (!isOvernight && catStr.includes('trek') && !catStr.includes('day')) ||
+        (!isOvernight && daysStr.includes('trek'));
+      const isDayHike =
+        !isOvernight &&
+        !isMultiDayTrek &&
+        (catStr.includes('day') ||
+          daysStr.includes('subs') ||
+          daysStr.includes('sat') ||
+          daysStr.includes('day bus') ||
+          daysStr.includes('1 day') ||
+          daysStr === '1');
 
       if (tripTypeFilter === 'treks' && !isMultiDayTrek) return false;
       if (tripTypeFilter === 'overnight' && !isOvernight) return false;
@@ -192,6 +200,15 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
     const past: Trek[] = [];
     const seenIds = new Set<string>();
 
+    const getTrekDateStr = (t: Trek): string => {
+      return t.date || t.data?.hikeDate || (t as any).hike_date || '';
+    };
+
+    const getHikeNum = (t: Trek): number => {
+      const raw = String(t.hike_number || t.data?.hikeNumber || t.id || '').replace(/\D/g, '');
+      return parseInt(raw, 10) || 0;
+    };
+
     for (const trek of filteredTreks) {
       if (!trek) continue;
       const tid = String(trek.id || '').trim();
@@ -200,7 +217,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       }
       if (tid) seenIds.add(tid);
 
-      const dt = parseTrekDate(trek.date);
+      const dt = parseTrekDate(getTrekDateStr(trek));
       if (!dt || dt.getTime() >= today.getTime()) {
         upcoming.push(trek);
       } else {
@@ -208,18 +225,20 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       }
     }
 
-    // Sort upcoming ascending (closest upcoming hike first)
+    // Sort upcoming (closest upcoming hike first; ties broken by higher hike number first)
     upcoming.sort((a, b) => {
-      const da = parseTrekDate(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      const db = parseTrekDate(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      return da - db;
+      const da = parseTrekDate(getTrekDateStr(a))?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const db = parseTrekDate(getTrekDateStr(b))?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      if (da !== db) return da - db;
+      return getHikeNum(b) - getHikeNum(a);
     });
 
-    // Sort past descending (most recent first)
+    // Sort past descending (most recent past date first; ties broken by higher hike number first)
     past.sort((a, b) => {
-      const da = parseTrekDate(a.date)?.getTime() || 0;
-      const db = parseTrekDate(b.date)?.getTime() || 0;
-      return db - da;
+      const da = parseTrekDate(getTrekDateStr(a))?.getTime() || 0;
+      const db = parseTrekDate(getTrekDateStr(b))?.getTime() || 0;
+      if (da !== db) return db - da;
+      return getHikeNum(b) - getHikeNum(a);
     });
 
     return { upcomingTreks: upcoming, pastTreks: past };
@@ -416,13 +435,13 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
       ) : (
         <div className="space-y-6">
-          {/* 1. UPCOMING TREKS AS CARDS */}
+          {/* 1. UPCOMING HIKES */}
           {upcomingTreks.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
                 <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F] flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-[#E08828]" />
-                  <span>Upcoming Treks</span>
+                  <span>Upcoming Hikes</span>
                 </h3>
                 <span className="text-xs font-semibold text-[#8B8680]">
                   {upcomingTreks.length} Available
@@ -446,42 +465,67 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
             </div>
           )}
 
-          {/* 2. PAST EVENTS AS LIST (Auto-expanded if no upcoming events to avoid blank screen) */}
+          {/* Banner if Trip Category filter is active and has no upcoming hikes */}
+          {tripTypeFilter !== 'all' && upcomingTreks.length === 0 && pastTreks.length > 0 && (
+            <div className="bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl p-3 sm:p-4 text-center">
+              <p className="text-xs font-semibold text-[#5A5551]">
+                No upcoming hikes scheduled in this category right now.
+              </p>
+              <p className="text-[11px] text-[#8B8680] mt-0.5">
+                Browse completed past hikes in this category below.
+              </p>
+            </div>
+          )}
+
+          {/* 2. PAST HIKES */}
           {pastTreks.length > 0 && (() => {
-            const isArchiveOpen = showPastEvents || upcomingTreks.length === 0;
+            const isCategoryActive = tripTypeFilter !== 'all';
+            const isArchiveOpen = isCategoryActive || showPastEvents || upcomingTreks.length === 0;
             return (
-              <div className="pt-3 border-t border-[#F0EBE5]">
+              <div className="pt-3 border-t border-[#F0EBE5] space-y-3">
                 {/* Subtle miniature Himalayan prayer flag strip divider */}
                 <div className="mb-2 max-w-sm sm:max-w-md opacity-85">
                   <MiniPrayerFlags variant="card" count={7} withMountain={true} />
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    id="toggle-past-events-archive-btn"
-                    onClick={() => setShowPastEvents((prev) => !prev)}
-                    className="inline-flex items-center gap-2 text-xs font-bold text-[#5A5551] hover:text-[#1F1F1F] py-1 transition-colors cursor-pointer group"
-                    aria-expanded={isArchiveOpen}
-                  >
-                    <History className="w-3.5 h-3.5 text-[#7ABA42] group-hover:scale-110 transition-transform shrink-0" />
-                    <span>
-                      {upcomingTreks.length === 0
-                        ? `Recent & Completed Events (${pastTreks.length})`
-                        : `Past Events Archive (${pastTreks.length} Completed)`}
-                    </span>
-                    <span className="text-[#8B8680] font-normal group-hover:text-[#5A5551]">
-                      — {isArchiveOpen ? 'click to hide' : 'click to view'}
-                    </span>
-                    {isArchiveOpen ? (
-                      <ChevronUp className="w-3.5 h-3.5 text-[#7ABA42]" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-[#7ABA42]" />
-                    )}
-                  </button>
+                  {isCategoryActive ? (
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4 text-[#7ABA42] shrink-0" />
+                      <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">
+                        Past Hikes
+                      </h3>
+                      <span className="text-xs font-semibold text-[#8B8680]">
+                        ({pastTreks.length} Completed)
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      id="toggle-past-events-archive-btn"
+                      onClick={() => setShowPastEvents((prev) => !prev)}
+                      className="inline-flex items-center gap-2 text-xs font-bold text-[#5A5551] hover:text-[#1F1F1F] py-1 transition-colors cursor-pointer group"
+                      aria-expanded={isArchiveOpen}
+                    >
+                      <History className="w-3.5 h-3.5 text-[#7ABA42] group-hover:scale-110 transition-transform shrink-0" />
+                      <span>
+                        {upcomingTreks.length === 0
+                          ? `Recent & Completed Events (${pastTreks.length})`
+                          : `Past Events Archive (${pastTreks.length} Completed)`}
+                      </span>
+                      <span className="text-[#8B8680] font-normal group-hover:text-[#5A5551]">
+                        — {isArchiveOpen ? 'click to hide' : 'click to view'}
+                      </span>
+                      {isArchiveOpen ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-[#7ABA42]" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-[#7ABA42]" />
+                      )}
+                    </button>
+                  )}
                 </div>
 
-                {/* Collapsible Content */}
+                {/* Collapsible / Categorized Content */}
                 {isArchiveOpen && (
                   <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-2.5">

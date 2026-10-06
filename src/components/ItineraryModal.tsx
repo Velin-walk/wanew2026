@@ -138,7 +138,7 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 md:top-16 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 md:top-16 z-[2000] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
     >
       <div
         onClick={(e) => e.stopPropagation()}

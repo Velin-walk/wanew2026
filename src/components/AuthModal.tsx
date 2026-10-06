@@ -75,7 +75,7 @@ export const AuthModal: React.FC = () => {
   const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-[#EFEAE4] overflow-hidden flex flex-col">
         {/* Header decoration */}
         <div className="bg-gradient-to-r from-[#FAF6F0] via-white to-[#FAF6F0] p-6 text-center border-b border-[#EFEAE4] relative">

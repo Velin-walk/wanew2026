@@ -77,10 +77,15 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
           const json = await res.json();
           const serverRoster = json.roster || json.data?.roster;
           if (Array.isArray(serverRoster) && serverRoster.length > 0) {
-            const mapped: ParticipantItem[] = serverRoster.map((r: any) => ({
-              name: r.full_name || r.name || 'Hiker',
-              gender: (String(r.gender || '').toLowerCase().startsWith('f') ? 'f' : 'm') as 'm' | 'f',
-            }));
+            const mapped: ParticipantItem[] = serverRoster
+              .filter((r: any) => {
+                const st = String(r.status || r.registration_status || r.roster_registration_status || 'Confirmed').toLowerCase().trim();
+                return st !== 'cancelled' && st !== 'waitlisted' && st !== 'cancelled by user' && !st.includes('cancelled');
+              })
+              .map((r: any) => ({
+                name: r.full_name || r.name || 'Hiker',
+                gender: (String(r.gender || '').toLowerCase().startsWith('f') ? 'f' : 'm') as 'm' | 'f',
+              }));
             if (mapped.length > 0) {
               setRoster(mapped);
             }
@@ -122,21 +127,27 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
   if (!isOpen) return null;
 
   const totalParticipants =
-    totalCount !== undefined && totalCount > 0
-      ? Math.max(totalCount, roster.length)
-      : (participantsCount?.total || roster.length);
+    roster.length > 0
+      ? roster.length
+      : (totalCount !== undefined && totalCount > 0
+        ? totalCount
+        : (participantsCount?.total || 0));
 
   const maleCount =
-    participantsCount?.male || roster.filter((p) => p.gender === 'm').length;
+    roster.length > 0
+      ? roster.filter((p) => p.gender === 'm').length
+      : (participantsCount?.male || 0);
   const femaleCount =
-    participantsCount?.female || roster.filter((p) => p.gender === 'f').length;
+    roster.length > 0
+      ? roster.filter((p) => p.gender === 'f').length
+      : (participantsCount?.female || 0);
 
   return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="participants-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div

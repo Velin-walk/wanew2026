@@ -792,7 +792,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 md:top-16 z-[1000] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 md:top-16 z-[2000] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
     >
       <div
         onClick={(e) => e.stopPropagation()}

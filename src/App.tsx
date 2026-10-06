@@ -12,6 +12,7 @@ import { ItineraryModal } from './components/ItineraryModal';
 import { TrekFeedbackModal } from './components/TrekFeedbackModal';
 import { InfoPagesModal, SubPageType } from './components/InfoPagesModal';
 import { VoucherModal } from './components/VoucherModal';
+import { NoticeBoardModal } from './components/NoticeBoardModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { FALLBACK_TREKS } from './data/fallbackTreks';
@@ -1300,7 +1301,7 @@ function MainApp() {
       {(pullDistance > 0 || isRefreshing) && (
         <div
           id="pull-to-refresh-indicator"
-          className="fixed top-2 left-1/2 -translate-x-1/2 z-50 transition-all duration-150 pointer-events-none flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 backdrop-blur-md shadow-lg border border-[#E5E1DB] text-xs font-bold text-[#1F1F1F]"
+          className="fixed top-2 left-1/2 -translate-x-1/2 z-[3000] transition-all duration-150 pointer-events-none flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 backdrop-blur-md shadow-lg border border-[#E5E1DB] text-xs font-bold text-[#1F1F1F]"
           style={{
             transform: `translate(-50%, ${pullDistance > 0 ? Math.min(pullDistance - 12, 28) : (isRefreshing ? 6 : -60)}px)`,
             opacity: isRefreshing ? 1 : Math.min(pullDistance / 40, 1),
@@ -1323,7 +1324,7 @@ function MainApp() {
         {toast && (
           <div
             id="mobile-toast"
-            className={`fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-sm p-3.5 rounded-2xl shadow-xl border flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-top-4 duration-200 ${
+            className={`fixed top-3 left-1/2 -translate-x-1/2 z-[3000] w-[90%] max-w-sm p-3.5 rounded-2xl shadow-xl border flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-top-4 duration-200 ${
               toast.type === 'success'
                 ? 'bg-emerald-50 text-emerald-950 border-emerald-300'
                 : 'bg-rose-50 text-rose-950 border-rose-300'
@@ -1659,6 +1660,9 @@ function MainApp() {
 
         {/* Firebase Authentication Modal */}
         <AuthModal />
+
+        {/* Site Notice Board Pop-up Modal */}
+        <NoticeBoardModal />
 
         {/* Hiker Profile & Booking History Modal */}
         <ProfileModal

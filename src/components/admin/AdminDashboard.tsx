@@ -25,7 +25,8 @@ import {
   FileSpreadsheet,
   Link2,
   AlertCircle,
-  Smartphone
+  Smartphone,
+  Bell
 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -54,6 +55,7 @@ import { CloudflareRegistrationsTable } from './CloudflareRegistrationsTable';
 import { AdminActivityLogs } from './AdminActivityLogs';
 import { PWAInstallStats } from './PWAInstallStats';
 import { HomepageHeroManager } from './HomepageHeroManager';
+import { NoticeBoardManager } from './NoticeBoardManager';
 import { UserActivityNotificationsPanel } from './UserActivityNotificationsPanel';
 import {
   fetchAllUserActivities,
@@ -95,7 +97,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     } catch {}
     return 'bookings';
   });
-  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero'>(() => {
+  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice'>(() => {
     try {
       const saved = sessionStorage.getItem('wnw_admin_system_subtab');
       if (
@@ -103,7 +105,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'audit' ||
         saved === 'leaderboard' ||
         saved === 'pwa' ||
-        saved === 'hero'
+        saved === 'hero' ||
+        saved === 'notice'
       ) {
         return saved;
       }
@@ -2054,6 +2057,17 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               >
                 <span>Homepage Hero</span>
               </button>
+              <button
+                onClick={() => setSystemSubTab('notice')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'notice'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                }`}
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>Notice Board</span>
+              </button>
             </div>
 
             <div className="mt-6">
@@ -2161,6 +2175,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
               {systemSubTab === 'hero' && (
                 <HomepageHeroManager currentUserEmail={currentUserEmail} />
+              )}
+
+              {systemSubTab === 'notice' && (
+                <NoticeBoardManager />
               )}
             </div>
           </div>

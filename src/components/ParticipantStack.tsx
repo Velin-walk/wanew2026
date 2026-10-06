@@ -21,10 +21,13 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const avatars = (recentParticipants || []).slice(0, 8);
+  const hasExactRoster = recentParticipants && recentParticipants.length > 0;
   const totalParticipants =
-    totalCount !== undefined && totalCount > 0
-      ? totalCount
-      : (participantsCount?.total || (recentParticipants ? recentParticipants.length : 0));
+    hasExactRoster && totalCount !== undefined && totalCount <= 12 && totalCount > recentParticipants.length
+      ? recentParticipants.length
+      : (totalCount !== undefined && totalCount > 0
+        ? totalCount
+        : (hasExactRoster ? recentParticipants.length : (participantsCount?.total || 0)));
   const overflow = Math.max(0, totalParticipants - avatars.length);
 
   if (totalParticipants === 0 && avatars.length === 0) {
@@ -39,8 +42,14 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
     );
   }
 
-  const maleCount = participantsCount?.male || recentParticipants.filter((p) => p.gender === 'm').length;
-  const femaleCount = participantsCount?.female || recentParticipants.filter((p) => p.gender === 'f').length;
+  const maleCount =
+    hasExactRoster && recentParticipants.length <= 12
+      ? recentParticipants.filter((p) => p.gender === 'm').length
+      : (participantsCount?.male || recentParticipants.filter((p) => p.gender === 'm').length);
+  const femaleCount =
+    hasExactRoster && recentParticipants.length <= 12
+      ? recentParticipants.filter((p) => p.gender === 'f').length
+      : (participantsCount?.female || recentParticipants.filter((p) => p.gender === 'f').length);
 
   return (
     <>

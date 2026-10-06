@@ -434,24 +434,28 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
 
       for (const reg of regList) {
         const status = String(reg.active_status || 'Confirmed').toLowerCase();
-        if (status.includes('cancelled') || status === 'rejected') {
+        if (status.includes('cancelled') || status === 'rejected' || status === 'waitlisted') {
           continue;
-        }
-
-        const count = Number(reg.pax) || 1;
-        totalPax += count;
-
-        const g = String(reg.gender || '').trim().toLowerCase();
-        if (g.startsWith('m')) {
-          malePax += count;
-        } else if (g.startsWith('f')) {
-          femalePax += count;
         }
 
         const rawName = (reg.full_name || '').trim();
         const lowerName = rawName.toLowerCase();
-        if (rawName && !seenNames.has(lowerName) && recentParticipants.length < 10) {
-          seenNames.add(lowerName);
+        if (!rawName || seenNames.has(lowerName)) {
+          continue;
+        }
+        seenNames.add(lowerName);
+
+        // Option A: Each confirmed unique individual attendee counts as 1
+        totalPax += 1;
+
+        const g = String(reg.gender || '').trim().toLowerCase();
+        if (g.startsWith('f')) {
+          femalePax += 1;
+        } else {
+          malePax += 1;
+        }
+
+        if (recentParticipants.length < 10) {
           const parts = rawName.split(/\s+/).filter(Boolean);
           const anonymized = parts.length > 1
             ? `${parts[0]} ${parts[1].charAt(0)}.`
@@ -685,53 +689,71 @@ export default {
           return errorResponse('Trek not found', 404);
         }
 
-        // Strict hike_number matching for live roster with anonymous privacy protection
-        const regs = await env.DB.prepare(
-          'SELECT * FROM registrations WHERE hike_number = ?'
-        ).bind(String(row.hike_number || '')).all();
+        // Strict hike_number matching for live roster with anonymous privacy protection (excluding cancelled / waitlisted)
+        let regs = { results: [] };
+        try {
+          regs = await env.DB.prepare(`
+            SELECT 
+              r.id, r.hike_number, r.full_name, r.gender, r.pax, r.timestamp,
+              COALESCE(b.registration_status, 'Confirmed') as active_status
+            FROM registrations r
+            LEFT JOIN bookings_roster b ON CAST(r.id AS TEXT) = b.registration_id
+            WHERE r.hike_number = ?
+              AND LOWER(COALESCE(b.registration_status, 'Confirmed')) NOT LIKE '%cancel%'
+              AND LOWER(COALESCE(b.registration_status, 'Confirmed')) != 'waitlisted'
+          `).bind(String(row.hike_number || '')).all();
+        } catch (_) {
+          try {
+            regs = await env.DB.prepare(
+              'SELECT * FROM registrations WHERE hike_number = ?'
+            ).bind(String(row.hike_number || '')).all();
+          } catch (e) {
+            regs = { results: [] };
+          }
+        }
 
         const roster = regs.results || [];
-        const total_pax = roster.reduce((acc, r) => acc + (Number(r.pax) || 1), 0);
         let male_count = 0;
         let female_count = 0;
         const recent_participants = [];
         const seenNames = new Set();
+        const sanitizedRoster = [];
 
         for (const r of roster) {
-          const pCount = Number(r.pax) || 1;
-          const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
-          if (isFemale) female_count += pCount;
-          else male_count += pCount;
+          const st = String(r.active_status || r.registration_status || r.status || 'Confirmed').toLowerCase().trim();
+          if (st.includes('cancel') || st === 'waitlisted') continue;
 
           const rawName = (r.full_name || '').trim();
           const lowerName = rawName.toLowerCase();
-          if (rawName && !seenNames.has(lowerName) && recent_participants.length < 6) {
-            seenNames.add(lowerName);
-            const parts = rawName.split(/\s+/).filter(Boolean);
-            const anonymized = parts.length > 1
-              ? `${parts[0]} ${parts[1].charAt(0)}.`
-              : (parts[0] || 'Hiker');
+          if (!rawName || seenNames.has(lowerName)) continue;
+          seenNames.add(lowerName);
+
+          const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
+          if (isFemale) female_count += 1;
+          else male_count += 1;
+
+          const parts = rawName.split(/\s+/).filter(Boolean);
+          const anonymized = parts.length > 1
+            ? `${parts[0]} ${parts[1].charAt(0)}.`
+            : (parts[0] || 'Hiker');
+
+          if (recent_participants.length < 10) {
             recent_participants.push({
               name: anonymized,
               gender: isFemale ? 'f' : 'm',
             });
           }
-        }
 
-        const sanitizedRoster = roster.map((r) => {
-          const rawName = (r.full_name || '').trim();
-          const parts = rawName.split(/\s+/).filter(Boolean);
-          const anonymized = parts.length > 1
-            ? `${parts[0]} ${parts[1].charAt(0)}.`
-            : (parts[0] || 'Hiker');
-          return {
+          sanitizedRoster.push({
             full_name: anonymized,
             gender: r.gender,
-            pax: r.pax,
+            pax: 1,
             hike_number: r.hike_number,
             timestamp: r.timestamp,
-          };
-        });
+          });
+        }
+
+        const total_pax = sanitizedRoster.length;
 
         let parsedData = {};
         try {
@@ -2070,6 +2092,63 @@ export default {
         ).run();
 
         return jsonResponse({ success: true, message: 'Feedback submitted successfully' });
+      }
+
+      // ===== NOTICE BOARD ENDPOINTS (system_snapshots Backend) =====
+
+      // GET /notice or GET /admin/notice - Fetch current site notice board
+      if (method === 'GET' && (path === '/notice' || path === '/admin/notice')) {
+        if (!env.DB) return jsonResponse({ success: true, data: null });
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS system_snapshots (
+              key TEXT PRIMARY KEY,
+              data_json TEXT NOT NULL,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `).run().catch(() => {});
+
+          const row = await env.DB.prepare(
+            "SELECT data_json, updated_at FROM system_snapshots WHERE key = 'site_notice_board'"
+          ).first();
+          if (!row || !row.data_json) {
+            return jsonResponse({ success: true, data: null });
+          }
+          const parsed = typeof row.data_json === 'string' ? JSON.parse(row.data_json) : row.data_json;
+          return jsonResponse({ success: true, data: parsed, updated_at: row.updated_at });
+        } catch (err) {
+          return errorResponse('Failed to fetch notice: ' + err.message, 500);
+        }
+      }
+
+      // POST /admin/notice or POST /notice - Update site notice board
+      if (method === 'POST' && (path === '/notice' || path === '/admin/notice')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS system_snapshots (
+              key TEXT PRIMARY KEY,
+              data_json TEXT NOT NULL,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `).run().catch(() => {});
+
+          const body = await request.json();
+          const nowIso = new Date().toISOString();
+          const noticeData = {
+            ...body,
+            updatedAt: nowIso,
+          };
+          const jsonStr = JSON.stringify(noticeData);
+
+          await env.DB.prepare(
+            "INSERT OR REPLACE INTO system_snapshots (key, data_json, updated_at) VALUES ('site_notice_board', ?, ?)"
+          ).bind(jsonStr, nowIso).run();
+
+          return jsonResponse({ success: true, data: noticeData });
+        } catch (err) {
+          return errorResponse('Failed to update notice: ' + err.message, 500);
+        }
       }
 
       // ===== TREK PHOTOS ENDPOINTS (Cloudflare D1 Backend) =====

@@ -486,8 +486,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return 1;
   };
 
-  // Metrics Calculations
-  const totalRegistered = trekRegistrations.reduce((acc, r) => acc + (r.paxCount || 1), 0);
+  // Metrics Calculations (Option A: Unique confirmed roster entries)
+  const totalRegistered = trekRegistrations.length;
   const paidCount = trekRegistrations.filter(
     (r) => r.payment_status?.toLowerCase() === 'fully paid' || (r.paid_amount || 0) > 0
   ).length;
@@ -720,7 +720,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           const matchedRegs = registrations.filter(
             (r) => doesRegistrationMatchTrek(r, t)
           );
-          const tRegsCount = matchedRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
+          const tRegsCount = matchedRegs.length;
 
           const dt = parseTrekDate(t.date);
           const todayStartMs = new Date().setHours(0, 0, 0, 0);
