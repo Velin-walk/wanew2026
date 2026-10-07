@@ -341,7 +341,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
               placeholder="Search by hike number, trek name, meeting point..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs pl-10 pr-4 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-[#1F1F1F] placeholder-[#8B8680] focus:outline-none focus:border-[#E08828]"
+              className="w-full text-xs pl-10 pr-4 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-[#1F1F1F] placeholder-[#8B8680] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             />
           </div>
 

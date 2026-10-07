@@ -2107,7 +2107,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                             value={gasUrl}
                             onChange={(e) => setGasUrl(e.target.value)}
                             placeholder="https://script.google.com/macros/s/.../exec"
-                            className="w-full pl-10 pr-4 py-3 bg-white border border-[#E5E1DB] rounded-xl text-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-hidden transition-all"
+                            className="w-full pl-10 pr-4 py-3 bg-white border border-[#E5E1DB] rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-all"
                           />
                           <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8B8680]" />
                         </div>

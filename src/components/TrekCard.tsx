@@ -320,7 +320,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
               </div>
             )}
 
-            <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F] leading-snug">
+            <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F] leading-snug line-clamp-2 md:min-h-[3.25rem] flex items-start">
               {trek.name}
             </h3>
 

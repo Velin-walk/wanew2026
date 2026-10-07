@@ -192,6 +192,86 @@ async function logAdminActivity(env, request, actionType, description, metadata 
   }
 }
 
+let lastAutoMigrateTime = 0;
+
+/**
+ * Background auto-migrator: seamlessly downloads external images into R2 with zero user intervention
+ */
+async function autoMigrateTrekImagesToR2(env, urlOrigin, ctx) {
+  if (!env || !env.DB || !env.BUCKET) return;
+  const now = Date.now();
+  if (now - lastAutoMigrateTime < 5 * 60 * 1000) return; // check every 5 minutes max
+  lastAutoMigrateTime = now;
+
+  try {
+    const { results: rows } = await env.DB.prepare(
+      "SELECT id, hike_number, name, featured_image, data_json FROM treks WHERE (featured_image LIKE 'http%' AND featured_image NOT LIKE '%/images/%' AND featured_image NOT LIKE '%.r2.dev%') LIMIT 5"
+    ).all();
+
+    if (!rows || rows.length === 0) return;
+
+    for (const row of rows) {
+      let rowModified = false;
+      let currentFeatured = row.featured_image || '';
+      let dataObj = {};
+      try {
+        dataObj = JSON.parse(row.data_json || '{}');
+      } catch (_) {}
+
+      const hikeNum = String(row.hike_number || 'hike').trim();
+
+      const downloadAndPut = async (url) => {
+        if (!url || typeof url !== 'string') return url;
+        const trimmed = url.trim();
+        if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return trimmed;
+        if (trimmed.includes('/images/') || trimmed.includes('.r2.dev') || trimmed.includes(urlOrigin)) return trimmed;
+
+        try {
+          const res = await fetch(trimmed, {
+            headers: { 'User-Agent': 'WalkNepalWalk-AutoMigrator/1.0' }
+          });
+          if (!res.ok) return trimmed;
+          const mimeType = res.headers.get('content-type') || 'image/jpeg';
+          let ext = 'jpg';
+          if (mimeType.includes('png')) ext = 'png';
+          else if (mimeType.includes('webp')) ext = 'webp';
+          const r2FileName = `covers_${hikeNum}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${ext}`;
+          const buffer = await res.arrayBuffer();
+          await env.BUCKET.put(r2FileName, buffer, { httpMetadata: { contentType: mimeType } });
+          return `${urlOrigin}/images/${r2FileName}`;
+        } catch (_) {
+          return trimmed;
+        }
+      };
+
+      if (currentFeatured && !currentFeatured.includes('/images/')) {
+        const newFeat = await downloadAndPut(currentFeatured);
+        if (newFeat !== currentFeatured) {
+          currentFeatured = newFeat;
+          rowModified = true;
+        }
+      }
+
+      if (dataObj.cardImageUrl && typeof dataObj.cardImageUrl === 'string' && !dataObj.cardImageUrl.includes('/images/')) {
+        const newCard = await downloadAndPut(dataObj.cardImageUrl);
+        if (newCard !== dataObj.cardImageUrl) {
+          dataObj.cardImageUrl = newCard;
+          rowModified = true;
+        }
+      }
+
+      if (rowModified) {
+        await env.DB.prepare('UPDATE treks SET featured_image = ?, data_json = ? WHERE id = ?')
+          .bind(currentFeatured, JSON.stringify(dataObj), row.id)
+          .run();
+        console.log(`[AutoMigrate] Background migrated Trek #${hikeNum} to R2: ${currentFeatured}`);
+      }
+    }
+  } catch (err) {
+    console.warn('[AutoMigrate] Background notice:', err.message);
+  }
+}
+
 /**
  * Recomputes the unified Leaderboard Master Snapshot from D1 registration data and treks.
  * Stored in system_snapshots table for O(1) single-read and Edge-cached delivery.
@@ -547,6 +627,203 @@ export default {
         });
       }
 
+      // POST /upload/image or POST /api/upload/image or POST /images/upload - Direct R2 Image Upload for Covers, Hero, & Gallery
+      if (method === 'POST' && (path === '/upload/image' || path === '/api/upload/image' || path === '/images/upload' || path === '/api/images/upload')) {
+        const bucket = env.BUCKET;
+        if (!bucket) return errorResponse('R2 Storage binding BUCKET missing', 500);
+
+        try {
+          const contentTypeHeader = request.headers.get('content-type') || '';
+          let fileData = null;
+          let originalName = 'image.jpg';
+          let mimeType = 'image/jpeg';
+          let folder = url.searchParams.get('folder') || 'covers';
+
+          if (contentTypeHeader.includes('multipart/form-data')) {
+            const formData = await request.formData();
+            const file = formData.get('file') || formData.get('image');
+            if (!file) {
+              return errorResponse('No file found in multipart form data (field: "file" or "image")', 400);
+            }
+            folder = formData.get('folder') || folder;
+            originalName = file.name || originalName;
+            mimeType = file.type || mimeType;
+            fileData = await file.arrayBuffer();
+          } else {
+            // Direct binary upload
+            fileData = await request.arrayBuffer();
+            mimeType = contentTypeHeader.split(';')[0] || mimeType;
+            const paramName = url.searchParams.get('name') || url.searchParams.get('filename');
+            if (paramName) originalName = paramName;
+          }
+
+          if (!fileData || fileData.byteLength === 0) {
+            return errorResponse('Empty file payload received', 400);
+          }
+
+          // Generate clean unique filename
+          const cleanBase = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const extMatch = cleanBase.match(/\.([a-zA-Z0-9]+)$/);
+          let ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+          if (mimeType.includes('png')) ext = 'png';
+          else if (mimeType.includes('webp')) ext = 'webp';
+          else if (mimeType.includes('gif')) ext = 'gif';
+
+          const rand = Math.random().toString(36).substring(2, 7);
+          const sanitizedFolder = String(folder).replace(/[^a-zA-Z0-9_-]/g, '');
+          const fileName = `${sanitizedFolder ? sanitizedFolder + '_' : ''}${Date.now()}_${rand}.${ext}`;
+
+          await bucket.put(fileName, fileData, {
+            httpMetadata: { contentType: mimeType }
+          });
+
+          const imageUrl = `${urlOrigin}/images/${fileName}`;
+          return jsonResponse({
+            success: true,
+            url: imageUrl,
+            fileName,
+            size: fileData.byteLength,
+            contentType: mimeType,
+            message: 'Image uploaded successfully to Cloudflare R2'
+          }, 201);
+        } catch (uploadErr) {
+          console.error('Error handling direct R2 image upload:', uploadErr);
+          return errorResponse(`Image upload to R2 failed: ${uploadErr.message}`, 500);
+        }
+      }
+
+      // POST /admin/migrate-images-to-r2 - Batch migrate external trek images to Cloudflare R2
+      if (method === 'POST' && (path === '/admin/migrate-images-to-r2' || path === '/admin/migrate_images_to_r2')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        const bucket = env.BUCKET;
+        if (!bucket) return errorResponse('R2 Storage binding BUCKET missing', 500);
+
+        try {
+          // 1. Fetch all treks from D1
+          const { results: rows } = await env.DB.prepare('SELECT id, hike_number, name, featured_image, data_json FROM treks').all();
+          let migratedCount = 0;
+          let skippedCount = 0;
+          const report = [];
+
+          for (const row of (rows || [])) {
+            let rowModified = false;
+            let currentFeatured = row.featured_image || '';
+            let dataObj = {};
+            try {
+              dataObj = JSON.parse(row.data_json || '{}');
+            } catch (_) {
+              dataObj = {};
+            }
+
+            const hikeNum = String(row.hike_number || 'hike').trim();
+
+            // Helper to download an external image and upload to R2
+            const migrateUrlToR2 = async (imgUrl, label) => {
+              if (!imgUrl || typeof imgUrl !== 'string') return imgUrl;
+              const trimmed = imgUrl.trim();
+              if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return trimmed;
+              if (trimmed.includes('/images/') || trimmed.includes('.r2.dev') || trimmed.includes(urlOrigin)) return trimmed;
+
+              try {
+                const fetchRes = await fetch(trimmed, {
+                  headers: { 'User-Agent': 'WalkNepalWalk-ImageMigrator/1.0' }
+                });
+                if (!fetchRes.ok) {
+                  console.warn(`[Migrate] Failed to download image for ${label}: HTTP ${fetchRes.status}`);
+                  return trimmed;
+                }
+
+                const mimeType = fetchRes.headers.get('content-type') || 'image/jpeg';
+                let ext = 'jpg';
+                if (mimeType.includes('png')) ext = 'png';
+                else if (mimeType.includes('webp')) ext = 'webp';
+                else if (mimeType.includes('gif')) ext = 'gif';
+
+                const rand = Math.random().toString(36).substring(2, 7);
+                const r2FileName = `covers_${hikeNum}_${Date.now()}_${rand}.${ext}`;
+                const buffer = await fetchRes.arrayBuffer();
+
+                await bucket.put(r2FileName, buffer, {
+                  httpMetadata: { contentType: mimeType }
+                });
+
+                const newR2Url = `${urlOrigin}/images/${r2FileName}`;
+                console.log(`[Migrate] Successfully moved ${label} to R2: ${newR2Url}`);
+                return newR2Url;
+              } catch (err) {
+                console.error(`[Migrate] Error uploading ${label} to R2:`, err);
+                return trimmed;
+              }
+            };
+
+            // 1. Migrate featured_image
+            if (currentFeatured && !currentFeatured.includes('/images/') && !currentFeatured.includes('.r2.dev')) {
+              const newFeatured = await migrateUrlToR2(currentFeatured, `Trek #${hikeNum} featured_image`);
+              if (newFeatured !== currentFeatured) {
+                currentFeatured = newFeatured;
+                rowModified = true;
+              }
+            }
+
+            // 2. Migrate cardImageUrl inside dataObj
+            if (dataObj.cardImageUrl && typeof dataObj.cardImageUrl === 'string' && !dataObj.cardImageUrl.includes('/images/') && !dataObj.cardImageUrl.includes('.r2.dev')) {
+              const newCardUrl = await migrateUrlToR2(dataObj.cardImageUrl, `Trek #${hikeNum} cardImageUrl`);
+              if (newCardUrl !== dataObj.cardImageUrl) {
+                dataObj.cardImageUrl = newCardUrl;
+                rowModified = true;
+              }
+            }
+
+            // 3. Migrate hero images or overview images inside dataObj if present
+            if (dataObj.overview?.heroImageUrl && !dataObj.overview.heroImageUrl.includes('/images/') && !dataObj.overview.heroImageUrl.includes('.r2.dev')) {
+              const newHeroUrl = await migrateUrlToR2(dataObj.overview.heroImageUrl, `Trek #${hikeNum} heroImageUrl`);
+              if (newHeroUrl !== dataObj.overview.heroImageUrl) {
+                dataObj.overview.heroImageUrl = newHeroUrl;
+                rowModified = true;
+              }
+            }
+
+            if (rowModified) {
+              await env.DB.prepare(
+                'UPDATE treks SET featured_image = ?, data_json = ? WHERE id = ?'
+              ).bind(
+                currentFeatured,
+                JSON.stringify(dataObj),
+                row.id
+              ).run();
+
+              migratedCount++;
+              report.push({
+                hikeNumber: row.hike_number,
+                name: row.name,
+                newFeaturedImage: currentFeatured
+              });
+            } else {
+              skippedCount++;
+            }
+          }
+
+          // Purge Edge Caches
+          await purgeEdgeCache([
+            `${urlOrigin}/treks`,
+            `${urlOrigin}/admin/itineraries`
+          ], ctx);
+
+          await logAdminActivity(env, request, 'MIGRATE_IMAGES_R2', `Batch migrated ${migratedCount} trek images to Cloudflare R2`, { migratedCount, skippedCount });
+
+          return jsonResponse({
+            success: true,
+            message: `Batch migration complete. ${migratedCount} treks migrated to Cloudflare R2 (${skippedCount} already up to date).`,
+            migratedCount,
+            skippedCount,
+            report
+          });
+        } catch (err) {
+          console.error('[Migrate] Global error during batch migration:', err);
+          return errorResponse(`Batch migration failed: ${err.message}`, 500);
+        }
+      }
+
       // ===== TREKS & ADMIN ITINERARIES ENDPOINTS =====
       
       // GET /treks or GET /admin/itineraries - List all treks with server-side anonymous participant aggregation
@@ -567,6 +844,13 @@ export default {
           if (cached) {
             return cached;
           }
+        }
+
+        // Seamless background migration: automatically transfers external images to R2 with zero manual commands
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(autoMigrateTrekImagesToR2(env, urlOrigin, ctx));
+        } else {
+          autoMigrateTrekImagesToR2(env, urlOrigin, ctx).catch(() => {});
         }
         
         let results = [];

@@ -183,7 +183,7 @@ export const NoticeBoardManager: React.FC = () => {
               value={notice.title}
               onChange={(e) => setNotice({ ...notice, title: e.target.value })}
               placeholder="e.g. Schedule Change for Hike #205"
-              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:border-[#E08828]"
+              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             />
           </div>
 
@@ -192,7 +192,7 @@ export const NoticeBoardManager: React.FC = () => {
             <select
               value={notice.type}
               onChange={(e) => setNotice({ ...notice, type: e.target.value as NoticeType })}
-              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:border-[#E08828]"
+              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             >
               <option value="info">🔵 Information (General)</option>
               <option value="event">🟠 Trek &amp; Event Alert</option>
@@ -210,7 +210,7 @@ export const NoticeBoardManager: React.FC = () => {
             value={notice.message}
             onChange={(e) => setNotice({ ...notice, message: e.target.value })}
             placeholder="Write the full notice details here. Line breaks are preserved in the pop-up."
-            className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-medium text-[#1F1F1F] focus:bg-white focus:outline-none focus:border-[#E08828] leading-relaxed"
+            className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-medium text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] leading-relaxed transition-colors"
           />
         </div>
 
@@ -223,7 +223,7 @@ export const NoticeBoardManager: React.FC = () => {
               value={notice.ctaText || ''}
               onChange={(e) => setNotice({ ...notice, ctaText: e.target.value })}
               placeholder="e.g. View Hike Itinerary"
-              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:border-[#E08828]"
+              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             />
           </div>
 
@@ -234,7 +234,7 @@ export const NoticeBoardManager: React.FC = () => {
               value={notice.ctaLink || ''}
               onChange={(e) => setNotice({ ...notice, ctaLink: e.target.value })}
               placeholder="e.g. #treks or https://chat.whatsapp.com/..."
-              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:border-[#E08828]"
+              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             />
           </div>
 
@@ -244,7 +244,7 @@ export const NoticeBoardManager: React.FC = () => {
               type="date"
               value={notice.expiresAt ? notice.expiresAt.slice(0, 10) : ''}
               onChange={(e) => setNotice({ ...notice, expiresAt: e.target.value ? new Date(e.target.value).toISOString() : '' })}
-              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:border-[#E08828]"
+              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             />
           </div>
         </div>

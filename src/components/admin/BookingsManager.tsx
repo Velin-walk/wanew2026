@@ -882,7 +882,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by hiker name, phone, destination, remarks..."
-              className="w-full pl-10 pr-4 py-2.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:border-[#E08828]"
+              className="w-full pl-10 pr-4 py-2.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             />
           </div>
 
@@ -1340,7 +1340,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                             value={curPickup}
                             onChange={(e) => handleRowChange(reg.id, 'pickup_point', e.target.value)}
                             placeholder="Pickup Point"
-                            className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:border-[#E08828]"
+                            className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
                           />
                         </td>
 
@@ -1351,7 +1351,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                             value={curNotes}
                             onChange={(e) => handleRowChange(reg.id, 'admin_notes', e.target.value)}
                             placeholder="Edit admin notes..."
-                            className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-medium text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:border-[#E08828]"
+                            className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-medium text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
                           />
                         </td>
 

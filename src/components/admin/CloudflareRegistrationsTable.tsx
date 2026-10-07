@@ -403,7 +403,7 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
                 setCurrentPage(1);
               }}
               placeholder="Search across all table columns..."
-              className="w-full pl-9 pr-3 py-1.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-[#F38020] transition-colors"
+              className="w-full pl-9 pr-3 py-1.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             />
             {searchQuery && (
               <button
@@ -426,7 +426,7 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
                   setHikeFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-2.5 py-1.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-stone-700 focus:outline-hidden focus:border-[#F38020] cursor-pointer"
+                className="px-2.5 py-1.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-stone-700 focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] cursor-pointer transition-colors"
               >
                 <option value="ALL">All Treks ({uniqueHikes.length})</option>
                 {uniqueHikes.map(([hikeNum, label]) => (

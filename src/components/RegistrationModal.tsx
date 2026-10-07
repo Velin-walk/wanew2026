@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Trek, TeamMember, BookingFormData } from '../types';
+import { triggerHaptic } from '../utils/haptics';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import {
   X,
@@ -486,6 +487,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       setSubmissionProgress(100);
 
       setTimeout(() => {
+        triggerHaptic([30, 40, 50]);
         setIsSubmitted(true);
         setSubmitting(false);
       }, 300);
@@ -667,7 +669,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="w-full py-3 px-5 bg-[#E08828] hover:bg-[#c9741b] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                    className="w-full py-3 px-3 sm:px-5 bg-[#E08828] hover:bg-[#c9741b] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
                   >
                     <span>Done (Return to Roster)</span>
                     <CheckCircle2 className="w-4 h-4" />
@@ -683,7 +685,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                           onClose();
                         }
                       }}
-                      className="w-full py-3 px-5 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                      className="w-full py-3 px-3 sm:px-5 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
                     >
                       <span>Pay Now (Pricing & Payment)</span>
                       <ChevronRight className="w-4 h-4" />
@@ -691,7 +693,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     <button
                       type="button"
                       onClick={onClose}
-                      className="w-full py-2.5 px-5 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#5A5551] font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                      className="w-full py-2.5 px-3 sm:px-5 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#5A5551] font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
                     >
                       Pay Later (Return to Homepage)
                     </button>
@@ -1199,7 +1201,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 <button
                   type="submit"
                   id="reviewBtn"
-                  className="w-full min-h-[44px] py-2.5 px-6 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-sm transition-all shadow-sm active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full min-h-[44px] py-2.5 px-3 sm:px-6 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-sm transition-all shadow-sm active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>Review & Confirm Registration</span>
                   <ChevronRight className="w-4 h-4" />

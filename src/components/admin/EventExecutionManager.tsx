@@ -287,7 +287,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search event execution by hike title or number..."
-            className="w-full pl-10 pr-4 py-2.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:border-[#E08828]"
+            className="w-full pl-10 pr-4 py-2.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
           />
         </div>
 
@@ -414,7 +414,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                               onChange={(e) => handleRowChange(t.id, 'capacity', e.target.value)}
                               min={1}
                               max={100}
-                              className="w-16 p-1 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-xs font-black text-[#1F1F1F] text-center focus:bg-white focus:outline-none focus:border-[#E08828]"
+                              className="w-16 p-1 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-xs font-black text-[#1F1F1F] text-center focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
                               title="Max Seats Capacity"
                             />
                             <span className="text-[11px] text-[#8B8680]">Seats</span>
@@ -443,7 +443,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                           value={curLeader}
                           onChange={(e) => handleRowChange(t.id, 'leader', e.target.value)}
                           placeholder="Guide name & contact..."
-                          className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:border-[#E08828]"
+                          className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
                         />
                       </td>
 

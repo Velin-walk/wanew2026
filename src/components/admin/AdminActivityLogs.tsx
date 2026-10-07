@@ -221,7 +221,7 @@ export function AdminActivityLogs() {
               placeholder="Search by admin email..."
               value={searchEmail}
               onChange={(e) => setSearchEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-250 focus:border-[#F38020] rounded-xl text-xs text-stone-900 placeholder-stone-400 outline-none transition-all shadow-xs"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-250 focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] rounded-xl text-xs text-stone-900 placeholder-stone-400 transition-all shadow-xs"
             />
             {searchEmail && (
               <button
@@ -250,7 +250,7 @@ export function AdminActivityLogs() {
               setSelectedAction(e.target.value);
               setOffset(0);
             }}
-            className="px-3 py-2.5 bg-white border border-stone-250 focus:border-[#F38020] rounded-xl text-xs text-stone-800 outline-none transition-all shadow-xs cursor-pointer min-w-[200px]"
+            className="px-3 py-2.5 bg-white border border-stone-250 focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] rounded-xl text-xs text-stone-800 transition-all shadow-xs cursor-pointer min-w-[200px]"
           >
             {ACTION_TYPES.map((type) => (
               <option key={type.value} value={type.value}>

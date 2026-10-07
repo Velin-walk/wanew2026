@@ -490,7 +490,7 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                   type="button"
                   id="itinerary-scroll-to-logistics-btn"
                   onClick={() => switchTab('logistics')}
-                  className="w-full sm:w-auto px-5 py-3 bg-[#E08828] hover:bg-[#D07717] active:scale-95 text-white text-xs sm:text-sm font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 group"
+                  className="w-full sm:w-auto px-3.5 sm:px-5 py-2.5 sm:py-3 bg-[#E08828] hover:bg-[#D07717] active:scale-95 text-white text-xs sm:text-sm font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 group"
                 >
                   <ClipboardList className="w-4 h-4" />
                   <span>View Logistics & Booking</span>

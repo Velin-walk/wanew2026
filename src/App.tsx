@@ -50,6 +50,8 @@ import {
 } from './services/notificationService';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 
+import { triggerHaptic } from './utils/haptics';
+
 function MainApp() {
   const { user, userEmail, userPhone, isAdmin, openAuthModal, authModalOpen, closeAuthModal } = useAuth();
   const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>(() => {
@@ -956,6 +958,7 @@ function MainApp() {
   };
 
   const toggleFavorite = (trekId: string) => {
+    triggerHaptic(20);
     setFavorites((prev) => {
       const next = prev.includes(trekId)
         ? prev.filter((id) => id !== trekId)

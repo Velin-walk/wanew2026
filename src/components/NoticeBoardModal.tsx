@@ -215,7 +215,7 @@ export const NoticeBoardModal: React.FC<NoticeBoardModalProps> = ({
           {notice.ctaText && notice.ctaLink && (
             <button
               onClick={handleCtaClick}
-              className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm ${config.btnClass}`}
+              className={`w-full sm:w-auto px-3.5 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm ${config.btnClass}`}
             >
               <span>{notice.ctaText}</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -224,7 +224,7 @@ export const NoticeBoardModal: React.FC<NoticeBoardModalProps> = ({
 
           <button
             onClick={handleDismiss}
-            className="w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-[#F2ECE4] border border-[#D5CEC5] text-[#1F1F1F] rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+            className="w-full sm:w-auto px-3.5 sm:px-5 py-2.5 bg-white hover:bg-[#F2ECE4] border border-[#D5CEC5] text-[#1F1F1F] rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
           >
             Got it, Dismiss
           </button>
