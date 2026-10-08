@@ -49,6 +49,7 @@ export function AdminActivityLogs() {
   const [selectedAction, setSelectedAction] = useState('');
   const [searchEmail, setSearchEmail] = useState('');
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+  const [showRawJsonId, setShowRawJsonId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchLogs = async () => {
@@ -302,83 +303,218 @@ export function AdminActivityLogs() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {logs.map((log) => {
-              const isExpanded = expandedLogId === log.id;
-              return (
-                <div
-                  key={log.id}
-                  className={`border rounded-2xl transition-all duration-200 ${
-                    isExpanded
-                      ? 'bg-[#FAF8F5]/80 border-stone-300 shadow-xs'
-                      : 'border-stone-150 hover:border-stone-250 bg-white hover:bg-stone-50/40'
-                  }`}
-                >
-                  <div
-                    onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 cursor-pointer select-none"
-                  >
-                    <div className="flex items-start gap-3.5">
-                      <div className="w-9 h-9 shrink-0 flex items-center justify-center rounded-xl bg-white border border-stone-200 shadow-2xs">
-                        {getActionIcon(log.action_type)}
-                      </div>
+          <div className="overflow-x-auto border border-[#EFEAE4] rounded-2xl shadow-2xs bg-white">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-[#FAF8F5] border-b border-[#EFEAE4] text-[10px] font-bold text-stone-600 uppercase tracking-wider select-none">
+                <tr>
+                  <th className="py-2.5 px-3.5 whitespace-nowrap">Action Type & ID</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Executed At</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Operator</th>
+                  <th className="py-2.5 px-3 min-w-[180px]">Changes Made To</th>
+                  <th className="py-2.5 px-3 min-w-[220px]">Payload Metadatas</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F5F2EE]">
+                {logs.map((log) => {
+                  const isExpanded = expandedLogId === log.id;
+                  let meta: Record<string, any> | null = null;
+                  try {
+                    if (log.metadata_json) {
+                      meta = JSON.parse(log.metadata_json);
+                    }
+                  } catch (_) {
+                    meta = null;
+                  }
 
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${getActionBadgeColor(log.action_type || '')}`}>
-                            {(log.action_type || 'SYSTEM').replace(/_/g, ' ')}
-                          </span>
-                          <span className="text-xs font-bold text-stone-900 leading-tight">
-                            {log.description}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-stone-500 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <User className="w-3.5 h-3.5 text-stone-400" />
-                            <span className="text-[#F38020]">{log.admin_email}</span>
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-stone-400" />
-                            <span>{formatLogDate(log.created_at)}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-end">
-                      <button
-                        type="button"
-                        className="p-1.5 hover:bg-stone-200 rounded-lg text-stone-400 hover:text-stone-700 transition-colors"
+                  return (
+                    <React.Fragment key={log.id}>
+                      <tr
+                        onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                        className={`transition-colors cursor-pointer ${
+                          isExpanded ? 'bg-[#FAF8F5]' : 'hover:bg-stone-50/70'
+                        }`}
                       >
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
+                        {/* 1. Action Type & ID */}
+                        <td className="py-2.5 px-3.5 align-top whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 shrink-0 flex items-center justify-center rounded-lg bg-stone-100 border border-stone-200">
+                              {getActionIcon(log.action_type)}
+                            </div>
+                            <div>
+                              <span className={`text-[9.5px] font-extrabold uppercase px-1.5 py-0.5 rounded-md inline-block ${getActionBadgeColor(log.action_type || '')}`}>
+                                {(log.action_type || 'SYSTEM').replace(/_/g, ' ')}
+                              </span>
+                              <div className="text-[10px] font-mono text-stone-500 font-bold mt-0.5">
+                                ID: #{log.id}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
 
-                  {isExpanded && (
-                    <div className="px-14 pb-4 border-t border-stone-150/60 pt-3">
-                      <div className="text-[11px] text-stone-600 space-y-1.5 leading-relaxed font-semibold">
-                        <div>
-                          <strong className="text-stone-500 uppercase text-[10px] tracking-wider block sm:inline sm:mr-1.5">Action ID:</strong>
-                          <span className="font-mono bg-stone-100 px-1.5 py-0.2 rounded-md text-stone-800">{log.id}</span>
-                        </div>
-                        <div>
-                          <strong className="text-stone-500 uppercase text-[10px] tracking-wider block sm:inline sm:mr-1.5">Operator:</strong>
-                          <span className="text-stone-800">{log.admin_email}</span>
-                        </div>
-                        <div>
-                          <strong className="text-stone-500 uppercase text-[10px] tracking-wider block sm:inline sm:mr-1.5">Executed At:</strong>
-                          <span className="text-stone-800 font-mono">{formatLogDate(log.created_at)}</span>
-                        </div>
-                      </div>
+                        {/* 2. Executed At */}
+                        <td className="py-2.5 px-3 align-top whitespace-nowrap text-stone-700">
+                          <div className="flex items-center gap-1 font-mono text-[11px]">
+                            <Calendar className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                            <span>{formatLogDate(log.created_at)}</span>
+                          </div>
+                        </td>
 
-                      {renderMetadata(log.metadata_json)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                        {/* 3. Operator */}
+                        <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                          <div className="flex items-center gap-1 text-[11px] font-semibold text-stone-800">
+                            <User className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                            <span className="text-[#F38020]">{log.admin_email}</span>
+                          </div>
+                        </td>
+
+                        {/* 4. Changes Made To */}
+                        <td className="py-2.5 px-3 align-top text-stone-800">
+                          <div className="text-xs font-semibold leading-relaxed">
+                            {log.description}
+                          </div>
+                        </td>
+
+                        {/* 5. Payload Metadatas */}
+                        <td className="py-2.5 px-3 align-top">
+                          {meta && Object.keys(meta).length > 0 ? (
+                            <div className="flex flex-wrap gap-1 items-center">
+                              {meta.registration_id && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-700 font-mono">
+                                  Reg: #{meta.registration_id}
+                                </span>
+                              )}
+                              {meta.status && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                  {meta.status}
+                                </span>
+                              )}
+                              {meta.payment_status && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                  {meta.payment_status}
+                                </span>
+                              )}
+                              {meta.paid_amount !== undefined && meta.paid_amount !== null && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">
+                                  Paid: Rs. {Number(meta.paid_amount).toLocaleString()}
+                                </span>
+                              )}
+                              {meta.due_amount !== undefined && meta.due_amount !== null && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700">
+                                  Due: Rs. {Number(meta.due_amount).toLocaleString()}
+                                </span>
+                              )}
+                              {meta.pickup_point ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700">
+                                  {meta.pickup_point}
+                                </span>
+                              ) : null}
+                              {!meta.registration_id && !meta.status && !meta.payment_status && (
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(meta).slice(0, 3).map(([k, v]) => (
+                                    <span key={k} className="px-1.5 py-0.5 rounded text-[10px] bg-stone-100 text-stone-700 font-mono">
+                                      {k}: {typeof v === 'object' ? '...' : String(v).slice(0, 20)}
+                                    </span>
+                                  ))}
+                                  {Object.keys(meta).length > 3 && (
+                                    <span className="text-[10px] text-stone-400 font-semibold">+{Object.keys(meta).length - 3} more</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-stone-400 text-[11px] italic">—</span>
+                          )}
+                        </td>
+
+                        {/* 6. Details */}
+                        <td className="py-2.5 px-3 align-top text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedLogId(isExpanded ? null : log.id);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-stone-250 bg-white hover:bg-stone-50 text-stone-700 text-[11px] font-bold transition-all cursor-pointer shadow-3xs"
+                          >
+                            <span>{isExpanded ? 'Hide' : 'View'}</span>
+                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Expanded Sub-Table */}
+                      {isExpanded && (
+                        <tr className="bg-[#FAF8F5] border-b border-stone-200">
+                          <td colSpan={6} className="p-3 sm:p-4">
+                            <div className="bg-white rounded-xl border border-stone-200 p-3.5 shadow-2xs space-y-3">
+                              <div className="flex items-center justify-between border-b border-stone-150 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-stone-800">
+                                    Payload Metadata Details (Action #{log.id})
+                                  </span>
+                                  <span className="text-[10px] text-stone-400 font-mono">
+                                    Operator: {log.admin_email}
+                                  </span>
+                                </div>
+                                {meta && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowRawJsonId(showRawJsonId === log.id ? null : log.id)}
+                                    className="text-[10px] font-bold text-[#F38020] hover:text-[#d96e17] underline cursor-pointer"
+                                  >
+                                    {showRawJsonId === log.id ? 'Show Table View' : 'Show Raw JSON'}
+                                  </button>
+                                )}
+                              </div>
+
+                              {meta && Object.keys(meta).length > 0 ? (
+                                showRawJsonId === log.id ? (
+                                  <pre className="p-3 bg-stone-900 text-stone-100 text-[11px] font-mono rounded-lg overflow-x-auto leading-relaxed">
+                                    {JSON.stringify(meta, null, 2)}
+                                  </pre>
+                                ) : (
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-xs border border-stone-200 rounded-lg overflow-hidden">
+                                      <thead className="bg-stone-50 border-b border-stone-200 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                                        <tr>
+                                          <th className="py-1.5 px-3 text-left w-1/3">Field / Attribute</th>
+                                          <th className="py-1.5 px-3 text-left">Payload Value</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-stone-100">
+                                        {Object.entries(meta).map(([key, val]) => (
+                                          <tr key={key} className="hover:bg-stone-50/50">
+                                            <td className="py-1.5 px-3 font-mono text-[11px] font-bold text-stone-700">
+                                              {key}
+                                            </td>
+                                            <td className="py-1.5 px-3 font-mono text-[11px] text-stone-900">
+                                              {val === null || val === undefined || val === '' ? (
+                                                <span className="text-stone-400 italic font-sans text-[10px]">None / Empty</span>
+                                              ) : typeof val === 'object' ? (
+                                                <pre className="inline font-mono">{JSON.stringify(val)}</pre>
+                                              ) : (
+                                                String(val)
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )
+                              ) : (
+                                <p className="text-xs text-stone-400 italic">No payload metadata recorded for this action.</p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
 
