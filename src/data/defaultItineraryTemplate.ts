@@ -29,6 +29,8 @@ export interface SafetyRule {
 }
 
 export interface TrekItineraryData {
+  status?: 'draft' | 'published' | 'archived' | string;
+  schedule?: any;
   // Section 1: Basic Information
   hikeNumber: string;
   title: string;

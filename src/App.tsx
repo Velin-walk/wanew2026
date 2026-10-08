@@ -800,7 +800,7 @@ function MainApp() {
           date: booking.trek_date || 'TBA',
           meeting_point: booking.pickup_point || 'Kathmandu',
           price: booking.paid_amount || booking.due_amount || 0,
-        } as Trek;
+        } as unknown as Trek;
       }
 
       return null;

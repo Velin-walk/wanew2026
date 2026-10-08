@@ -14,6 +14,8 @@ import {
   Copy,
   Check,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Compass,
   Clock,
   AlertCircle,
@@ -351,6 +353,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   }, [allAvailableTreks, registrations]);
 
   const [selectedTrekId, setSelectedTrekId] = useState<string>('');
+  const [showZeroParticipants, setShowZeroParticipants] = useState<boolean>(false);
 
   // 3. Auto-select first trek with bookings or first available event
   React.useEffect(() => {
@@ -399,6 +402,38 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       null
     );
   }, [upcomingTreks, selectedTrekId]);
+
+  // Participant counts for top strip cards to filter out 0-participant cards by default
+  const treksWithParticipantCounts = useMemo(() => {
+    return upcomingTreks.map((t) => {
+      const matchedRegs = registrations.filter((r) => doesRegistrationMatchTrek(r, t));
+      return {
+        trek: t,
+        regsCount: matchedRegs.length,
+      };
+    });
+  }, [upcomingTreks, registrations]);
+
+  const zeroParticipantCount = useMemo(() => {
+    return treksWithParticipantCounts.filter((item) => item.regsCount <= 0).length;
+  }, [treksWithParticipantCounts]);
+
+  const visibleTreksWithCounts = useMemo(() => {
+    if (showZeroParticipants) {
+      return treksWithParticipantCounts;
+    }
+    const curHikeNum = getHikeNumberFromAny(currentTrek);
+    return treksWithParticipantCounts.filter((item) => {
+      if (item.regsCount > 0) return true;
+      const t = item.trek;
+      const tHikeNum = getHikeNumberFromAny(t);
+      const isSelected =
+        currentTrek?.id === t.id ||
+        (t.hike_number && t.hike_number !== 'TBD' && currentTrek?.hike_number === t.hike_number) ||
+        Boolean(curHikeNum && tHikeNum && curHikeNum === tHikeNum);
+      return isSelected;
+    });
+  }, [treksWithParticipantCounts, showZeroParticipants, currentTrek]);
 
   // Registrations matching active trek
   const trekRegistrations = useMemo(() => {
@@ -710,17 +745,13 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
       {/* ── TOP EVENT CARDS STRIP ── */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(125px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(135px,1fr))] gap-2.5 print:hidden">
-        {upcomingTreks.map((t) => {
+        {visibleTreksWithCounts.map(({ trek: t, regsCount: tRegsCount }) => {
           const curHikeNum = getHikeNumberFromAny(currentTrek);
           const tHikeNum = getHikeNumberFromAny(t);
           const isSelected =
             currentTrek?.id === t.id ||
             (t.hike_number && t.hike_number !== 'TBD' && currentTrek?.hike_number === t.hike_number) ||
             Boolean(curHikeNum && tHikeNum && curHikeNum === tHikeNum);
-          const matchedRegs = registrations.filter(
-            (r) => doesRegistrationMatchTrek(r, t)
-          );
-          const tRegsCount = matchedRegs.length;
 
           const dt = parseTrekDate(t.date);
           const todayStartMs = new Date().setHours(0, 0, 0, 0);
@@ -767,6 +798,36 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             </div>
           );
         })}
+
+        {/* Show More / Show Less Button Card for expeditions with 0 participants */}
+        {zeroParticipantCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowZeroParticipants((prev) => !prev)}
+            className="p-2 sm:p-2.5 rounded-xl w-full cursor-pointer transition-all border border-dashed border-stone-300 hover:border-amber-500 bg-stone-50/90 hover:bg-amber-50/60 text-stone-600 hover:text-amber-900 flex flex-col justify-between overflow-hidden shadow-2xs group text-left min-h-[64px]"
+            title={showZeroParticipants ? "Hide expeditions with 0 participants" : `Show ${zeroParticipantCount} expeditions with 0 participants`}
+          >
+            <div className="flex items-center justify-between text-[9px] font-bold text-stone-400 group-hover:text-amber-700/80 mb-0.5">
+              <span>{showZeroParticipants ? 'COLLAPSE' : 'EXPAND'}</span>
+              {showZeroParticipants ? (
+                <ChevronUp className="w-3 h-3 text-stone-400 group-hover:text-amber-700 shrink-0" />
+              ) : (
+                <ChevronDown className="w-3 h-3 text-stone-400 group-hover:text-amber-700 shrink-0" />
+              )}
+            </div>
+            <h3 className="text-[11px] font-bold text-stone-700 group-hover:text-amber-900 truncate mb-1">
+              {showZeroParticipants ? 'Show Less' : 'Show More'}
+            </h3>
+            <div className="flex items-center gap-1.5 text-[9.5px] font-bold min-w-0">
+              <span className="px-1.5 py-0.5 rounded bg-black/5 group-hover:bg-amber-100 text-stone-600 group-hover:text-amber-900 font-extrabold shrink-0">
+                {showZeroParticipants ? 'HIDE' : `+${zeroParticipantCount}`}
+              </span>
+              <span className="text-[9px] text-stone-400 group-hover:text-amber-700 truncate font-medium">
+                0 Joined
+              </span>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* ── CANCELLATION NOTICE BANNER (IF EVENT CANCELLED) ── */}
@@ -956,8 +1017,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       {/* ── HIKER ROSTER TABLE WRAP ── */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-2xs overflow-hidden">
         {/* Table Header Bar */}
-        <div className="p-4 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-base font-extrabold text-[#1F2937]">
+        <div className="p-2.5 sm:p-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <h2 className="text-sm sm:text-base font-bold text-[#1F2937]">
             {currentTrek?.hike_number && currentTrek.hike_number !== 'TBD' ? `Hike #${currentTrek.hike_number} - ` : ''}
             {currentTrek?.name || 'Pachpokhari'} ({currentTrek?.date || 'Flexible'}) — {totalRegistered} hikers
           </h2>
@@ -967,7 +1028,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <button
               type="button"
               onClick={() => setTableFilter('all')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 tableFilter === 'all'
                   ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
                   : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
@@ -978,7 +1039,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <button
               type="button"
               onClick={() => setTableFilter('paid')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 tableFilter === 'paid'
                   ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
                   : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
@@ -989,7 +1050,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <button
               type="button"
               onClick={() => setTableFilter('pending')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 tableFilter === 'pending'
                   ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
                   : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
@@ -1000,7 +1061,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <button
               type="button"
               onClick={() => setTableFilter('due')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 tableFilter === 'due'
                   ? 'bg-emerald-50 text-[#16A34A] border border-[#16A34A]'
                   : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
@@ -1015,61 +1076,61 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-[#F8FAFC] border-b border-stone-200 text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
-                <th className="py-3 px-3 text-center w-[40px]">S.N.</th>
+              <tr className="bg-[#F8FAFC] border-b border-stone-200 text-[10px] font-bold uppercase text-stone-500 tracking-wider">
+                <th className="py-2 px-2.5 text-center w-[40px]">S.N.</th>
                 <th
                   onClick={() => handleSort('name')}
-                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   NAME {sortCol === 'name' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th
                   onClick={() => handleSort('phone')}
-                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   PHONE {sortCol === 'phone' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th
                   onClick={() => handleSort('pickup')}
-                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   PICKUP {sortCol === 'pickup' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th
                   onClick={() => handleSort('paid')}
-                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   PAID {sortCol === 'paid' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th
                   onClick={() => handleSort('due')}
-                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   DUE {sortCol === 'due' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th
                   onClick={() => handleSort('gender')}
-                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   GENDER {sortCol === 'gender' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th
                   onClick={() => handleSort('age')}
-                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   AGE GROUP {sortCol === 'age' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
-                <th className="py-3 px-3 select-none">SUGGESTIONS ⇅</th>
+                <th className="py-2 px-2.5 select-none">SUGGESTIONS ⇅</th>
                 <th
                   onClick={() => handleSort('updates')}
-                  className="py-3 px-3 cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   UPDATES {sortCol === 'updates' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
-                <th className="py-3 px-3 select-none">MEDICAL ⇅</th>
+                <th className="py-2 px-2.5 select-none">MEDICAL ⇅</th>
                 <th
                   onClick={() => handleSort('totalHikes')}
-                  className="py-3 px-3 text-center cursor-pointer hover:text-stone-700 select-none"
+                  className="py-2 px-2.5 text-center cursor-pointer hover:text-stone-700 select-none"
                 >
                   TOTAL HIKES {sortCol === 'totalHikes' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
@@ -1079,7 +1140,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <tbody className="divide-y divide-stone-100">
               {paginatedRegistrations.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-stone-400 font-semibold">
+                  <td colSpan={12} className="py-6 text-center text-stone-400 font-semibold text-xs">
                     No registered hikers found matching criteria
                   </td>
                 </tr>
@@ -1101,12 +1162,12 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                       }`}
                     >
                       {/* S.N. */}
-                      <td className="py-3 px-3 text-center font-extrabold text-stone-700">
+                      <td className="py-2 px-2.5 text-center font-bold text-stone-600 text-xs">
                         {sn}
                       </td>
 
                       {/* NAME */}
-                      <td className="py-3 px-3 font-extrabold text-[#1F2937]">
+                      <td className="py-2 px-2.5 font-semibold text-[#1F2937] text-xs">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <button
                             type="button"
@@ -1117,13 +1178,13 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                                 email: r.email || r.email_address || r.user_email,
                               })
                             }
-                            className="hover:text-[#E08828] hover:underline cursor-pointer text-left transition-colors font-extrabold"
+                            className="hover:text-[#E08828] hover:underline cursor-pointer text-left transition-colors font-semibold"
                             title="Click to view full hiker profile, stats & lifetime records"
                           >
                             {r.full_name}
                           </button>
                           {r.paxCount && r.paxCount > 1 && (
-                            <span className="font-bold text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.5 rounded text-[10px]">
+                            <span className="font-bold text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.2 rounded text-[9.5px]">
                               {r.paxCount} Pax
                             </span>
                           )}
@@ -1131,27 +1192,29 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                       </td>
 
                       {/* PHONE */}
-                      <td className="py-3 px-3 font-medium text-stone-600">
+                      <td className="py-2 px-2.5 font-medium text-stone-600 text-xs">
                         {r.phone || '—'}
                       </td>
 
                       {/* PICKUP */}
-                      <td className="py-3 px-3 font-medium text-stone-500">
+                      <td className="py-2 px-2.5 font-medium text-stone-500 text-xs">
                         {r.pickup_point || '—'}
                       </td>
 
                       {/* PAID */}
-                      <td className="py-3 px-3">
-                        <div className="flex flex-col items-start gap-1">
+                      <td className="py-2 px-2.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {r.paid_amount > 0 ? (
-                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-extrabold">
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10.5px] font-bold">
                               Rs {r.paid_amount}
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-black">
+                            <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10.5px] font-bold">
                               -
                             </span>
                           )}
+
+                          {/* Payment Voucher Button pops next to paid amount */}
                           {r.payment_voucher_url && (
                             <button
                               type="button"
@@ -1159,15 +1222,15 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                                 setViewingVoucherUrl(r.payment_voucher_url || null);
                                 setViewingVoucherReg(r);
                               }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-all cursor-pointer shadow-3xs"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 shadow-2xs transition-all cursor-pointer active:scale-95"
+                              title="View uploaded payment voucher"
                             >
-                              <FileText className="w-3 h-3 text-amber-700" />
+                              <FileText className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                               <span>
                                 Voucher
                                 {r.payment_voucher_url.split(',').filter(Boolean).length > 1
-                                  ? `s (${r.payment_voucher_url.split(',').filter(Boolean).length})`
-                                  : ''}{' '}
-                                📄
+                                  ? ` (${r.payment_voucher_url.split(',').filter(Boolean).length})`
+                                  : ''}
                               </span>
                             </button>
                           )}
@@ -1175,40 +1238,40 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                       </td>
 
                       {/* DUE */}
-                      <td className="py-3 px-3">
+                      <td className="py-2 px-2.5">
                         {r.due_amount > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-extrabold">
+                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10.5px] font-bold">
                             Rs {r.due_amount}
                           </span>
                         ) : (
-                          <span className="text-stone-400">—</span>
+                          <span className="text-stone-400 text-xs">—</span>
                         )}
                       </td>
 
                       {/* GENDER */}
-                      <td className="py-3 px-3 font-semibold text-stone-700">
+                      <td className="py-2 px-2.5 font-medium text-stone-700 text-xs">
                         {r.gender || '—'}
                       </td>
 
                       {/* AGE GROUP */}
-                      <td className="py-3 px-3 font-semibold text-stone-700">
+                      <td className="py-2 px-2.5 font-medium text-stone-700 text-xs">
                         {r.age_group || '—'}
                       </td>
 
                       {/* SUGGESTIONS */}
-                      <td className="py-3 px-3 text-stone-500 max-w-[150px] truncate" title={r.suggestions}>
+                      <td className="py-2 px-2.5 text-stone-500 max-w-[150px] truncate text-xs" title={r.suggestions}>
                         {r.suggestions || '—'}
                       </td>
 
                       {/* UPDATES */}
-                      <td className="py-3 px-3 text-stone-500 max-w-[150px] truncate" title={r.admin_notes || r.person_remarks}>
+                      <td className="py-2 px-2.5 text-stone-500 max-w-[150px] truncate text-xs" title={r.admin_notes || r.person_remarks}>
                         {r.admin_notes || r.person_remarks || '—'}
                       </td>
 
                       {/* MEDICAL */}
-                      <td className="py-3 px-3 font-semibold">
+                      <td className="py-2 px-2.5 font-medium text-xs">
                         {r.has_medical && r.has_medical.toLowerCase() !== 'no' && r.has_medical.toLowerCase() !== 'none' ? (
-                          <span className="text-rose-600 font-extrabold flex items-center gap-1">
+                          <span className="text-rose-600 font-bold flex items-center gap-1">
                             <AlertTriangle className="w-3.5 h-3.5" />
                             <span>{r.specify_medical || r.has_medical}</span>
                           </span>
@@ -1218,7 +1281,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                       </td>
 
                       {/* TOTAL HIKES */}
-                      <td className="py-3 px-3 text-center font-extrabold text-stone-700">
+                      <td className="py-2 px-2.5 text-center font-bold text-stone-700 text-xs">
                         {pastHikes}
                       </td>
                     </tr>

@@ -8,6 +8,17 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    {
+      name: 'safe-vite-client-ws',
+      transform(code, id) {
+        if (id.includes('/@vite/client') || id.includes('client.mjs')) {
+          return code.replace(
+            'ws.send(JSON.stringify(data));',
+            'if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(data)); }'
+          );
+        }
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo.png'],

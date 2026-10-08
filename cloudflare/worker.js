@@ -582,6 +582,7 @@ export default {
     }
 
     const url = new URL(request.url);
+    const urlOrigin = url.origin;
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const method = request.method.toUpperCase();
 

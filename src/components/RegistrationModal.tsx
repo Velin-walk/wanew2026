@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Trek, TeamMember, BookingFormData } from '../types';
 import { triggerHaptic } from '../utils/haptics';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
@@ -95,6 +95,39 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 
   const [selectedTrekId, setSelectedTrekId] = useState<string>(trek?.id || availableTreks[0]?.id || '');
   const activeTrek = availableTreks.find((t) => t.id === selectedTrekId) || trek;
+
+  // Determine if the selected hike is an overnight hike where DAYS = 2D 1N
+  const isOvernight2D1N = useMemo(() => {
+    if (!activeTrek) return false;
+    const cat = String(activeTrek.category || activeTrek.data?.category || '').toLowerCase();
+    const title = String(activeTrek.name || activeTrek.title || activeTrek.data?.title || '').toLowerCase();
+    const rawDays = String(
+      activeTrek.days ||
+      (activeTrek as any)?.days_label ||
+      activeTrek.data?.overview?.days ||
+      activeTrek.data?.days ||
+      activeTrek.data?.overview?.expectedDuration ||
+      ''
+    ).trim().toLowerCase();
+
+    const cleanDays = rawDays.replace(/[\s\-_/]/g, '');
+
+    // Direct match for 2D 1N pattern (e.g. 2d1n, 2days1night, 2d1night)
+    const has2D1N =
+      cleanDays.includes('2d1n') ||
+      cleanDays === '2d1n' ||
+      /2\s*d(?:ays?)?.*1\s*n(?:ights?)?/i.test(rawDays);
+
+    const isOvernight = cat.includes('overnight') || title.includes('overnight') || rawDays.includes('overnight');
+    const is2Days =
+      has2D1N ||
+      cleanDays === '2d' ||
+      cleanDays === '2' ||
+      cleanDays.startsWith('2day') ||
+      rawDays === '2';
+
+    return has2D1N || (isOvernight && is2Days);
+  }, [activeTrek]);
 
   const [selectedDate, setSelectedDate] = useState<string>(trek?.date || activeTrek?.date || '');
 
@@ -1102,66 +1135,69 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
               <div className="bg-white border border-[#EBE7E1] rounded-xl p-3 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between text-[11px] font-semibold text-[#2B6CB0] border-b border-[#F5F2EC] pb-1.5">
                   <span className="flex items-center gap-1">
-                    <Shield className="w-3.5 h-3.5 text-[#5C942D]" /> Trail Preferences & Safety
+                    <Shield className="w-3.5 h-3.5 text-[#5C942D]" /> {isOvernight2D1N ? 'Trail Preferences & Safety' : 'Safety Agreement & Rules'}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
-                      Guide Mode
-                    </label>
-                    <div className="flex bg-[#FAF9F6] p-0.5 rounded-lg border border-[#D6D3CD]">
-                      <button
-                        type="button"
-                        onClick={() => setGuidePreference('Guided')}
-                        className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                          guidePreference === 'Guided' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
-                        }`}
-                      >
-                        Guided
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGuidePreference('Unguided')}
-                        className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                          guidePreference === 'Unguided' ? 'bg-[#78716C] text-white shadow-2xs' : 'text-[#78716C]'
-                        }`}
-                      >
-                        Unguided
-                      </button>
+                {/* Trail Preferences: Guide Mode & Transport (only for overnight hikes where DAYS = 2D 1N) */}
+                {isOvernight2D1N && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                        Guide Mode
+                      </label>
+                      <div className="flex bg-[#FAF9F6] p-0.5 rounded-lg border border-[#D6D3CD]">
+                        <button
+                          type="button"
+                          onClick={() => setGuidePreference('Guided')}
+                          className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                            guidePreference === 'Guided' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                          }`}
+                        >
+                          Guided
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGuidePreference('Unguided')}
+                          className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                            guidePreference === 'Unguided' ? 'bg-[#78716C] text-white shadow-2xs' : 'text-[#78716C]'
+                          }`}
+                        >
+                          Unguided
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
-                      Transport
-                    </label>
-                    <div className="flex bg-[#FAF9F6] p-0.5 rounded-lg border border-[#D6D3CD]">
-                      <button
-                        type="button"
-                        onClick={() => setTransportPreference('Bus')}
-                        className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                          transportPreference === 'Bus' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
-                        }`}
-                      >
-                        Bus
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTransportPreference('Jeep')}
-                        className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                          transportPreference === 'Jeep' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
-                        }`}
-                      >
-                        Jeep
-                      </button>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                        Transport
+                      </label>
+                      <div className="flex bg-[#FAF9F6] p-0.5 rounded-lg border border-[#D6D3CD]">
+                        <button
+                          type="button"
+                          onClick={() => setTransportPreference('Bus')}
+                          className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                            transportPreference === 'Bus' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                          }`}
+                        >
+                          Bus
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTransportPreference('Jeep')}
+                          className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                            transportPreference === 'Jeep' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                          }`}
+                        >
+                          Jeep
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Safety Rules Check */}
-                <div className="pt-2 border-t border-[#F5F2EC] flex items-center justify-between">
+                <div className={`${isOvernight2D1N ? 'pt-2 border-t border-[#F5F2EC]' : ''} flex items-center justify-between`}>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1316,15 +1352,17 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     </span>
                   </div>
 
-                  {/* Guide & Transport Mode */}
-                  <div className="py-1">
-                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
-                      Guide & Transport Mode
-                    </span>
-                    <span className="font-medium text-[#1F1F1F]">
-                      {guidePreference} Mode • {transportPreference}
-                    </span>
-                  </div>
+                  {/* Guide & Transport Mode (shown only for overnight 2D 1N hikes) */}
+                  {isOvernight2D1N && (
+                    <div className="py-1">
+                      <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                        Guide & Transport Mode
+                      </span>
+                      <span className="font-medium text-[#1F1F1F]">
+                        {guidePreference} Mode • {transportPreference}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Medical Condition & Past Hikes */}
                   <div className="py-1">

@@ -43,6 +43,8 @@ type CategoryFilter =
   | 'mapminers_comment_posted'
   | 'gallery';
 
+type TimeFilter = 'all' | 'today' | 'week' | 'month';
+
 export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsPanelProps> = ({
   onNavigateTab,
   onUnreadCountChange,
@@ -50,6 +52,7 @@ export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsP
   const [activities, setActivities] = useState<UserActivityItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [visibleCount, setVisibleCount] = useState<number>(20);
   const [lastSeenAt, setLastSeenAt] = useState<number>(() => getAdminLastSeenTimestamp());
@@ -87,7 +90,7 @@ export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsP
 
   useEffect(() => {
     setVisibleCount(20);
-  }, [categoryFilter, searchQuery]);
+  }, [categoryFilter, searchQuery, timeFilter]);
 
   const unreadCount = useMemo(() => {
     if (!lastSeenAt) return activities.length;
@@ -116,6 +119,26 @@ export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsP
         return false;
       }
 
+      if (timeFilter !== 'all') {
+        const trimmed = String(item.createdAt || '').trim();
+        const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed)
+          ? `${trimmed.replace(' ', 'T')}Z`
+          : trimmed;
+        const itemTime = new Date(normalized).getTime() || 0;
+        const now = new Date();
+
+        if (timeFilter === 'today') {
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          if (itemTime < startOfToday) return false;
+        } else if (timeFilter === 'week') {
+          const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+          if (itemTime < sevenDaysAgo) return false;
+        } else if (timeFilter === 'month') {
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+          if (itemTime < startOfMonth) return false;
+        }
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const haystack = [
@@ -133,7 +156,7 @@ export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsP
       }
       return true;
     });
-  }, [activities, categoryFilter, searchQuery]);
+  }, [activities, categoryFilter, timeFilter, searchQuery]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {
@@ -315,188 +338,245 @@ export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsP
           ))}
         </div>
 
-        <div className="relative max-w-md">
-          <Search className="w-3.5 h-3.5 text-[#8B8680] absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by hiker name, phone, trek, trail, or comment..."
-            className="w-full pl-9 pr-8 py-2 bg-white border border-[#E5E1DB] rounded-xl text-xs text-[#1F1F1F] placeholder:text-[#8B8680] focus:outline-none focus:border-[#7ABA42]"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8B8680] hover:text-[#1F1F1F] cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-3.5 h-3.5 text-[#8B8680] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by hiker name, phone, trek, trail, or comment..."
+              className="w-full pl-9 pr-8 py-1.5 bg-white border border-[#E5E1DB] rounded-xl text-xs text-[#1F1F1F] placeholder:text-[#8B8680] focus:outline-none focus:border-[#7ABA42]"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8B8680] hover:text-[#1F1F1F] cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Time Filter Buttons: Today, This Week, This Month, All Time */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 sm:pb-0 shrink-0">
+            {[
+              { id: 'today', label: 'Today' },
+              { id: 'week', label: 'This Week' },
+              { id: 'month', label: 'This Month' },
+              { id: 'all', label: 'All Time' },
+            ].map((btn) => (
+              <button
+                key={btn.id}
+                type="button"
+                onClick={() => setTimeFilter(btn.id as TimeFilter)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer whitespace-nowrap ${
+                  timeFilter === btn.id
+                    ? 'bg-[#1F1F1F] text-white shadow-2xs'
+                    : 'bg-white border border-[#E5E1DB] text-[#5A5551] hover:bg-[#F0ECE7]'
+                }`}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Activity Feed List */}
-      <div className="p-4 sm:p-6 space-y-3">
+      {/* Activity Feed Table */}
+      <div className="overflow-x-auto">
         {loading && filteredActivities.length === 0 ? (
-          <div className="space-y-3">
+          <div className="p-6 space-y-3">
             {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="p-4 rounded-2xl border border-[#E5E1DB] bg-[#FAF8F5] animate-pulse space-y-2">
-                <div className="h-4 bg-stone-200 rounded w-1/3" />
-                <div className="h-3 bg-stone-200 rounded w-2/3" />
+              <div key={n} className="p-4 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] animate-pulse space-y-2">
+                <div className="h-4 bg-stone-200 rounded w-1/4" />
+                <div className="h-3 bg-stone-200 rounded w-3/4" />
               </div>
             ))}
           </div>
         ) : filteredActivities.length === 0 ? (
-          <div className="py-12 text-center bg-[#FAF8F5] rounded-2xl border border-dashed border-[#E5E1DB] space-y-2">
+          <div className="py-12 px-4 text-center bg-[#FAF8F5] m-4 rounded-2xl border border-dashed border-[#E5E1DB] space-y-2">
             <p className="text-sm font-bold text-[#1F1F1F]">No matching user activities found</p>
             <p className="text-xs text-[#8B8680]">
               New trek registrations, vouchers, reviews, GPX uploads/downloads, trail comments, and gallery posts will appear here automatically.
             </p>
           </div>
         ) : (
-          <>
-            {filteredActivities.slice(0, visibleCount).map((item) => {
-              const style = getTypeStyle(item.type);
-              const itemTime = new Date(item.createdAt || 0).getTime() || 0;
-              const isNew = !lastSeenAt || itemTime > lastSeenAt;
+          <table className="w-full text-left border-collapse text-[11px]">
+            <thead>
+              <tr className="bg-[#FAF8F5] border-b border-[#E5E1DB] text-[10px] font-semibold text-[#6B6560] uppercase tracking-wider">
+                <th className="py-1.5 px-2.5 whitespace-nowrap">Activity Type</th>
+                <th className="py-1.5 px-2 whitespace-nowrap text-center">Status</th>
+                <th className="py-1.5 px-2.5 whitespace-nowrap">Date &amp; Time</th>
+                <th className="py-1.5 px-2.5 whitespace-nowrap">Hiker</th>
+                <th className="py-1.5 px-2.5 whitespace-nowrap">Trek</th>
+                <th className="py-1.5 px-2 whitespace-nowrap text-center">Group Size</th>
+                <th className="py-1.5 px-2.5 text-right whitespace-nowrap">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#EFEAE4]">
+              {filteredActivities.slice(0, visibleCount).map((item) => {
+                const style = getTypeStyle(item.type);
+                const itemTime = new Date(item.createdAt || 0).getTime() || 0;
+                const isNew = !lastSeenAt || itemTime > lastSeenAt;
 
-              return (
-                <div
-                  key={item.id}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-start justify-between gap-3 ${
-                    isNew
-                      ? 'bg-[#FFFDF9] border-[#E08828]/40 shadow-xs'
-                      : 'bg-white border-[#E5E1DB] hover:border-[#D5CFC9]'
-                  }`}
-                >
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 rounded-xl bg-[#FAF8F5] border border-[#E5E1DB] flex items-center justify-center shrink-0 mt-0.5">
-                      {style.icon}
-                    </div>
+                const hikerName = String(
+                  item.details?.Hiker ||
+                  item.details?.User ||
+                  item.details?.Contributor ||
+                  item.actorName ||
+                  '-'
+                );
 
-                    <div className="space-y-1.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${style.badge}`}>
+                const trekVal = String(
+                  item.details?.Trek ||
+                  item.details?.Destination ||
+                  item.targetName ||
+                  '-'
+                );
+
+                const groupSizeVal = String(
+                  item.details?.['Group Size'] ||
+                  (item.details?.Pax ? `${item.details.Pax} Pax` : '') ||
+                  (item.summary.match(/\((\d+\s*Pax)\)/i)?.[1]) ||
+                  '-'
+                );
+
+                return (
+                  <tr
+                    key={item.id}
+                    className={`transition-colors hover:bg-[#FAF8F5] ${
+                      isNew ? 'bg-[#FFFDF9]' : 'bg-white'
+                    }`}
+                  >
+                    {/* Activity Type */}
+                    <td className="py-1.5 px-2.5 align-middle whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-md bg-[#FAF8F5] border border-[#E5E1DB] flex items-center justify-center shrink-0">
+                          {React.cloneElement(style.icon, { className: 'w-2.5 h-2.5' })}
+                        </div>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium border ${style.badge}`}>
                           {style.label}
                         </span>
-                        {isNew && (
-                          <span className="px-1.5 py-0.5 rounded bg-[#E08828] text-white text-[9px] font-black uppercase tracking-wider">
-                            New
-                          </span>
-                        )}
-                        <span className="text-[11px] text-[#8B8680] font-medium flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {formatDateTime(item.createdAt)}
-                        </span>
                       </div>
+                    </td>
 
-                      <p className="text-xs sm:text-sm font-bold text-[#1F1F1F] leading-snug break-words">
-                        {item.summary}
-                      </p>
-
-                      {/* Structured Key-Value Details */}
-                      {item.details && Object.keys(item.details).length > 0 && (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11px] text-[#5A5551]">
-                          {Object.entries(item.details).map(([k, v]) => {
-                            if (v === undefined || v === null || v === '') return null;
-                            return (
-                              <span
-                                key={k}
-                                className="inline-flex items-center gap-1 bg-[#FAF8F5] border border-[#EFEAE4] px-2 py-0.5 rounded-lg"
-                              >
-                                <strong className="text-[#1F1F1F]">{k}:</strong>
-                                <span className="truncate max-w-[260px]">{String(v)}</span>
-                              </span>
-                            );
-                          })}
-                        </div>
+                    {/* Status */}
+                    <td className="py-1.5 px-2 align-middle text-center whitespace-nowrap">
+                      {isNew ? (
+                        <span className="px-1.5 py-0.2 rounded-full bg-[#E08828] text-white text-[8px] font-medium tracking-wide">
+                          New
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-[#8B8680] font-normal">
+                          Seen
+                        </span>
                       )}
-                    </div>
-                  </div>
+                    </td>
 
-                  {/* Right Actions / Thumbnail */}
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    {item.imageUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setPreviewImageUrl(item.imageUrl!)}
-                        className="group relative w-12 h-12 rounded-xl overflow-hidden border border-[#E5E1DB] shadow-2xs shrink-0 cursor-pointer"
-                        title="Click to preview image / voucher"
-                      >
-                        <img
-                          src={item.imageUrl}
-                          alt={item.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                      </button>
-                    )}
+                    {/* Date & Time */}
+                    <td className="py-1.5 px-2.5 align-middle whitespace-nowrap text-[#6B6560] font-normal text-[10px]">
+                      {formatDateTime(item.createdAt)}
+                    </td>
 
-                    {item.linkUrl && (
-                      <a
-                        href={item.linkUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1.5 rounded-xl bg-[#FAF8F5] hover:bg-[#F0ECE7] border border-[#E5E1DB] text-[11px] font-bold text-[#1F1F1F] flex items-center gap-1 transition-colors"
-                      >
-                        <span>Open Link</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
+                    {/* Hiker */}
+                    <td className="py-1.5 px-2.5 align-middle font-medium text-[#1F1F1F] whitespace-nowrap">
+                      {hikerName}
+                    </td>
 
-                    {item.actorContact && /^\+?[0-9\s-]{7,}$/.test(item.actorContact) && (
-                      <a
-                        href={`tel:${item.actorContact}`}
-                        className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-bold text-emerald-800 flex items-center gap-1 transition-colors"
-                      >
-                        <Phone className="w-3 h-3" />
-                        <span>Call</span>
-                      </a>
-                    )}
+                    {/* Trek */}
+                    <td className="py-1.5 px-2.5 align-middle font-normal text-[#1F1F1F] whitespace-nowrap">
+                      {trekVal}
+                    </td>
 
-                    {onNavigateTab && (
-                      <>
-                        {(item.type === 'trek_registration' ||
-                          item.type === 'voucher_uploaded' ||
-                          item.type === 'private_trek_request') && (
+                    {/* Group Size */}
+                    <td className="py-1.5 px-2 align-middle text-center whitespace-nowrap">
+                      {groupSizeVal !== '-' ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#FAF8F5] border border-[#E5E1DB] text-[10px] font-normal text-[#4A4541]">
+                          {groupSizeVal}
+                        </span>
+                      ) : (
+                        <span className="text-[#8B8680] font-normal">-</span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-1.5 px-2.5 align-middle text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
+                        {item.imageUrl && (
                           <button
                             type="button"
-                            onClick={() => onNavigateTab('bookings')}
-                            className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[11px] font-bold text-blue-800 transition-colors cursor-pointer"
+                            onClick={() => setPreviewImageUrl(item.imageUrl!)}
+                            className="group relative w-5 h-5 rounded overflow-hidden border border-[#E5E1DB] shadow-2xs shrink-0 cursor-pointer"
+                            title="Preview Attachment / Voucher"
                           >
-                            View Roster
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
                           </button>
                         )}
-                        {item.type === 'mapminers_gpx_uploaded' && (
-                          <button
-                            type="button"
-                            onClick={() => onNavigateTab('maps')}
-                            className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-[11px] font-bold text-purple-800 transition-colors cursor-pointer"
-                          >
-                            Moderate Map
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
 
-            {visibleCount < filteredActivities.length && (
-              <div className="pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => setVisibleCount((prev) => prev + 20)}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-[#FAF8F5] hover:bg-[#F3F0EC] border-2 border-dashed border-[#7ABA42] text-[#1F1F1F] font-extrabold text-xs rounded-xl shadow-2xs active:scale-95 transition-all cursor-pointer"
-                >
-                  Show Next 20 Activities ({Math.min(visibleCount, filteredActivities.length)} of {filteredActivities.length} shown) ⬇
-                </button>
-              </div>
-            )}
-          </>
+                        {item.linkUrl && (
+                          <a
+                            href={item.linkUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-1.5 py-0.5 rounded bg-[#FAF8F5] hover:bg-[#F0ECE7] border border-[#E5E1DB] text-[9px] font-normal text-[#1F1F1F] flex items-center gap-0.5 transition-colors"
+                            title="Open external link"
+                          >
+                            <ExternalLink className="w-2.5 h-2.5" />
+                            <span>Link</span>
+                          </a>
+                        )}
+
+                        {onNavigateTab && (
+                          <>
+                            {(item.type === 'trek_registration' ||
+                              item.type === 'voucher_uploaded' ||
+                              item.type === 'private_trek_request') && (
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('bookings')}
+                                className="px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[9px] font-medium text-blue-800 transition-colors cursor-pointer"
+                              >
+                                View Roster
+                              </button>
+                            )}
+                            {item.type === 'mapminers_gpx_uploaded' && (
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('maps')}
+                                className="px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 border border-purple-200 text-[9px] font-medium text-purple-800 transition-colors cursor-pointer"
+                              >
+                                Moderate Map
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
+
+      {visibleCount < filteredActivities.length && (
+        <div className="p-4 border-t border-[#EFEAE4] bg-[#FAF8F5] text-center">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((prev) => prev + 20)}
+            className="w-full sm:w-auto px-6 py-2 bg-white hover:bg-[#F3F0EC] border-2 border-dashed border-[#7ABA42] text-[#1F1F1F] font-extrabold text-xs rounded-xl shadow-2xs active:scale-95 transition-all cursor-pointer"
+          >
+            Show Next 20 Activities ({Math.min(visibleCount, filteredActivities.length)} of {filteredActivities.length} shown) ⬇
+          </button>
+        </div>
+      )}
 
       {/* Lightbox Modal for Voucher / Gallery Image Preview */}
       {previewImageUrl && (

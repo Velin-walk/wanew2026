@@ -62,7 +62,7 @@ export interface AdminRegistration {
   transport_preference?: string;
   suggestions?: string;
   person_remarks?: string;
-  status?: 'Pending' | 'Confirmed' | 'Waitlisted' | 'Cancelled';
+  status?: 'Pending' | 'Confirmed' | 'Waitlisted' | 'Cancelled' | 'Cancelled by User' | string;
   payment_status?: 'Unpaid' | 'Deposit Paid' | 'Fully Paid' | 'Refunded';
   paid_amount?: number;
   due_amount?: number;
@@ -99,6 +99,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [bookingTypeFilter, setBookingTypeFilter] = useState<'all' | 'public' | 'private'>('all');
   const [sortField, setSortField] = useState<'participant' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [showZeroParticipants, setShowZeroParticipants] = useState(false);
 
   const handleSort = (field: 'participant' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point') => {
     if (sortField === field) {
@@ -234,6 +235,74 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [rowDrafts, setRowDrafts] = useState<Record<string, Partial<AdminRegistration>>>({});
   const [savingRowIds, setSavingRowIds] = useState<Record<string, boolean>>({});
   const [justSavedRowIds, setJustSavedRowIds] = useState<Record<string, boolean>>({});
+
+  // Pre-calculate participant counts for top strip cards to filter out 0-participant cards by default
+  const treksWithParticipantCounts = useMemo(() => {
+    const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const extractDigits = (val?: string): string => {
+      if (!val) return '';
+      const s = String(val).trim();
+      if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
+      const m = s.match(/^\d{1,4}$/) || s.match(/^hike-(\d{1,4})$/i) || s.match(/^#?(\d{1,4})$/);
+      return m ? m[1] || m[0] : '';
+    };
+
+    return upcomingTreks.map((t) => {
+      const tDateNorm = normStr(t.date);
+      const tNameNorm = normStr(t.name);
+      const tDigits = extractDigits(t.hike_number) || extractDigits(t.id);
+
+      const matchedActiveRegs = registrations.filter((r) => {
+        const effStatus = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
+        if (effStatus.includes('cancelled') || effStatus === 'waitlisted') {
+          return false;
+        }
+
+        const tId = (t.id || '').toLowerCase().trim();
+        const tHikeNum = (t.hike_number || '').toLowerCase().trim();
+        const rTrekId = (r.trek_id || '').toLowerCase().trim();
+        const rHikeNum = (r.hike_number || '').toLowerCase().trim();
+        const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
+
+        if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
+        if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
+        if (tDigits && rDigits) return tDigits === rDigits;
+
+        const rNameNorm = normStr(r.trek_name);
+        if (tNameNorm && rNameNorm && rNameNorm === tNameNorm) {
+          return true;
+        }
+        return false;
+      });
+
+      const tRegsCount = matchedActiveRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
+
+      return {
+        trek: t,
+        regsCount: tRegsCount,
+      };
+    });
+  }, [upcomingTreks, registrations, rowDrafts]);
+
+  const zeroParticipantCount = useMemo(() => {
+    return treksWithParticipantCounts.filter((item) => item.regsCount <= 0).length;
+  }, [treksWithParticipantCounts]);
+
+  const visibleTreksWithCounts = useMemo(() => {
+    if (showZeroParticipants) {
+      return treksWithParticipantCounts;
+    }
+    return treksWithParticipantCounts.filter((item) => {
+      if (item.regsCount > 0) return true;
+      const filterKey = item.trek.id || item.trek.hike_number;
+      const isSelected =
+        selectedTrekFilter === filterKey ||
+        (item.trek.hike_number &&
+          item.trek.hike_number !== 'TBD' &&
+          selectedTrekFilter === item.trek.hike_number);
+      return isSelected;
+    });
+  }, [treksWithParticipantCounts, showZeroParticipants, selectedTrekFilter]);
 
   // Delete Confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -679,6 +748,137 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         </div>
       </div>
 
+      {/* Control Panel: Category Tabs, Search, Trek Filter, Status Filter & WhatsApp Action */}
+      <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-[#E5E1DB] shadow-2xs space-y-2">
+        {/* Category Tabs Switcher */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F0EBE5] pb-2">
+          <div className="flex items-center gap-1 p-0.5 bg-[#F5EFE8] rounded-xl border border-[#E5E1DB]">
+            <button
+              type="button"
+              onClick={() => {
+                setBookingTypeFilter('all');
+                if (selectedTrekFilter === 'PRIVATE') setSelectedTrekFilter('all');
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                bookingTypeFilter === 'all'
+                  ? 'bg-white text-[#1F1F1F] shadow-2xs'
+                  : 'text-[#8B8680] hover:text-[#1F1F1F]'
+              }`}
+            >
+              All Bookings ({registrations.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBookingTypeFilter('public');
+                if (selectedTrekFilter === 'PRIVATE') setSelectedTrekFilter('all');
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                bookingTypeFilter === 'public'
+                  ? 'bg-white text-[#E08828] shadow-2xs'
+                  : 'text-[#8B8680] hover:text-[#1F1F1F]'
+              }`}
+            >
+              Public Expeditions ({publicCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBookingTypeFilter('private');
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                bookingTypeFilter === 'private'
+                  ? 'bg-purple-700 text-white shadow-2xs'
+                  : 'text-purple-800 hover:bg-purple-100/50'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Private Trek Requests ({privateCount})</span>
+            </button>
+          </div>
+
+          <div className="text-[11px] font-semibold text-[#8B8680]">
+            Showing <span className="font-extrabold text-[#1F1F1F]">{filteredRegistrations.length}</span> record(s)
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2">
+          {/* Search Bar */}
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-[#8B8680] absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by hiker name, phone, destination, remarks..."
+              className="w-full pl-8.5 pr-3 py-1.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-medium text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Trek Selector Filter */}
+            <div className="flex items-center gap-1.5 bg-[#F9F7F5] border border-[#E5E1DB] px-2.5 py-1.5 rounded-xl">
+              <Filter className="w-3.5 h-3.5 text-[#8B8680]" />
+              <select
+                value={selectedTrekFilter}
+                onChange={(e) => {
+                  setSelectedTrekFilter(e.target.value);
+                  if (e.target.value === 'PRIVATE') {
+                    setBookingTypeFilter('private');
+                  }
+                }}
+                className="bg-transparent text-xs font-bold text-[#1F1F1F] focus:outline-none cursor-pointer max-w-[170px]"
+              >
+                <option value="all">All Treks & Inquiries</option>
+                <option value="PRIVATE">⭐ Private Requests ({privateCount})</option>
+                <optgroup label="Public Treks">
+                  {treks.map((t) => (
+                    <option key={t.id} value={t.id || t.hike_number}>
+                      Hike #{t.hike_number || 'TBD'} - {t.name}{t.date ? ` (${t.date})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center gap-1.5 bg-[#F9F7F5] border border-[#E5E1DB] px-2.5 py-1.5 rounded-xl">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-transparent text-xs font-bold text-[#1F1F1F] focus:outline-none cursor-pointer"
+              >
+                <option value="all">All Statuses</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="pending">Pending</option>
+                <option value="waitlisted">Waitlisted</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="cancelled by user">Cancelled by User</option>
+              </select>
+            </div>
+
+            {/* Refresh */}
+            <button
+              onClick={onRefresh}
+              className="p-1.5 bg-[#F9F7F5] hover:bg-[#EFEAE4] border border-[#E5E1DB] rounded-xl text-[#5A5551] transition-colors cursor-pointer"
+              title="Refresh Roster Data"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#E08828]' : ''}`} />
+            </button>
+
+            {/* WhatsApp Roster Broadcast Copy */}
+            <button
+              onClick={handleCopyWhatsAppNumbers}
+              disabled={filteredRegistrations.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              {copiedWhatsApp ? <Check className="w-3.5 h-3.5" /> : <MessageSquare className="w-3.5 h-3.5" />}
+              <span>{copiedWhatsApp ? 'Copied WhatsApp List!' : 'Copy WhatsApp Roster'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ── TOP EVENT CARDS STRIP (UPCOMING + LAST 1 MONTH HIKES) ── */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -731,45 +931,9 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           </div>
 
           {/* Individual Trek Cards */}
-          {upcomingTreks.map((t) => {
+          {visibleTreksWithCounts.map(({ trek: t, regsCount: tRegsCount }) => {
             const filterKey = t.id || t.hike_number;
             const isSelected = (selectedTrekFilter === filterKey) || (t.hike_number && t.hike_number !== 'TBD' && selectedTrekFilter === t.hike_number);
-            const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const tDateNorm = normStr(t.date);
-            const tNameNorm = normStr(t.name);
-            const extractDigits = (val?: string): string => {
-              if (!val) return '';
-              const s = String(val).trim();
-              if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
-              const m = s.match(/^\d{1,4}$/) || s.match(/^hike-(\d{1,4})$/i) || s.match(/^#?(\d{1,4})$/);
-              return m ? m[1] || m[0] : '';
-            };
-            const tDigits = extractDigits(t.hike_number) || extractDigits(t.id);
-
-            const matchedActiveRegs = registrations.filter((r) => {
-              const effStatus = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
-              if (effStatus.includes('cancelled') || effStatus === 'waitlisted') {
-                return false;
-              }
-
-              const tId = (t.id || '').toLowerCase().trim();
-              const tHikeNum = (t.hike_number || '').toLowerCase().trim();
-              const rTrekId = (r.trek_id || '').toLowerCase().trim();
-              const rHikeNum = (r.hike_number || '').toLowerCase().trim();
-              const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
-
-              if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
-              if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
-              if (tDigits && rDigits) return tDigits === rDigits;
-
-              const rNameNorm = normStr(r.trek_name);
-              if (tNameNorm && rNameNorm && rNameNorm === tNameNorm) {
-                return true;
-              }
-              return false;
-            });
-
-            const tRegsCount = matchedActiveRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
 
             const dt = parseTrekDate(t.date);
             const todayStartMs = new Date().setHours(0, 0, 0, 0);
@@ -816,162 +980,61 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               </div>
             );
           })}
-        </div>
-      </div>
 
-      {/* Control Panel: Category Tabs, Search, Trek Filter, Status Filter & WhatsApp Action */}
-      <div className="bg-white p-4 rounded-2xl border border-[#E5E1DB] shadow-2xs space-y-3">
-        {/* Category Tabs Switcher */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F0EBE5] pb-3">
-          <div className="flex items-center gap-1.5 p-1 bg-[#F5EFE8] rounded-xl border border-[#E5E1DB]">
+          {/* Show More / Show Less Button Card for expeditions with 0 participants */}
+          {zeroParticipantCount > 0 && (
             <button
               type="button"
-              onClick={() => {
-                setBookingTypeFilter('all');
-                if (selectedTrekFilter === 'PRIVATE') setSelectedTrekFilter('all');
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                bookingTypeFilter === 'all'
-                  ? 'bg-white text-[#1F1F1F] shadow-2xs'
-                  : 'text-[#8B8680] hover:text-[#1F1F1F]'
-              }`}
+              onClick={() => setShowZeroParticipants((prev) => !prev)}
+              className="p-2 rounded-xl w-full cursor-pointer transition-all border border-dashed border-stone-300 hover:border-amber-500 bg-stone-50/90 hover:bg-amber-50/60 text-stone-600 hover:text-amber-900 flex flex-col justify-between overflow-hidden shadow-2xs group text-left min-h-[64px]"
+              title={showZeroParticipants ? "Hide expeditions with 0 participants" : `Show ${zeroParticipantCount} expeditions with 0 participants`}
             >
-              All Bookings ({registrations.length})
+              <div className="flex items-center justify-between text-[9px] font-bold text-stone-400 group-hover:text-amber-700/80 mb-0.5">
+                <span>{showZeroParticipants ? 'COLLAPSE' : 'EXPAND'}</span>
+                {showZeroParticipants ? (
+                  <ChevronUp className="w-3 h-3 text-stone-400 group-hover:text-amber-700 shrink-0" />
+                ) : (
+                  <ChevronDown className="w-3 h-3 text-stone-400 group-hover:text-amber-700 shrink-0" />
+                )}
+              </div>
+              <h3 className="text-[11px] font-bold text-stone-700 group-hover:text-amber-900 truncate mb-1">
+                {showZeroParticipants ? 'Show Less' : 'Show More'}
+              </h3>
+              <div className="flex items-center gap-1.5 text-[9.5px] font-bold min-w-0">
+                <span className="px-1.5 py-0.5 rounded bg-black/5 group-hover:bg-amber-100 text-stone-600 group-hover:text-amber-900 font-extrabold shrink-0">
+                  {showZeroParticipants ? 'HIDE' : `+${zeroParticipantCount}`}
+                </span>
+                <span className="text-[9px] text-stone-400 group-hover:text-amber-700 truncate font-medium">
+                  0 Joined
+                </span>
+              </div>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setBookingTypeFilter('public');
-                if (selectedTrekFilter === 'PRIVATE') setSelectedTrekFilter('all');
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                bookingTypeFilter === 'public'
-                  ? 'bg-white text-[#E08828] shadow-2xs'
-                  : 'text-[#8B8680] hover:text-[#1F1F1F]'
-              }`}
-            >
-              Public Expeditions ({publicCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setBookingTypeFilter('private');
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                bookingTypeFilter === 'private'
-                  ? 'bg-purple-700 text-white shadow-2xs'
-                  : 'text-purple-800 hover:bg-purple-100/50'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Private Trek Requests ({privateCount})</span>
-            </button>
-          </div>
-
-          <div className="text-[11px] font-semibold text-[#8B8680]">
-            Showing <span className="font-extrabold text-[#1F1F1F]">{filteredRegistrations.length}</span> record(s)
-          </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Bar */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-[#8B8680] absolute left-3.5 top-3.5" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by hiker name, phone, destination, remarks..."
-              className="w-full pl-10 pr-4 py-2.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Trek Selector Filter */}
-            <div className="flex items-center gap-1.5 bg-[#F9F7F5] border border-[#E5E1DB] px-3 py-1.5 rounded-xl">
-              <Filter className="w-3.5 h-3.5 text-[#8B8680]" />
-              <select
-                value={selectedTrekFilter}
-                onChange={(e) => {
-                  setSelectedTrekFilter(e.target.value);
-                  if (e.target.value === 'PRIVATE') {
-                    setBookingTypeFilter('private');
-                  }
-                }}
-                className="bg-transparent text-xs font-bold text-[#1F1F1F] focus:outline-none cursor-pointer max-w-[170px]"
-              >
-                <option value="all">All Treks & Inquiries</option>
-                <option value="PRIVATE">⭐ Private Requests ({privateCount})</option>
-                <optgroup label="Public Treks">
-                  {treks.map((t) => (
-                    <option key={t.id} value={t.id || t.hike_number}>
-                      Hike #{t.hike_number || 'TBD'} - {t.name}{t.date ? ` (${t.date})` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-            </div>
-
-            {/* Status Filter */}
-            <div className="flex items-center gap-1.5 bg-[#F9F7F5] border border-[#E5E1DB] px-3 py-1.5 rounded-xl">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-transparent text-xs font-bold text-[#1F1F1F] focus:outline-none cursor-pointer"
-              >
-                <option value="all">All Statuses</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="pending">Pending</option>
-                <option value="waitlisted">Waitlisted</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="cancelled by user">Cancelled by User</option>
-              </select>
-            </div>
-
-            {/* Refresh */}
-            <button
-              onClick={onRefresh}
-              className="p-2 bg-[#F9F7F5] hover:bg-[#EFEAE4] border border-[#E5E1DB] rounded-xl text-[#5A5551] transition-colors cursor-pointer"
-              title="Refresh Roster Data"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#E08828]' : ''}`} />
-            </button>
-
-            {/* WhatsApp Roster Broadcast Copy */}
-            <button
-              onClick={handleCopyWhatsAppNumbers}
-              disabled={filteredRegistrations.length === 0}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            >
-              {copiedWhatsApp ? <Check className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
-              <span>{copiedWhatsApp ? 'Copied WhatsApp List!' : 'Copy WhatsApp Roster'}</span>
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Registrations List / Table */}
       <div className="bg-white rounded-2xl border border-[#E5E1DB] shadow-2xs overflow-hidden">
-        <div className="p-4 border-b border-[#F0EBE5] flex items-center justify-between">
+        <div className="p-3 sm:p-4 border-b border-[#F0EBE5] flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-black text-[#1F1F1F] tracking-tight">Hiker Applications Roster</h3>
-            <p className="text-[11px] text-[#8B8680] mt-0.5">
+            <h3 className="text-xs font-bold text-[#1F1F1F] tracking-tight">Hiker Applications Roster</h3>
+            <p className="text-[10px] text-[#8B8680] mt-0.5">
               Showing {filteredRegistrations.length} application(s) • Inline status, payment &amp; notes controls
             </p>
           </div>
         </div>
 
         {selectedIds.length > 0 && (
-          <div className="bg-[#FAF2EB] border-b border-[#EFEAE4] p-3 px-4 flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-150">
-            <div className="flex items-center gap-2 text-xs font-bold text-[#E08828]">
-              <AlertCircle className="w-4 h-4 text-[#E08828]" />
+          <div className="bg-[#FAF2EB] border-b border-[#EFEAE4] p-2.5 px-3 flex flex-wrap items-center justify-between gap-2.5 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="flex items-center gap-2 text-xs font-medium text-[#E08828]">
+              <AlertCircle className="w-3.5 h-3.5 text-[#E08828]" />
               <span>{selectedIds.length} registration(s) selected for batch operations</span>
             </div>
             
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSelectedIds([])}
-                className="px-3 py-1.5 border border-[#E5E1DB] hover:bg-[#EFEAE4] rounded-lg text-xs font-bold text-[#5A5551] transition-all cursor-pointer"
+                className="px-2.5 py-1 border border-[#E5E1DB] hover:bg-[#EFEAE4] rounded-lg text-[11px] font-medium text-[#5A5551] transition-all cursor-pointer"
                 disabled={isPurging}
               >
                 Clear Selection
@@ -979,10 +1042,10 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               
               <button
                 onClick={handleBatchDelete}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-medium shadow-xs transition-all cursor-pointer"
                 disabled={isPurging}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3 h-3" />
                 <span>{isPurging ? `Purging (${purgeProgress}/${selectedIds.length})...` : 'Purge Selected Entirely'}</span>
               </button>
             </div>
@@ -1001,10 +1064,10 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse text-[11px]">
               <thead>
-                <tr className="bg-[#FAF8F5] border-b border-[#F0EBE5] text-[10px] font-extrabold uppercase text-[#5A5551] tracking-wider">
-                  <th className="py-3 px-4 w-[40px] text-center">
+                <tr className="bg-[#FAF8F5] border-b border-[#F0EBE5] text-[10px] font-semibold uppercase text-[#6B6560] tracking-wider">
+                  <th className="py-1.5 px-2.5 w-[34px] text-center">
                     <input
                       type="checkbox"
                       checked={filteredRegistrations.length > 0 && selectedIds.length === filteredRegistrations.length}
@@ -1020,7 +1083,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   </th>
                   <th
                     onClick={() => handleSort('participant')}
-                    className="py-3 px-4 min-w-[260px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    className="py-1.5 px-2.5 min-w-[220px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
                     title="Click to sort by Participant & Trek"
                   >
                     <div className="flex items-center gap-1.5">
@@ -1038,7 +1101,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   </th>
                   <th
                     onClick={() => handleSort('status')}
-                    className="py-3 px-3 w-[140px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    className="py-1.5 px-2 w-[125px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
                     title="Click to sort by Reg Status"
                   >
                     <div className="flex items-center gap-1.5">
@@ -1056,7 +1119,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   </th>
                   <th
                     onClick={() => handleSort('payment_status')}
-                    className="py-3 px-3 w-[140px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    className="py-1.5 px-2 w-[125px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
                     title="Click to sort by Payment Status"
                   >
                     <div className="flex items-center gap-1.5">
@@ -1074,7 +1137,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   </th>
                   <th
                     onClick={() => handleSort('paid_amount')}
-                    className="py-3 px-3 w-[110px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    className="py-1.5 px-2 w-[90px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
                     title="Click to sort by Paid (NPR)"
                   >
                     <div className="flex items-center gap-1.5">
@@ -1092,7 +1155,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   </th>
                   <th
                     onClick={() => handleSort('due_amount')}
-                    className="py-3 px-3 w-[110px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    className="py-1.5 px-2 w-[90px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
                     title="Click to sort by Due (NPR)"
                   >
                     <div className="flex items-center gap-1.5">
@@ -1110,7 +1173,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   </th>
                   <th
                     onClick={() => handleSort('pickup_point')}
-                    className="py-3 px-3 w-[150px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
+                    className="py-1.5 px-2 w-[130px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
                     title="Click to sort by Pickup Point"
                   >
                     <div className="flex items-center gap-1.5">
@@ -1126,8 +1189,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                       )}
                     </div>
                   </th>
-                  <th className="py-3 px-3 min-w-[200px]">Internal Admin Notes</th>
-                  <th className="py-3 px-4 w-[110px] text-right">Actions</th>
+                  <th className="py-1.5 px-2.5 min-w-[160px]">Internal Admin Notes</th>
+                  <th className="py-1.5 px-2.5 w-[95px] text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0EBE5]">
@@ -1152,7 +1215,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                     <React.Fragment key={reg.id}>
                       <tr className={`transition-colors ${isPrivate ? 'bg-purple-50/25 hover:bg-purple-50/50' : 'hover:bg-[#FAF8F5]'}`}>
                         {/* Batch Selection Checkbox */}
-                        <td className="py-3 px-4 text-center align-middle w-[40px]">
+                        <td className="py-1.5 px-2.5 text-center align-middle w-[34px]">
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(reg.id)}
@@ -1167,9 +1230,9 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                           />
                         </td>
                         {/* Participant & Trek Info */}
-                        <td className="py-3 px-4 align-middle">
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-1.5">
+                        <td className="py-1.5 px-2.5 align-middle">
+                          <div className="space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1179,7 +1242,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                                     email: reg.email || reg.email_address || reg.user_email,
                                   })
                                 }
-                                className="font-extrabold text-xs text-[#1F1F1F] hover:text-[#E08828] hover:underline cursor-pointer text-left transition-colors"
+                                className="font-medium text-[11px] text-[#1F1F1F] hover:text-[#E08828] hover:underline cursor-pointer text-left transition-colors"
                                 title="Click to view full hiker profile, stats & lifetime records"
                               >
                                 {reg.full_name}
@@ -1187,83 +1250,81 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                               
                               {/* Distinctive Purple/Blue Private Trek Badge */}
                               {isPrivate && (
-                                <span className="inline-flex items-center gap-1 font-black text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-300 shadow-2xs">
-                                  <Sparkles className="w-3 h-3 text-purple-600 shrink-0" />
-                                  <span>Private Request</span>
+                                <span className="inline-flex items-center gap-0.5 font-medium text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                                  <Sparkles className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                                  <span>Private</span>
                                 </span>
                               )}
 
                               {reg.gender && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#EFEAE4] text-[#5A5551]">
+                                <span className="text-[9px] font-normal px-1.5 py-0.2 rounded bg-[#EFEAE4] text-[#5A5551]">
                                   {reg.gender} {reg.age_group ? `(${reg.age_group})` : ''}
                                 </span>
                               )}
 
-                              {reg.paxCount && reg.paxCount > 1 && (
-                                <span className="font-bold text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.5 rounded text-[10px]">
-                                  {reg.paxCount} Pax Group
-                                </span>
-                              )}
-
-                              {Array.isArray(reg.team_members) && reg.team_members.length > 0 && (
-                                <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-[10px]">
-                                  +{reg.team_members.length} companion(s)
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Trek Name & Date */}
-                            <div className="flex flex-wrap items-center gap-x-2 text-[11px]">
-                              {isPrivate ? (
-                                <span className="font-extrabold text-purple-900 flex items-center gap-1">
-                                  <Compass className="w-3 h-3 text-purple-600 shrink-0" />
-                                  <span>{reg.trek_name || 'Bespoke Private Trek'}</span>
-                                </span>
-                              ) : (
-                                <span className="font-bold text-[#E08828]">
-                                  {reg.hike_number ? `#${reg.hike_number} - ` : ''}
-                                  {reg.trek_name || 'Himalayan Trek'}
-                                </span>
-                              )}
-                              {reg.trek_date && (
-                                <span className="text-[#8B8680] flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 text-[#8B8680]" />
-                                  <span>{reg.trek_date}</span>
-                                </span>
-                              )}
-                            </div>
-
-                            {/* View Payment Voucher for Admins */}
-                            {reg.payment_voucher_url && (
-                              <div className="pt-0.5">
+                              {/* View Payment Voucher for Admins - pops right by side of gender */}
+                              {reg.payment_voucher_url && (
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setViewingAdminVoucherUrl(reg.payment_voucher_url || null);
                                     setViewingAdminVoucherReg(reg);
                                   }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-all cursor-pointer shadow-3xs"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 shadow-2xs transition-all cursor-pointer active:scale-95"
+                                  title="View uploaded payment voucher"
                                 >
-                                  <FileText className="w-3.5 h-3.5 text-amber-700" />
+                                  <FileText className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                   <span>
-                                    View Voucher
+                                    Voucher
                                     {reg.payment_voucher_url.split(',').filter(Boolean).length > 1
-                                      ? `s (${reg.payment_voucher_url.split(',').filter(Boolean).length})`
-                                      : ''}{' '}
-                                    📄
+                                      ? ` (${reg.payment_voucher_url.split(',').filter(Boolean).length})`
+                                      : ''}
                                   </span>
                                 </button>
-                              </div>
-                            )}
+                              )}
+
+                              {reg.paxCount && reg.paxCount > 1 && (
+                                <span className="font-medium text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.2 rounded text-[9px]">
+                                  {reg.paxCount} Pax Group
+                                </span>
+                              )}
+
+                              {Array.isArray(reg.team_members) && reg.team_members.length > 0 && (
+                                <span className="font-medium text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded text-[9px]">
+                                  +{reg.team_members.length} companion(s)
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Trek Name & Date */}
+                            <div className="flex flex-wrap items-center gap-x-1.5 text-[10px]">
+                              {isPrivate ? (
+                                <span className="font-medium text-purple-900 flex items-center gap-1">
+                                  <Compass className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                                  <span>{reg.trek_name || 'Bespoke Private Trek'}</span>
+                                </span>
+                              ) : (
+                                <span className="font-medium text-[#E08828]">
+                                  {reg.hike_number ? `#${reg.hike_number} - ` : ''}
+                                  {reg.trek_name || 'Himalayan Trek'}
+                                </span>
+                              )}
+                              {reg.trek_date && (
+                                <span className="text-[#8B8680] flex items-center gap-1">
+                                  <Calendar className="w-2.5 h-2.5 text-[#8B8680]" />
+                                  <span>{reg.trek_date}</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
                         {/* Registration Status */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-1.5 px-2 align-middle">
                           <select
                             value={curStatus}
                             onChange={(e: any) => handleRowChange(reg.id, 'status', e.target.value)}
-                            className={`w-full p-2 rounded-xl text-xs font-extrabold border focus:outline-none cursor-pointer ${
+                            className={`w-full py-1 px-1.5 rounded-lg text-[11px] font-medium border focus:outline-none cursor-pointer ${
                               curStatus === 'Confirmed'
                                 ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
                                 : curStatus === 'Pending'
@@ -1280,11 +1341,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                         </td>
 
                         {/* Payment Status */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-1.5 px-2 align-middle">
                           <select
                             value={curPayment}
                             onChange={(e: any) => handleRowChange(reg.id, 'payment_status', e.target.value)}
-                            className={`w-full p-2 rounded-xl text-xs font-bold border focus:outline-none cursor-pointer ${
+                            className={`w-full py-1 px-1.5 rounded-lg text-[11px] font-medium border focus:outline-none cursor-pointer ${
                               curPayment === 'Fully Paid'
                                 ? 'bg-blue-50 border-blue-300 text-blue-900'
                                 : curPayment === 'Deposit Paid'
@@ -1300,7 +1361,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                         </td>
 
                         {/* Paid Amount */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-1.5 px-2 align-middle">
                           <input
                             type="number"
                             value={curPaidAmount}
@@ -1312,12 +1373,12 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                               )
                             }
                             placeholder="Paid"
-                            className="w-full p-2 bg-emerald-50/60 border border-emerald-300 rounded-xl text-xs font-extrabold text-emerald-950 placeholder-emerald-400 focus:bg-white focus:outline-none focus:border-emerald-600"
+                            className="w-full py-1 px-1.5 bg-emerald-50/60 border border-emerald-300 rounded-lg text-[11px] font-medium text-emerald-950 placeholder-emerald-400 focus:bg-white focus:outline-none focus:border-emerald-600"
                           />
                         </td>
 
                         {/* Due Amount */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-1.5 px-2 align-middle">
                           <input
                             type="number"
                             value={curDueAmount}
@@ -1329,58 +1390,58 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                               )
                             }
                             placeholder="Due"
-                            className="w-full p-2 bg-amber-50/60 border border-amber-300 rounded-xl text-xs font-extrabold text-amber-950 placeholder-amber-400 focus:bg-white focus:outline-none focus:border-amber-600"
+                            className="w-full py-1 px-1.5 bg-amber-50/60 border border-amber-300 rounded-lg text-[11px] font-medium text-amber-950 placeholder-amber-400 focus:bg-white focus:outline-none focus:border-amber-600"
                           />
                         </td>
 
                         {/* Pickup Point */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-1.5 px-2 align-middle">
                           <input
                             type="text"
                             value={curPickup}
                             onChange={(e) => handleRowChange(reg.id, 'pickup_point', e.target.value)}
                             placeholder="Pickup Point"
-                            className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
+                            className="w-full py-1 px-1.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-normal text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
                           />
                         </td>
 
                         {/* Internal Admin Notes */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-1.5 px-2.5 align-middle">
                           <input
                             type="text"
                             value={curNotes}
                             onChange={(e) => handleRowChange(reg.id, 'admin_notes', e.target.value)}
                             placeholder="Edit admin notes..."
-                            className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-medium text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
+                            className="w-full py-1 px-1.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-normal text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
                           />
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-1.5 px-2.5 align-middle text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
                               onClick={() => handleSaveRow(reg)}
                               disabled={isSavingThisRow}
-                              className={`px-3 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
+                              className={`px-2 py-1 text-[10px] font-medium rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
                                 isDirty
-                                  ? 'bg-[#E08828] hover:bg-[#D07717] text-white animate-pulse'
-                                  : isRowJustSaved
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'bg-[#F9F7F5] hover:bg-[#EFEAE4] text-[#1F1F1F] border border-[#E5E1DB]'
+                                   ? 'bg-[#E08828] hover:bg-[#D07717] text-white animate-pulse'
+                                   : isRowJustSaved
+                                   ? 'bg-emerald-600 text-white'
+                                   : 'bg-[#F9F7F5] hover:bg-[#EFEAE4] text-[#1F1F1F] border border-[#E5E1DB]'
                               }`}
                               title="Save Row Changes"
                             >
                               {isSavingThisRow ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <RefreshCw className="w-3 h-3 animate-spin" />
                               ) : isRowJustSaved ? (
                                 <>
-                                  <Check className="w-3.5 h-3.5 text-white" />
+                                  <Check className="w-3 h-3 text-white" />
                                   <span>Saved</span>
                                 </>
                               ) : (
                                 <>
-                                  <Save className="w-3.5 h-3.5" />
+                                  <Save className="w-3 h-3" />
                                   <span>Save</span>
                                 </>
                               )}
@@ -1390,13 +1451,13 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                               type="button"
                               onClick={() => setPendingDeleteReg(reg)}
                               disabled={isDeleting}
-                              className="p-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                              className="p-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                               title="Delete Application"
                             >
                               {isDeleting ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <RefreshCw className="w-3 h-3 animate-spin" />
                               ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3 h-3" />
                               )}
                             </button>
                           </div>

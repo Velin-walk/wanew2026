@@ -34,6 +34,11 @@ export interface Trek {
   is_cancelled?: boolean;
   cancellation_reason?: string;
   status?: 'draft' | 'published' | 'archived' | string;
+  category?: string;
+  team_leader?: string;
+  title?: string;
+  hike_date?: string;
+  days_label?: string;
   data?: any;
 }
 
