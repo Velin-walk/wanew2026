@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Trek, TeamMember, BookingFormData } from '../types';
 import { triggerHaptic } from '../utils/haptics';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
+import { useCitizenPricing, isNepalPhoneNumber } from '../hooks/useCitizenPricing';
 import {
   X,
   MapPin,
@@ -138,6 +139,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [emergencyContact, setEmergencyContact] = useState('');
   const [email, setEmail] = useState(userEmail);
   const [profession, setProfession] = useState('');
+
+  const { isNepaliCitizen } = useCitizenPricing();
+  const isCitizenRate = isNepaliCitizen || isNepalPhoneNumber(phone) || isNepalPhoneNumber(whatsapp);
+  const activeTrekPriceLabel = activeTrek?.price
+    ? isCitizenRate
+      ? activeTrek.price
+      : 'Inquire for International Rates'
+    : '';
 
   // Group & About You
   const [isGroup, setIsGroup] = useState<'Solo' | 'Group'>('Solo');
@@ -747,8 +756,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   <span className="flex items-center gap-1 text-[#2B6CB0]">
                     <Compass className="w-3.5 h-3.5" /> Event Selection
                   </span>
-                  {activeTrek?.price && (
-                    <span className="text-[#E08828] font-bold">{activeTrek.price}</span>
+                  {activeTrekPriceLabel && (
+                    <span className={`font-bold ${isCitizenRate ? 'text-[#E08828]' : 'text-blue-600 text-[10px]'}`}>
+                      {activeTrekPriceLabel}
+                    </span>
                   )}
                 </div>
 
@@ -1279,10 +1290,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                           <span className="text-[#78716C] font-medium">{activeTrek.days}</span>
                         </>
                       )}
-                      {activeTrek?.price && (
+                      {activeTrekPriceLabel && (
                         <>
                           <span className="text-[#D6D3CD]">•</span>
-                          <span className="text-[#E08828] font-bold">{activeTrek.price}</span>
+                          <span className={`font-bold ${isCitizenRate ? 'text-[#E08828]' : 'text-blue-600'}`}>{activeTrekPriceLabel}</span>
                         </>
                       )}
                     </div>

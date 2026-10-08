@@ -574,8 +574,27 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
   }
 }
 
+let indexesEnsured = false;
+function ensureDbIndexes(env, ctx) {
+  if (indexesEnsured || !env || !env.DB) return;
+  indexesEnsured = true;
+  const p = env.DB.batch([
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_executions_hike_number ON event_executions (hike_number)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_created_at ON treks (created_at DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_treks_hike_number ON treks (hike_number)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_community_trails_uploaded_at ON community_trails (uploaded_at DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_trek_photos_uploaded_at ON trek_photos (uploaded_at DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id)'),
+  ]).catch(() => {});
+  if (ctx && ctx.waitUntil) {
+    ctx.waitUntil(p);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
+    ensureDbIndexes(env, ctx);
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -594,6 +613,16 @@ export default {
           status: 'ok',
           service: 'Walk Nepal Walk Cloudflare API',
           timestamp: new Date().toISOString(),
+        });
+      }
+
+      // ===== VISITOR GEOLOCATION (CLOUDFLARE EDGE) =====
+      if (method === 'GET' && (path === '/geo' || path === '/api/geo')) {
+        const country = request.cf?.country || request.headers.get('cf-ipcountry') || 'NP';
+        return jsonResponse({
+          success: true,
+          country: String(country).toUpperCase(),
+          isNepal: String(country).toUpperCase() === 'NP'
         });
       }
 
@@ -943,13 +972,13 @@ export default {
         });
 
         const resp = jsonResponse({ success: true, data }, 200, {
-          'Cache-Control': isAdminPath || isFresh ? 'no-cache, no-store, must-revalidate' : 'public, max-age=60, s-maxage=60',
+          'Cache-Control': isAdminPath || isFresh ? 'no-cache, no-store, must-revalidate' : 'public, max-age=300, s-maxage=300',
           'X-Edge-Cache': 'MISS'
         });
 
         // Store in Cloudflare Edge Cache asynchronously only for public cached GET requests
         if (!isAdminPath && !isFresh) {
-          await putEdgeCache(request, resp, ctx, 60);
+          await putEdgeCache(request, resp, ctx, 300);
         }
 
         return resp;

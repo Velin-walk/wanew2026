@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Trek } from '../types';
 import { ParticipantStack } from './ParticipantStack';
 import { useAuth } from '../context/AuthContext';
+import { useCitizenPricing } from '../hooks/useCitizenPricing';
 import { TrekPhotosModal } from './TrekPhotosModal';
 import { GuideProfileModal } from './GuideProfileModal';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
@@ -45,6 +46,8 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   const [photosOpen, setPhotosOpen] = useState(false);
   const [guideModalOpen, setGuideModalOpen] = useState(false);
   const { isAdmin } = useAuth();
+  const { formatPrice } = useCitizenPricing();
+  const priceInfo = formatPrice(trek.price);
 
   const isEventDayOrOnward = () => {
     if (!trek.date) return false;
@@ -259,10 +262,30 @@ export const TrekCard: React.FC<TrekCardProps> = ({
           <MiniPrayerFlags variant="draped" count={5} />
         </div>
         
-        {/* Price Tag */}
-        {trek.price && (
-          <div className="absolute bottom-3 right-3 bg-[#E08828] text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-sm border border-white/20">
-            {trek.price}
+        {/* Price Tag (Filtered for Nepali Citizens vs International Visitors) */}
+        {priceInfo.isAvailable && (
+          <div
+            className={`absolute bottom-3 right-3 text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-sm border border-white/20 select-none ${
+              priceInfo.isInternational
+                ? 'bg-[#1E40AF] hover:bg-[#1D4ED8] cursor-pointer'
+                : 'bg-[#E08828]'
+            }`}
+            title={
+              priceInfo.isInternational
+                ? 'Click to inquire about international rates on WhatsApp'
+                : 'Rate for Nepali Citizens'
+            }
+            onClick={(e) => {
+              if (priceInfo.isInternational) {
+                e.stopPropagation();
+                const msg = encodeURIComponent(
+                  `Hi Walk Nepal Walk, I am an international visitor interested in Hike #${trek.hike_number || ''} (${trek.name}). Could you please share the international rates and details?`
+                );
+                window.open(`https://wa.me/9779803568612?text=${msg}`, '_blank');
+              }
+            }}
+          >
+            {priceInfo.display}
           </div>
         )}
 

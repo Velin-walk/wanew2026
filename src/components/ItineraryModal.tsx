@@ -31,6 +31,7 @@ import {
 import { Trek } from '../types';
 import { TrekItineraryData } from '../data/defaultItineraryTemplate';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
+import { useCitizenPricing } from '../hooks/useCitizenPricing';
 
 interface ItineraryModalProps {
   isOpen: boolean;
@@ -50,6 +51,7 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
   const [activeTab, setActiveTab] = useState<'experience' | 'logistics'>('experience');
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
   const contentScrollRef = useRef<HTMLDivElement>(null);
+  const { isNepaliCitizen } = useCitizenPricing();
 
   // Reset states when a new trek opens
   useEffect(() => {
@@ -617,7 +619,13 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                       <div key={addon.id || idx} className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E5E1DB] flex items-center justify-between">
                         <span className="text-xs font-bold text-[#1F1F1F]">{addon.name}</span>
                         <span className="text-xs font-black text-[#E08828]">
-                          {dbData.currency} {Number(addon.price).toLocaleString()} <span className="text-[9px] font-normal text-[#8B8680]">{addon.unit}</span>
+                          {isNepaliCitizen ? (
+                            <>
+                              {dbData.currency} {Number(addon.price).toLocaleString()} <span className="text-[9px] font-normal text-[#8B8680]">{addon.unit}</span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-blue-600 font-bold">Inquire on WhatsApp</span>
+                          )}
                         </span>
                       </div>
                     ))}

@@ -38,6 +38,7 @@ import {
   Gem
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useCitizenPricing } from '../hooks/useCitizenPricing';
 import { Trek, Booking } from '../types';
 import { HISTORICAL_TREKS, HistoricalTrekItem } from '../data/historicalTreks';
 import { fetchLeaderboardData } from '../services/api';
@@ -82,6 +83,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onUploadVoucher,
 }) => {
   const { user, isAdmin, userPhone, signOutUser, showProfileImage, updateUserProfile } = useAuth();
+  const { nationalityPreference, setNationalityPreference, isNepaliCitizen, detectedCountry } = useCitizenPricing();
   const [activeProfileTab, setActiveProfileTab] = useState<'hikes' | 'bookings' | 'saved' | 'settings'>(initialTab);
 
   const [editName, setEditName] = useState(user?.displayName || '');
@@ -1108,6 +1110,31 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     disabled
                     className="w-full px-3.5 py-2.5 bg-stone-100 border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#8B8680] cursor-not-allowed"
                   />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-black text-[#5A5551] uppercase tracking-wider">
+                      Pricing &amp; Nationality Preference
+                    </label>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FAF8F5] border border-[#E5E1DB] text-[#5A5551]">
+                      {isNepaliCitizen ? '🇳🇵 Citizen Rates' : '🌐 International Rates'}
+                    </span>
+                  </div>
+                  <select
+                    value={nationalityPreference}
+                    onChange={(e) => setNationalityPreference(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#7ABA42] focus:bg-white"
+                  >
+                    <option value="auto">
+                      Auto-Detect (Phone +977 or Location: {detectedCountry || 'Nepal/Auto'})
+                    </option>
+                    <option value="nepali">Nepali Citizen (Always Show NPR Rates)</option>
+                    <option value="international">International / Foreign Visitor (Inquire for Rates)</option>
+                  </select>
+                  <span className="text-[10px] text-[#8B8680] mt-1 block">
+                    Foreign visitors see &quot;Inquire for International Rates&quot;. Nepali citizens see standard local trek prices.
+                  </span>
                 </div>
 
                 <div className="pt-1">
