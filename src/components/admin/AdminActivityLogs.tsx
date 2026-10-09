@@ -30,14 +30,16 @@ interface ActivityLog {
 
 const ACTION_TYPES = [
   { value: '', label: 'All Actions' },
-  { value: 'SYNC_ALL_PROFILES', label: 'Bulk Profile Sync' },
   { value: 'UPSERT_TREK', label: 'Trek Upsert' },
-  { value: 'UPDATE_BOOKING', label: 'Roster / Booking Change' },
-  { value: 'DELETE_TREK', label: 'Delete Trek' },
-  { value: 'UPDATE_TREK_STATUS', label: 'Trek Status Update' },
-  { value: 'UPDATE_EVENT_EXECUTION', label: 'Event Execution Edit' },
+  { value: 'UPDATE_TREK_STATUS', label: 'Status Update' },
+  { value: 'UPDATE_EVENT_EXECUTION', label: 'Event Execution' },
+  { value: 'UPDATE_BOOKING', label: 'Booking / Roster' },
   { value: 'CLONE_TREK', label: 'Clone Trek' },
-  { value: 'DELETE_REGISTRATION', label: 'Delete Registration' }
+  { value: 'DELETE_TREK', label: 'Delete Trek' },
+  { value: 'DELETE_REGISTRATION', label: 'Delete Registration' },
+  { value: 'SYNC_ALL_PROFILES', label: 'Profile Sync' },
+  { value: 'SYNC_LEADERBOARD', label: 'Leaderboard Sync' },
+  { value: 'MIGRATE_IMAGES_R2', label: 'R2 Migration' },
 ];
 
 export function AdminActivityLogs() {
@@ -109,6 +111,7 @@ export function AdminActivityLogs() {
   const getActionBadgeColor = (action: string) => {
     switch (action) {
       case 'SYNC_ALL_PROFILES':
+      case 'SYNC_LEADERBOARD':
         return 'bg-emerald-50 text-emerald-800 border border-emerald-200';
       case 'UPSERT_TREK':
       case 'CLONE_TREK':
@@ -121,6 +124,8 @@ export function AdminActivityLogs() {
       case 'UPDATE_TREK_STATUS':
       case 'UPDATE_EVENT_EXECUTION':
         return 'bg-amber-50 text-amber-800 border border-amber-200';
+      case 'MIGRATE_IMAGES_R2':
+        return 'bg-purple-50 text-purple-800 border border-purple-200';
       default:
         return 'bg-stone-50 text-stone-800 border border-stone-200';
     }
@@ -129,20 +134,25 @@ export function AdminActivityLogs() {
   const getActionIcon = (action: string) => {
     switch (action) {
       case 'SYNC_ALL_PROFILES':
-        return <Database className="w-4 h-4 text-emerald-600" />;
+      case 'SYNC_LEADERBOARD':
+        return <Database className="w-3.5 h-3.5 text-emerald-600" />;
       case 'UPSERT_TREK':
-        return <Layers className="w-4 h-4 text-blue-600" />;
+        return <Layers className="w-3.5 h-3.5 text-blue-600" />;
       case 'CLONE_TREK':
-        return <Sparkles className="w-4 h-4 text-sky-600" />;
+        return <Sparkles className="w-3.5 h-3.5 text-sky-600" />;
       case 'UPDATE_BOOKING':
-        return <CreditCard className="w-4 h-4 text-indigo-600" />;
+        return <CreditCard className="w-3.5 h-3.5 text-indigo-600" />;
       case 'DELETE_TREK':
       case 'DELETE_REGISTRATION':
-        return <ShieldAlert className="w-4 h-4 text-red-600" />;
+        return <ShieldAlert className="w-3.5 h-3.5 text-red-600" />;
       case 'UPDATE_TREK_STATUS':
-        return <Map className="w-4 h-4 text-amber-600" />;
+        return <Map className="w-3.5 h-3.5 text-amber-600" />;
+      case 'UPDATE_EVENT_EXECUTION':
+        return <Calendar className="w-3.5 h-3.5 text-amber-600" />;
+      case 'MIGRATE_IMAGES_R2':
+        return <RefreshCw className="w-3.5 h-3.5 text-purple-600" />;
       default:
-        return <Clock className="w-4 h-4 text-stone-500" />;
+        return <Clock className="w-3.5 h-3.5 text-stone-500" />;
     }
   };
 
@@ -167,6 +177,23 @@ export function AdminActivityLogs() {
     } catch (_) {
       return dateStr;
     }
+  };
+
+  const formatChangesTarget = (desc: string) => {
+    if (!desc || typeof desc !== 'string') return '';
+    return desc
+      .replace(/^updated\s+booking\/roster\s+(?:for\s+)?/i, '')
+      .replace(/^upserted\s+trek\s+/i, '')
+      .replace(/^updated\s+event\s+execution\s+for\s+trek\s+/i, '')
+      .replace(/^updated\s+event\s+execution\s+for\s+/i, '')
+      .replace(/^changed\s+status\s+of\s+/i, '')
+      .replace(/^updated\s+trek\s+(\S+)\s+status\s+to\s+['"]?([^'"]+)['"]?/i, 'Hike #$1 → $2')
+      .replace(/^deleted\s+registration\s+id\s+/i, 'Registration #')
+      .replace(/^deleted\s+registration\s+/i, 'Registration ')
+      .replace(/^deleted\s+trek\s+/i, 'Trek ')
+      .replace(/^cloned\s+trek\s+/i, '')
+      .replace(/^batch\s+migrated\s+/i, '')
+      .trim();
   };
 
   const renderMetadata = (jsonStr: string) => {
@@ -209,6 +236,36 @@ export function AdminActivityLogs() {
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh Audit Logs</span>
         </button>
+      </div>
+
+      {/* Action Filter Buttons */}
+      <div className="px-4 py-3 bg-[#FCFAF7] border-b border-[#F0EBE5]">
+        <div className="text-[10px] font-black uppercase tracking-wider text-stone-400 mb-2">
+          Filter by Action Type
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {ACTION_TYPES.map((type) => {
+            const isSelected = selectedAction === type.value;
+            return (
+              <button
+                key={type.value || 'all'}
+                type="button"
+                onClick={() => {
+                  setSelectedAction(type.value);
+                  setOffset(0);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 select-none ${
+                  isSelected
+                    ? 'bg-stone-900 text-white shadow-xs ring-2 ring-stone-900/20'
+                    : 'bg-white text-stone-600 hover:text-stone-900 hover:bg-stone-100 border border-stone-250 shadow-3xs'
+                }`}
+              >
+                {type.value ? getActionIcon(type.value) : <Clock className="w-3.5 h-3.5 text-stone-400" />}
+                <span>{type.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Filter and Search controls */}
@@ -371,7 +428,7 @@ export function AdminActivityLogs() {
                         {/* 4. Changes Made To */}
                         <td className="py-2.5 px-3 align-top text-stone-800">
                           <div className="text-xs font-semibold leading-relaxed">
-                            {log.description}
+                            {formatChangesTarget(log.description)}
                           </div>
                         </td>
 
