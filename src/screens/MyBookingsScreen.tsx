@@ -71,10 +71,73 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
     return set;
   }, []);
 
+function parseBookingDate(dateStr?: string): Date | null {
+  if (!dateStr) return null;
+  const trimmed = dateStr.trim();
+  if (trimmed.toUpperCase() === 'TBA' || trimmed.toUpperCase() === 'TBD') {
+    return null;
+  }
+
+  // 1. Slash format: DD/MM/YYYY or YYYY/MM/DD
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      } else {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+  }
+
+  // 2. Dash/Dot format: DD-MM-YYYY or DD.MM.YYYY
+  if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+    const delimiter = trimmed.includes('-') ? '-' : '.';
+    const parts = trimmed.split(delimiter);
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      } else if (parts[0].length === 4) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+  }
+
+  // 3. Direct JS Date constructor
+  const direct = new Date(trimmed);
+  if (!isNaN(direct.getTime())) return direct;
+
+  // 4. Handle date ranges like "14 Oct - 18 Oct 2026" or "Wed 14 Oct – Sun 18 Oct 2026"
+  const rangeMatch = trimmed.match(/(\d{1,2}\s+[a-zA-Z]+\s+\d{4})/);
+  if (rangeMatch) {
+    const d = new Date(rangeMatch[1]);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  return null;
+}
+
   // Filter out bookings that have already been finalized / completed in Google Sheet
   const { activeBookings, completedCount } = useMemo(() => {
     let completed = 0;
     const active: Booking[] = [];
+    const todayStartMs = new Date().setHours(0, 0, 0, 0);
 
     bookings.forEach((b) => {
       const hikeNum = String(b.hike_number || b.trek_id || '').toLowerCase().trim();
@@ -82,12 +145,22 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
       if (statusLower === 'cancelled by user') {
         return;
       }
-      const isCancelledStatus = statusLower.includes('cancelled');
-      const isPastCompleted =
-        !isCancelledStatus &&
-        (statusLower === 'completed' || (hikeNum && completedHikeNumbers.has(hikeNum)));
 
-      if (isPastCompleted) {
+      const isCancelled = Boolean(b.is_cancelled) || statusLower.includes('cancelled');
+      const dt = parseBookingDate(b.trek_date);
+      const isPast =
+        (dt !== null && dt.getTime() < todayStartMs) ||
+        (hikeNum !== '' && completedHikeNumbers.has(hikeNum));
+
+      if (isCancelled) {
+        if (isPast) {
+          // Past cancelled treks disappear from My Bookings
+          return;
+        } else {
+          // Future cancelled treks appear so users see the cancellation alert
+          active.push(b);
+        }
+      } else if (isPast || statusLower === 'completed') {
         completed++;
       } else {
         active.push(b);

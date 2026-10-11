@@ -120,6 +120,11 @@ export const HikerReviewsSection: React.FC<{
     setVisibleReviewsCount(20);
   }, [reviewFilter, reviewSearch, selectedTrekPill, starRatingFilter]);
 
+  // Auto-fetch latest community reviews on mount
+  useEffect(() => {
+    fetchReviews();
+  }, []);
+
   const fetchReviews = async () => {
     setLoadingReviews(true);
     try {
@@ -219,6 +224,16 @@ export const HikerReviewsSection: React.FC<{
           </span>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          {onLeaveFeedback && (
+            <button
+              type="button"
+              onClick={onLeaveFeedback}
+              className="h-8 sm:h-9 px-3 rounded-lg sm:rounded-xl bg-[#7ABA42] hover:bg-[#6CA838] text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-xs active:scale-95"
+            >
+              <Star className="w-3.5 h-3.5 fill-current" />
+              <span>Write Review</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={fetchReviews}

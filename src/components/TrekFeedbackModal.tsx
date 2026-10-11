@@ -27,7 +27,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   const trekName = trek?.name || booking?.trek_name || 'Himalayan Hike';
   const trekLeader = trek?.leader || 'Trail Coordinator';
   const defaultName = currentUser?.name || booking?.full_name || 'Hiker';
-  const defaultEmail = currentUser?.email || booking?.user_email || booking?.email || 'velinrai.VR@gmail.com';
+  const defaultEmail = currentUser?.email || booking?.user_email || booking?.email || '';
 
   const [hikerName, setHikerName] = useState(defaultName);
   const [teamRating, setTeamRating] = useState<number>(5);
@@ -63,15 +63,26 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
     setSubmitting(true);
     setErrorMessage(null);
 
+    const resolvedTrekName = `${trekName} ${trek?.date ? `(${trek.date})` : ''}`.trim();
+    const resolvedHikeNumber = trek?.hike_number || booking?.hike_number || '';
+
     const payload = {
       name: hikerName || 'Anonymous Hiker',
+      full_name: hikerName || 'Anonymous Hiker',
       email: defaultEmail,
-      recentWalk: `${trekName} ${trek?.date ? `(${trek.date})` : ''}`.trim(),
-      hikeNumber: trek?.hike_number || booking?.hike_number || '',
+      email_address: defaultEmail,
+      trek_name: resolvedTrekName,
+      recentWalk: resolvedTrekName,
+      hike_number: resolvedHikeNumber,
+      hikeNumber: resolvedHikeNumber,
       teamFeedback: teamFeedback.trim(),
+      team_feedback: teamFeedback.trim(),
       teamRating: teamRating,
+      team_rating: teamRating,
       overallFeedback: overallFeedback.trim(),
+      overall_feedback: overallFeedback.trim(),
       overallRating: overallRating,
+      overall_rating: overallRating,
     };
 
     try {

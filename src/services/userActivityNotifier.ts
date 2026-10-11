@@ -114,16 +114,124 @@ export async function logUserActivity(
   }
 }
 
+function parseActivityTimestamp(val?: string): number {
+  if (!val) return 0;
+  const trimmed = String(val).trim();
+  if (/^\d+$/.test(trimmed)) {
+    const num = Number(trimmed);
+    return num > 1e11 ? num : num * 1000;
+  }
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed)
+    ? `${trimmed.replace(' ', 'T')}Z`
+    : trimmed;
+  const t = new Date(normalized).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+function normalizeActivityString(val?: string): string {
+  return (val || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[\s\-_]+/g, ' ');
+}
+
+function areSemanticDuplicates(a: UserActivityItem, b: UserActivityItem): boolean {
+  if (!a || !b) return false;
+  if (a.id === b.id) return true;
+  if (a.type !== b.type) return false;
+
+  // 1. Direct media / link match (e.g. payment voucher or gallery photo URL)
+  if (a.imageUrl && b.imageUrl && a.imageUrl === b.imageUrl) {
+    return true;
+  }
+  if (a.linkUrl && b.linkUrl && a.linkUrl === b.linkUrl) {
+    return true;
+  }
+
+  // 2. Chat / Comment content match (do not merge different comments by the same user)
+  if (a.type === 'mapminers_comment_posted' || a.type === 'gallery_comment_posted') {
+    const textA = normalizeActivityString(String(a.details?.Comment || a.summary || ''));
+    const textB = normalizeActivityString(String(b.details?.Comment || b.summary || ''));
+    if (textA && textB && textA !== textB) {
+      return false;
+    }
+  }
+
+  // 3. Actor matching
+  const actorA = normalizeActivityString(a.actorName);
+  const actorB = normalizeActivityString(b.actorName);
+  const contactA = normalizeActivityString(a.actorContact);
+  const contactB = normalizeActivityString(b.actorContact);
+
+  const actorsMatch =
+    (actorA && actorB && (actorA === actorB || actorA.includes(actorB) || actorB.includes(actorA))) ||
+    (contactA && contactB && (contactA === contactB || contactA.includes(contactB) || contactB.includes(contactA)));
+
+  if (!actorsMatch) return false;
+
+  // 4. Target matching
+  const targetA = normalizeActivityString(a.targetName);
+  const targetB = normalizeActivityString(b.targetName);
+
+  const targetsMatch =
+    (!targetA && !targetB) ||
+    targetA === targetB ||
+    (targetA && targetB && (targetA.includes(targetB) || targetB.includes(targetA)));
+
+  if (!targetsMatch) return false;
+
+  // 5. Time proximity check
+  const timeA = parseActivityTimestamp(a.createdAt);
+  const timeB = parseActivityTimestamp(b.createdAt);
+
+  if (!timeA || !timeB) return true;
+
+  const diffMs = Math.abs(timeA - timeB);
+  if (a.type === 'gallery_photo_uploaded' || a.type === 'mapminers_comment_posted') {
+    return diffMs <= 30 * 60 * 1000; // 30 minutes
+  }
+
+  // Registrations, vouchers, private trek requests, reviews, GPX uploads: 24-hour window
+  return diffMs <= 24 * 60 * 60 * 1000;
+}
+
 /**
  * Aggregates real-time logged user events + live records from D1 endpoints into a single chronological feed.
  */
 export async function fetchAllUserActivities(forceFresh = false): Promise<UserActivityItem[]> {
-  const activityMap = new Map<string, UserActivityItem>();
+  const activities: UserActivityItem[] = [];
 
   const addItem = (item: UserActivityItem) => {
     if (!item || !item.id) return;
-    if (!activityMap.has(item.id)) {
-      activityMap.set(item.id, item);
+
+    const existingIdx = activities.findIndex((ex) => areSemanticDuplicates(ex, item));
+    if (existingIdx === -1) {
+      activities.push(item);
+    } else {
+      const existing = activities[existingIdx];
+      const isItemD1 = item.id.startsWith('d1_');
+      const isExistingD1 = existing.id.startsWith('d1_');
+
+      activities[existingIdx] = {
+        ...existing,
+        ...item,
+        // Prefer authoritative d1_ ID so actions link properly to backend records
+        id: isItemD1 ? item.id : isExistingD1 ? existing.id : item.id,
+        actorName:
+          item.actorName && item.actorName !== 'Hiker' && item.actorName !== 'Verified Hiker'
+            ? item.actorName
+            : existing.actorName,
+        actorContact: item.actorContact || existing.actorContact,
+        targetName: item.targetName || existing.targetName,
+        details: { ...(existing.details || {}), ...(item.details || {}) },
+        linkUrl: item.linkUrl || existing.linkUrl,
+        imageUrl: item.imageUrl || existing.imageUrl,
+        summary:
+          (existing.summary?.length || 0) >= (item.summary?.length || 0)
+            ? existing.summary
+            : item.summary,
+        createdAt: existing.createdAt || item.createdAt,
+      };
     }
   };
 
@@ -364,12 +472,11 @@ export async function fetchAllUserActivities(forceFresh = false): Promise<UserAc
     })(),
   ]);
 
-  const allItems = Array.from(activityMap.values());
-  allItems.sort((a, b) => {
-    const timeA = new Date(a.createdAt || 0).getTime() || 0;
-    const timeB = new Date(b.createdAt || 0).getTime() || 0;
+  activities.sort((a, b) => {
+    const timeA = parseActivityTimestamp(a.createdAt);
+    const timeB = parseActivityTimestamp(b.createdAt);
     return timeB - timeA;
   });
 
-  return allItems;
+  return activities;
 }
