@@ -577,26 +577,6 @@ function MainApp() {
 
     setLoadingBookings(true);
     try {
-      const candidateEmails = new Set<string>();
-      const candidatePhones = new Set<string>();
-
-      if (user?.email) candidateEmails.add(user.email.toLowerCase().trim());
-      if (userEmail) candidateEmails.add(userEmail.toLowerCase().trim());
-      if (userPhone) candidatePhones.add(userPhone.trim());
-
-      try {
-        const savedPhone = localStorage.getItem('wnw_user_phone');
-        if (savedPhone) candidatePhones.add(savedPhone.trim());
-
-        const saved = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.email) candidateEmails.add(parsed.email.toLowerCase().trim());
-          if (parsed.email_address) candidateEmails.add(parsed.email_address.toLowerCase().trim());
-          if (parsed.phone) candidatePhones.add(parsed.phone.trim());
-        }
-      } catch {}
-
       const mergedMap = new Map<string, any>();
 
       // 1. Initial device local cache
@@ -644,29 +624,16 @@ function MainApp() {
         });
       };
 
-      if (candidateEmails.size > 0) {
-        for (const email of candidateEmails) {
-          try {
-            const userRegs = await fetchUserBookings(email, undefined, force);
-            if (Array.isArray(userRegs)) {
-              userRegs.forEach(mergeRemoteBooking);
-            }
-          } catch (cfErr) {
-            console.warn(`Could not fetch D1 bookings for ${email}:`, cfErr);
+      // 2. Fetch from Cloudflare D1 for authenticated user
+      const authenticatedEmail = user?.email?.toLowerCase().trim() || userEmail?.toLowerCase().trim();
+      if (authenticatedEmail) {
+        try {
+          const userRegs = await fetchUserBookings(authenticatedEmail, userPhone?.trim() || undefined, force);
+          if (Array.isArray(userRegs)) {
+            userRegs.forEach(mergeRemoteBooking);
           }
-        }
-      }
-
-      if (candidatePhones.size > 0) {
-        for (const phone of candidatePhones) {
-          try {
-            const userRegs = await fetchUserBookings(undefined, phone, force);
-            if (Array.isArray(userRegs)) {
-              userRegs.forEach(mergeRemoteBooking);
-            }
-          } catch (cfErr) {
-            console.warn(`Could not fetch D1 bookings for phone ${phone}:`, cfErr);
-          }
+        } catch (cfErr) {
+          console.warn(`Could not fetch D1 bookings for ${authenticatedEmail}:`, cfErr);
         }
       }
 

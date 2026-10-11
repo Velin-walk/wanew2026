@@ -126,7 +126,6 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
 
     const cleanUserPhone = effectivePhone.replace(/[^0-9]/g, '');
     const cleanWhatsApp = effectiveWhatsapp.replace(/[^0-9]/g, '');
-    const cleanUserName = effectiveName.toLowerCase().trim();
     const cleanUserEmail = effectiveEmail.toLowerCase().trim();
 
     // 1. Try matching by Phone numbers (Calling phone or WhatsApp - highest precision)
@@ -145,29 +144,7 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
       }
     }
 
-    // 2. Try matching by exact full name
-    if (cleanUserName.length >= 3) {
-      for (let i = 0; i < leaderboardHikers.length; i++) {
-        const h = leaderboardHikers[i];
-        const hName = (h.n || '').toLowerCase().trim();
-        if (hName === cleanUserName) {
-          return { stats: h, rank: i + 1, matchSource: 'Hiker Name' };
-        }
-      }
-    }
-
-    // 3. Try matching by first + last name substrings
-    if (cleanUserName.length >= 4) {
-      for (let i = 0; i < leaderboardHikers.length; i++) {
-        const h = leaderboardHikers[i];
-        const hName = (h.n || '').toLowerCase().trim();
-        if (hName.includes(cleanUserName) || cleanUserName.includes(hName)) {
-          return { stats: h, rank: i + 1, matchSource: 'Name Match' };
-        }
-      }
-    }
-
-    // 4. Try matching by email
+    // 2. Try matching by verified email
     if (cleanUserEmail.length >= 4) {
       for (let i = 0; i < leaderboardHikers.length; i++) {
         const h = leaderboardHikers[i];
@@ -179,7 +156,7 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
     }
 
     return { stats: null, rank: 0, matchSource: null };
-  }, [leaderboardHikers, effectivePhone, effectiveWhatsapp, effectiveName, effectiveEmail]);
+  }, [leaderboardHikers, effectivePhone, effectiveWhatsapp, effectiveEmail]);
 
   // Build the user's personal completed hikes list (Exact Public Profile Logic)
   const userCompletedHikes = useMemo(() => {

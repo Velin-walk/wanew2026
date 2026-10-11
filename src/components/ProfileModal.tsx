@@ -225,7 +225,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
     const cleanUserPhone = (editPhone || userPhone || '').replace(/[^0-9]/g, '');
     const cleanWhatsApp = (editWhatsapp || '').replace(/[^0-9]/g, '');
-    const cleanUserName = (editName || user?.displayName || '').toLowerCase().trim();
 
     // 1. Try matching by Phone numbers (Calling phone or WhatsApp - highest precision)
     if (cleanUserPhone.length >= 7 || cleanWhatsApp.length >= 7) {
@@ -243,30 +242,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       }
     }
 
-    // 2. Try matching by exact full name
-    if (cleanUserName.length >= 3) {
+    // 2. Try matching by verified email address (secure fallback for authenticated Google users)
+    const cleanUserEmail = (user?.email || '').toLowerCase().trim();
+    if (cleanUserEmail.length >= 4) {
       for (let i = 0; i < leaderboardHikers.length; i++) {
         const h = leaderboardHikers[i];
-        const hName = (h.n || '').toLowerCase().trim();
-        if (hName === cleanUserName) {
-          return { stats: h, rank: i + 1, matchSource: 'Hiker Name' };
-        }
-      }
-    }
-
-    // 3. Try matching by first + last name substrings
-    if (cleanUserName.length >= 4) {
-      for (let i = 0; i < leaderboardHikers.length; i++) {
-        const h = leaderboardHikers[i];
-        const hName = (h.n || '').toLowerCase().trim();
-        if (hName.includes(cleanUserName) || cleanUserName.includes(hName)) {
-          return { stats: h, rank: i + 1, matchSource: 'Name Match' };
+        const hEmail = (h.e || '').toLowerCase().trim();
+        if (hEmail && hEmail === cleanUserEmail) {
+          return { stats: h, rank: i + 1, matchSource: 'Email Address' };
         }
       }
     }
 
     return { stats: null, rank: 0, matchSource: null };
-  }, [leaderboardHikers, editPhone, editWhatsapp, userPhone, editName, user]);
+  }, [leaderboardHikers, editPhone, editWhatsapp, userPhone, user]);
 
   // Build the user's personal completed hikes list
   // Combines verified hikes from Google Sheet with app-registered completed bookings

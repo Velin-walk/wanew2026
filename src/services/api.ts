@@ -109,7 +109,7 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
     directUrl = `${directUrl}${separator}fresh=1&_t=${Date.now()}`;
   }
 
-  // Dynamically attach authenticated user's email if logged in for write actions (non-GET)
+  // Dynamically attach authenticated user's credentials (Firebase ID token and email)
   const headers = new Headers(options?.headers);
   try {
     let userEmail = headers.get("X-Admin-Email") || auth.currentUser?.email;
@@ -131,8 +131,18 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
         }
       } catch (_) {}
     }
-    if (userEmail && method !== "GET") {
+    if (userEmail) {
       headers.set("X-Admin-Email", userEmail);
+    }
+
+    if (!headers.has("Authorization")) {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const token = await currentUser.getIdToken();
+        if (token) {
+          headers.set("Authorization", `Bearer ${token}`);
+        }
+      }
     }
   } catch (_) {}
 
@@ -612,24 +622,7 @@ export async function fetchUserBookings(email?: string, phone?: string, forceFre
       const items = Array.isArray(json) ? json : json?.data;
       if (Array.isArray(items)) return items;
     }
-
-    // Fallback if worker email query returned 500 (e.g. before worker.js is redeployed)
-    const fallbackRes = await apiFetch('registrations?limit=300', {
-      forceFresh,
-      cacheTtl: 60 * 1000,
-    });
-    if (!fallbackRes.ok) return [];
-    const fallbackJson = await fallbackRes.json();
-    const allItems = Array.isArray(fallbackJson) ? fallbackJson : fallbackJson?.data;
-    if (!Array.isArray(allItems)) return [];
-
-    return allItems.filter((r: any) => {
-      const rowEmail = String(r.email_address || r.email || r.user_email || '').trim().toLowerCase();
-      const rowPhone = String(r.phone || r.whatsapp_number || r.whatsapp || '').replace(/[^0-9]/g, '');
-      const emailMatch = cleanEmail && rowEmail === cleanEmail;
-      const phoneMatch = cleanPhone && rowPhone && (rowPhone.includes(cleanPhone) || cleanPhone.includes(rowPhone));
-      return Boolean(emailMatch || phoneMatch);
-    });
+    return [];
   } catch (e) {
     console.warn(`Failed to fetch user bookings for ${email}/${phone}:`, e);
     return [];

@@ -28,6 +28,113 @@ function errorResponse(errorMsg, status = 500) {
   return jsonResponse({ success: false, error: errorMsg }, status);
 }
 
+const ADMIN_EMAILS = [
+  'velinrai.vr@gmail.com',
+  'thingbiraj77@gmail.com',
+  'business.seekscape@gmail.com',
+  'salinatmg.npl@gmail.com',
+  'wanewasalina@gmail.com',
+  'sundargurung110@gmail.com',
+  'walknepalwalk@gmail.com',
+];
+
+let cachedGoogleJwks = null;
+let googleJwksExpiresAt = 0;
+
+function base64UrlToBytes(str) {
+  let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+async function getGoogleJwks() {
+  const now = Date.now();
+  if (cachedGoogleJwks && now < googleJwksExpiresAt) {
+    return cachedGoogleJwks;
+  }
+  try {
+    const res = await fetch('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.keys) && data.keys.length > 0) {
+        cachedGoogleJwks = data.keys;
+        googleJwksExpiresAt = now + 6 * 60 * 60 * 1000; // Cache keys for 6 hours
+        return cachedGoogleJwks;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch Google JWKS:', err);
+  }
+  return cachedGoogleJwks || [];
+}
+
+async function verifyFirebaseToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.trim().split('.');
+  if (parts.length !== 3) return null;
+
+  try {
+    const [headerB64, payloadB64, sigB64] = parts;
+    const headerStr = new TextDecoder().decode(base64UrlToBytes(headerB64));
+    const payloadStr = new TextDecoder().decode(base64UrlToBytes(payloadB64));
+    const header = JSON.parse(headerStr);
+    const payload = JSON.parse(payloadStr);
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (!payload.exp || payload.exp < nowSec) {
+      return null;
+    }
+    const expectedProjectId = 'walk-nepal-walk';
+    if (payload.aud !== expectedProjectId) {
+      return null;
+    }
+    if (payload.iss !== `https://securetoken.google.com/${expectedProjectId}`) {
+      return null;
+    }
+
+    const jwks = await getGoogleJwks();
+    const matchingKey = jwks.find((k) => k.kid === header.kid);
+    if (!matchingKey) {
+      return null;
+    }
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'jwk',
+      matchingKey,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+
+    const signedData = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+    const sigBytes = base64UrlToBytes(sigB64);
+    const isValid = await crypto.subtle.verify(
+      'RSASSA-PKCS1-v1_5',
+      cryptoKey,
+      sigBytes,
+      signedData
+    );
+
+    if (!isValid) {
+      return null;
+    }
+
+    const email = (payload.email || '').trim().toLowerCase();
+    const isAdmin = Boolean(email && ADMIN_EMAILS.includes(email));
+
+    return {
+      valid: true,
+      email,
+      uid: payload.user_id || payload.sub,
+      isAdmin,
+    };
+  } catch (err) {
+    console.warn('Error verifying Firebase token in worker:', err);
+    return null;
+  }
+}
+
+
 function formatDisplayName(fullName, rankTitle) {
   const rawName = String(fullName || 'Hiker').trim();
   const parts = rawName.split(/\s+/).filter(Boolean);
@@ -173,9 +280,12 @@ async function purgeEdgeCache(urlList, ctx) {
   } catch (_) {}
 }
 
+const memLogsCount = new Map();
+
 async function logAdminActivity(env, request, actionType, description, metadata = {}) {
   if (!env || !env.DB) return;
   try {
+    memLogsCount.clear();
     const rawEmail = request.headers.get('X-Admin-Email') || request.headers.get('x-admin-email');
     const adminEmail = (rawEmail || 'walknepalwalk@gmail.com').trim().toLowerCase();
     await env.DB.prepare(`
@@ -569,9 +679,149 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
         recentJson
       ).run();
     }
+    // Refresh snapshot in background after participant summary updates
+    rebuildTreksSnapshot(env).catch(() => {});
   } catch (err) {
     console.warn('Notice updating trek_participant_summary table:', err);
   }
+}
+
+const TREKS_SNAP_KEY = 'snapshots/treks_list.json';
+let memTreksSnap = null;
+let memTreksSnapAt = 0;
+
+async function rebuildTreksSnapshot(env) {
+  if (!env || !env.DB) return null;
+  let results = [];
+  try {
+    const { results: joined } = await env.DB.prepare(`
+      SELECT 
+        t.hike_number, t.id, t.title, t.category, t.status, t.cover_image_url,
+        t.hike_date, t.min_price, t.max_price, t.currency, t.meeting_point,
+        t.meeting_time, t.expected_duration, t.difficulty, t.approx_distance,
+        t.elevation_range, t.elevation_gross, t.ending_point, t.team_leader,
+        t.whatsapp_link, t.itinerary_link, t.faq_link, t.max_capacity,
+        t.author_email, t.created_at, t.updated_at, t.data_json,
+        e.execution_status,
+        e.is_cancelled as exec_is_cancelled,
+        e.cancellation_reason as exec_cancellation_reason,
+        e.capacity as exec_capacity,
+        e.assigned_leader as exec_assigned_leader,
+        s.total_pax as agg_total_pax,
+        s.male_pax as agg_male_pax,
+        s.female_pax as agg_female_pax,
+        s.recent_participants as agg_recent_json
+      FROM treks t
+      LEFT JOIN event_executions e ON t.hike_number = e.hike_number
+      LEFT JOIN trek_participant_summary s ON t.hike_number = s.hike_number
+      ORDER BY t.created_at DESC
+    `).all();
+    results = joined || [];
+  } catch (joinErr) {
+    console.warn('Failed to join treks with summary table in rebuildTreksSnapshot:', joinErr);
+    try {
+      const { results: rawTreks } = await env.DB.prepare(
+        'SELECT * FROM treks ORDER BY created_at DESC'
+      ).all();
+      results = rawTreks || [];
+    } catch (_) {
+      results = [];
+    }
+  }
+
+  const data = (results || []).map((row) => {
+    let parsedData = {};
+    try {
+      const rawData = row.data_json || row.data || '{}';
+      parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      cleanLightweightData(parsedData);
+    } catch (e) {}
+
+    if (row.exec_is_cancelled !== undefined) {
+      parsedData.is_cancelled = row.exec_is_cancelled === 1;
+    }
+    if (row.exec_cancellation_reason !== undefined) {
+      parsedData.cancellation_reason = row.exec_cancellation_reason;
+    }
+    if (row.execution_status !== undefined) {
+      parsedData.execution_status = row.execution_status;
+    }
+    if (row.exec_capacity !== undefined) {
+      parsedData.maxCapacity = row.exec_capacity;
+    }
+    if (row.exec_assigned_leader !== undefined) {
+      parsedData.teamLeader = row.exec_assigned_leader;
+    }
+
+    let recentParticipants = [];
+    try {
+      if (row.agg_recent_json) {
+        recentParticipants = typeof row.agg_recent_json === 'string'
+          ? JSON.parse(row.agg_recent_json)
+          : row.agg_recent_json;
+      }
+    } catch (_) {}
+
+    const totalPax = Number(row.agg_total_pax) || 0;
+    const malePax = Number(row.agg_male_pax) || 0;
+    const femalePax = Number(row.agg_female_pax) || 0;
+
+    return {
+      ...row,
+      max_capacity: row.exec_capacity !== undefined ? row.exec_capacity : row.max_capacity,
+      team_leader: row.exec_assigned_leader !== undefined ? row.exec_assigned_leader : row.team_leader,
+      hikeNumber: row.hike_number,
+      hike_number: row.hike_number,
+      participants: totalPax,
+      registered_pax: totalPax,
+      participants_by_gender: {
+        total: totalPax,
+        male: malePax,
+        female: femalePax,
+      },
+      recent_participants: recentParticipants,
+      data: parsedData,
+    };
+  });
+
+  const payload = JSON.stringify({ success: true, data });
+  memTreksSnap = payload;
+  memTreksSnapAt = Date.now();
+
+  if (env.BUCKET) {
+    try {
+      await env.BUCKET.put(TREKS_SNAP_KEY, payload, {
+        httpMetadata: { contentType: 'application/json' }
+      });
+    } catch (r2Err) {
+      console.warn('Could not store treks snapshot in R2:', r2Err);
+    }
+  }
+
+  return payload;
+}
+
+async function getTreksSnapshot(env, forceFresh = false) {
+  const now = Date.now();
+  if (!forceFresh && memTreksSnap && (now - memTreksSnapAt < 30000)) {
+    return memTreksSnap;
+  }
+
+  if (!forceFresh && env.BUCKET) {
+    try {
+      const obj = await env.BUCKET.get(TREKS_SNAP_KEY);
+      if (obj) {
+        const text = await obj.text();
+        if (text) {
+          memTreksSnap = text;
+          memTreksSnapAt = now;
+          return text;
+        }
+      }
+    } catch (_) {}
+  }
+
+  return await rebuildTreksSnapshot(env);
 }
 
 let indexesEnsured = false;
@@ -585,6 +835,14 @@ function ensureDbIndexes(env, ctx) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_community_trails_uploaded_at ON community_trails (uploaded_at DESC)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_trek_photos_uploaded_at ON trek_photos (uploaded_at DESC)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_trek_photos_trek_id ON trek_photos (trek_id)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_logs_created ON admin_activity_logs (created_at DESC, id DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_logs_action ON admin_activity_logs (action_type, created_at DESC, id DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_logs_email ON admin_activity_logs (admin_email, created_at DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_reg_hike ON registrations (hike_number)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_reg_email ON registrations (email_address)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_reg_ts ON registrations (timestamp DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_regid ON bookings_roster (registration_id)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_hike ON bookings_roster (hike_number)'),
   ]).catch(() => {});
   if (ctx && ctx.waitUntil) {
     ctx.waitUntil(p);
@@ -856,132 +1114,20 @@ export default {
 
       // ===== TREKS & ADMIN ITINERARIES ENDPOINTS =====
       
-      // GET /treks or GET /admin/itineraries - List all treks with server-side anonymous participant aggregation
+      // GET /treks or GET /admin/itineraries - List all treks from precomputed snapshot (0 D1 row reads per request)
       if (method === 'GET' && (path === '/treks' || path === '/admin/itineraries')) {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
 
-        const isAdminPath = path.startsWith('/admin');
-        const isFresh = isAdminPath ||
-          url.searchParams.has('fresh') ||
-          url.searchParams.has('forceFresh') ||
-          url.searchParams.has('_t') ||
-          request.headers.get('Cache-Control')?.includes('no-cache') ||
-          request.headers.has('X-Admin-Email');
-        
-        // 1. Check Cloudflare Global Edge Cache first for public cached requests
-        if (!isFresh) {
-          const cached = await matchEdgeCache(request);
-          if (cached) {
-            return cached;
-          }
-        }
+        const isForceFresh = url.searchParams.has('forceFresh');
+        const snap = await getTreksSnapshot(env, isForceFresh);
 
-        // Seamless background migration: automatically transfers external images to R2 with zero manual commands
-        if (ctx && ctx.waitUntil) {
-          ctx.waitUntil(autoMigrateTrekImagesToR2(env, urlOrigin, ctx));
-        } else {
-          autoMigrateTrekImagesToR2(env, urlOrigin, ctx).catch(() => {});
-        }
-        
-        let results = [];
-        try {
-          const { results: joined } = await env.DB.prepare(`
-            SELECT 
-              t.*,
-              e.execution_status,
-              e.is_cancelled as exec_is_cancelled,
-              e.cancellation_reason as exec_cancellation_reason,
-              e.capacity as exec_capacity,
-              e.assigned_leader as exec_assigned_leader,
-              s.total_pax as agg_total_pax,
-              s.male_pax as agg_male_pax,
-              s.female_pax as agg_female_pax,
-              s.recent_participants as agg_recent_json
-            FROM treks t
-            LEFT JOIN event_executions e ON t.hike_number = e.hike_number
-            LEFT JOIN trek_participant_summary s ON t.hike_number = s.hike_number
-            ORDER BY t.created_at DESC
-          `).all();
-          results = joined;
-        } catch (joinErr) {
-          console.warn('Failed to join treks with summary table:', joinErr);
-          try {
-            const { results: rawTreks } = await env.DB.prepare(
-              'SELECT * FROM treks ORDER BY created_at DESC'
-            ).all();
-            results = rawTreks;
-          } catch (_) {
-            results = [];
+        return new Response(snap, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=30, s-maxage=30'
           }
-        }
-
-        const data = (results || []).map((row) => {
-          let parsedData = {};
-          try {
-            const rawData = row.data_json || row.data || '{}';
-            parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-            cleanLightweightData(parsedData);
-          } catch (e) {}
-
-          // Merge event_executions values into parsedData
-          if (row.exec_is_cancelled !== undefined) {
-            parsedData.is_cancelled = row.exec_is_cancelled === 1;
-          }
-          if (row.exec_cancellation_reason !== undefined) {
-            parsedData.cancellation_reason = row.exec_cancellation_reason;
-          }
-          if (row.execution_status !== undefined) {
-            parsedData.execution_status = row.execution_status;
-          }
-          if (row.exec_capacity !== undefined) {
-            parsedData.maxCapacity = row.exec_capacity;
-          }
-          if (row.exec_assigned_leader !== undefined) {
-            parsedData.teamLeader = row.exec_assigned_leader;
-          }
-
-          let recentParticipants = [];
-          try {
-            if (row.agg_recent_json) {
-              recentParticipants = typeof row.agg_recent_json === 'string'
-                ? JSON.parse(row.agg_recent_json)
-                : row.agg_recent_json;
-            }
-          } catch (_) {}
-
-          const totalPax = Number(row.agg_total_pax) || 0;
-          const malePax = Number(row.agg_male_pax) || 0;
-          const femalePax = Number(row.agg_female_pax) || 0;
-
-          return {
-            ...row,
-            max_capacity: row.exec_capacity !== undefined ? row.exec_capacity : row.max_capacity,
-            team_leader: row.exec_assigned_leader !== undefined ? row.exec_assigned_leader : row.team_leader,
-            hikeNumber: row.hike_number,
-            hike_number: row.hike_number,
-            participants: totalPax,
-            registered_pax: totalPax,
-            participants_by_gender: {
-              total: totalPax,
-              male: malePax,
-              female: femalePax,
-            },
-            recent_participants: recentParticipants,
-            data: parsedData,
-          };
         });
-
-        const resp = jsonResponse({ success: true, data }, 200, {
-          'Cache-Control': isAdminPath || isFresh ? 'no-cache, no-store, must-revalidate' : 'public, max-age=300, s-maxage=300',
-          'X-Edge-Cache': 'MISS'
-        });
-
-        // Store in Cloudflare Edge Cache asynchronously only for public cached GET requests
-        if (!isAdminPath && !isFresh) {
-          await putEdgeCache(request, resp, ctx, 300);
-        }
-
-        return resp;
       }
 
       // GET /treks/:id or GET /admin/itineraries/:id - Get single trek
@@ -1257,6 +1403,13 @@ export default {
           `${url.origin}/admin/itineraries/${row.hike_number}`
         ], ctx);
 
+        // Rebuild treks snapshot in background
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
+        }
+
         return jsonResponse({
           success: true,
           message: `Trek status updated to ${newStatus}`,
@@ -1435,6 +1588,13 @@ export default {
           capacity: maxCapacity
         });
 
+        // Rebuild treks snapshot in background
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
+        }
+
         return jsonResponse({
           success: true,
           message: 'Event Execution updated in D1 successfully',
@@ -1551,6 +1711,14 @@ export default {
         }
 
         cachedTrekAggMap = null; // Invalidate cache so new treks appear instantly
+
+        // Rebuild treks snapshot in background
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
+        }
+
         return jsonResponse({
           success: true,
           message: `Successfully processed ${totalInserted} treks into Cloudflare D1`,
@@ -1717,6 +1885,13 @@ export default {
           `${url.origin}/admin/itineraries/${hikeNum}`
         ], ctx);
 
+        // Rebuild treks snapshot in background
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
+        }
+
         return jsonResponse({
           success: true,
           message: 'Trek synced to Cloudflare D1 successfully',
@@ -1747,14 +1922,36 @@ export default {
           `${url.origin}/admin/itineraries/${idOrNum}`
         ], ctx);
 
+        // Rebuild treks snapshot in background
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
+        }
+
         return jsonResponse({ success: true, message: `Deleted trek ${idOrNum}` });
       }
 
       // ===== REGISTRATIONS ENDPOINTS =====
 
-      // GET /registrations - List registrations (Optimized Single LEFT JOIN query)
+      // GET /registrations - List registrations (Protected against IDOR & Unauthenticated Access)
       if (method === 'GET' && path === '/registrations') {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
+
+        // Authenticate request via Firebase Bearer token
+        const authHeader = request.headers.get('Authorization') || request.headers.get('authorization') || '';
+        const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+        const verifiedAuth = bearerToken ? await verifyFirebaseToken(bearerToken) : null;
+
+        // Security check: Unauthenticated callers cannot read registrations
+        if (!verifiedAuth) {
+          return errorResponse('Authentication required. Please sign in to view bookings.', 401);
+        }
+
+        const isAdmin = Boolean(verifiedAuth.isAdmin);
+        const authEmail = verifiedAuth.email;
+
         const email = url.searchParams.get('email');
         const phone = url.searchParams.get('phone');
         const hikeNum = url.searchParams.get('hike_number');
@@ -1762,6 +1959,15 @@ export default {
         const offsetParam = url.searchParams.get('offset');
         const limit = limitParam ? parseInt(limitParam, 10) : 0;
         const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+
+        // Security check for non-admin users:
+        // Regular hikers CANNOT perform unfiltered queries and CANNOT query other users' data
+        if (!isAdmin) {
+          const requestedEmail = (email || '').trim().toLowerCase();
+          if (!requestedEmail || requestedEmail !== authEmail) {
+            return errorResponse('Forbidden: Hikers can only access their own registrations.', 403);
+          }
+        }
 
         let regSql = `
           SELECT 
@@ -1777,22 +1983,37 @@ export default {
           LEFT JOIN bookings_roster b ON b.registration_id = CAST(r.id AS TEXT)
         `;
         let regParams = [];
-        if (email && phone) {
-          const cleanEmail = email.trim().toLowerCase();
-          const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
-          regSql += ' WHERE LOWER(r.email_address) = ? OR (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
-          regParams.push(cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
-        } else if (email) {
-          const cleanEmail = email.trim().toLowerCase();
-          regSql += ' WHERE LOWER(r.email_address) = ?';
-          regParams.push(cleanEmail);
-        } else if (phone) {
-          const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
-          regSql += ' WHERE (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
-          regParams.push(`%${cleanPhone}%`, `%${cleanPhone}%`);
-        } else if (hikeNum) {
-          regSql += ' WHERE r.hike_number = ?';
-          regParams.push(hikeNum.trim());
+
+        if (!isAdmin) {
+          // Strictly lock regular hikers to their own verified email
+          const cleanEmail = authEmail;
+          if (phone) {
+            const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
+            regSql += ' WHERE (LOWER(r.email_address) = ? OR r.email_address = ?) AND (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
+            regParams.push(cleanEmail, cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
+          } else {
+            regSql += ' WHERE (LOWER(r.email_address) = ? OR r.email_address = ?)';
+            regParams.push(cleanEmail, cleanEmail);
+          }
+        } else {
+          // Admin access: support all administrative filters
+          if (email && phone) {
+            const cleanEmail = email.trim().toLowerCase();
+            const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
+            regSql += ' WHERE LOWER(r.email_address) = ? OR (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
+            regParams.push(cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
+          } else if (email) {
+            const cleanEmail = email.trim().toLowerCase();
+            regSql += ' WHERE (r.email_address = ? OR LOWER(r.email_address) = ?)';
+            regParams.push(cleanEmail, cleanEmail);
+          } else if (phone) {
+            const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
+            regSql += ' WHERE (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
+            regParams.push(`%${cleanPhone}%`, `%${cleanPhone}%`);
+          } else if (hikeNum) {
+            regSql += ' WHERE r.hike_number = ?';
+            regParams.push(hikeNum.trim());
+          }
         }
         regSql += ' ORDER BY r.timestamp DESC';
 
@@ -1822,10 +2043,9 @@ export default {
           pickup_point: r.roster_pickup_point || r.pickup_point || '',
         }));
 
-        const responseHeaders = {};
-        if (hikeNum) {
-          responseHeaders['Cache-Control'] = 'public, max-age=30, s-maxage=60';
-        }
+        const responseHeaders = {
+          'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+        };
 
         return jsonResponse({ success: true, data: mapped }, 200, responseHeaders);
       }
@@ -2343,13 +2563,24 @@ export default {
         const selectParams = [...params, limit, offset];
 
         try {
-          const batchResults = await env.DB.batch([
-            env.DB.prepare(countQuery).bind(...countParams),
-            env.DB.prepare(query).bind(...selectParams)
-          ]);
+          const countCacheKey = `${action || ''}:${searchEmail || ''}`;
+          const cachedCount = memLogsCount.get(countCacheKey);
+          let total = 0;
+          let logs = [];
 
-          const total = batchResults[0]?.results?.[0]?.total || 0;
-          const logs = batchResults[1]?.results || [];
+          if (cachedCount && (Date.now() - cachedCount.timestamp < 60000)) {
+            total = cachedCount.total;
+            const { results } = await env.DB.prepare(query).bind(...selectParams).all();
+            logs = results || [];
+          } else {
+            const batchResults = await env.DB.batch([
+              env.DB.prepare(countQuery).bind(...countParams),
+              env.DB.prepare(query).bind(...selectParams)
+            ]);
+            total = batchResults[0]?.results?.[0]?.total || 0;
+            logs = batchResults[1]?.results || [];
+            memLogsCount.set(countCacheKey, { total, timestamp: Date.now() });
+          }
 
           return jsonResponse({
             success: true,

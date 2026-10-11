@@ -237,14 +237,21 @@ CREATE TABLE IF NOT EXISTS user_activities (
 -- Indexes for Ultra-Low Row Reads & High-Speed Querying
 CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_email ON admin_activity_logs (admin_email);
+CREATE INDEX IF NOT EXISTS idx_logs_created ON admin_activity_logs (created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_logs_action ON admin_activity_logs (action_type, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_logs_email ON admin_activity_logs (admin_email, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_photo_comments_photo_id ON photo_comments (photo_id);
 CREATE INDEX IF NOT EXISTS idx_regs_hike_number ON registrations (hike_number);
+CREATE INDEX IF NOT EXISTS idx_reg_hike ON registrations (hike_number);
 CREATE INDEX IF NOT EXISTS idx_regs_email ON registrations (email_address);
 CREATE INDEX IF NOT EXISTS idx_regs_email_lower ON registrations (LOWER(email_address));
 CREATE INDEX IF NOT EXISTS idx_regs_user_email_lower ON registrations (LOWER(user_email));
 CREATE INDEX IF NOT EXISTS idx_regs_timestamp ON registrations (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_reg_ts ON registrations (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_roster_reg_id ON bookings_roster (registration_id);
+CREATE INDEX IF NOT EXISTS idx_roster_regid ON bookings_roster (registration_id);
 CREATE INDEX IF NOT EXISTS idx_roster_hike_number ON bookings_roster (hike_number);
+CREATE INDEX IF NOT EXISTS idx_roster_hike ON bookings_roster (hike_number);
 CREATE INDEX IF NOT EXISTS idx_roster_email_lower ON bookings_roster (LOWER(email));
 CREATE INDEX IF NOT EXISTS idx_treks_created_at ON treks (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_treks_hike_number ON treks (hike_number);
