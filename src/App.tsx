@@ -943,23 +943,43 @@ function MainApp() {
     const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const targetDateNorm = norm(formData.trek_date);
 
+    // Date matching helper to ensure user-chosen date strictly determines the trek
+    const datesMatchLocal = (d1?: string, d2?: string): boolean => {
+      if (!d1 || !d2) return false;
+      const s1 = norm(d1);
+      const s2 = norm(d2);
+      if (s1 === s2) return true;
+      if (s1.includes(s2) || s2.includes(s1)) return true;
+      const m1 = String(d1).toLowerCase().match(/(\d{1,2}).*?([a-z]{3,9})/);
+      const m2 = String(d2).toLowerCase().match(/(\d{1,2}).*?([a-z]{3,9})/);
+      if (m1 && m2) {
+        return m1[1] === m2[1] && m1[2].slice(0, 3) === m2[2].slice(0, 3);
+      }
+      return false;
+    };
+
     // 1. Exact ID + Date match first
-    // 2. Exact ID match
-    // 3. Name/HikeNumber + Date match
-    // 4. Fallback to selectedTrekForRegister
+    // 2. Name/HikeNumber + Date match (User-selected date takes precedence over stale ID)
+    // 3. Any trek matching the chosen date
+    // 4. Fallback to Exact ID match
+    // 5. Fallback to selectedTrekForRegister
+    // 6. Fallback to Name/HikeNumber without date
     const trek =
       (targetDateNorm
-        ? treks.find((t) => t.id === formData.trek_id && norm(t.date) === targetDateNorm)
+        ? treks.find((t) => t.id === formData.trek_id && (norm(t.date) === targetDateNorm || datesMatchLocal(t.date, formData.trek_date)))
         : undefined) ||
-      treks.find((t) => t.id === formData.trek_id) ||
       (targetDateNorm
         ? treks.find(
             (t) =>
               (t.hike_number === formData.trek_id ||
                 (t.name && formData.trek_name && norm(t.name) === norm(formData.trek_name))) &&
-              norm(t.date) === targetDateNorm
+              (norm(t.date) === targetDateNorm || datesMatchLocal(t.date, formData.trek_date))
           )
         : undefined) ||
+      (targetDateNorm
+        ? treks.find((t) => datesMatchLocal(t.date, formData.trek_date) && (!formData.trek_name || norm(t.name) === norm(formData.trek_name)))
+        : undefined) ||
+      treks.find((t) => t.id === formData.trek_id) ||
       (selectedTrekForRegister &&
       (selectedTrekForRegister.id === formData.trek_id ||
         norm(selectedTrekForRegister.name) === norm(formData.trek_name))

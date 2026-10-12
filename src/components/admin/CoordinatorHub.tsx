@@ -25,7 +25,7 @@ import {
   Eye
 } from 'lucide-react';
 import { Trek } from '../../types';
-import { AdminRegistration } from './BookingsManager';
+import { AdminRegistration, doesRegistrationMatchTrek } from './BookingsManager';
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { fetchLeaderboardData } from '../../services/api';
 import { HikerStats } from '../../types/leaderboard';
@@ -121,33 +121,6 @@ const getTrekNameForHike = (hikeNum: string, fallbackName?: string): string => {
   return fallbackName && !isGenericTitle(fallbackName) ? fallbackName : 'Hike Event';
 };
 
-const doesRegistrationMatchTrek = (r: AdminRegistration, trek: Trek): boolean => {
-  if (!r || !trek) return false;
-
-  const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-  const tId = (trek.id || '').toLowerCase().trim();
-  const tHikeNum = (trek.hike_number || '').toLowerCase().trim();
-  const tDigits = extractDigits(trek.hike_number) || extractDigits(trek.id);
-
-  const rTrekId = (r.trek_id || '').toLowerCase().trim();
-  const rHikeNum = (r.hike_number || '').toLowerCase().trim();
-  const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
-
-  if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
-  if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
-  if (tDigits && rDigits) return tDigits === rDigits;
-
-  const tNameNorm = normStr(trek.name);
-  const rNameNorm = normStr(r.trek_name);
-  if (tNameNorm && rNameNorm && !isGenericTitle(trek.name) && !isGenericTitle(r.trek_name)) {
-    if (rNameNorm === tNameNorm || rNameNorm.includes(tNameNorm) || tNameNorm.includes(rNameNorm)) {
-      return true;
-    }
-  }
-
-  return false;
-};
 
 export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   treks,

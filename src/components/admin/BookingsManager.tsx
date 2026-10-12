@@ -84,6 +84,103 @@ interface BookingsManagerProps {
   initialTrekFilter?: string;
 }
 
+const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const extractDigits = (val?: string): string => {
+  if (!val) return '';
+  const s = String(val).trim();
+  if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
+  const m = s.match(/\d{1,4}/);
+  return m ? m[0] : '';
+};
+
+const parseDayMonth = (d?: string): { day: number; month: string } | null => {
+  if (!d) return null;
+  const str = String(d).toLowerCase().trim();
+  const m1 = str.match(/(\d{1,2})\s*(?:st|nd|rd|th)?\s+([a-z]{3,9})/);
+  if (m1) return { day: parseInt(m1[1], 10), month: m1[2].slice(0, 3) };
+  const m2 = str.match(/([a-z]{3,9})\s+(\d{1,2})/);
+  if (m2) return { day: parseInt(m2[2], 10), month: m2[1].slice(0, 3) };
+  const mIso = str.match(/\d{4}-(\d{2})-(\d{2})/);
+  if (mIso) {
+    const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const mIdx = parseInt(mIso[1], 10) - 1;
+    return { day: parseInt(mIso[2], 10), month: monthNames[mIdx] || '' };
+  }
+  return null;
+};
+
+const datesMatch = (d1?: string, d2?: string): boolean => {
+  if (!d1 || !d2) return false;
+  const p1 = parseDayMonth(d1);
+  const p2 = parseDayMonth(d2);
+  if (p1 && p2) {
+    return p1.day === p2.day && p1.month === p2.month;
+  }
+  const s1 = normStr(d1);
+  const s2 = normStr(d2);
+  return s1 === s2 || (s1.length > 5 && s2.length > 5 && (s1.includes(s2) || s2.includes(s1)));
+};
+
+const datesConflict = (d1?: string, d2?: string): boolean => {
+  if (!d1 || !d2) return false;
+  const p1 = parseDayMonth(d1);
+  const p2 = parseDayMonth(d2);
+  if (p1 && p2) {
+    return p1.day !== p2.day || p1.month !== p2.month;
+  }
+  return false;
+};
+
+export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boolean => {
+  if (!t || !r) return false;
+
+  const tDate = t.date || (t.data as any)?.hikeDate || (t.data as any)?.date;
+  const rDate = r.trek_date || (r as any).date;
+
+  // 1. Strict date conflict check: if both have explicit dates and they point to different days/months, NEVER match
+  if (datesConflict(tDate, rDate)) {
+    return false;
+  }
+
+  const tNameNorm = normStr(t.name);
+  const rNameNorm = normStr(r.trek_name);
+
+  // 2. Exact date match when names match or one is generic
+  if (datesMatch(tDate, rDate)) {
+    if (!tNameNorm || !rNameNorm || tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm)) {
+      return true;
+    }
+  }
+
+  const tId = (t.id || '').toLowerCase().trim();
+  const tHikeNum = (t.hike_number || '').toLowerCase().trim();
+  const tDigits = extractDigits(t.hike_number) || extractDigits(t.id);
+
+  const rTrekId = (r.trek_id || '').toLowerCase().trim();
+  const rHikeNum = (r.hike_number || '').toLowerCase().trim();
+  const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
+
+  // 3. Exact ID / hike number match (only if dates did not conflict)
+  if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
+  if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
+
+  // 4. Digits match (e.g. 304 === 304)
+  if (tDigits && rDigits) {
+    return tDigits === rDigits;
+  }
+
+  // 5. Fallback name match ONLY if neither side has conflicting dates
+  if (tNameNorm && rNameNorm && tNameNorm === rNameNorm) {
+    if (tDate || rDate) {
+      return datesMatch(tDate, rDate);
+    }
+    return true;
+  }
+
+  return false;
+};
+
 export const BookingsManager: React.FC<BookingsManagerProps> = ({
   registrations,
   treks,
@@ -238,41 +335,13 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
   // Pre-calculate participant counts for top strip cards to filter out 0-participant cards by default
   const treksWithParticipantCounts = useMemo(() => {
-    const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const extractDigits = (val?: string): string => {
-      if (!val) return '';
-      const s = String(val).trim();
-      if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
-      const m = s.match(/^\d{1,4}$/) || s.match(/^hike-(\d{1,4})$/i) || s.match(/^#?(\d{1,4})$/);
-      return m ? m[1] || m[0] : '';
-    };
-
     return upcomingTreks.map((t) => {
-      const tDateNorm = normStr(t.date);
-      const tNameNorm = normStr(t.name);
-      const tDigits = extractDigits(t.hike_number) || extractDigits(t.id);
-
       const matchedActiveRegs = registrations.filter((r) => {
         const effStatus = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
         if (effStatus.includes('cancelled') || effStatus === 'waitlisted') {
           return false;
         }
-
-        const tId = (t.id || '').toLowerCase().trim();
-        const tHikeNum = (t.hike_number || '').toLowerCase().trim();
-        const rTrekId = (r.trek_id || '').toLowerCase().trim();
-        const rHikeNum = (r.hike_number || '').toLowerCase().trim();
-        const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
-
-        if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
-        if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
-        if (tDigits && rDigits) return tDigits === rDigits;
-
-        const rNameNorm = normStr(r.trek_name);
-        if (tNameNorm && rNameNorm && rNameNorm === tNameNorm) {
-          return true;
-        }
-        return false;
+        return doesRegistrationMatchTrek(r, t);
       });
 
       const tRegsCount = matchedActiveRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
@@ -514,38 +583,6 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       reg.hike_number?.toLowerCase().includes(q) ||
       reg.person_remarks?.toLowerCase().includes(q);
 
-    const extractDigits = (val?: string): string => {
-      if (!val) return '';
-      const s = String(val).trim();
-      if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
-      const m = s.match(/^\d{1,4}$/) || s.match(/^hike-(\d{1,4})$/i) || s.match(/^#?(\d{1,4})$/);
-      return m ? m[1] || m[0] : '';
-    };
-
-    const matchesRegistrationToTrek = (r: AdminRegistration, t?: Trek): boolean => {
-      if (!t) return false;
-      const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-      const tId = (t.id || '').toLowerCase().trim();
-      const tHikeNum = (t.hike_number || '').toLowerCase().trim();
-      const tDigits = extractDigits(t.hike_number) || extractDigits(t.id);
-
-      const rTrekId = (r.trek_id || '').toLowerCase().trim();
-      const rHikeNum = (r.hike_number || '').toLowerCase().trim();
-      const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
-
-      if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
-      if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
-      if (tDigits && rDigits) return tDigits === rDigits;
-
-      const tNameNorm = normStr(t.name);
-      const rNameNorm = normStr(r.trek_name);
-      if (tNameNorm && rNameNorm && tNameNorm === rNameNorm) {
-        return true;
-      }
-      return false;
-    };
-
     const selectedTrekObj =
       selectedTrekFilter !== 'all' && selectedTrekFilter !== 'PRIVATE'
         ? treks.find(
@@ -558,9 +595,9 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     const matchesTrek =
       selectedTrekFilter === 'all' ||
       (selectedTrekFilter === 'PRIVATE' && isPrivate) ||
-      reg.trek_id === selectedTrekFilter ||
-      (reg.hike_number && reg.hike_number !== 'TBD' && reg.hike_number === selectedTrekFilter) ||
-      matchesRegistrationToTrek(reg, selectedTrekObj);
+      (selectedTrekObj
+        ? doesRegistrationMatchTrek(reg, selectedTrekObj)
+        : (reg.trek_id === selectedTrekFilter || (reg.hike_number && reg.hike_number !== 'TBD' && reg.hike_number === selectedTrekFilter)));
 
     const regStatus = reg.status || 'Confirmed';
     const regStatusLower = regStatus.toLowerCase();
@@ -1210,6 +1247,10 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
                   const isPrivate = reg.hike_number === 'PRIVATE' || reg.trek_name?.toLowerCase().includes('private');
                   const isExpanded = expandedDetailsId === reg.id;
+                  const matchedTrek = !isPrivate ? treks.find((t) => doesRegistrationMatchTrek(reg, t)) : undefined;
+                  const displayHikeNum = (matchedTrek && matchedTrek.hike_number && matchedTrek.hike_number !== 'TBD')
+                    ? matchedTrek.hike_number
+                    : (!isPrivate ? reg.hike_number || '' : '');
 
                   return (
                     <React.Fragment key={reg.id}>
@@ -1305,7 +1346,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                                 </span>
                               ) : (
                                 <span className="font-medium text-[#E08828]">
-                                  {reg.hike_number ? `#${reg.hike_number} - ` : ''}
+                                  {displayHikeNum ? `#${displayHikeNum} - ` : ''}
                                   {reg.trek_name || 'Himalayan Trek'}
                                 </span>
                               )}
