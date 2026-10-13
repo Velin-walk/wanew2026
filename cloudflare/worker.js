@@ -595,21 +595,29 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
 
       let regList = [];
       try {
+        const cleanH = String(hNum).replace(/^#/, '').trim();
         const { results } = await env.DB.prepare(`
           SELECT 
-            r.id, r.hike_number, r.full_name, r.gender, r.pax, r.profession, r.part_of_group, r.timestamp,
-            COALESCE(b.registration_status, 'Confirmed') as active_status
+            r.id, r.hike_number, r.full_name, r.gender, r.age_group, r.pax, r.profession, r.part_of_group, r.timestamp,
+            COALESCE(b.registration_status, r.registration_status, 'Confirmed') as active_status
           FROM registrations r
           LEFT JOIN bookings_roster b ON CAST(r.id AS TEXT) = b.registration_id
-          WHERE r.hike_number = ?
+          WHERE (
+            r.hike_number = ?
+            OR REPLACE(r.hike_number, '#', '') = ?
+            OR TRIM(r.hike_number) = ?
+            OR b.hike_number = ?
+            OR REPLACE(b.hike_number, '#', '') = ?
+          )
           ORDER BY r.id DESC
-        `).bind(hNum).all();
+        `).bind(cleanH, cleanH, cleanH, cleanH, cleanH).all();
         regList = results || [];
       } catch (err) {
         try {
+          const cleanH = String(hNum).replace(/^#/, '').trim();
           const { results } = await env.DB.prepare(
-            'SELECT id, hike_number, full_name, gender, pax, profession, part_of_group, timestamp FROM registrations WHERE hike_number = ? ORDER BY id DESC'
-          ).bind(hNum).all();
+            'SELECT id, hike_number, full_name, gender, pax, profession, part_of_group, timestamp FROM registrations WHERE hike_number = ? OR REPLACE(hike_number, "#", "") = ? ORDER BY id DESC'
+          ).bind(cleanH, cleanH).all();
           regList = results || [];
         } catch (_) {
           regList = [];
@@ -620,6 +628,7 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
       let malePax = 0;
       let femalePax = 0;
       const recentParticipants = [];
+      const seenIds = new Set();
       const seenNames = new Set();
 
       for (const reg of regList) {
@@ -628,14 +637,21 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
           continue;
         }
 
+        const regIdKey = reg.id !== undefined && reg.id !== null ? String(reg.id) : null;
+        if (regIdKey && seenIds.has(regIdKey)) continue;
+        if (regIdKey) seenIds.add(regIdKey);
+
         const rawName = (reg.full_name || '').trim();
         const lowerName = rawName.toLowerCase();
-        if (!rawName || seenNames.has(lowerName)) {
+        if (!rawName) {
+          continue;
+        }
+        if (!regIdKey && seenNames.has(lowerName)) {
           continue;
         }
         seenNames.add(lowerName);
 
-        // Option A: Each confirmed unique individual attendee counts as 1
+        // Each confirmed unique individual attendee counts as 1
         totalPax += 1;
 
         const g = String(reg.gender || '').trim().toLowerCase();
@@ -1141,32 +1157,55 @@ export default {
           if (cached) return cached;
         }
 
-        const row = await env.DB.prepare(
-          'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
-        ).bind(idOrNum, idOrNum).first();
+        let row;
+        try {
+          row = await env.DB.prepare(`
+            SELECT t.*, 
+              e.capacity as exec_capacity, 
+              e.assigned_leader as exec_assigned_leader,
+              e.execution_status, 
+              e.is_cancelled as exec_is_cancelled, 
+              e.cancellation_reason as exec_cancellation_reason
+            FROM treks t
+            LEFT JOIN event_executions e ON t.hike_number = e.hike_number
+            WHERE t.id = ? OR t.hike_number = ?
+          `).bind(idOrNum, idOrNum).first();
+        } catch (_) {
+          row = await env.DB.prepare(
+            'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
+          ).bind(idOrNum, idOrNum).first();
+        }
 
         if (!row) {
           return errorResponse('Trek not found', 404);
         }
+
+        const cleanHikeNum = String(row.hike_number || idOrNum || '').replace(/^#/, '').trim();
 
         // Strict hike_number matching for live roster with anonymous privacy protection (excluding cancelled / waitlisted)
         let regs = { results: [] };
         try {
           regs = await env.DB.prepare(`
             SELECT 
-              r.id, r.hike_number, r.full_name, r.gender, r.pax, r.timestamp,
-              COALESCE(b.registration_status, 'Confirmed') as active_status
+              r.id, r.hike_number, r.full_name, r.gender, r.age_group, r.pax, r.timestamp,
+              COALESCE(b.registration_status, r.registration_status, 'Confirmed') as active_status
             FROM registrations r
             LEFT JOIN bookings_roster b ON CAST(r.id AS TEXT) = b.registration_id
-            WHERE r.hike_number = ?
-              AND LOWER(COALESCE(b.registration_status, 'Confirmed')) NOT LIKE '%cancel%'
-              AND LOWER(COALESCE(b.registration_status, 'Confirmed')) != 'waitlisted'
-          `).bind(String(row.hike_number || '')).all();
+            WHERE (
+              r.hike_number = ?
+              OR REPLACE(r.hike_number, '#', '') = ?
+              OR TRIM(r.hike_number) = ?
+              OR b.hike_number = ?
+              OR REPLACE(b.hike_number, '#', '') = ?
+            )
+              AND LOWER(COALESCE(b.registration_status, r.registration_status, 'Confirmed')) NOT LIKE '%cancel%'
+              AND LOWER(COALESCE(b.registration_status, r.registration_status, 'Confirmed')) != 'waitlisted'
+          `).bind(cleanHikeNum, cleanHikeNum, cleanHikeNum, cleanHikeNum, cleanHikeNum).all();
         } catch (_) {
           try {
             regs = await env.DB.prepare(
-              'SELECT * FROM registrations WHERE hike_number = ?'
-            ).bind(String(row.hike_number || '')).all();
+              'SELECT * FROM registrations WHERE hike_number = ? OR REPLACE(hike_number, "#", "") = ?'
+            ).bind(cleanHikeNum, cleanHikeNum).all();
           } catch (e) {
             regs = { results: [] };
           }
@@ -1176,6 +1215,7 @@ export default {
         let male_count = 0;
         let female_count = 0;
         const recent_participants = [];
+        const seenIds = new Set();
         const seenNames = new Set();
         const sanitizedRoster = [];
 
@@ -1183,9 +1223,14 @@ export default {
           const st = String(r.active_status || r.registration_status || r.status || 'Confirmed').toLowerCase().trim();
           if (st.includes('cancel') || st === 'waitlisted') continue;
 
+          const regIdKey = r.id !== undefined && r.id !== null ? String(r.id) : null;
+          if (regIdKey && seenIds.has(regIdKey)) continue;
+          if (regIdKey) seenIds.add(regIdKey);
+
           const rawName = (r.full_name || '').trim();
           const lowerName = rawName.toLowerCase();
-          if (!rawName || seenNames.has(lowerName)) continue;
+          if (!rawName) continue;
+          if (!regIdKey && seenNames.has(lowerName)) continue;
           seenNames.add(lowerName);
 
           const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
@@ -1207,6 +1252,7 @@ export default {
           sanitizedRoster.push({
             full_name: anonymized,
             gender: r.gender,
+            age_group: r.age_group,
             pax: 1,
             hike_number: r.hike_number,
             timestamp: r.timestamp,
@@ -1221,8 +1267,16 @@ export default {
           parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
         } catch (e) {}
 
+        const execCap = (row.exec_capacity !== undefined && row.exec_capacity !== null) ? Number(row.exec_capacity) : null;
+        const resolvedMaxCap = (execCap && execCap > 0) ? execCap : (Number(row.max_capacity) || 25);
+        if (parsedData && typeof parsedData === 'object') {
+          parsedData.maxCapacity = resolvedMaxCap;
+        }
+
         const trekObj = {
           ...row,
+          max_capacity: resolvedMaxCap,
+          capacity: resolvedMaxCap,
           hikeNumber: row.hike_number,
           hike_number: row.hike_number,
           participants: total_pax,
@@ -1588,11 +1642,18 @@ export default {
           capacity: maxCapacity
         });
 
-        // Rebuild treks snapshot in background
+        // Recompute participant summary and rebuild treks snapshot in background
+        const hikeNumToSync = row.hike_number || idOrNum;
         if (ctx && ctx.waitUntil) {
-          ctx.waitUntil(rebuildTreksSnapshot(env));
+          ctx.waitUntil((async () => {
+            await updateTrekParticipantSummary(env, hikeNumToSync);
+            await rebuildTreksSnapshot(env);
+          })());
         } else {
-          rebuildTreksSnapshot(env).catch(() => {});
+          (async () => {
+            await updateTrekParticipantSummary(env, hikeNumToSync);
+            await rebuildTreksSnapshot(env);
+          })().catch(() => {});
         }
 
         return jsonResponse({

@@ -167,7 +167,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
     '';
 
   const badge = getDifficultyBadge(effectiveDifficulty);
-  const currentParticipants = trek.participants || 0;
+  const currentParticipants = Math.max(trek.participants || 0, (trek.recent_participants || []).length);
   const execStatus = trek.data?.execution_status;
   const isCancelled = Boolean(trek.is_cancelled || trek.data?.is_cancelled || execStatus === 'Cancelled');
   const isCompleted = execStatus === 'Completed';

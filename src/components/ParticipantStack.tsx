@@ -23,11 +23,11 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
   const avatars = (recentParticipants || []).slice(0, 8);
   const hasExactRoster = recentParticipants && recentParticipants.length > 0;
   const totalParticipants =
-    hasExactRoster && totalCount !== undefined && totalCount <= 12 && totalCount > recentParticipants.length
-      ? recentParticipants.length
+    hasExactRoster
+      ? Math.max(totalCount || 0, recentParticipants.length)
       : (totalCount !== undefined && totalCount > 0
         ? totalCount
-        : (hasExactRoster ? recentParticipants.length : (participantsCount?.total || 0)));
+        : (participantsCount?.total || 0));
   const overflow = Math.max(0, totalParticipants - avatars.length);
 
   if (totalParticipants === 0 && avatars.length === 0) {

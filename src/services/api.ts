@@ -358,14 +358,15 @@ export function normalizeTrek(row: any): Trek {
     }
   }
 
-  // Prefer explicit values in rawJsonData (treks.data_json) over null/defaulted JOIN columns
+  // Prefer live event_executions capacity over static initial values
   const resolvedCapacity =
     Number(
-      rawJsonData.maxCapacity ||
+      row.exec_capacity ||
+        cleanD.exec_capacity ||
+        row.capacity ||
+        rawJsonData.maxCapacity ||
         cleanD.maxCapacity ||
-        row.exec_capacity ||
-        row.max_capacity ||
-        row.capacity
+        row.max_capacity
     ) || 25;
   const resolvedLeader =
     rawJsonData.teamLeader ||
