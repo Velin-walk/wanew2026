@@ -80,7 +80,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
             const mapped: ParticipantItem[] = serverRoster
               .filter((r: any) => {
                 const st = String(r.status || r.registration_status || r.roster_registration_status || 'Confirmed').toLowerCase().trim();
-                return st !== 'cancelled' && st !== 'waitlisted' && st !== 'cancelled by user' && !st.includes('cancelled');
+                return st === 'confirmed';
               })
               .map((r: any) => ({
                 name: r.full_name || r.name || 'Hiker',

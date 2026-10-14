@@ -580,9 +580,11 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
     if (hikeNumber) {
       hikeNumbers.push(String(hikeNumber).trim());
     } else {
-      const { results: allHikes } = await env.DB.prepare(
-        'SELECT DISTINCT hike_number FROM registrations WHERE hike_number IS NOT NULL AND hike_number != ""'
-      ).all();
+      const { results: allHikes } = await env.DB.prepare(`
+        SELECT DISTINCT hike_number FROM bookings_roster WHERE hike_number IS NOT NULL AND hike_number != ''
+        UNION
+        SELECT DISTINCT hike_number FROM treks WHERE hike_number IS NOT NULL AND hike_number != ''
+      `).all();
       if (allHikes) {
         for (const row of allHikes) {
           if (row.hike_number) hikeNumbers.push(String(row.hike_number).trim());
@@ -598,26 +600,44 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
         const cleanH = String(hNum).replace(/^#/, '').trim();
         const { results } = await env.DB.prepare(`
           SELECT 
-            r.id, r.hike_number, r.full_name, r.gender, r.age_group, r.pax, r.profession, r.part_of_group, r.timestamp,
-            COALESCE(b.registration_status, r.registration_status, 'Confirmed') as active_status
-          FROM registrations r
-          LEFT JOIN bookings_roster b ON CAST(r.id AS TEXT) = b.registration_id
+            b.id, b.registration_id, b.hike_number, b.full_name, b.gender, b.age_group, b.registration_status,
+            COALESCE(b.created_at, b.updated_at, '') as timestamp
+          FROM bookings_roster b
           WHERE (
-            r.hike_number = ?
-            OR REPLACE(r.hike_number, '#', '') = ?
-            OR TRIM(r.hike_number) = ?
+            b.hike_number = ?
             OR b.hike_number = ?
             OR REPLACE(b.hike_number, '#', '') = ?
+            OR TRIM(b.hike_number) = ?
           )
-          ORDER BY r.id DESC
-        `).bind(cleanH, cleanH, cleanH, cleanH, cleanH).all();
+            AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
+          ORDER BY b.id ASC
+        `).bind(cleanH, '#' + cleanH, cleanH, cleanH).all();
         regList = results || [];
       } catch (err) {
         try {
           const cleanH = String(hNum).replace(/^#/, '').trim();
-          const { results } = await env.DB.prepare(
-            'SELECT id, hike_number, full_name, gender, pax, profession, part_of_group, timestamp FROM registrations WHERE hike_number = ? OR REPLACE(hike_number, "#", "") = ? ORDER BY id DESC'
-          ).bind(cleanH, cleanH).all();
+          const { results } = await env.DB.prepare(`
+            SELECT 
+              b.id, b.registration_id, b.hike_number, b.full_name,
+              COALESCE(r.gender, '') as gender,
+              COALESCE(r.age_group, '') as age_group,
+              b.registration_status,
+              COALESCE(b.created_at, b.updated_at, '') as timestamp
+            FROM bookings_roster b
+            LEFT JOIN registrations r ON b.registration_id = CAST(r.id AS TEXT)
+            WHERE (
+              b.hike_number = ?
+              OR b.hike_number = ?
+              OR REPLACE(b.hike_number, '#', '') = ?
+              OR TRIM(b.hike_number) = ?
+            )
+              AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+              AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+              AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
+            ORDER BY b.id ASC
+          `).bind(cleanH, '#' + cleanH, cleanH, cleanH).all();
           regList = results || [];
         } catch (_) {
           regList = [];
@@ -632,8 +652,8 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
       const seenNames = new Set();
 
       for (const reg of regList) {
-        const status = String(reg.active_status || 'Confirmed').toLowerCase();
-        if (status.includes('cancelled') || status === 'rejected' || status === 'waitlisted') {
+        const status = String(reg.registration_status || reg.active_status || 'Confirmed').toLowerCase().trim();
+        if (status !== 'confirmed' || status.includes('cancel') || status.includes('waitlist') || status === 'rejected') {
           continue;
         }
 
@@ -661,19 +681,15 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
           malePax += 1;
         }
 
-        if (recentParticipants.length < 10) {
-          const parts = rawName.split(/\s+/).filter(Boolean);
-          const anonymized = parts.length > 1
-            ? `${parts[0]} ${parts[1].charAt(0)}.`
-            : (parts[0] || 'Hiker');
-          recentParticipants.push({
-            name: anonymized,
-            gender: g.startsWith('f') ? 'f' : 'm',
-            profession: reg.profession || '',
-            part_of_group: reg.part_of_group || '',
-            timestamp: reg.timestamp || ''
-          });
-        }
+        const parts = rawName.split(/\s+/).filter(Boolean);
+        const anonymized = parts.length > 1
+          ? `${parts[0]} ${parts[1].charAt(0)}.`
+          : (parts[0] || 'Hiker');
+        recentParticipants.push({
+          name: anonymized,
+          gender: g.startsWith('f') ? 'f' : 'm',
+          timestamp: reg.timestamp || ''
+        });
       }
 
       const recentJson = JSON.stringify(recentParticipants);
@@ -728,8 +744,15 @@ async function rebuildTreksSnapshot(env) {
         s.female_pax as agg_female_pax,
         s.recent_participants as agg_recent_json
       FROM treks t
-      LEFT JOIN event_executions e ON t.hike_number = e.hike_number
-      LEFT JOIN trek_participant_summary s ON t.hike_number = s.hike_number
+      LEFT JOIN event_executions e ON (
+        t.hike_number = e.hike_number
+        OR REPLACE(t.hike_number, '#', '') = REPLACE(e.hike_number, '#', '')
+        OR TRIM(t.hike_number) = TRIM(e.hike_number)
+      )
+      LEFT JOIN trek_participant_summary s ON (
+        t.hike_number = s.hike_number
+        OR REPLACE(t.hike_number, '#', '') = REPLACE(s.hike_number, '#', '')
+      )
       ORDER BY t.created_at DESC
     `).all();
     results = joined || [];
@@ -753,6 +776,13 @@ async function rebuildTreksSnapshot(env) {
       cleanLightweightData(parsedData);
     } catch (e) {}
 
+    const execCapacity = (row.exec_capacity !== null && row.exec_capacity !== undefined && Number(row.exec_capacity) > 0)
+      ? Number(row.exec_capacity)
+      : (Number(row.max_capacity) || 25);
+    const execLeader = (row.exec_assigned_leader && String(row.exec_assigned_leader).trim())
+      ? String(row.exec_assigned_leader).trim()
+      : (row.team_leader || '');
+
     if (row.exec_is_cancelled !== undefined) {
       parsedData.is_cancelled = row.exec_is_cancelled === 1;
     }
@@ -762,11 +792,9 @@ async function rebuildTreksSnapshot(env) {
     if (row.execution_status !== undefined) {
       parsedData.execution_status = row.execution_status;
     }
-    if (row.exec_capacity !== undefined) {
-      parsedData.maxCapacity = row.exec_capacity;
-    }
-    if (row.exec_assigned_leader !== undefined) {
-      parsedData.teamLeader = row.exec_assigned_leader;
+    parsedData.maxCapacity = execCapacity;
+    if (execLeader) {
+      parsedData.teamLeader = execLeader;
     }
 
     let recentParticipants = [];
@@ -784,8 +812,10 @@ async function rebuildTreksSnapshot(env) {
 
     return {
       ...row,
-      max_capacity: row.exec_capacity !== undefined ? row.exec_capacity : row.max_capacity,
-      team_leader: row.exec_assigned_leader !== undefined ? row.exec_assigned_leader : row.team_leader,
+      max_capacity: execCapacity,
+      capacity: execCapacity,
+      team_leader: execLeader,
+      leader: execLeader,
       hikeNumber: row.hike_number,
       hike_number: row.hike_number,
       participants: totalPax,
@@ -1167,9 +1197,13 @@ export default {
               e.is_cancelled as exec_is_cancelled, 
               e.cancellation_reason as exec_cancellation_reason
             FROM treks t
-            LEFT JOIN event_executions e ON t.hike_number = e.hike_number
-            WHERE t.id = ? OR t.hike_number = ?
-          `).bind(idOrNum, idOrNum).first();
+            LEFT JOIN event_executions e ON (
+              t.hike_number = e.hike_number
+              OR REPLACE(t.hike_number, '#', '') = REPLACE(e.hike_number, '#', '')
+              OR TRIM(t.hike_number) = TRIM(e.hike_number)
+            )
+            WHERE t.id = ? OR t.hike_number = ? OR REPLACE(t.hike_number, '#', '') = ?
+          `).bind(idOrNum, idOrNum, idOrNum).first();
         } catch (_) {
           row = await env.DB.prepare(
             'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
@@ -1182,30 +1216,47 @@ export default {
 
         const cleanHikeNum = String(row.hike_number || idOrNum || '').replace(/^#/, '').trim();
 
-        // Strict hike_number matching for live roster with anonymous privacy protection (excluding cancelled / waitlisted)
+        // Strict hike_number matching for live roster from bookings_roster (confirmed only, excluding cancelled & waitlisted)
         let regs = { results: [] };
         try {
           regs = await env.DB.prepare(`
             SELECT 
-              r.id, r.hike_number, r.full_name, r.gender, r.age_group, r.pax, r.timestamp,
-              COALESCE(b.registration_status, r.registration_status, 'Confirmed') as active_status
-            FROM registrations r
-            LEFT JOIN bookings_roster b ON CAST(r.id AS TEXT) = b.registration_id
+              b.id, b.registration_id, b.hike_number, b.full_name, b.gender, b.age_group, b.registration_status,
+              COALESCE(b.created_at, b.updated_at, '') as timestamp
+            FROM bookings_roster b
             WHERE (
-              r.hike_number = ?
-              OR REPLACE(r.hike_number, '#', '') = ?
-              OR TRIM(r.hike_number) = ?
+              b.hike_number = ?
               OR b.hike_number = ?
               OR REPLACE(b.hike_number, '#', '') = ?
+              OR TRIM(b.hike_number) = ?
             )
-              AND LOWER(COALESCE(b.registration_status, r.registration_status, 'Confirmed')) NOT LIKE '%cancel%'
-              AND LOWER(COALESCE(b.registration_status, r.registration_status, 'Confirmed')) != 'waitlisted'
-          `).bind(cleanHikeNum, cleanHikeNum, cleanHikeNum, cleanHikeNum, cleanHikeNum).all();
+              AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+              AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+              AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
+            ORDER BY b.id ASC
+          `).bind(cleanHikeNum, '#' + cleanHikeNum, cleanHikeNum, cleanHikeNum).all();
         } catch (_) {
           try {
-            regs = await env.DB.prepare(
-              'SELECT * FROM registrations WHERE hike_number = ? OR REPLACE(hike_number, "#", "") = ?'
-            ).bind(cleanHikeNum, cleanHikeNum).all();
+            regs = await env.DB.prepare(`
+              SELECT 
+                b.id, b.registration_id, b.hike_number, b.full_name,
+                COALESCE(r.gender, '') as gender,
+                COALESCE(r.age_group, '') as age_group,
+                b.registration_status,
+                COALESCE(b.created_at, b.updated_at, '') as timestamp
+              FROM bookings_roster b
+              LEFT JOIN registrations r ON b.registration_id = CAST(r.id AS TEXT)
+              WHERE (
+                b.hike_number = ?
+                OR b.hike_number = ?
+                OR REPLACE(b.hike_number, '#', '') = ?
+                OR TRIM(b.hike_number) = ?
+              )
+                AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+                AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+                AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
+              ORDER BY b.id ASC
+            `).bind(cleanHikeNum, '#' + cleanHikeNum, cleanHikeNum, cleanHikeNum).all();
           } catch (e) {
             regs = { results: [] };
           }
@@ -1220,8 +1271,8 @@ export default {
         const sanitizedRoster = [];
 
         for (const r of roster) {
-          const st = String(r.active_status || r.registration_status || r.status || 'Confirmed').toLowerCase().trim();
-          if (st.includes('cancel') || st === 'waitlisted') continue;
+          const st = String(r.registration_status || r.active_status || r.status || 'Confirmed').toLowerCase().trim();
+          if (st !== 'confirmed' || st.includes('cancel') || st.includes('waitlist') || st === 'rejected') continue;
 
           const regIdKey = r.id !== undefined && r.id !== null ? String(r.id) : null;
           if (regIdKey && seenIds.has(regIdKey)) continue;
@@ -1242,12 +1293,10 @@ export default {
             ? `${parts[0]} ${parts[1].charAt(0)}.`
             : (parts[0] || 'Hiker');
 
-          if (recent_participants.length < 10) {
-            recent_participants.push({
-              name: anonymized,
-              gender: isFemale ? 'f' : 'm',
-            });
-          }
+          recent_participants.push({
+            name: anonymized,
+            gender: isFemale ? 'f' : 'm',
+          });
 
           sanitizedRoster.push({
             full_name: anonymized,
@@ -1267,16 +1316,26 @@ export default {
           parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
         } catch (e) {}
 
-        const execCap = (row.exec_capacity !== undefined && row.exec_capacity !== null) ? Number(row.exec_capacity) : null;
-        const resolvedMaxCap = (execCap && execCap > 0) ? execCap : (Number(row.max_capacity) || 25);
+        const execCap = (row.exec_capacity !== undefined && row.exec_capacity !== null && Number(row.exec_capacity) > 0)
+          ? Number(row.exec_capacity)
+          : null;
+        const resolvedMaxCap = execCap || (Number(row.max_capacity) || 25);
+        const execLeader = (row.exec_assigned_leader && String(row.exec_assigned_leader).trim())
+          ? String(row.exec_assigned_leader).trim()
+          : null;
+        const resolvedLeader = execLeader || (row.team_leader || 'Walk Nepal Walk Guide');
+
         if (parsedData && typeof parsedData === 'object') {
           parsedData.maxCapacity = resolvedMaxCap;
+          if (execLeader) parsedData.teamLeader = execLeader;
         }
 
         const trekObj = {
           ...row,
           max_capacity: resolvedMaxCap,
           capacity: resolvedMaxCap,
+          team_leader: resolvedLeader,
+          leader: resolvedLeader,
           hikeNumber: row.hike_number,
           hike_number: row.hike_number,
           participants: total_pax,

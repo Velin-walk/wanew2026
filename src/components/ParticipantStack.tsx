@@ -43,13 +43,13 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
   }
 
   const maleCount =
-    hasExactRoster && recentParticipants.length <= 12
+    hasExactRoster
       ? recentParticipants.filter((p) => p.gender === 'm').length
-      : (participantsCount?.male || recentParticipants.filter((p) => p.gender === 'm').length);
+      : (participantsCount?.male || 0);
   const femaleCount =
-    hasExactRoster && recentParticipants.length <= 12
+    hasExactRoster
       ? recentParticipants.filter((p) => p.gender === 'f').length
-      : (participantsCount?.female || recentParticipants.filter((p) => p.gender === 'f').length);
+      : (participantsCount?.female || 0);
 
   return (
     <>

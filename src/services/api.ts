@@ -369,10 +369,11 @@ export function normalizeTrek(row: any): Trek {
         row.max_capacity
     ) || 25;
   const resolvedLeader =
+    row.exec_assigned_leader ||
+    cleanD.exec_assigned_leader ||
+    row.team_leader ||
     rawJsonData.teamLeader ||
     cleanD.teamLeader ||
-    row.exec_assigned_leader ||
-    row.team_leader ||
     row.leader ||
     "Walk Nepal Walk Guide";
   const resolvedExecStatus =
@@ -475,7 +476,7 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
 
     const matched = registrations.filter((r) => {
       const regStatus = String(r.status || r.registration_status || r.roster_registration_status || 'Confirmed').toLowerCase().trim();
-      if (regStatus.includes('cancelled') || regStatus === 'waitlisted') {
+      if (regStatus !== 'confirmed') {
         return false;
       }
 
