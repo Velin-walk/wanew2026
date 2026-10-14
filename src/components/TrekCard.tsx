@@ -167,7 +167,20 @@ export const TrekCard: React.FC<TrekCardProps> = ({
     '';
 
   const badge = getDifficultyBadge(effectiveDifficulty);
-  const currentParticipants = Math.max(trek.participants || 0, (trek.recent_participants || []).length);
+  const confirmedFromGender =
+    trek.participants_by_gender &&
+    (typeof trek.participants_by_gender.total === 'number' ||
+      typeof trek.participants_by_gender.male === 'number' ||
+      typeof trek.participants_by_gender.female === 'number')
+      ? (typeof trek.participants_by_gender.total === 'number' && trek.participants_by_gender.total > 0
+          ? trek.participants_by_gender.total
+          : (trek.participants_by_gender.male || 0) + (trek.participants_by_gender.female || 0))
+      : 0;
+  const currentParticipants = confirmedFromGender > 0
+    ? confirmedFromGender
+    : (trek.participants !== undefined && trek.participants !== null
+        ? Number(trek.participants)
+        : (trek.recent_participants || []).length);
   const execStatus = trek.data?.execution_status;
   const isCancelled = Boolean(trek.is_cancelled || trek.data?.is_cancelled || execStatus === 'Cancelled');
   const isCompleted = execStatus === 'Completed';
