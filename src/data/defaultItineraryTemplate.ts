@@ -269,6 +269,9 @@ export interface SavedHikeRecord {
   updatedAt: string;
   authorEmail: string;
   data: TrekItineraryData;
+  participants?: number;
+  participants_by_gender?: { total: number; male: number; female: number };
+  recent_participants?: Array<{ name: string; gender: 'm' | 'f' }>;
   syncedToCloudflare?: boolean;
 }
 

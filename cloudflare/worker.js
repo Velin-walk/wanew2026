@@ -694,22 +694,26 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
 
       const recentJson = JSON.stringify(recentParticipants);
 
-      await env.DB.prepare(`
-        INSERT INTO trek_participant_summary (hike_number, total_pax, male_pax, female_pax, recent_participants, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(hike_number) DO UPDATE SET
-          total_pax = excluded.total_pax,
-          male_pax = excluded.male_pax,
-          female_pax = excluded.female_pax,
-          recent_participants = excluded.recent_participants,
-          updated_at = CURRENT_TIMESTAMP
-      `).bind(
-        hNum,
-        totalPax,
-        malePax,
-        femalePax,
-        recentJson
-      ).run();
+      const cleanH = String(hNum).replace(/^#/, '').trim();
+      for (const keyToSave of Array.from(new Set([cleanH, '#' + cleanH, hNum]))) {
+        if (!keyToSave) continue;
+        await env.DB.prepare(`
+          INSERT INTO trek_participant_summary (hike_number, total_pax, male_pax, female_pax, recent_participants, updated_at)
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(hike_number) DO UPDATE SET
+            total_pax = excluded.total_pax,
+            male_pax = excluded.male_pax,
+            female_pax = excluded.female_pax,
+            recent_participants = excluded.recent_participants,
+            updated_at = CURRENT_TIMESTAMP
+        `).bind(
+          keyToSave,
+          totalPax,
+          malePax,
+          femalePax,
+          recentJson
+        ).run();
+      }
     }
     // Refresh snapshot in background after participant summary updates
     rebuildTreksSnapshot(env).catch(() => {});
@@ -727,6 +731,26 @@ async function rebuildTreksSnapshot(env) {
   let results = [];
   try {
     const { results: joined } = await env.DB.prepare(`
+      WITH roster_summary AS (
+        SELECT 
+          clean_hike,
+          COUNT(*) as total_pax,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) as female_pax,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(gender, ''))) NOT LIKE 'f%' THEN 1 ELSE 0 END) as male_pax
+        FROM (
+          SELECT DISTINCT
+            COALESCE(b.id, b.registration_id, LOWER(TRIM(b.full_name))) as uid,
+            REPLACE(REPLACE(TRIM(b.hike_number), '#', ''), ' ', '') as clean_hike,
+            b.gender
+          FROM bookings_roster b
+          WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%reject%'
+            AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
+        ) b
+        GROUP BY clean_hike
+      )
       SELECT 
         t.hike_number, t.id, t.title, t.category, t.status, t.cover_image_url,
         t.hike_date, t.min_price, t.max_price, t.currency, t.meeting_point,
@@ -739,15 +763,21 @@ async function rebuildTreksSnapshot(env) {
         e.cancellation_reason as exec_cancellation_reason,
         e.capacity as exec_capacity,
         e.assigned_leader as exec_assigned_leader,
-        s.total_pax as agg_total_pax,
-        s.male_pax as agg_male_pax,
-        s.female_pax as agg_female_pax,
+        COALESCE(rs.total_pax, s.total_pax, 0) as agg_total_pax,
+        COALESCE(rs.male_pax, s.male_pax, 0) as agg_male_pax,
+        COALESCE(rs.female_pax, s.female_pax, 0) as agg_female_pax,
         s.recent_participants as agg_recent_json
       FROM treks t
       LEFT JOIN event_executions e ON (
         t.hike_number = e.hike_number
         OR REPLACE(t.hike_number, '#', '') = REPLACE(e.hike_number, '#', '')
         OR TRIM(t.hike_number) = TRIM(e.hike_number)
+        OR REPLACE(REPLACE(t.hike_number, '#', ''), ' ', '') = REPLACE(REPLACE(e.hike_number, '#', ''), ' ', '')
+      )
+      LEFT JOIN roster_summary rs ON (
+        REPLACE(REPLACE(TRIM(t.hike_number), '#', ''), ' ', '') = rs.clean_hike
+        OR TRIM(t.hike_number) = rs.clean_hike
+        OR t.id = rs.clean_hike
       )
       LEFT JOIN trek_participant_summary s ON (
         t.hike_number = s.hike_number
@@ -781,7 +811,7 @@ async function rebuildTreksSnapshot(env) {
       : (Number(row.max_capacity) || 25);
     const execLeader = (row.exec_assigned_leader && String(row.exec_assigned_leader).trim())
       ? String(row.exec_assigned_leader).trim()
-      : (row.team_leader || '');
+      : (row.team_leader || 'Walk Nepal Walk Guide');
 
     if (row.exec_is_cancelled !== undefined) {
       parsedData.is_cancelled = row.exec_is_cancelled === 1;
@@ -793,9 +823,7 @@ async function rebuildTreksSnapshot(env) {
       parsedData.execution_status = row.execution_status;
     }
     parsedData.maxCapacity = execCapacity;
-    if (execLeader) {
-      parsedData.teamLeader = execLeader;
-    }
+    parsedData.teamLeader = execLeader;
 
     let recentParticipants = [];
     try {
@@ -857,11 +885,15 @@ async function getTreksSnapshot(env, forceFresh = false) {
     try {
       const obj = await env.BUCKET.get(TREKS_SNAP_KEY);
       if (obj) {
-        const text = await obj.text();
-        if (text) {
-          memTreksSnap = text;
-          memTreksSnapAt = now;
-          return text;
+        const uploadTime = obj.uploaded ? new Date(obj.uploaded).getTime() : 0;
+        // Keep R2 cache TTL to 60 seconds so live rosters stay fresh
+        if (uploadTime && (now - uploadTime < 60000)) {
+          const text = await obj.text();
+          if (text) {
+            memTreksSnap = text;
+            memTreksSnapAt = now;
+            return text;
+          }
         }
       }
     } catch (_) {}
@@ -1650,9 +1682,11 @@ export default {
           const trekName = row.title || '';
           const eventDate = row.hike_date || '';
           
-          const existingExec = await env.DB.prepare(
-            'SELECT id FROM event_executions WHERE hike_number = ?'
-          ).bind(hikeNum).first();
+          const cleanHikeNum = String(hikeNum).replace(/^#/, '').trim();
+          const existingExec = await env.DB.prepare(`
+            SELECT id FROM event_executions 
+            WHERE hike_number = ? OR hike_number = ? OR REPLACE(hike_number, '#', '') = ?
+          `).bind(hikeNum, '#' + cleanHikeNum, cleanHikeNum).first();
 
           if (existingExec) {
             await env.DB.prepare(`
@@ -1663,14 +1697,14 @@ export default {
                 capacity = ?,
                 assigned_leader = ?,
                 updated_at = CURRENT_TIMESTAMP
-              WHERE hike_number = ?
+              WHERE id = ?
             `).bind(
               body.data?.execution_status || 'Scheduled',
               body.data?.is_cancelled ? 1 : 0,
               body.data?.cancellation_reason || '',
               maxCapacity,
               teamLeader,
-              hikeNum
+              existingExec.id
             ).run();
           } else {
             await env.DB.prepare(`

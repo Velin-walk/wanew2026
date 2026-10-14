@@ -839,8 +839,21 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       ? t.hike_number
       : (d.hikeNumber && d.hikeNumber !== 'TBD' ? d.hikeNumber : (t.hike_number || d.hikeNumber || parsedJson.hikeNumber || ''));
 
-    const maxCap = Number(parsedJson.maxCapacity || cleanDataObj.maxCapacity || t.exec_capacity || t.max_capacity || t.capacity || 25);
-    const leader = parsedJson.teamLeader || cleanDataObj.teamLeader || t.exec_assigned_leader || t.team_leader || t.leader || 'Walk Nepal Walk Guide';
+    const maxCap = Number(
+      (t.exec_capacity && Number(t.exec_capacity) > 0 ? t.exec_capacity : null) ||
+      (cleanDataObj.maxCapacity && Number(cleanDataObj.maxCapacity) > 0 ? cleanDataObj.maxCapacity : null) ||
+      (parsedJson.maxCapacity && Number(parsedJson.maxCapacity) > 0 ? parsedJson.maxCapacity : null) ||
+      t.max_capacity ||
+      t.capacity ||
+      25
+    );
+    const leader =
+      (t.exec_assigned_leader && String(t.exec_assigned_leader).trim()) ||
+      (cleanDataObj.teamLeader && String(cleanDataObj.teamLeader).trim()) ||
+      (parsedJson.teamLeader && String(parsedJson.teamLeader).trim()) ||
+      (t.team_leader && String(t.team_leader).trim()) ||
+      (t.leader && String(t.leader).trim()) ||
+      'Walk Nepal Walk Guide';
     const execStatus = parsedJson.execution_status || cleanDataObj.execution_status || (parsedJson.is_cancelled ? 'Cancelled' : 'Active');
     const isCancelled = Boolean(
       parsedJson.is_cancelled ??
@@ -851,6 +864,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     );
     const cancelReason = parsedJson.cancellation_reason || cleanDataObj.cancellation_reason || '';
 
+    const recParticipants = Number(t.participants ?? t.registered_pax ?? t.agg_total_pax ?? 0);
+    const recGender = t.participants_by_gender;
+    const recRecent = t.recent_participants;
+
     return {
       id: t.id,
       hikeNumber: hNum,
@@ -860,6 +877,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       createdAt: t.created_at || t.createdAt || d.createdAt || '2025-01-01T00:00:00.000Z',
       updatedAt: d.updatedAt || t.updated_at || t.updatedAt || '2025-01-01T00:00:00.000Z',
       authorEmail: t.author_email || t.authorEmail || 'walknepalwalk@gmail.com',
+      participants: recParticipants,
+      participants_by_gender: recGender,
+      recent_participants: recRecent,
       data: {
         ...d,
         hikeNumber: hNum,
@@ -871,6 +891,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         is_cancelled: isCancelled,
         cancellation_reason: cancelReason,
         execution_status: execStatus,
+        participants: recParticipants,
+        participants_by_gender: recGender,
+        recent_participants: recRecent,
       }
     };
   };
@@ -1467,7 +1490,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       difficulty: (d.overview?.difficulty || d.difficulty || 'moderate').toLowerCase() as any,
       leader: d.teamLeader || 'Walk Nepal Walk Guide',
       capacity: Number(d.maxCapacity) || 25,
-      participants: 0,
+      participants: Number((h as any).participants ?? (h as any).data?.participants ?? 0),
+      participants_by_gender: (h as any).participants_by_gender || (h as any).data?.participants_by_gender,
+      recent_participants: (h as any).recent_participants || (h as any).data?.recent_participants,
       price: d.priceTiers?.length ? `NPR ${d.priceTiers[0].price}` : (d.costing?.totalEstimatedCost ? `NPR ${d.costing.totalEstimatedCost}` : 'NPR 1,500'),
       featured_image: d.coverImageUrl || d.images?.[0] || '',
       is_cancelled: isCancelled,

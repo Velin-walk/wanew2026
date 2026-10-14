@@ -361,20 +361,21 @@ export function normalizeTrek(row: any): Trek {
   // Prefer live event_executions capacity over static initial values
   const resolvedCapacity =
     Number(
-      row.exec_capacity ||
-        cleanD.exec_capacity ||
-        row.capacity ||
-        rawJsonData.maxCapacity ||
-        cleanD.maxCapacity ||
-        row.max_capacity
+      (row.exec_capacity && Number(row.exec_capacity) > 0 ? row.exec_capacity : null) ||
+      (cleanD.exec_capacity && Number(cleanD.exec_capacity) > 0 ? cleanD.exec_capacity : null) ||
+      row.capacity ||
+      rawJsonData.maxCapacity ||
+      cleanD.maxCapacity ||
+      row.max_capacity
     ) || 25;
   const resolvedLeader =
-    row.exec_assigned_leader ||
-    cleanD.exec_assigned_leader ||
-    row.team_leader ||
-    rawJsonData.teamLeader ||
-    cleanD.teamLeader ||
-    row.leader ||
+    (row.exec_assigned_leader && String(row.exec_assigned_leader).trim()) ||
+    (row.assigned_leader && String(row.assigned_leader).trim()) ||
+    (cleanD.exec_assigned_leader && String(cleanD.exec_assigned_leader).trim()) ||
+    (row.team_leader && String(row.team_leader).trim()) ||
+    (rawJsonData.teamLeader && String(rawJsonData.teamLeader).trim()) ||
+    (cleanD.teamLeader && String(cleanD.teamLeader).trim()) ||
+    (row.leader && String(row.leader).trim()) ||
     "Walk Nepal Walk Guide";
   const resolvedExecStatus =
     rawJsonData.execution_status ||
@@ -406,6 +407,41 @@ export function normalizeTrek(row: any): Trek {
     cancellation_reason: resolvedCancelReason,
   };
 
+  const resolvedGenderCounts = (() => {
+    const rawG = row.participants_by_gender || row.participantsByGender || d.participants_by_gender || rawJsonData.participants_by_gender;
+    let parsed = rawG;
+    if (typeof rawG === 'string') {
+      try { parsed = JSON.parse(rawG); } catch (_) { parsed = undefined; }
+    }
+    if (parsed && typeof parsed === 'object') {
+      const m = Number(parsed.male) || 0;
+      const f = Number(parsed.female) || 0;
+      const tot = typeof parsed.total === 'number' && parsed.total > 0 ? parsed.total : (m + f);
+      return { total: tot, male: m, female: f };
+    }
+    if (row.agg_total_pax !== undefined || row.agg_male_pax !== undefined || row.agg_female_pax !== undefined) {
+      const m = Number(row.agg_male_pax) || 0;
+      const f = Number(row.agg_female_pax) || 0;
+      const tot = Number(row.agg_total_pax) || (m + f);
+      return { total: tot, male: m, female: f };
+    }
+    return undefined;
+  })();
+
+  const resolvedTotalParticipants = (() => {
+    if (resolvedGenderCounts && typeof resolvedGenderCounts.total === 'number' && resolvedGenderCounts.total > 0) {
+      return resolvedGenderCounts.total;
+    }
+    if (typeof row.participants === 'number' && row.participants > 0) return row.participants;
+    if (row.agg_total_pax !== undefined && row.agg_total_pax !== null && Number(row.agg_total_pax) > 0) {
+      return Number(row.agg_total_pax);
+    }
+    if (row.registered_pax !== undefined && row.registered_pax !== null && Number(row.registered_pax) > 0) {
+      return Number(row.registered_pax);
+    }
+    return 0;
+  })();
+
   return {
     id: String(rawRowId || fallbackUniqueId || title),
     hike_number: String(hikeNum),
@@ -416,14 +452,8 @@ export function normalizeTrek(row: any): Trek {
     difficulty: (difficulty === "hard" || difficulty === "difficult") ? "difficult" : (difficulty === "moderate" ? "moderate" : (difficulty === "extreme" ? "extreme" : (difficulty === "easy" ? "easy" : difficulty))),
     leader: resolvedLeader,
     capacity: resolvedCapacity,
-    participants: Number(row.participants ?? row.registered_pax) || 0,
-    participants_by_gender: (() => {
-      const rawG = row.participants_by_gender || row.participantsByGender || d.participants_by_gender || rawJsonData.participants_by_gender;
-      if (typeof rawG === 'string') {
-        try { return JSON.parse(rawG); } catch (_) { return undefined; }
-      }
-      return rawG;
-    })(),
+    participants: resolvedTotalParticipants,
+    participants_by_gender: resolvedGenderCounts,
     recent_participants: (() => {
       const rawR = row.recent_participants || row.recentParticipants || d.recent_participants || rawJsonData.recent_participants;
       if (typeof rawR === 'string') {
@@ -475,7 +505,7 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
     const isGenericTName = !tName || tName === 'himalayantrek' || tName === 'hikeevent' || tName === 'untitledhike';
 
     const matched = registrations.filter((r) => {
-      const regStatus = String(r.status || r.registration_status || r.roster_registration_status || 'Confirmed').toLowerCase().trim();
+      const regStatus = String(r.roster_registration_status || r.registration_status || r.status || 'Confirmed').toLowerCase().trim();
       if (regStatus !== 'confirmed') {
         return false;
       }
@@ -522,7 +552,7 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
           gender: isFemale ? 'f' : 'm',
         });
 
-        // Check for companions in team_members or person_remarks
+        // Check for companions in team_members
         if (Array.isArray(r.team_members)) {
           for (const tm of r.team_members) {
             const tmName = (tm.full_name || '').trim();
@@ -536,23 +566,6 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
                 name: tmName,
                 gender: tmFemale ? 'f' : 'm',
               });
-            }
-          }
-        } else {
-          const remarks = String(r.person_remarks || '');
-          const matchComp = remarks.match(/companion\(?s?\)?:\s*([^,\n]+)/i);
-          if (matchComp && matchComp[1]) {
-            const compNames = matchComp[1].split(',').map((n: string) => n.trim()).filter(Boolean);
-            for (const cName of compNames) {
-              if (!seenNames.has(cName.toLowerCase())) {
-                seenNames.add(cName.toLowerCase());
-                totalPax += 1;
-                femaleCount += 1;
-                recentList.unshift({
-                  name: cName,
-                  gender: 'f',
-                });
-              }
             }
           }
         }
@@ -569,7 +582,7 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
           male: maleCount,
           female: femaleCount,
         },
-        recent_participants: recentList,
+        recent_participants: recentList.length > 0 ? recentList : trek.recent_participants,
       };
     }
 
