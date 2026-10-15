@@ -1,0 +1,1488 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Trek, TeamMember, BookingFormData } from '../types';
+import { triggerHaptic } from '../utils/haptics';
+import { MiniPrayerFlags } from './NepaliPrayerFlags';
+import { useCitizenPricing, isNepalPhoneNumber } from '../hooks/useCitizenPricing';
+import {
+  X,
+  MapPin,
+  User,
+  Users,
+  Heart,
+  Shield,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  Trash2,
+  ArrowLeft,
+  Calendar,
+  Sparkles,
+  Phone,
+  Mail,
+  Briefcase,
+  ChevronRight,
+  HelpCircle,
+  Clock,
+  Compass,
+} from 'lucide-react';
+
+interface RegistrationModalProps {
+  trek: Trek | null;
+  allTreks?: Trek[];
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (formData: BookingFormData) => Promise<void>;
+  userEmail?: string;
+  latestBooking?: any;
+  onNavigateToPayment?: () => void;
+  isAdminProxy?: boolean;
+  pastHikers?: any[];
+}
+
+export const RegistrationModal: React.FC<RegistrationModalProps> = ({
+  trek,
+  allTreks = [],
+  isOpen,
+  onClose,
+  onSubmit,
+  userEmail = '',
+  latestBooking,
+  onNavigateToPayment,
+  isAdminProxy = false,
+  pastHikers = [],
+}) => {
+  // Helper to accurately parse trek date
+  const parseTrekDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+    if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  // Filter to only upcoming events for registration selection
+  const availableTreks = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const sourceTreks = allTreks.length > 0 ? allTreks : trek ? [trek] : [];
+    const upcoming = sourceTreks.filter((t) => {
+      // If this is the specific trek the user clicked "Register" on, always ensure it's in the list
+      if (trek && t.id === trek.id) return true;
+      const status = (t.status || t.data?.status || '').toLowerCase().trim();
+      if (status === 'draft' || status === 'archived') return false;
+      const dt = parseTrekDate(t.date);
+      return !dt || dt.getTime() >= today.getTime();
+    });
+
+    // Sort ascending (nearest date first)
+    upcoming.sort((a, b) => {
+      const da = parseTrekDate(a.date)?.getTime() || 0;
+      const db = parseTrekDate(b.date)?.getTime() || 0;
+      return da - db;
+    });
+
+    return upcoming.length > 0 ? upcoming : sourceTreks;
+  }, [allTreks, trek]);
+
+  const [selectedTrekId, setSelectedTrekId] = useState<string>(trek?.id || availableTreks[0]?.id || '');
+  const activeTrek = availableTreks.find((t) => t.id === selectedTrekId) || trek;
+
+  // Determine if the selected hike is an overnight hike where DAYS = 2D 1N
+  const isOvernight2D1N = useMemo(() => {
+    if (!activeTrek) return false;
+    const cat = String(activeTrek.category || activeTrek.data?.category || '').toLowerCase();
+    const title = String(activeTrek.name || activeTrek.title || activeTrek.data?.title || '').toLowerCase();
+    const rawDays = String(
+      activeTrek.days ||
+      (activeTrek as any)?.days_label ||
+      activeTrek.data?.overview?.days ||
+      activeTrek.data?.days ||
+      activeTrek.data?.overview?.expectedDuration ||
+      ''
+    ).trim().toLowerCase();
+
+    const cleanDays = rawDays.replace(/[\s\-_/]/g, '');
+
+    // Direct match for 2D 1N pattern (e.g. 2d1n, 2days1night, 2d1night)
+    const has2D1N =
+      cleanDays.includes('2d1n') ||
+      cleanDays === '2d1n' ||
+      /2\s*d(?:ays?)?.*1\s*n(?:ights?)?/i.test(rawDays);
+
+    const isOvernight = cat.includes('overnight') || title.includes('overnight') || rawDays.includes('overnight');
+    const is2Days =
+      has2D1N ||
+      cleanDays === '2d' ||
+      cleanDays === '2' ||
+      cleanDays.startsWith('2day') ||
+      rawDays === '2';
+
+    return has2D1N || (isOvernight && is2Days);
+  }, [activeTrek]);
+
+  const [selectedDate, setSelectedDate] = useState<string>(trek?.date || activeTrek?.date || '');
+
+  // Your Information (Primary Contact)
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [emergencyContact, setEmergencyContact] = useState('');
+  const [email, setEmail] = useState(userEmail);
+  const [profession, setProfession] = useState('');
+
+  const { isNepaliCitizen } = useCitizenPricing();
+  const isCitizenRate = isNepaliCitizen || isNepalPhoneNumber(phone) || isNepalPhoneNumber(whatsapp);
+  const activeTrekPriceLabel = activeTrek?.price
+    ? isCitizenRate
+      ? activeTrek.price
+      : 'Inquire for International Rates'
+    : '';
+
+  // Group & About You
+  const [isGroup, setIsGroup] = useState<'Solo' | 'Group'>('Solo');
+  const [ageGroup, setAgeGroup] = useState('20-30');
+  const [gender, setGender] = useState('Female');
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+
+  // Health
+  const [hasMedical, setHasMedical] = useState<'Yes' | 'No'>('No');
+  const [specifyMedical, setSpecifyMedical] = useState('');
+  const [recentHikes, setRecentHikes] = useState('');
+
+  // Safety & Preferences
+  const [agreeRules, setAgreeRules] = useState<'Yes' | 'No'>('Yes');
+  const [guidePreference, setGuidePreference] = useState<'Guided' | 'Unguided'>('Guided');
+  const [transportPreference, setTransportPreference] = useState<'Jeep' | 'Bus'>('Bus');
+  const [showGuideDetail, setShowGuideDetail] = useState(false);
+  const [showTransportDetail, setShowTransportDetail] = useState(false);
+
+  // Additional Notes
+  const [suggestions, setSuggestions] = useState('');
+
+  // UI state
+  const [isReviewMode, setIsReviewMode] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isAutoFilled, setIsAutoFilled] = useState(false);
+  const [submissionProgress, setSubmissionProgress] = useState<number>(0);
+  const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
+  const [matchedHiker, setMatchedHiker] = useState<{ name: string; phone?: string } | null>(null);
+
+  const handlePhoneChange = (inputVal: string) => {
+    setPhone(inputVal);
+
+    if (!pastHikers || pastHikers.length === 0) return;
+
+    const cleanInput = inputVal.replace(/\D/g, '');
+    if (cleanInput.length >= 8) {
+      const targetDigits = cleanInput.slice(-10);
+      const match = pastHikers.find((h) => {
+        const p1 = (h.phone || h.whatsapp || '').replace(/\D/g, '');
+        return p1.length >= 8 && (p1.slice(-10) === targetDigits || p1.includes(targetDigits) || targetDigits.includes(p1));
+      });
+
+      if (match) {
+        if (match.full_name) setFullName(match.full_name);
+        if (match.email || match.email_address) setEmail(match.email || match.email_address);
+        if (match.whatsapp || match.phone) setWhatsapp(match.whatsapp || match.phone);
+        if (match.emergency_contact || match.emergency_backup_contact) {
+          setEmergencyContact(match.emergency_contact || match.emergency_backup_contact);
+        }
+        if (match.profession) setProfession(match.profession);
+        if (match.age_group) setAgeGroup(match.age_group);
+        if (match.gender) setGender(match.gender);
+        if (match.has_medical === 'Yes' || (match.specify_medical && match.specify_medical !== 'No')) {
+          setHasMedical('Yes');
+          setSpecifyMedical(match.specify_medical || '');
+        }
+        if (match.recent_hikes) setRecentHikes(match.recent_hikes);
+        if (match.guide_preference) setGuidePreference(match.guide_preference as any);
+        if (match.transport_preference) setTransportPreference(match.transport_preference as any);
+
+        setMatchedHiker({
+          name: match.full_name,
+          phone: match.phone,
+        });
+      } else {
+        setMatchedHiker(null);
+      }
+    } else {
+      setMatchedHiker(null);
+    }
+  };
+
+  // Helper to load saved profile data from localStorage or passed props
+  const getSavedProfile = () => {
+    try {
+      const p1 = localStorage.getItem('wnw_user_registration_profile');
+      if (p1) {
+        const parsed = JSON.parse(p1);
+        if (parsed && (parsed.fullName || parsed.full_name || parsed.phone)) return parsed;
+      }
+      const p2 = localStorage.getItem('wnw_last_registration_data');
+      if (p2) {
+        const parsed = JSON.parse(p2);
+        if (parsed && (parsed.fullName || parsed.full_name || parsed.phone)) return parsed;
+      }
+      const devB = localStorage.getItem('wnw_device_bookings');
+      if (devB) {
+        const parsed = JSON.parse(devB);
+        if (Array.isArray(parsed) && parsed.length > 0 && (parsed[0].full_name || parsed[0].phone)) {
+          return parsed[0];
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Auto-fill when modal opens from latestBooking, localStorage, or user profile
+  useEffect(() => {
+    if (isOpen) {
+      if (isAdminProxy) {
+        setFullName('');
+        setPhone('');
+        setWhatsapp('');
+        setEmergencyContact('');
+        setEmail('');
+        setProfession('');
+        setTeamMembers([]);
+        setIsGroup('Solo');
+        setHasMedical('No');
+        setSpecifyMedical('');
+        setRecentHikes('');
+        setSuggestions('');
+        setIsReviewMode(false);
+        setError(null);
+        setMatchedHiker(null);
+        setIsSubmitted(false);
+        setSubmitting(false);
+        return;
+      }
+      const saved = getSavedProfile();
+      const source = latestBooking || saved;
+
+      let filledCount = 0;
+
+      if (source) {
+        const nameVal = source.full_name || source.hikerName || source.fullName || source.name;
+        if (nameVal) {
+          setFullName(nameVal);
+          filledCount++;
+        }
+
+        const phoneVal = source.phone || source.phoneNumber || source.phone_number;
+        if (phoneVal) {
+          setPhone(phoneVal);
+          filledCount++;
+        }
+
+        const whatsappVal = source.whatsapp || source.whatsapp_number || source.whatsappNumber;
+        if (whatsappVal) {
+          setWhatsapp(whatsappVal);
+        } else if (phoneVal) {
+          setWhatsapp(phoneVal);
+        }
+
+        const emergencyVal = source.emergency_backup_contact || source.emergency_contact || source.emergencyContact || source.emergencyBackupContact;
+        if (emergencyVal) {
+          setEmergencyContact(emergencyVal);
+          filledCount++;
+        }
+
+        const emailVal = userEmail || source.email_address || source.email || source.user_email || source.userEmail;
+        if (emailVal) {
+          setEmail(emailVal);
+        }
+
+        const professionVal = source.profession || source.job;
+        if (professionVal) {
+          setProfession(professionVal);
+        }
+
+        const ageVal = source.age_group || source.ageGroup;
+        if (ageVal) {
+          setAgeGroup(ageVal);
+        }
+
+        const genderVal = source.gender;
+        if (genderVal) {
+          setGender(genderVal);
+        }
+
+        const medVal = source.medical_condition || source.medicalCondition || source.specifyMedical;
+        if (medVal && medVal !== 'No' && medVal !== 'None') {
+          setHasMedical('Yes');
+          setSpecifyMedical(medVal === 'Yes' ? '' : medVal);
+        } else {
+          setHasMedical('No');
+          setSpecifyMedical('');
+        }
+
+        const recentVal = source.recent_hikes || source.recentHikes;
+        if (recentVal) {
+          setRecentHikes(recentVal);
+        }
+
+        const guideVal = source.guide_mode || source.guide_preference || source.guidePreference;
+        if (guideVal === 'Guided' || guideVal === 'Unguided') {
+          setGuidePreference(guideVal);
+        }
+
+        const transportVal = source.transport_mode || source.transport_preference || source.transportPreference;
+        if (transportVal === 'Jeep' || transportVal === 'Bus') {
+          setTransportPreference(transportVal);
+        }
+      } else if (userEmail) {
+        setEmail(userEmail);
+      }
+
+      setIsAutoFilled(filledCount > 0);
+    } else {
+      setIsAutoFilled(false);
+      setIsReviewMode(false);
+    }
+  }, [isOpen, latestBooking, userEmail]);
+
+  // Reset or pre-fill when active trek or email changes
+  useEffect(() => {
+    if (trek) {
+      setSelectedTrekId(trek.id);
+      setSelectedDate(trek.date);
+    }
+    if (userEmail) {
+      setEmail(userEmail);
+    }
+  }, [trek, userEmail]);
+
+  const handleTrekChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newId = e.target.value;
+    setSelectedTrekId(newId);
+    const matched = availableTreks.find((t) => t.id === newId);
+    if (matched) {
+      setSelectedDate(matched.date);
+    }
+  };
+
+  const handleAddTeamMember = () => {
+    setTeamMembers([
+      ...teamMembers,
+      {
+        full_name: '',
+        phone: '',
+        age_group: '20-30',
+        gender: 'Female',
+      },
+    ]);
+    setIsGroup('Group');
+  };
+
+  const handleUpdateTeamMember = (index: number, field: keyof TeamMember, val: string) => {
+    const updated = [...teamMembers];
+    updated[index] = { ...updated[index], [field]: val };
+    setTeamMembers(updated);
+  };
+
+  const handleRemoveTeamMember = (index: number) => {
+    const updated = teamMembers.filter((_, i) => i !== index);
+    setTeamMembers(updated);
+    if (updated.length === 0) {
+      setIsGroup('Solo');
+    }
+  };
+
+  const validateForm = () => {
+    setError(null);
+    if (!selectedTrekId) {
+      setError('Please select a trek.');
+      return false;
+    }
+    if (activeTrek?.is_cancelled) {
+      setError(`This trek has been cancelled: ${activeTrek.cancellation_reason || 'Registrations are closed.'}`);
+      return false;
+    }
+    if (!fullName.trim()) {
+      setError('Please enter your full name.');
+      return false;
+    }
+    if (!phone.trim()) {
+      setError('Please enter your phone number.');
+      return false;
+    }
+    if (!email.trim()) {
+      setError('Please enter a valid email address.');
+      return false;
+    }
+    if (!gender) {
+      setError('Please select your gender.');
+      return false;
+    }
+    if (agreeRules !== 'Yes') {
+      setError('You must agree to the safety rules to proceed.');
+      return false;
+    }
+
+    // Validate any team members
+    for (let i = 0; i < teamMembers.length; i++) {
+      const tm = teamMembers[i];
+      if (!tm.full_name.trim() || !tm.phone?.trim()) {
+        setError(`Please fill in both name and phone for Team Member ${i + 1}.`);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleProceedToReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (validateForm()) {
+      setIsReviewMode(true);
+    }
+  };
+
+  const handleFinalSubmit = async () => {
+    if (!validateForm()) return;
+    setSubmitting(true);
+    setError(null);
+    setSubmissionProgress(0);
+
+    const payload: BookingFormData = {
+      trek_id: selectedTrekId,
+      trek_name: activeTrek?.name || 'Trek Expedition',
+      trek_date: selectedDate,
+      full_name: fullName.trim(),
+      phone: phone.trim(),
+      whatsapp: whatsapp.trim() || phone.trim(),
+      emergency_contact: emergencyContact.trim(),
+      email: email.trim(),
+      profession: profession.trim(),
+      is_group: isGroup,
+      age_group: ageGroup,
+      gender,
+      team_members: teamMembers,
+      has_medical: hasMedical,
+      specify_medical: hasMedical === 'Yes' ? specifyMedical.trim() : '',
+      recent_hikes: recentHikes.trim(),
+      agree_rules: agreeRules,
+      guide_preference: guidePreference,
+      transport_preference: transportPreference,
+      suggestions: suggestions.trim(),
+    };
+
+    const progressInterval = setInterval(() => {
+      setSubmissionProgress((prev) => {
+        if (prev >= 95) return prev;
+        const inc = Math.floor(Math.random() * 8) + 4;
+        return Math.min(98, prev + inc);
+      });
+    }, 150);
+
+    try {
+      // Save profile locally so subsequent registrations always prefill smoothly
+      const profileToSave = {
+        fullName: payload.full_name,
+        full_name: payload.full_name,
+        phone: payload.phone,
+        whatsapp: payload.whatsapp,
+        whatsapp_number: payload.whatsapp,
+        emergencyContact: payload.emergency_contact,
+        emergency_backup_contact: payload.emergency_contact,
+        email: payload.email,
+        email_address: payload.email,
+        profession: payload.profession,
+        ageGroup: payload.age_group,
+        age_group: payload.age_group,
+        gender: payload.gender,
+        medicalCondition: payload.specify_medical,
+        medical_condition: payload.specify_medical,
+        recentHikes: payload.recent_hikes,
+        recent_hikes: payload.recent_hikes,
+        guidePreference: payload.guide_preference,
+        transportPreference: payload.transport_preference,
+      };
+      if (!isAdminProxy) {
+        try {
+          localStorage.setItem('wnw_user_registration_profile', JSON.stringify(profileToSave));
+          localStorage.setItem('wnw_last_registration_data', JSON.stringify(profileToSave));
+          if (payload.phone) {
+            localStorage.setItem('wnw_user_phone', payload.phone.trim());
+          }
+        } catch (e) {
+          console.warn('Could not save profile to localStorage:', e);
+        }
+      }
+
+      await onSubmit(payload);
+      clearInterval(progressInterval);
+      setSubmissionProgress(100);
+
+      setTimeout(() => {
+        triggerHaptic([30, 40, 50]);
+        setIsSubmitted(true);
+        setSubmitting(false);
+      }, 300);
+    } catch (err: any) {
+      clearInterval(progressInterval);
+      setSubmissionProgress(0);
+      setSubmitting(false);
+      setError(err?.message || 'Failed to submit registration');
+    }
+  };
+
+  const ageOptions = ['Under 20', '20-30', '31-40', '41-50', 'Over 50'];
+  const genderOptions = ['Female', 'Male', 'Non-Binary', 'Prefer not to say'];
+
+  // Mobile swipe down to dismiss handling
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState<number>(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+    setDragOffsetY(0);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY === null) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY;
+    if (diff > 0) {
+      setDragOffsetY(diff);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (dragOffsetY > 75) {
+      onClose();
+    }
+    setTouchStartY(null);
+    setDragOffsetY(0);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      id="modal-registration-backdrop"
+      className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs transition-all"
+    >
+      <div
+        id="modal-registration-sheet"
+        style={{
+          transform: dragOffsetY > 0 ? `translateY(${dragOffsetY}px)` : undefined,
+          transition: dragOffsetY === 0 ? 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
+        }}
+        className="bg-[#FAFAF9] rounded-t-3xl sm:rounded-2xl max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 border border-[#E5E1DB]"
+      >
+        {/* Mobile drag bar with touch gesture listeners */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="w-full pt-2.5 pb-1 sm:hidden shrink-0 cursor-grab active:cursor-grabbing flex justify-center touch-none select-none"
+        >
+          <div className="w-10 h-1.5 rounded-full bg-[#D6D3CD]" />
+        </div>
+
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[#EBE7E1] bg-white shrink-0">
+          <div className="min-w-0 flex-1 mr-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                isAdminProxy
+                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                  : 'bg-[#7ABA42]/15 text-[#5C942D]'
+              }`}>
+                <Sparkles className="w-2.5 h-2.5" />
+                {isAdminProxy ? 'Admin Quick Entry' : 'Hike Registration'}
+              </span>
+              {activeTrek?.hike_number && (
+                <span className="text-[10px] font-bold text-[#8B8680]">
+                  #{activeTrek.hike_number}
+                </span>
+              )}
+            </div>
+            <h2 className="text-base sm:text-lg font-bold text-[#1F1F1F] truncate mt-0.5">
+              {isAdminProxy
+                ? `Add Participant: ${activeTrek ? activeTrek.name : 'New Event'}`
+                : activeTrek ? activeTrek.name : 'Adventure Registration'}
+            </h2>
+            <p className="text-[11px] text-[#78716C] flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-[#E08828]" />
+              <span>{selectedDate || 'Upcoming Schedule'}</span>
+              <span className="text-[#D6D3CD]">•</span>
+              <span className="text-[#7ABA42] font-semibold">{activeTrek?.days || 'Trail Event'}</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            id="close-registration-modal-btn"
+            onClick={onClose}
+            className="p-1.5 text-[#78716C] hover:text-[#1F1F1F] rounded-lg hover:bg-[#F3EFEA] transition-colors shrink-0 cursor-pointer"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="mx-4 mt-3 p-2.5 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span className="flex-1 font-medium">{error}</span>
+          </div>
+        )}
+
+        {/* Scrollable Form Body */}
+        <div className="flex-1 overflow-y-auto px-4 pt-3 pb-24 sm:px-5 sm:py-4 space-y-3.5 text-xs text-[#1F1F1F]">
+          {submitting ? (
+            /* ===== SUBMISSION PROGRESS VIEW ===== */
+            <div className="py-12 flex flex-col items-center justify-center space-y-6 text-center animate-in fade-in duration-200">
+              <div className="relative flex items-center justify-center">
+                {/* Outer spin track */}
+                <div className="w-20 h-20 rounded-full border-4 border-stone-100" />
+                {/* Active progress border */}
+                <div 
+                  className="absolute w-20 h-20 rounded-full border-4 border-t-[#7ABA42] border-r-transparent border-b-transparent border-l-transparent animate-spin"
+                  style={{ animationDuration: '0.8s' }}
+                />
+                <span className="absolute text-sm font-black font-mono text-[#1F1F1F]">
+                  {submissionProgress}%
+                </span>
+              </div>
+              
+              <div className="space-y-1.5 max-w-sm">
+                <h4 className="text-sm font-bold text-[#1F1F1F]">
+                  Submitting Registration...
+                </h4>
+                <div className="w-48 h-1.5 bg-stone-100 rounded-full overflow-hidden mx-auto">
+                  <div 
+                    className="h-full bg-[#7ABA42] transition-all duration-150 ease-out"
+                    style={{ width: `${submissionProgress}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-[#78716C] animate-pulse">
+                  {submissionProgress < 40 
+                    ? 'Packaging details...' 
+                    : submissionProgress < 80 
+                    ? 'Creating secure reservation...' 
+                    : 'Finalizing coordination links...'}
+                </p>
+              </div>
+            </div>
+          ) : isSubmitted ? (
+            /* ===== SUBMISSION COMPLETE SUCCESS SCREEN ===== */
+            <div className="py-10 flex flex-col items-center justify-center space-y-6 text-center animate-in zoom-in-95 duration-300">
+              <div className="w-16 h-16 bg-[#EEF8E7] rounded-full flex items-center justify-center text-[#7ABA42] shadow-2xs border border-[#D0EBC4]">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+              
+              <div className="space-y-2 max-w-sm">
+                <h3 className="text-lg font-black text-[#1F1F1F] tracking-tight">
+                  {isAdminProxy ? 'Participant Added to Roster!' : 'Registration Confirmed!'}
+                </h3>
+                <p className="text-xs text-[#5A5551] leading-relaxed">
+                  {isAdminProxy ? (
+                    <>
+                      <strong className="text-[#1F1F1F]">{fullName}</strong> has been successfully added to the <strong className="text-[#1F1F1F]">{activeTrek?.name}</strong> roster.
+                    </>
+                  ) : (
+                    <>
+                      Hi <strong className="text-[#1F1F1F]">{fullName}</strong>, your spot on the <strong className="text-[#1F1F1F]">{activeTrek?.name}</strong> expedition has been secured successfully.
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {/* Success Call to Actions */}
+              <div className="w-full max-w-xs space-y-2.5 pt-4 mx-auto">
+                {isAdminProxy ? (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full py-3 px-3 sm:px-5 bg-[#E08828] hover:bg-[#c9741b] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>Done (Return to Roster)</span>
+                    <CheckCircle2 className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onNavigateToPayment) {
+                          onNavigateToPayment();
+                        } else {
+                          onClose();
+                        }
+                      }}
+                      className="w-full py-3 px-3 sm:px-5 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <span>Pay Now (Pricing & Payment)</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="w-full py-2.5 px-3 sm:px-5 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#5A5551] font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                    >
+                      Pay Later (Return to Homepage)
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : !isReviewMode ? (
+            /* ===== COMPACT FORM VIEW ===== */
+            <form onSubmit={handleProceedToReview} className="space-y-3.5">
+              {/* 1. Trek Selector Banner */}
+              <div className="relative bg-white border border-[#EBE7E1] rounded-xl p-3 shadow-2xs space-y-2 overflow-hidden">
+                {/* Miniature prayer flags draped over booking banner */}
+                <div className="absolute -top-1 right-2 sm:right-4 w-24 xs:w-28 sm:w-32 z-20 pointer-events-none drop-shadow-2xs opacity-85">
+                  <MiniPrayerFlags variant="draped" count={5} />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-[#78716C] font-semibold border-b border-[#F5F2EC] pb-1.5">
+                  <span className="flex items-center gap-1 text-[#2B6CB0]">
+                    <Compass className="w-3.5 h-3.5" /> Event Selection
+                  </span>
+                  {activeTrekPriceLabel && (
+                    <span className={`font-bold ${isCitizenRate ? 'text-[#E08828]' : 'text-blue-600 text-[10px]'}`}>
+                      {activeTrekPriceLabel}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Trek / Route *
+                    </label>
+                    <select
+                      id="trekSelect"
+                      value={selectedTrekId}
+                      onChange={handleTrekChange}
+                      required
+                      className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] font-medium focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                    >
+                      {availableTreks.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.hike_number ? `#${t.hike_number} - ` : ''}{t.name} {t.date ? `(${t.date})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Date *
+                    </label>
+                    <input
+                      type="text"
+                      id="dateSelect"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      required
+                      placeholder="e.g. 28 March 2026"
+                      className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] font-medium focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Primary Hiker Information */}
+              <div className="bg-white border border-[#EBE7E1] rounded-xl p-3 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-[#2B6CB0] border-b border-[#F5F2EC] pb-1.5">
+                  <span className="flex items-center gap-1">
+                    <User className="w-3.5 h-3.5" /> Primary Hiker Details
+                  </span>
+                  {isAutoFilled ? (
+                    <span className="flex items-center gap-1 text-[10px] text-[#7ABA42] bg-[#EEF8E7] px-2 py-0.5 rounded-full font-bold animate-pulse">
+                      <Sparkles className="w-3 h-3 text-[#7ABA42]" /> Prefilled from previous trek
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-[#A8A29E] font-normal">* Required</span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      id="fullName"
+                      name="fullName"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="e.g. Arjun Koirala"
+                      className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      id="phoneNumber"
+                      name="phoneNumber"
+                      required
+                      value={phone}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="e.g. 98XXXXXXXX"
+                      className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                    />
+                    {matchedHiker && (
+                      <div className="mt-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[10.5px] font-bold text-emerald-800 flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="truncate">
+                            Past hiker found: <strong>{matchedHiker.name}</strong> (Auto-filled)
+                          </span>
+                        </div>
+                        <span className="text-[8.5px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-200 text-emerald-900 rounded font-black shrink-0">
+                          Matched
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      id="emailAddress"
+                      name="emailAddress"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="arjun@example.com"
+                      className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Emergency Contact
+                    </label>
+                    <input
+                      type="tel"
+                      id="emergencyContact"
+                      name="emergencyContact"
+                      value={emergencyContact}
+                      onChange={(e) => setEmergencyContact(e.target.value)}
+                      placeholder="Backup Phone (Family/Friend)"
+                      className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      WhatsApp (if different)
+                    </label>
+                    <input
+                      type="tel"
+                      id="whatsappNumber"
+                      name="whatsappNumber"
+                      value={whatsapp}
+                      onChange={(e) => setWhatsapp(e.target.value)}
+                      placeholder="Same as phone if blank"
+                      className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Profession / Field
+                    </label>
+                    <input
+                      type="text"
+                      id="profession"
+                      name="profession"
+                      value={profession}
+                      onChange={(e) => setProfession(e.target.value)}
+                      placeholder="e.g. Student, Engineer"
+                      className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Demographics & Solo/Group Compact Row */}
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#F5F2EC]">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Type
+                    </label>
+                    <div className="flex bg-[#FAF9F6] p-0.5 rounded-lg border border-[#D6D3CD]">
+                      <button
+                        type="button"
+                        onClick={() => setIsGroup('Solo')}
+                        className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                          isGroup === 'Solo' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                        }`}
+                      >
+                        Solo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsGroup('Group')}
+                        className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                          isGroup === 'Group' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                        }`}
+                      >
+                        Group
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Age
+                    </label>
+                    <select
+                      id="ageGroup"
+                      name="ageGroup"
+                      value={ageGroup}
+                      onChange={(e) => setAgeGroup(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42]"
+                    >
+                      {ageOptions.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Gender *
+                    </label>
+                    <select
+                      id="gender"
+                      name="gender"
+                      required
+                      value={gender}
+                      onChange={(e) => setGender(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42]"
+                    >
+                      {genderOptions.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Team Members Expansion */}
+                <div className="pt-2 border-t border-[#F5F2EC]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#1F1F1F] flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-[#5C942D]" />
+                      Group Companions {teamMembers.length > 0 && `(${teamMembers.length})`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAddTeamMember}
+                      className="px-2 py-1 text-[11px] font-bold text-[#E08828] bg-[#FFF8EE] border border-[#FCD399] rounded-lg hover:bg-[#E08828] hover:text-white transition-all cursor-pointer"
+                    >
+                      + Add Hiker
+                    </button>
+                  </div>
+
+                  {teamMembers.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {teamMembers.map((tm, idx) => (
+                        <div
+                          key={idx}
+                          className="p-2 bg-[#FAF9F6] border border-[#EBE7E1] rounded-lg space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between text-[11px] font-bold text-[#78716C]">
+                            <span>Companion #{idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTeamMember(idx)}
+                              className="text-rose-600 hover:text-rose-800 p-0.5 cursor-pointer"
+                              title="Remove"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                            <input
+                              type="text"
+                              placeholder="Name *"
+                              required
+                              value={tm.full_name}
+                              onChange={(e) => handleUpdateTeamMember(idx, 'full_name', e.target.value)}
+                              className="px-2 py-1 text-xs border border-[#D6D3CD] rounded bg-white"
+                            />
+                            <input
+                              type="tel"
+                              placeholder="Phone *"
+                              required
+                              value={tm.phone || ''}
+                              onChange={(e) => handleUpdateTeamMember(idx, 'phone', e.target.value)}
+                              className="px-2 py-1 text-xs border border-[#D6D3CD] rounded bg-white"
+                            />
+                            <select
+                              value={tm.age_group || '20-30'}
+                              onChange={(e) => handleUpdateTeamMember(idx, 'age_group', e.target.value)}
+                              className="px-1.5 py-1 text-xs border border-[#D6D3CD] rounded bg-white"
+                            >
+                              {ageOptions.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={tm.gender}
+                              onChange={(e) => handleUpdateTeamMember(idx, 'gender', e.target.value)}
+                              className="px-1.5 py-1 text-xs border border-[#D6D3CD] rounded bg-white"
+                            >
+                              {genderOptions.map((g) => (
+                                <option key={g} value={g}>
+                                  {g}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Health & Fitness */}
+              <div className="bg-white border border-[#EBE7E1] rounded-xl p-3 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-[#2B6CB0] border-b border-[#F5F2EC] pb-1.5">
+                  <span className="flex items-center gap-1">
+                    <Heart className="w-3.5 h-3.5 text-rose-500" /> Health & Fitness
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                      Any Medical Conditions?
+                    </label>
+                    <div className="flex bg-[#FAF9F6] p-0.5 rounded-lg border border-[#D6D3CD] w-36">
+                      <button
+                        type="button"
+                        onClick={() => setHasMedical('No')}
+                        className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                          hasMedical === 'No' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                        }`}
+                      >
+                        No
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHasMedical('Yes')}
+                        className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                          hasMedical === 'Yes' ? 'bg-rose-500 text-white shadow-2xs' : 'text-[#78716C]'
+                        }`}
+                      >
+                        Yes
+                      </button>
+                    </div>
+                  </div>
+
+                  {hasMedical === 'Yes' ? (
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                        Condition Details *
+                      </label>
+                      <input
+                        type="text"
+                        id="specifyMedical"
+                        name="specifyMedical"
+                        value={specifyMedical}
+                        onChange={(e) => setSpecifyMedical(e.target.value)}
+                        placeholder="e.g. Asthma, Knee pain, Allergy"
+                        className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-rose-500 focus:bg-white"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                        Recent Treks / Hikes
+                      </label>
+                      <input
+                        type="text"
+                        id="recentHikes"
+                        name="recentHikes"
+                        value={recentHikes}
+                        onChange={(e) => setRecentHikes(e.target.value)}
+                        placeholder="e.g. Nagarkot, Poon Hill"
+                        className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 4. Safety Agreement & Preferences */}
+              <div className="bg-white border border-[#EBE7E1] rounded-xl p-3 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-[#2B6CB0] border-b border-[#F5F2EC] pb-1.5">
+                  <span className="flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5 text-[#5C942D]" /> {isOvernight2D1N ? 'Trail Preferences & Safety' : 'Safety Agreement & Rules'}
+                  </span>
+                </div>
+
+                {/* Trail Preferences: Guide Mode & Transport (only for overnight hikes where DAYS = 2D 1N) */}
+                {isOvernight2D1N && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                        Guide Mode
+                      </label>
+                      <div className="flex bg-[#FAF9F6] p-0.5 rounded-lg border border-[#D6D3CD]">
+                        <button
+                          type="button"
+                          onClick={() => setGuidePreference('Guided')}
+                          className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                            guidePreference === 'Guided' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                          }`}
+                        >
+                          Guided
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGuidePreference('Unguided')}
+                          className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                            guidePreference === 'Unguided' ? 'bg-[#78716C] text-white shadow-2xs' : 'text-[#78716C]'
+                          }`}
+                        >
+                          Unguided
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78716C] mb-1">
+                        Transport
+                      </label>
+                      <div className="flex bg-[#FAF9F6] p-0.5 rounded-lg border border-[#D6D3CD]">
+                        <button
+                          type="button"
+                          onClick={() => setTransportPreference('Bus')}
+                          className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                            transportPreference === 'Bus' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                          }`}
+                        >
+                          Bus
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTransportPreference('Jeep')}
+                          className={`flex-1 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                            transportPreference === 'Jeep' ? 'bg-[#7ABA42] text-white shadow-2xs' : 'text-[#78716C]'
+                          }`}
+                        >
+                          Jeep
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Safety Rules Check */}
+                <div className={`${isOvernight2D1N ? 'pt-2 border-t border-[#F5F2EC]' : ''} flex items-center justify-between`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={agreeRules === 'Yes'}
+                      onChange={(e) => setAgreeRules(e.target.checked ? 'Yes' : 'No')}
+                      required
+                      className="w-4 h-4 rounded text-[#7ABA42] focus:ring-[#7ABA42] border-[#D6D3CD] cursor-pointer"
+                    />
+                    <span className="text-[11px] font-semibold text-[#1F1F1F]">
+                      I accept safety guidelines & club rules *
+                    </span>
+                  </label>
+                  <a
+                    href="https://www.walknepalwalk.com.np/faq-safety-policy"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#2B6CB0] hover:underline text-[10px] font-bold"
+                  >
+                    Rules Policy ↗
+                  </a>
+                </div>
+
+                {/* Optional Note */}
+                <input
+                  type="text"
+                  id="suggestions"
+                  name="suggestions"
+                  value={suggestions}
+                  onChange={(e) => setSuggestions(e.target.value)}
+                  placeholder="Notes / Dietary requests (optional)"
+                  className="w-full px-2.5 py-1.5 text-xs border border-[#EBE7E1] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:bg-white"
+                />
+              </div>
+
+              {/* Submit CTA */}
+              <div className="pt-1 space-y-1.5">
+                <button
+                  type="submit"
+                  id="reviewBtn"
+                  className="w-full min-h-[44px] py-2.5 px-3 sm:px-6 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-sm transition-all shadow-sm active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Review & Confirm Registration</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <p className="text-[10px] text-[#A8A29E] text-center">
+                  Instant registration linked with WhatsApp coordination group.
+                </p>
+              </div>
+            </form>
+          ) : (
+            /* ===== CLEAN REVIEW VIEW ===== */
+            <div className="space-y-3.5">
+              <div className="bg-white border border-[#EBE7E1] rounded-xl p-3.5 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between border-b border-[#F5F2EC] pb-2">
+                  <div className="flex items-center gap-1.5 font-bold text-sm text-[#1F1F1F]">
+                    <CheckCircle2 className="w-4 h-4 text-[#7ABA42]" />
+                    <span>Verify Registration Details</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-[#7ABA42]/10 text-[#5C942D] text-[10px] font-bold">
+                    {isGroup === 'Group' ? `Group (${teamMembers.length + 1})` : 'Solo Hiker'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs divide-y-0">
+                  {/* Event & Date */}
+                  <div className="col-span-2 bg-[#FAF9F6] p-2.5 rounded-lg border border-[#EBE7E1]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#78716C] block">
+                      Trek / Route & Date
+                    </span>
+                    <span className="font-bold text-[#1F1F1F] text-sm block">
+                      {activeTrek?.hike_number ? `#${activeTrek.hike_number} - ` : ''}
+                      {activeTrek?.name || 'Selected Trek'}
+                    </span>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs">
+                      <span className="text-[#5C942D] font-semibold">{selectedDate || 'Date not specified'}</span>
+                      {activeTrek?.days && (
+                        <>
+                          <span className="text-[#D6D3CD]">•</span>
+                          <span className="text-[#78716C] font-medium">{activeTrek.days}</span>
+                        </>
+                      )}
+                      {activeTrekPriceLabel && (
+                        <>
+                          <span className="text-[#D6D3CD]">•</span>
+                          <span className={`font-bold ${isCitizenRate ? 'text-[#E08828]' : 'text-blue-600'}`}>{activeTrekPriceLabel}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Primary Hiker */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Primary Hiker
+                    </span>
+                    <span className="font-semibold text-[#1F1F1F]">{fullName || '(Not Provided)'}</span>
+                  </div>
+
+                  {/* Phone */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Phone Number
+                    </span>
+                    <span className="font-semibold text-[#1F1F1F]">{phone || '(Not Provided)'}</span>
+                  </div>
+
+                  {/* Email */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Email Address
+                    </span>
+                    <span className="font-medium text-[#1F1F1F] truncate block">{email || '(Not Provided)'}</span>
+                  </div>
+
+                  {/* WhatsApp */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      WhatsApp Number
+                    </span>
+                    <span className="font-medium text-[#1F1F1F]">
+                      {whatsapp.trim() ? whatsapp : phone.trim() ? `${phone} (Same as Phone)` : '(Not Provided)'}
+                    </span>
+                  </div>
+
+                  {/* Emergency Contact */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Emergency Backup Contact
+                    </span>
+                    <span className={`font-medium ${emergencyContact.trim() ? 'text-[#1F1F1F]' : 'text-[#A8A29E] italic'}`}>
+                      {emergencyContact.trim() || 'None provided'}
+                    </span>
+                  </div>
+
+                  {/* Profession */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Profession / Field
+                    </span>
+                    <span className={`font-medium ${profession.trim() ? 'text-[#1F1F1F]' : 'text-[#A8A29E] italic'}`}>
+                      {profession.trim() || 'None specified'}
+                    </span>
+                  </div>
+
+                  {/* Demographics & Group Type */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Demographics & Type
+                    </span>
+                    <span className="font-medium text-[#1F1F1F]">
+                      {gender || 'Not specified'} • {ageGroup || 'Not specified'} • {isGroup}
+                    </span>
+                  </div>
+
+                  {/* Guide & Transport Mode (shown only for overnight 2D 1N hikes) */}
+                  {isOvernight2D1N && (
+                    <div className="py-1">
+                      <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                        Guide & Transport Mode
+                      </span>
+                      <span className="font-medium text-[#1F1F1F]">
+                        {guidePreference} Mode • {transportPreference}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Medical Condition & Past Hikes */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Medical Conditions
+                    </span>
+                    <span className="font-medium text-[#1F1F1F]">
+                      {hasMedical === 'Yes'
+                        ? `Yes: ${specifyMedical.trim() || 'Condition details not specified'}`
+                        : 'No known conditions'}
+                    </span>
+                  </div>
+
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Recent Hikes / Experience
+                    </span>
+                    <span className={`font-medium ${recentHikes.trim() ? 'text-[#1F1F1F]' : 'text-[#A8A29E] italic'}`}>
+                      {recentHikes.trim() || 'First time / None listed'}
+                    </span>
+                  </div>
+
+                  {/* Safety Agreement */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Safety Rules Agreement
+                    </span>
+                    <span className={`font-semibold inline-flex items-center gap-1.5 ${agreeRules === 'Yes' ? 'text-[#5C942D]' : 'text-rose-600'}`}>
+                      {agreeRules === 'Yes' ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-[#5C942D]" /> Accepted Safety Rules
+                        </>
+                      ) : (
+                        <>
+                          <X className="w-4 h-4 text-rose-600" /> Not Accepted
+                        </>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Suggestions / Notes */}
+                  <div className="py-1">
+                    <span className="text-[10px] text-[#78716C] block font-bold uppercase tracking-wider">
+                      Notes & Special Requests
+                    </span>
+                    <span className={`font-medium ${suggestions.trim() ? 'text-[#1F1F1F]' : 'text-[#A8A29E] italic'}`}>
+                      {suggestions.trim() || 'None'}
+                    </span>
+                  </div>
+
+                  {/* Team Members List if Group */}
+                  {teamMembers.length > 0 && (
+                    <div className="col-span-2 py-1.5 border-t border-[#F5F2EC]">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#78716C] block mb-1">
+                        Group Companions ({teamMembers.length})
+                      </span>
+                      <div className="space-y-1">
+                        {teamMembers.map((m, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-xs bg-[#FAF9F6] px-2.5 py-1.5 rounded-lg border border-[#EBE7E1]">
+                            <div>
+                              <span className="font-semibold text-[#1F1F1F] block">{m.full_name || `Companion #${idx + 1}`}</span>
+                              <span className="text-[#78716C] text-[11px]">
+                                {m.phone ? `Phone: ${m.phone}` : 'No phone'}
+                              </span>
+                            </div>
+                            <span className="text-[#5C942D] text-[11px] font-semibold bg-[#7ABA42]/10 px-2 py-0.5 rounded">
+                              {m.gender || 'Female'} • {m.age_group || '20-30'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Review Actions */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  id="backBtn"
+                  onClick={() => setIsReviewMode(false)}
+                  className="flex-1 min-h-[42px] py-2 px-3 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#1F1F1F] font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Edit Details</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="finalSubmitBtn"
+                  disabled={submitting}
+                  onClick={handleFinalSubmit}
+                  className="flex-2 min-h-[42px] py-2 px-4 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-50 active:scale-[0.99] cursor-pointer"
+                >
+                  {submitting ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Confirm & Register</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

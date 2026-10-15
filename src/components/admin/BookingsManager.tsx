@@ -193,6 +193,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTrekFilter, setSelectedTrekFilter] = useState<string>(initialTrekFilter || 'all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
   const [bookingTypeFilter, setBookingTypeFilter] = useState<'all' | 'public' | 'private'>('all');
   const [sortField, setSortField] = useState<'participant' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -608,7 +609,14 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         ? regStatusLower.includes('cancelled')
         : regStatusLower === filterLower);
 
-    return matchesSearch && matchesTrek && matchesStatus;
+    const draft = rowDrafts[reg.id];
+    const curPayment = draft?.payment_status !== undefined ? draft.payment_status : (reg.payment_status || 'Unpaid');
+    const curPaymentLower = String(curPayment).toLowerCase().trim();
+    const payFilterLower = paymentStatusFilter.toLowerCase().trim();
+    const matchesPayment =
+      paymentStatusFilter === 'all' || curPaymentLower === payFilterLower;
+
+    return matchesSearch && matchesTrek && matchesStatus && matchesPayment;
   });
 
   // Sort registrations according to active column sort
@@ -663,8 +671,107 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   }, 0);
 
   const confirmedCount = filteredRegistrations.filter((r) => (r.status || 'Confirmed') === 'Confirmed').length;
-  
-  // Financial totals across filtered registrations
+
+  // Status counts across current search/trek selection
+  const statusCounts = useMemo(() => {
+    let confirmed = 0;
+    let pending = 0;
+    let waitlisted = 0;
+    let cancelled = 0;
+
+    const selectedTrekObj =
+      selectedTrekFilter !== 'all' && selectedTrekFilter !== 'PRIVATE'
+        ? treks.find(
+            (t) =>
+              t.id === selectedTrekFilter ||
+              (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === selectedTrekFilter)
+          )
+        : undefined;
+
+    const q = searchTerm.toLowerCase().trim();
+
+    registrations.forEach((reg) => {
+      const isPrivate = reg.hike_number === 'PRIVATE' || reg.trek_name?.toLowerCase().includes('private');
+      if (bookingTypeFilter === 'public' && isPrivate) return;
+      if (bookingTypeFilter === 'private' && !isPrivate) return;
+
+      const matchesSearch =
+        !q ||
+        reg.full_name?.toLowerCase().includes(q) ||
+        reg.phone?.toLowerCase().includes(q) ||
+        reg.whatsapp?.toLowerCase().includes(q) ||
+        reg.hike_number?.toLowerCase().includes(q) ||
+        reg.trek_name?.toLowerCase().includes(q);
+
+      const matchesTrek =
+        selectedTrekFilter === 'all' ||
+        (selectedTrekFilter === 'PRIVATE' && isPrivate) ||
+        (selectedTrekObj
+          ? doesRegistrationMatchTrek(reg, selectedTrekObj)
+          : (reg.trek_id === selectedTrekFilter || (reg.hike_number && reg.hike_number !== 'TBD' && reg.hike_number === selectedTrekFilter)));
+
+      if (!matchesSearch || !matchesTrek) return;
+
+      const st = String(reg.status || 'Confirmed').toLowerCase();
+      if (st === 'confirmed') confirmed++;
+      else if (st === 'pending') pending++;
+      else if (st === 'waitlisted') waitlisted++;
+      else if (st.includes('cancel')) cancelled++;
+    });
+
+    return { confirmed, pending, waitlisted, cancelled };
+  }, [registrations, selectedTrekFilter, bookingTypeFilter, searchTerm, treks]);
+
+  // Payment status counts across current search/trek selection
+  const paymentCounts = useMemo(() => {
+    let unpaid = 0;
+    let depositPaid = 0;
+    let fullyPaid = 0;
+    let refunded = 0;
+
+    const selectedTrekObj =
+      selectedTrekFilter !== 'all' && selectedTrekFilter !== 'PRIVATE'
+        ? treks.find(
+            (t) =>
+              t.id === selectedTrekFilter ||
+              (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === selectedTrekFilter)
+          )
+        : undefined;
+
+    const q = searchTerm.toLowerCase().trim();
+
+    registrations.forEach((reg) => {
+      const isPrivate = reg.hike_number === 'PRIVATE' || reg.trek_name?.toLowerCase().includes('private');
+      if (bookingTypeFilter === 'public' && isPrivate) return;
+      if (bookingTypeFilter === 'private' && !isPrivate) return;
+
+      const matchesSearch =
+        !q ||
+        reg.full_name?.toLowerCase().includes(q) ||
+        reg.phone?.toLowerCase().includes(q) ||
+        reg.whatsapp?.toLowerCase().includes(q) ||
+        reg.hike_number?.toLowerCase().includes(q) ||
+        reg.trek_name?.toLowerCase().includes(q);
+
+      const matchesTrek =
+        selectedTrekFilter === 'all' ||
+        (selectedTrekFilter === 'PRIVATE' && isPrivate) ||
+        (selectedTrekObj
+          ? doesRegistrationMatchTrek(reg, selectedTrekObj)
+          : (reg.trek_id === selectedTrekFilter || (reg.hike_number && reg.hike_number !== 'TBD' && reg.hike_number === selectedTrekFilter)));
+
+      if (!matchesSearch || !matchesTrek) return;
+
+      const draft = rowDrafts[reg.id];
+      const curPayment = String(draft?.payment_status !== undefined ? draft.payment_status : (reg.payment_status || 'Unpaid')).toLowerCase().trim();
+      if (curPayment === 'unpaid') unpaid++;
+      else if (curPayment === 'deposit paid') depositPaid++;
+      else if (curPayment === 'fully paid') fullyPaid++;
+      else if (curPayment === 'refunded') refunded++;
+    });
+
+    return { unpaid, depositPaid, fullyPaid, refunded };
+  }, [registrations, selectedTrekFilter, bookingTypeFilter, searchTerm, treks, rowDrafts]);
   const totalPaidCash = filteredRegistrations.reduce((acc, r) => {
     const draftPaid = rowDrafts[r.id]?.paid_amount;
     const val = draftPaid !== undefined ? Number(draftPaid) : Number(r.paid_amount || 0);
@@ -1052,12 +1159,174 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
       {/* Registrations List / Table */}
       <div className="bg-white rounded-2xl border border-[#E5E1DB] shadow-2xs overflow-hidden">
-        <div className="p-3 sm:p-4 border-b border-[#F0EBE5] flex items-center justify-between">
+        <div className="p-3 sm:p-4 border-b border-[#F0EBE5] flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
           <div>
             <h3 className="text-xs font-bold text-[#1F1F1F] tracking-tight">Hiker Applications Roster</h3>
             <p className="text-[10px] text-[#8B8680] mt-0.5">
               Showing {filteredRegistrations.length} application(s) • Inline status, payment &amp; notes controls
             </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Reset All Filters Button */}
+            {(statusFilter !== 'all' || paymentStatusFilter !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('all');
+                  setPaymentStatusFilter('all');
+                }}
+                className="px-2 py-1 rounded-lg text-[10.5px] font-bold text-[#8B8680] hover:text-[#1F1F1F] hover:bg-[#F0EBE5] transition-colors cursor-pointer"
+                title="Reset all filters"
+              >
+                All
+              </button>
+            )}
+
+            {/* 4 Status Filter Buttons: Confirmed, Pending, Waitlisted, Cancelled (including Cancelled by User) */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'confirmed' ? 'all' : 'confirmed')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  statusFilter === 'confirmed'
+                    ? 'bg-emerald-600 border-emerald-700 text-white shadow-xs'
+                    : 'bg-emerald-50/70 hover:bg-emerald-100 border-emerald-200/80 text-emerald-800'
+                }`}
+                title="Filter Confirmed applications"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'confirmed' ? 'bg-white' : 'bg-emerald-500'}`} />
+                <span>Confirmed</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${statusFilter === 'confirmed' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-900'}`}>
+                  {statusCounts.confirmed}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  statusFilter === 'pending'
+                    ? 'bg-amber-600 border-amber-700 text-white shadow-xs'
+                    : 'bg-amber-50/70 hover:bg-amber-100 border-amber-200/80 text-amber-800'
+                }`}
+                title="Filter Pending applications"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'pending' ? 'bg-white' : 'bg-amber-500'}`} />
+                <span>Pending</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${statusFilter === 'pending' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-900'}`}>
+                  {statusCounts.pending}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'waitlisted' ? 'all' : 'waitlisted')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  statusFilter === 'waitlisted'
+                    ? 'bg-blue-600 border-blue-700 text-white shadow-xs'
+                    : 'bg-blue-50/70 hover:bg-blue-100 border-blue-200/80 text-blue-800'
+                }`}
+                title="Filter Waitlisted applications"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'waitlisted' ? 'bg-white' : 'bg-blue-500'}`} />
+                <span>Waitlisted</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${statusFilter === 'waitlisted' ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-900'}`}>
+                  {statusCounts.waitlisted}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'cancelled' ? 'all' : 'cancelled')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  statusFilter === 'cancelled'
+                    ? 'bg-rose-600 border-rose-700 text-white shadow-xs'
+                    : 'bg-rose-50/70 hover:bg-rose-100 border-rose-200/80 text-rose-800'
+                }`}
+                title="Filter Cancelled & Cancelled by User applications"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'cancelled' ? 'bg-white' : 'bg-rose-500'}`} />
+                <span>Cancelled</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${statusFilter === 'cancelled' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-900'}`}>
+                  {statusCounts.cancelled}
+                </span>
+              </button>
+            </div>
+
+            {/* Subtle Divider */}
+            <div className="hidden sm:block w-px h-5 bg-[#E5E1DB]" />
+
+            {/* 4 Payment Status Filter Buttons: Unpaid, Deposit Paid, Fully Paid, Refunded */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setPaymentStatusFilter(paymentStatusFilter === 'unpaid' ? 'all' : 'unpaid')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  paymentStatusFilter === 'unpaid'
+                    ? 'bg-stone-800 border-stone-900 text-white shadow-xs'
+                    : 'bg-stone-100/80 hover:bg-stone-200/80 border-stone-300 text-stone-800'
+                }`}
+                title="Filter Unpaid applications"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${paymentStatusFilter === 'unpaid' ? 'bg-white' : 'bg-stone-500'}`} />
+                <span>Unpaid</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${paymentStatusFilter === 'unpaid' ? 'bg-white/25 text-white' : 'bg-stone-200 text-stone-900'}`}>
+                  {paymentCounts.unpaid}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentStatusFilter(paymentStatusFilter === 'deposit paid' ? 'all' : 'deposit paid')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  paymentStatusFilter === 'deposit paid'
+                    ? 'bg-purple-600 border-purple-700 text-white shadow-xs'
+                    : 'bg-purple-50/70 hover:bg-purple-100 border-purple-200/80 text-purple-800'
+                }`}
+                title="Filter Deposit Paid applications"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${paymentStatusFilter === 'deposit paid' ? 'bg-white' : 'bg-purple-500'}`} />
+                <span>Deposit Paid</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${paymentStatusFilter === 'deposit paid' ? 'bg-white/25 text-white' : 'bg-purple-100 text-purple-900'}`}>
+                  {paymentCounts.depositPaid}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentStatusFilter(paymentStatusFilter === 'fully paid' ? 'all' : 'fully paid')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  paymentStatusFilter === 'fully paid'
+                    ? 'bg-blue-600 border-blue-700 text-white shadow-xs'
+                    : 'bg-blue-50/70 hover:bg-blue-100 border-blue-200/80 text-blue-800'
+                }`}
+                title="Filter Fully Paid applications"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${paymentStatusFilter === 'fully paid' ? 'bg-white' : 'bg-blue-500'}`} />
+                <span>Fully Paid</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${paymentStatusFilter === 'fully paid' ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-900'}`}>
+                  {paymentCounts.fullyPaid}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentStatusFilter(paymentStatusFilter === 'refunded' ? 'all' : 'refunded')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  paymentStatusFilter === 'refunded'
+                    ? 'bg-amber-700 border-amber-800 text-white shadow-xs'
+                    : 'bg-amber-50/70 hover:bg-amber-100 border-amber-200/80 text-amber-800'
+                }`}
+                title="Filter Refunded applications"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${paymentStatusFilter === 'refunded' ? 'bg-white' : 'bg-amber-500'}`} />
+                <span>Refunded</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${paymentStatusFilter === 'refunded' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-900'}`}>
+                  {paymentCounts.refunded}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 

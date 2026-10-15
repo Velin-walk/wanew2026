@@ -167,26 +167,28 @@ export const TrekCard: React.FC<TrekCardProps> = ({
     '';
 
   const badge = getDifficultyBadge(effectiveDifficulty);
-  const confirmedFromGender =
-    trek.participants_by_gender &&
-    (typeof trek.participants_by_gender.total === 'number' ||
-      typeof trek.participants_by_gender.male === 'number' ||
-      typeof trek.participants_by_gender.female === 'number')
-      ? (typeof trek.participants_by_gender.total === 'number' && trek.participants_by_gender.total > 0
-          ? trek.participants_by_gender.total
-          : (trek.participants_by_gender.male || 0) + (trek.participants_by_gender.female || 0))
-      : 0;
-  const currentParticipants = confirmedFromGender > 0
-    ? confirmedFromGender
-    : (trek.participants !== undefined && trek.participants !== null
-        ? Number(trek.participants)
-        : (trek.recent_participants || []).length);
+  const recent = trek.recent_participants || [];
+
+  const pg = trek.participants_by_gender;
+  const serverTotal = Number(pg?.total ?? trek.participants ?? (trek as any).registered_pax ?? 0);
+
+  const filteredParticipants = {
+    male: Number(pg?.male ?? recent.filter(p => p.gender === 'm').length) || 0,
+    female: Number(pg?.female ?? recent.filter(p => p.gender === 'f').length) || 0,
+    total: serverTotal > 0 ? serverTotal : recent.length,
+  };
+  const currentParticipants = filteredParticipants.total;
+  
   const execStatus = trek.data?.execution_status;
+  // Use isCancelled, also ensure cancellation reason is read correctly
   const isCancelled = Boolean(trek.is_cancelled || trek.data?.is_cancelled || execStatus === 'Cancelled');
+  const cancellationReason = trek.cancellation_reason || trek.data?.cancellation_reason;
+
   const isCompleted = execStatus === 'Completed';
   const isClosedByAdmin = execStatus === 'Registration Closed';
   const isFull = currentParticipants >= trek.capacity;
-  const isRegistrationDisabled = isFull || isCancelled || isCompleted || isClosedByAdmin;
+  // Allow registration for waitlist (i.e., if full, don't disable button, user clicks to join waitlist)
+  const isRegistrationDisabled = (isFull && !isFull) || isCancelled || isCompleted || isClosedByAdmin;
   const fillPercentage = Math.min(100, Math.round((currentParticipants / Math.max(1, trek.capacity)) * 100));
 
   const getBorderColor = (difficulty?: string) => {
@@ -263,10 +265,13 @@ export const TrekCard: React.FC<TrekCardProps> = ({
       {/* Card Image */}
       <div className="relative h-40 sm:h-48 w-full overflow-hidden group">
         <img
-          src={dbData?.cardImageUrl || trek.featured_image}
+          src={dbData?.cardImageUrl || trek.featured_image || (trek as any).cover_image_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop"}
           alt={trek.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           referrerPolicy="no-referrer"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop";
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
 
@@ -432,7 +437,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 
         {/* Participant Stack */}
         <ParticipantStack
-          participantsCount={trek.participants_by_gender}
+          participantsCount={filteredParticipants}
           recentParticipants={trek.recent_participants}
           totalCount={currentParticipants}
           trekName={trek.name}

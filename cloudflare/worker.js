@@ -575,6 +575,7 @@ async function recomputeLeaderboardSnapshot(env, force = false) {
  */
 async function updateTrekParticipantSummary(env, hikeNumber) {
   if (!env || !env.DB) return;
+  memTreksSnap = null;
   try {
     const hikeNumbers = [];
     if (hikeNumber) {
@@ -732,23 +733,18 @@ async function rebuildTreksSnapshot(env) {
   try {
     const { results: joined } = await env.DB.prepare(`
       WITH roster_summary AS (
-        SELECT 
-          clean_hike,
-          COUNT(*) as total_pax,
-          SUM(CASE WHEN LOWER(TRIM(COALESCE(gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) as female_pax,
-          SUM(CASE WHEN LOWER(TRIM(COALESCE(gender, ''))) NOT LIKE 'f%' THEN 1 ELSE 0 END) as male_pax
-        FROM (
-          SELECT DISTINCT
-            COALESCE(b.id, b.registration_id, LOWER(TRIM(b.full_name))) as uid,
-            REPLACE(REPLACE(TRIM(b.hike_number), '#', ''), ' ', '') as clean_hike,
-            b.gender
-          FROM bookings_roster b
-          WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
-            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
-            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
-            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%reject%'
-            AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
-        ) b
+        SELECT
+          REPLACE(REPLACE(TRIM(b.hike_number), '#', ''), ' ', '') AS clean_hike,
+          COUNT(*) AS total_pax,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+        FROM bookings_roster b
+        LEFT JOIN registrations r ON (
+          r.id = CAST(b.registration_id AS INTEGER)
+          OR CAST(r.id AS TEXT) = b.registration_id
+        )
+        WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+          AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
         GROUP BY clean_hike
       )
       SELECT 
@@ -770,19 +766,11 @@ async function rebuildTreksSnapshot(env) {
       FROM treks t
       LEFT JOIN event_executions e ON (
         t.hike_number = e.hike_number
-        OR REPLACE(t.hike_number, '#', '') = REPLACE(e.hike_number, '#', '')
-        OR TRIM(t.hike_number) = TRIM(e.hike_number)
-        OR REPLACE(REPLACE(t.hike_number, '#', ''), ' ', '') = REPLACE(REPLACE(e.hike_number, '#', ''), ' ', '')
       )
-      LEFT JOIN roster_summary rs ON (
-        REPLACE(REPLACE(TRIM(t.hike_number), '#', ''), ' ', '') = rs.clean_hike
-        OR TRIM(t.hike_number) = rs.clean_hike
-        OR t.id = rs.clean_hike
-      )
-      LEFT JOIN trek_participant_summary s ON (
-        t.hike_number = s.hike_number
-        OR REPLACE(t.hike_number, '#', '') = REPLACE(s.hike_number, '#', '')
-      )
+      LEFT JOIN roster_summary rs
+        ON REPLACE(REPLACE(TRIM(t.hike_number), '#', ''), ' ', '') = rs.clean_hike
+      LEFT JOIN trek_participant_summary s
+        ON (s.hike_number = REPLACE(TRIM(t.hike_number), '#', '') OR s.hike_number = TRIM(t.hike_number))
       ORDER BY t.created_at DESC
     `).all();
     results = joined || [];
@@ -2515,6 +2503,8 @@ export default {
 
             if (email) affectedEmails.add(email);
 
+            const insertedRegId = item.id || 0; // Simple fix to capture ID
+
             stmts.push(
               env.DB.prepare(`
                 INSERT INTO registrations (
@@ -2534,12 +2524,12 @@ export default {
             stmts.push(
               env.DB.prepare(`
                 INSERT INTO bookings_roster (
-                  hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
+                  registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
                   registration_status, payment_status, paid_amount, due_amount, pickup_point,
                   created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `).bind(
-                hikeNum, trekName, regTimestamp, fullName, phone, email, whatsapp,
+                insertedRegId, hikeNum, trekName, regTimestamp, fullName, phone, email, whatsapp,
                 payStatus, paid, due, pickupPoint
               )
             );

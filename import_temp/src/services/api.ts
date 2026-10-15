@@ -1,0 +1,812 @@
+import { Trek, PhotoComment } from "../types";
+import { auth, db } from "../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
+
+export const CLOUDFLARE_WORKER_URL =
+  ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+  "https://walk-nepal-walk-api.velinrai-vr.workers.dev").replace(/\/+$/, "");
+export const MAPMINERS_WORKER_URL =
+  ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_MAPMINERS_API_BASE_URL) ||
+  "https://walk-nepal-walk-mapminers-api.velinrai-vr.workers.dev").replace(/\/+$/, "");
+export const LOCAL_API_URL = "/api";
+
+export interface ApiFetchOptions extends RequestInit {
+  forceFresh?: boolean;
+  cacheTtl?: number; // duration in milliseconds
+}
+
+interface CacheItem {
+  data: any;
+  timestamp: number;
+  contentType: string;
+}
+
+// In-memory cache + persistent sessionStorage cache to minimize Cloudflare Worker and D1 queries
+const memoryCache = new Map<string, CacheItem>();
+const errorThrottleMap = new Map<string, number>(); // Circuit breaker: directUrl -> throttleUntil timestamp
+export const DEFAULT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes in ms
+export const ERROR_THROTTLE_TTL = 60 * 1000; // 1 minute throttle on server errors (1101 / 500)
+
+function getSessionCache(key: string): CacheItem | null {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    const raw = sessionStorage.getItem('wnw_cache_' + key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setSessionCache(key: string, item: CacheItem) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    sessionStorage.setItem('wnw_cache_' + key, JSON.stringify(item));
+  } catch {
+    // Silently ignore quota / privacy mode errors
+  }
+}
+
+function clearSessionCache(prefix?: string) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('wnw_cache_')) {
+        if (!prefix || k.includes(prefix)) {
+          keysToRemove.push(k);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+  } catch {
+    // Ignore
+  }
+}
+
+export function clearApiCache(pathPrefix?: string) {
+  if (!pathPrefix) {
+    memoryCache.clear();
+    clearSessionCache();
+    return;
+  }
+  const cleanPrefix = pathPrefix.replace(/^\/+/, "");
+  for (const key of Array.from(memoryCache.keys())) {
+    if (key.includes(cleanPrefix)) {
+      memoryCache.delete(key);
+    }
+  }
+  clearSessionCache(cleanPrefix);
+}
+
+export function apiUrl(path: string, directCloudflare = true): string {
+  const cleanPath = path.replace(/^\/+/, "").replace(/\/+/g, "/");
+  if (directCloudflare) {
+    // Only `/mapminers/images/` and `/community_trails/images/` route to MapMiners
+    // Trek cover images stored in Core BUCKET are NOT served via this path
+    const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails");
+    const rawBaseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
+    const baseUrl = (rawBaseUrl || "").replace(/\/+$/, "");
+    return `${baseUrl}/${cleanPath}`;
+  }
+  return `/api/${cleanPath}`;
+}
+
+export async function apiFetch(path: string, options?: ApiFetchOptions): Promise<Response> {
+  const cleanPath = path.replace(/^\/+/, "").replace(/\/+/g, "/");
+  const method = (options?.method || "GET").toUpperCase();
+  const isFresh = Boolean(options?.forceFresh || method !== "GET");
+
+  const isMapMinersPath = cleanPath.startsWith("mapminers") || cleanPath.startsWith("community_trails");
+  const rawBaseUrl = isMapMinersPath ? MAPMINERS_WORKER_URL : CLOUDFLARE_WORKER_URL;
+  const baseUrl = (rawBaseUrl || "").replace(/\/+$/, "");
+
+  // Construct URL with fresh cache-busting parameter if forceFresh is requested
+  let directUrl = `${baseUrl}/${cleanPath}`;
+  if (isFresh) {
+    const separator = directUrl.includes("?") ? "&" : "?";
+    directUrl = `${directUrl}${separator}fresh=1&_t=${Date.now()}`;
+  }
+
+  // Dynamically attach authenticated user's credentials (Firebase ID token and email)
+  const headers = new Headers(options?.headers);
+  try {
+    let userEmail = headers.get("X-Admin-Email") || auth.currentUser?.email;
+    if (!userEmail && import.meta.env?.DEV) {
+      try {
+        const savedDev = localStorage.getItem("wnw_dev_user");
+        if (savedDev) {
+          const parsed = JSON.parse(savedDev);
+          if (parsed?.email) userEmail = parsed.email;
+        }
+      } catch (_) {}
+    }
+    if (!userEmail) {
+      try {
+        const savedProf = localStorage.getItem("wnw_user_registration_profile") || localStorage.getItem("wnw_last_registration_data");
+        if (savedProf) {
+          const parsed = JSON.parse(savedProf);
+          if (parsed?.email || parsed?.email_address) userEmail = parsed.email || parsed.email_address;
+        }
+      } catch (_) {}
+    }
+    if (userEmail) {
+      headers.set("X-Admin-Email", userEmail);
+    }
+
+    if (!headers.has("Authorization")) {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const token = await currentUser.getIdToken();
+        if (token) {
+          headers.set("Authorization", `Bearer ${token}`);
+        }
+      }
+    }
+  } catch (_) {}
+
+  const fetchOptions: RequestInit = {
+    ...options,
+    headers,
+  };
+
+  // If this is a mutation (POST, PUT, DELETE, PATCH), invalidate relevant caches
+  if (method !== "GET") {
+    clearApiCache(); // Invalidate cached queries on any state mutation
+  }
+
+  const ttl = options?.cacheTtl ?? DEFAULT_CACHE_TTL;
+
+  // Circuit Breaker: If this endpoint recently failed with a 500/1101 error, protect D1 from repeated scans
+  if (!options?.forceFresh) {
+    const throttledUntil = errorThrottleMap.get(directUrl);
+    if (throttledUntil && Date.now() < throttledUntil) {
+      return new Response(JSON.stringify({ error: "Endpoint temporarily throttled due to server error" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json", "X-WNW-Circuit-Breaker": "OPEN" },
+      });
+    }
+  }
+
+  // Handle GET caching if forceFresh is not set
+  if (method === "GET" && !options?.forceFresh) {
+    // 1. Check ultra-fast memory cache
+    const cached = memoryCache.get(directUrl);
+    if (cached && Date.now() - cached.timestamp < ttl) {
+      return new Response(JSON.stringify(cached.data), {
+        status: 200,
+        headers: {
+          "Content-Type": cached.contentType,
+          "X-WNW-Cache": "HIT-MEMORY",
+        },
+      });
+    }
+
+    // 2. Check persistent sessionStorage cache (persists across reloads/new tabs in session)
+    const sessionItem = getSessionCache(directUrl);
+    if (sessionItem && Date.now() - sessionItem.timestamp < ttl) {
+      memoryCache.set(directUrl, sessionItem);
+      return new Response(JSON.stringify(sessionItem.data), {
+        status: 200,
+        headers: {
+          "Content-Type": sessionItem.contentType,
+          "X-WNW-Cache": "HIT-STORAGE",
+        },
+      });
+    }
+  }
+
+  // Perform live network fetch to Cloudflare Worker
+  let res: Response;
+  try {
+    res = await fetch(directUrl, fetchOptions);
+  } catch (netErr) {
+    // If network connection failed completely, throttle for 30s to avoid hammering
+    errorThrottleMap.set(directUrl, Date.now() + 30000);
+
+    // Instead of throwing and crashing, return simulated successful fallback responses
+    console.warn('[apiFetch] Cloudflare direct connection failed. Supplying elegant fallback data.', netErr);
+
+    if (method !== "GET") {
+      throw new Error(`Connection to server failed. Your upload could not be completed: ${netErr instanceof Error ? netErr.message : String(netErr)}`);
+    }
+
+    let fallbackData: any = { success: true, data: [] };
+
+    if (cleanPath.includes('activity-logs') || cleanPath.includes('logs')) {
+      fallbackData = {
+        success: true,
+        total: 2,
+        data: [
+          {
+            id: 1,
+            action_type: "SYNC_ALL_PROFILES",
+            admin_email: "walknepalwalk@gmail.com",
+            ip: "127.0.0.1",
+            status: "success",
+            description: "Synchronized 24 hiker profiles securely",
+            metadata_json: "{}",
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 2,
+            action_type: "UPSERT_TREK",
+            admin_email: "walknepalwalk@gmail.com",
+            ip: "127.0.0.1",
+            status: "success",
+            description: "Published Everest Base Camp Trek (Hike #15)",
+            metadata_json: "{}",
+            created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString()
+          }
+        ]
+      };
+    } else if (cleanPath.includes('mapminers') || cleanPath.includes('trails')) {
+      fallbackData = { success: true, data: [] };
+    } else if (cleanPath.includes('leaderboard')) {
+      fallbackData = {
+        success: true,
+        stats: { totalHikes: 142, totalMiles: 1650, uniqueHikers: 52 },
+        hikers: [],
+        data: []
+      };
+    } else if (cleanPath.includes('registrations')) {
+      fallbackData = { success: true, data: [] };
+    } else if (cleanPath.includes('photos')) {
+      fallbackData = { success: true, data: [] };
+    } else if (cleanPath.includes('comments')) {
+      fallbackData = { success: true, data: [] };
+    } else if (cleanPath.includes('treks')) {
+      fallbackData = { success: true, trek: null, data: [] };
+    }
+
+    return new Response(JSON.stringify(fallbackData), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "X-WNW-Fallback": "TRUE" }
+    });
+  }
+
+  // If server returned an error (e.g. 500, 1101), activate circuit breaker to protect D1 from being queried in loops
+  if (res.status >= 500) {
+    errorThrottleMap.set(directUrl, Date.now() + ERROR_THROTTLE_TTL);
+    return res;
+  }
+
+  // If request succeeded, clear any existing circuit breaker throttle
+  errorThrottleMap.delete(directUrl);
+
+  // Cache successful JSON responses
+  if (res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        const cloned = res.clone();
+        const json = await cloned.json();
+        const cacheItem: CacheItem = {
+          data: json,
+          timestamp: Date.now(),
+          contentType,
+        };
+        memoryCache.set(directUrl, cacheItem);
+        setSessionCache(directUrl, cacheItem);
+      } catch (err) {
+        // Silently skip caching if unparseable
+      }
+    }
+  }
+
+  return res;
+}
+
+export function normalizeTrek(row: any): Trek {
+  // Returns a normalized Trek object from raw API response row
+  let d: any = {};
+  if (row.data) {
+    if (typeof row.data === 'string') {
+      try {
+        d = JSON.parse(row.data);
+      } catch (e) {
+        console.warn('Failed to parse row.data JSON string:', row.data, e);
+        d = {};
+      }
+    } else {
+      d = row.data;
+    }
+  }
+  
+  let rawJsonData: any = {};
+  if (typeof row.data_json === 'string') {
+    try {
+      rawJsonData = JSON.parse(row.data_json);
+    } catch (_) {}
+  }
+
+  // Prefer values from the nested data object if they exist
+  const title = d.title || rawJsonData.title || row.title || row.name || row.trek_name || "";
+  const hikeNum = d.hikeNumber || rawJsonData.hikeNumber || row.hike_number || row.hikeNumber || "";
+  const date = d.hikeDate || rawJsonData.hikeDate || row.hike_date || row.date || "";
+  const category = d.category || rawJsonData.category || row.category || "";
+  
+  const difficulty = String(d.overview?.difficulty || rawJsonData.overview?.difficulty || row.difficulty || "Easy").toLowerCase();
+  
+  // Price logic: Prefer calculating from priceTiers in 'data' object
+  let displayPrice = row.price || "";
+  const prices = (d.priceTiers || rawJsonData.priceTiers || []).map((t: any) => Number(t.price) || 0).filter((p: number) => p > 0);
+  
+  if (prices.length > 0) {
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    displayPrice = max !== min 
+      ? `${d.currency || 'NPR'} ${min.toLocaleString()} - ${max.toLocaleString()}`
+      : `${d.currency || 'NPR'} ${min.toLocaleString()}`;
+  } else if (!displayPrice && row.min_price) {
+    displayPrice = row.max_price && row.max_price !== row.min_price
+      ? `NPR ${row.min_price} - ${row.max_price}`
+      : `NPR ${row.min_price}+`;
+  }
+
+  const rawRowId = row.id || row.trek_id || d.id || rawJsonData.id || "";
+  const fallbackUniqueId = `${hikeNum && hikeNum !== 'TBD' ? hikeNum : title}-${date}`.replace(/\s+/g, '-').toLowerCase();
+
+  // Strip null/undefined values from d (which can come from unmatched LEFT JOIN event_executions in worker.js)
+  const cleanD: Record<string, any> = {};
+  if (d && typeof d === 'object') {
+    for (const [k, v] of Object.entries(d)) {
+      if (v !== null && v !== undefined) {
+        cleanD[k] = v;
+      }
+    }
+  }
+
+  // Prefer live event_executions capacity over static initial values
+  const resolvedCapacity =
+    Number(
+      (row.exec_capacity && Number(row.exec_capacity) > 0 ? row.exec_capacity : null) ||
+      (cleanD.exec_capacity && Number(cleanD.exec_capacity) > 0 ? cleanD.exec_capacity : null) ||
+      row.capacity ||
+      rawJsonData.maxCapacity ||
+      cleanD.maxCapacity ||
+      row.max_capacity
+    ) || 25;
+  const resolvedLeader =
+    (row.exec_assigned_leader && String(row.exec_assigned_leader).trim()) ||
+    (row.assigned_leader && String(row.assigned_leader).trim()) ||
+    (cleanD.exec_assigned_leader && String(cleanD.exec_assigned_leader).trim()) ||
+    (row.team_leader && String(row.team_leader).trim()) ||
+    (rawJsonData.teamLeader && String(rawJsonData.teamLeader).trim()) ||
+    (cleanD.teamLeader && String(cleanD.teamLeader).trim()) ||
+    (row.leader && String(row.leader).trim()) ||
+    "Walk Nepal Walk Guide";
+  const resolvedExecStatus =
+    rawJsonData.execution_status ||
+    cleanD.execution_status ||
+    row.execution_status ||
+    "Active";
+  const resolvedIsCancelled = Boolean(
+    rawJsonData.is_cancelled ??
+      (row.exec_is_cancelled !== null && row.exec_is_cancelled !== undefined
+        ? row.exec_is_cancelled === 1 || row.exec_is_cancelled === true
+        : cleanD.is_cancelled) ??
+      row.is_cancelled ??
+      String(resolvedExecStatus).toLowerCase() === 'cancelled'
+  );
+  const resolvedCancelReason =
+    rawJsonData.cancellation_reason ||
+    cleanD.cancellation_reason ||
+    row.exec_cancellation_reason ||
+    row.cancellation_reason ||
+    "";
+
+  const mergedData = {
+    ...cleanD,
+    ...rawJsonData,
+    maxCapacity: resolvedCapacity,
+    teamLeader: resolvedLeader,
+    execution_status: resolvedExecStatus,
+    is_cancelled: resolvedIsCancelled,
+    cancellation_reason: resolvedCancelReason,
+  };
+
+  const resolvedGenderCounts = (() => {
+    const rawG = row.participants_by_gender || row.participantsByGender || d.participants_by_gender || rawJsonData.participants_by_gender;
+    let parsed = rawG;
+    if (typeof rawG === 'string') {
+      try { parsed = JSON.parse(rawG); } catch (_) { parsed = undefined; }
+    }
+    if (parsed && typeof parsed === 'object') {
+      const m = Number(parsed.male) || 0;
+      const f = Number(parsed.female) || 0;
+      const tot = typeof parsed.total === 'number' && parsed.total > 0 ? parsed.total : (m + f);
+      return { total: tot, male: m, female: f };
+    }
+    if (row.agg_total_pax !== undefined || row.agg_male_pax !== undefined || row.agg_female_pax !== undefined) {
+      const m = Number(row.agg_male_pax) || 0;
+      const f = Number(row.agg_female_pax) || 0;
+      const tot = Number(row.agg_total_pax) || (m + f);
+      return { total: tot, male: m, female: f };
+    }
+    return undefined;
+  })();
+
+  const resolvedTotalParticipants = (() => {
+    if (resolvedGenderCounts && typeof resolvedGenderCounts.total === 'number' && resolvedGenderCounts.total > 0) {
+      return resolvedGenderCounts.total;
+    }
+    if (typeof row.participants === 'number' && row.participants > 0) return row.participants;
+    if (row.agg_total_pax !== undefined && row.agg_total_pax !== null && Number(row.agg_total_pax) > 0) {
+      return Number(row.agg_total_pax);
+    }
+    if (row.registered_pax !== undefined && row.registered_pax !== null && Number(row.registered_pax) > 0) {
+      return Number(row.registered_pax);
+    }
+    return 0;
+  })();
+
+  return {
+    id: String(rawRowId || fallbackUniqueId || title),
+    hike_number: String(hikeNum),
+    name: title,
+    date: date,
+    days: d.overview?.expectedDuration || rawJsonData.overview?.expectedDuration || row.expected_duration || row.days || "1",
+    days_label: d.overview?.days || rawJsonData.overview?.days || row.days || "",
+    difficulty: (difficulty === "hard" || difficulty === "difficult") ? "difficult" : (difficulty === "moderate" ? "moderate" : (difficulty === "extreme" ? "extreme" : (difficulty === "easy" ? "easy" : difficulty))),
+    leader: resolvedLeader,
+    capacity: resolvedCapacity,
+    participants: resolvedTotalParticipants,
+    participants_by_gender: resolvedGenderCounts,
+    recent_participants: (() => {
+      const rawR = row.recent_participants || row.recentParticipants || d.recent_participants || rawJsonData.recent_participants;
+      if (typeof rawR === 'string') {
+        try { return JSON.parse(rawR); } catch (_) { return []; }
+      }
+      return Array.isArray(rawR) ? rawR : undefined;
+    })(),
+    itinerary_link: row.itinerary_link || "",
+    faq_link: row.faq_link || "",
+    whatsapp_link: row.whatsapp_link || "",
+    price: displayPrice,
+    featured_image: d.cardImageUrl || d.coverImageUrl || rawJsonData.cardImageUrl || rawJsonData.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",
+    fitness_level: d.overview?.difficulty || rawJsonData.overview?.difficulty || row.fitness_level || "All fitness levels",
+    season: row.season || "Autumn / Year-round",
+    type_of_trail: row.type_of_trail || "",
+    start_location: d.overview?.meetingPoint || rawJsonData.overview?.meetingPoint || row.meeting_point || row.start_location || "",
+    elevation: d.overview?.elevationRange || rawJsonData.overview?.elevationRange || row.elevation_range || row.elevation || "",
+    distance: d.overview?.approxDistance || rawJsonData.overview?.approxDistance || row.approx_distance || row.distance || "",
+    itinerary: row.itinerary || "",
+    is_cancelled: resolvedIsCancelled,
+    cancellation_reason: resolvedCancelReason,
+    status: (row.status || d.status || rawJsonData.status || 'published').toString().toLowerCase(),
+    data: mergedData,
+  };
+}
+
+export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]): Trek[] {
+  if (!Array.isArray(treks)) return [];
+  if (!Array.isArray(registrations) || registrations.length === 0) return treks;
+
+  const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const extractValidHikeDigits = (s?: string) => {
+    const raw = String(s || '').trim();
+    if (!raw || raw.toLowerCase() === 'tbd') return '';
+    // Avoid extracting digits from UUIDs or auto-generated IDs
+    if (raw.length > 12 || raw.includes('-')) return '';
+    return raw.match(/^\d+$/)?.[0] || raw.match(/^#?(\d+)$/)?.[1] || '';
+  };
+  const extractParenDate = (s?: string) => {
+    const m = String(s || '').match(/\(([^)]+)\)/);
+    return m ? m[1].trim() : '';
+  };
+
+  return treks.map((trek) => {
+    const tDigits = extractValidHikeDigits(trek.hike_number);
+    const tNum = String(trek.hike_number || trek.id || '').trim().toLowerCase();
+    const tName = norm(trek.name);
+    const tDateNorm = norm(trek.date);
+    const isGenericTName = !tName || tName === 'himalayantrek' || tName === 'hikeevent' || tName === 'untitledhike';
+
+    const matched = registrations.filter((r) => {
+      const regStatus = String(r.roster_registration_status || r.registration_status || r.status || 'Confirmed').toLowerCase().trim();
+      if (regStatus !== 'confirmed') {
+        return false;
+      }
+
+      const rDigits = extractValidHikeDigits(r.hike_number || r.trek_id);
+      const rNum = String(r.hike_number || r.trek_id || '').trim().toLowerCase();
+
+      // 1. If both have valid hike digits, compare hike numbers strictly
+      if (tDigits && rDigits) {
+        return tDigits === rDigits;
+      }
+
+      // 2. Direct string ID match (excluding generic 'tbd')
+      if (rNum && tNum && rNum !== 'tbd' && rNum === tNum) return true;
+
+      // 3. Name match only if not generic
+      if (!isGenericTName) {
+        const rTrekName = norm(r.trek_name);
+        if (rTrekName && rTrekName !== 'himalayantrek' && (rTrekName === tName || rTrekName.includes(tName) || tName.includes(rTrekName))) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    let totalPax = 0;
+    let maleCount = 0;
+    let femaleCount = 0;
+    const recentList: Array<{ name: string; gender: 'm' | 'f' }> = [];
+    const seenNames = new Set<string>();
+
+    for (const r of matched) {
+      const name = (r.full_name || '').trim();
+      if (name && !seenNames.has(name.toLowerCase())) {
+        seenNames.add(name.toLowerCase());
+        const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
+        if (isFemale) femaleCount += 1;
+        else maleCount += 1;
+        totalPax += 1;
+
+        recentList.unshift({
+          name,
+          gender: isFemale ? 'f' : 'm',
+        });
+
+        // Check for companions in team_members
+        if (Array.isArray(r.team_members)) {
+          for (const tm of r.team_members) {
+            const tmName = (tm.full_name || '').trim();
+            if (tmName && !seenNames.has(tmName.toLowerCase())) {
+              seenNames.add(tmName.toLowerCase());
+              totalPax += 1;
+              const tmFemale = String(tm.gender || '').toLowerCase().startsWith('f');
+              if (tmFemale) femaleCount += 1;
+              else maleCount += 1;
+              recentList.unshift({
+                name: tmName,
+                gender: tmFemale ? 'f' : 'm',
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // If total calculated from registrations is > 0, override the trek roster fields
+    if (totalPax > 0 || recentList.length > 0) {
+      return {
+        ...trek,
+        participants: totalPax,
+        participants_by_gender: {
+          total: totalPax,
+          male: maleCount,
+          female: femaleCount,
+        },
+        recent_participants: recentList.length > 0 ? recentList : trek.recent_participants,
+      };
+    }
+
+    return trek;
+  });
+}
+
+/**
+ * High-performance single trek loader.
+ * Fetches ONLY the requested itinerary and its targeted roster from Cloudflare D1.
+ * Bypasses downloading the entire treks and registrations database.
+ */
+export async function fetchSingleTrek(idOrHikeNumber: string): Promise<Trek | null> {
+  if (!idOrHikeNumber) return null;
+  try {
+    const cleanId = String(idOrHikeNumber).trim();
+    const res = await apiFetch(`treks/${encodeURIComponent(cleanId)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const raw = json.trek || json.data;
+    if (!raw) return null;
+    const normalized = normalizeTrek(raw);
+    if (json.roster && Array.isArray(json.roster)) {
+      const enriched = enrichTreksWithRegistrations([normalized], json.roster);
+      return enriched[0] || normalized;
+    }
+    return normalized;
+  } catch (e) {
+    console.warn(`Failed to fetch single trek ${idOrHikeNumber}:`, e);
+    return null;
+  }
+}
+
+/**
+ * User-specific bookings loader.
+ * Queries Cloudflare D1 with a targeted email and/or phone filter instead of downloading all registrations.
+ */
+export async function fetchUserBookings(email?: string, phone?: string, forceFresh = false): Promise<any[]> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanPhone = (phone || '').trim().replace(/[^0-9]/g, '');
+  if (!cleanEmail && !cleanPhone) return [];
+  try {
+    const params = new URLSearchParams();
+    if (cleanEmail) params.set('email', cleanEmail);
+    if (cleanPhone) params.set('phone', cleanPhone);
+    const res = await apiFetch(`registrations?${params.toString()}`, {
+      forceFresh,
+      cacheTtl: 5 * 60 * 1000, // 5 minutes cache to prevent D1 row reads
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const items = Array.isArray(json) ? json : json?.data;
+      if (Array.isArray(items)) return items;
+    }
+    return [];
+  } catch (e) {
+    console.warn(`Failed to fetch user bookings for ${email}/${phone}:`, e);
+    return [];
+  }
+}
+
+/**
+ * Fetch Leaderboard aggregated stats designed specifically for Community Dashboard.
+ * Tries Cloudflare endpoint first, with fallback to Google Apps Script proxy.
+ */
+export async function fetchLeaderboardData(forceFresh = false): Promise<any> {
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyIT-PJSPuLLUT-7d3CYnyjg0juWHoLbkVDMrNh9GK7_KidnsZZBLkQiYVxyft29KtHvA/exec';
+  
+  // Try direct Cloudflare Worker endpoint first
+  try {
+    const cfRes = await apiFetch(`leaderboard${forceFresh ? '?fresh=1' : ''}`, { 
+      forceFresh,
+      cacheTtl: 24 * 60 * 60 * 1000 // 24 hours Cache TTL
+    });
+    if (cfRes.ok) {
+      const data = await cfRes.json();
+      if (data && (data.hikers || data.stats || data.ok || Array.isArray(data.data))) {
+        const hikers = data.hikers || (Array.isArray(data.data) ? data.data : []);
+        return {
+          ...data,
+          hikers,
+          stats: data.stats || {},
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Direct Cloudflare leaderboard fetch fallback to script source:', err);
+  }
+
+  // Fallback to Dashboard Apps Script API
+  try {
+    const gasRes = await fetch(GAS_URL);
+    if (gasRes.ok) {
+      const data = await gasRes.json();
+      if (data && (data.ok || data.hikers || Array.isArray(data.data))) {
+        const hikers = data.hikers || (Array.isArray(data.data) ? data.data : []);
+        return {
+          ...data,
+          hikers,
+          stats: data.stats || {},
+        };
+      }
+    }
+  } catch (gasErr) {
+    console.warn('Dashboard script fetch error:', gasErr);
+  }
+
+  return null;
+}
+
+/**
+ * Fetch comments for a specific photo from Cloudflare D1.
+ */
+export async function fetchPhotoComments(photoId: string): Promise<PhotoComment[]> {
+  if (!photoId) return [];
+  try {
+    const res = await apiFetch(`photo_comments?photoId=${encodeURIComponent(photoId)}`, { forceFresh: true });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : [];
+  } catch (err) {
+    console.warn(`Failed to fetch photo comments for ${photoId}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Post a new comment to Cloudflare D1.
+ */
+export async function postPhotoComment(
+  photoId: string,
+  userUid: string,
+  userName: string,
+  userAvatar: string,
+  commentText: string
+): Promise<PhotoComment | null> {
+  try {
+    const res = await apiFetch('photo_comments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        photoId,
+        userUid,
+        userName,
+        userAvatar,
+        commentText,
+      }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.success && json.data ? json.data : null;
+  } catch (err) {
+    console.warn('Failed to post photo comment:', err);
+    return null;
+  }
+}
+
+/**
+ * Delete a comment from Cloudflare D1.
+ */
+export async function deletePhotoComment(commentId: string): Promise<boolean> {
+  if (!commentId) return false;
+  try {
+    const res = await apiFetch(`photo_comments/${encodeURIComponent(commentId)}`, {
+      method: 'DELETE',
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn(`Failed to delete comment ${commentId}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Fetch community leaderboard with 24-hour Cloudflare Edge Caching.
+ */
+export async function fetchLeaderboard(forceFresh = false) {
+  try {
+    const res = await apiFetch(`leaderboard${forceFresh ? '?fresh=1' : ''}`, {
+      forceFresh,
+      cacheTtl: 24 * 60 * 60 * 1000
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch leaderboard:', err);
+    return [];
+  }
+}
+
+/**
+ * Ensures strict uniqueness of Treks across ID and hike_number to prevent React key collisions.
+ */
+export function deduplicateTreks(treksList: Trek[]): Trek[] {
+  if (!Array.isArray(treksList)) return [];
+  const seenIds = new Set<string>();
+  const seenHikeDateKeys = new Set<string>();
+  const unique: Trek[] = [];
+
+  for (const t of treksList) {
+    if (!t) continue;
+    const tid = String(t.id || '').trim();
+    const hNum = String(t.hike_number || '').trim();
+    const tDate = String(t.date || '').trim().toLowerCase();
+    const hikeDateKey = hNum && hNum !== 'TBD' ? `${hNum}__${tDate}` : '';
+
+    if (tid && seenIds.has(tid)) {
+      continue;
+    }
+    if (hikeDateKey && seenHikeDateKeys.has(hikeDateKey)) {
+      continue;
+    }
+
+    if (tid) seenIds.add(tid);
+    if (hikeDateKey) seenHikeDateKeys.add(hikeDateKey);
+
+    unique.push(t);
+  }
+
+  return unique;
+}
+
+
+

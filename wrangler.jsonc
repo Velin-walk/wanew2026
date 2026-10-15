@@ -6,9 +6,10 @@
     "enabled": true
   },
   "assets": {
-    "directory": "./dist",
+    "directory": "./build",
     "not_found_handling": "single-page-application"
   },
+  "main": "cloudflare/worker.js",
   "compatibility_flags": [
     "nodejs_compat"
   ]

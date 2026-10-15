@@ -72,7 +72,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
 
       try {
         setLoading(true);
-        const res = await apiFetch(`/treks/${encodeURIComponent(idToQuery)}`);
+        const res = await apiFetch(`/treks/${encodeURIComponent(idToQuery)}`, { forceFresh: true });
         if (res.ok && isMounted) {
           const json = await res.json();
           const serverRoster = json.roster || json.data?.roster;
