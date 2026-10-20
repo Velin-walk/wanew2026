@@ -28,11 +28,13 @@ import {
   Filter,
   Search,
   UploadCloud,
+  BookOpen,
 } from 'lucide-react';
 import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
 import { ReviewsAnalyticsBoard } from './ReviewsAnalyticsBoard';
+import { CommunityBlogsSection } from './CommunityBlogsSection';
 
-export type SubPageType = 'payment' | 'trek_tips' | 'safety_policy' | 'reviews' | 'request_private_trek' | 'contact' | 'about';
+export type SubPageType = 'payment' | 'trek_tips' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about';
 
 interface InfoPagesModalProps {
   isOpen: boolean;
@@ -866,6 +868,19 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
 
               <button
                 type="button"
+                onClick={() => setActiveTab('blogs')}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                  activeTab === 'blogs'
+                    ? 'bg-white text-[#7ABA42] shadow-xs border border-[#7ABA42]/30 font-extrabold'
+                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === 'blogs' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
+                <span>Blogs & Stories</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setActiveTab('payment')}
                 className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
                   activeTab === 'payment'
@@ -1646,7 +1661,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
               </div>
             )}
 
-            {/* 6. HIKER REVIEWS & STORIES */}
+            {/* 6. HIKER REVIEWS */}
             {activeTab === 'reviews' && (
               <HikerReviewsSection
                 onNavigateToBookings={
@@ -1659,6 +1674,11 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                 }
                 onLeaveFeedback={onLeaveFeedback}
               />
+            )}
+
+            {/* 7. COMMUNITY BLOGS & STORIES */}
+            {activeTab === 'blogs' && (
+              <CommunityBlogsSection />
             )}
 
           </div>

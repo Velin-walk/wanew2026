@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Trek } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, fetchPhotoComments } from '../services/api';
+import { apiFetch, fetchPhotoComments, uploadImageToR2WithProgress } from '../services/api';
 import { logUserActivity } from '../services/userActivityNotifier';
 import { PhotoCommentsSection } from '../components/PhotoCommentsSection';
 import galleryHeroImg from '../assets/images/gallery_trail_hero_1790246900034.jpg';
@@ -54,46 +54,14 @@ interface GalleryScreenProps {
 
 function uploadToCloudinaryWithProgress(
   formData: FormData,
-  cloudName: string,
+  _cloudName?: string,
   onProgress?: (percent: number) => void
 ): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
-
-    if (xhr.upload && onProgress) {
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && event.total > 0) {
-          const pct = Math.round((event.loaded / event.total) * 100);
-          onProgress(pct);
-        }
-      };
-    }
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const resData = JSON.parse(xhr.responseText);
-          resolve(resData);
-        } catch (e) {
-          reject(new Error('Invalid response from Cloudinary'));
-        }
-      } else {
-        try {
-          const errBody = JSON.parse(xhr.responseText);
-          reject(new Error(errBody.error?.message || xhr.statusText));
-        } catch (_) {
-          reject(new Error(xhr.statusText || 'Upload failed'));
-        }
-      }
-    };
-
-    xhr.onerror = () => {
-      reject(new Error('Network error during photo upload'));
-    };
-
-    xhr.send(formData);
-  });
+  const file = formData.get('file') as (File | Blob);
+  if (!file) {
+    return Promise.reject(new Error('No file found to upload'));
+  }
+  return uploadImageToR2WithProgress(file, 'gallery', onProgress);
 }
 
 export const optimizeCloudinaryUrl = (url?: string, width = 800): string => {
@@ -947,6 +915,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                         alt={`${photo.trekName || 'Trek'} photo by ${photo.uploadedBy}`}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (target.src !== galleryHeroImg) {
+                            target.src = galleryHeroImg;
+                          }
+                        }}
                       />
 
                       {/* Floating Like Button */}

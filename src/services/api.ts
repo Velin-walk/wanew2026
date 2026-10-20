@@ -807,6 +807,259 @@ export function deduplicateTreks(treksList: Trek[]): Trek[] {
 
   return unique;
 }
+/**
+ * Fetch Community Blogs stored in Cloudflare D1
+ */
+export async function fetchBlogs(category?: string, forceFresh = false) {
+  try {
+    const query = category && category !== 'All' ? `?category=${encodeURIComponent(category)}` : '';
+    const res = await apiFetch(`blogs${query}`, {
+      forceFresh,
+      cacheTtl: 3 * 60 * 1000 // 3 minutes edge/browser cache
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch blogs from Cloudflare:', err);
+    return [];
+  }
+}
 
+/**
+ * Fetch single blog by ID or Slug
+ */
+export async function fetchBlogByIdOrSlug(idOrSlug: string | number) {
+  try {
+    const res = await apiFetch(`blogs/${encodeURIComponent(String(idOrSlug))}`, {
+      cacheTtl: 5 * 60 * 1000
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data || null;
+  } catch (err) {
+    console.warn('Failed to fetch blog item:', err);
+    return null;
+  }
+}
+
+/**
+ * Submit a new community blog post to Cloudflare
+ */
+export async function createBlog(blogData: {
+  title: string;
+  content: string;
+  author_name: string;
+  author_email?: string;
+  summary?: string;
+  cover_image_url?: string;
+  category?: string;
+  tags?: string;
+  edit_token?: string;
+}) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const res = await apiFetch('blogs', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(blogData)
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json.error || 'Failed to publish blog post');
+  }
+  return json.data;
+}
+
+/**
+ * Update an existing community blog post
+ */
+export async function updateBlog(
+  blogId: number,
+  blogData: {
+    title: string;
+    content: string;
+    author_name?: string;
+    summary?: string;
+    cover_image_url?: string;
+    category?: string;
+    tags?: string;
+  },
+  authInfo?: { email?: string; editToken?: string; isAdmin?: boolean }
+) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authInfo?.isAdmin && authInfo?.email) {
+    headers['X-Admin-Email'] = authInfo.email;
+  }
+
+  const res = await apiFetch(`blogs/${blogId}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      ...blogData,
+      author_email: authInfo?.email,
+      edit_token: authInfo?.editToken
+    })
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json.error || 'Failed to update blog post');
+  }
+  return json.data;
+}
+
+/**
+ * Delete a blog post
+ */
+export async function deleteBlog(
+  blogId: number,
+  authInfo?: { email?: string; editToken?: string; isAdmin?: boolean }
+) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authInfo?.isAdmin && authInfo?.email) {
+    headers['X-Admin-Email'] = authInfo.email;
+  }
+
+  const res = await apiFetch(`blogs/${blogId}`, {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify({
+      author_email: authInfo?.email,
+      edit_token: authInfo?.editToken
+    })
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json.error || 'Failed to delete blog post');
+  }
+  return true;
+}
+
+/**
+ * Upload an image to Cloudflare R2 for blog stories
+ */
+export async function uploadBlogImage(fileOrBase64: File | string): Promise<string> {
+  let body: any;
+  let headers: Record<string, string> = {};
+
+  if (typeof fileOrBase64 === 'string') {
+    if (fileOrBase64.startsWith('data:')) {
+      const parts = fileOrBase64.split(',');
+      const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+      const bstr = atob(parts[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      const formData = new FormData();
+      formData.append('file', blob, 'blog_image.jpg');
+      formData.append('folder', 'blogs');
+      body = formData;
+    } else {
+      const formData = new FormData();
+      formData.append('file', fileOrBase64);
+      formData.append('folder', 'blogs');
+      body = formData;
+    }
+  } else {
+    const formData = new FormData();
+    formData.append('file', fileOrBase64);
+    formData.append('folder', 'blogs');
+    body = formData;
+  }
+
+  const res = await apiFetch('upload/image', {
+    method: 'POST',
+    headers,
+    body
+  });
+
+  const json = await res.json();
+  const imageUrl = json.url || json.data?.url;
+  if (!res.ok || !json.success || !imageUrl) {
+    throw new Error(json.error || 'Failed to upload photo to Cloudflare R2');
+  }
+  return imageUrl;
+}
+
+/**
+ * Like / heart a community blog post
+ */
+export async function likeBlog(blogId: number) {
+  try {
+    const res = await apiFetch(`blogs/${blogId}/like`, { method: 'POST' });
+    return res.ok;
+  } catch (err) {
+    console.warn('Failed to like blog:', err);
+    return false;
+  }
+}
+
+/**
+ * Upload an image directly to Cloudflare R2 Storage with progress tracking.
+ * Eliminates dependency on Cloudinary with zero third-party lock-in.
+ */
+export function uploadImageToR2WithProgress(
+  fileOrBlob: File | Blob,
+  folder = 'general',
+  onProgress?: (percent: number) => void
+): Promise<{ url: string; fileName: string; secure_url: string; public_id: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const endpoint = apiUrl('upload/image');
+    xhr.open('POST', endpoint);
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const pct = Math.round((event.loaded / event.total) * 100);
+          onProgress(pct);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const resData = JSON.parse(xhr.responseText);
+          const rawUrl = resData.url || resData.data?.url;
+          if (resData.success && rawUrl) {
+            resolve({
+              url: rawUrl,
+              fileName: resData.fileName || '',
+              secure_url: rawUrl,
+              public_id: resData.fileName || ''
+            });
+          } else {
+            reject(new Error(resData.error || 'Failed to upload photo to Cloudflare R2'));
+          }
+        } catch {
+          reject(new Error('Invalid response from Cloudflare R2 Storage'));
+        }
+      } else {
+        try {
+          const errBody = JSON.parse(xhr.responseText);
+          reject(new Error(errBody.error || xhr.statusText || 'R2 upload failed'));
+        } catch {
+          reject(new Error(xhr.statusText || 'R2 upload failed'));
+        }
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during photo upload to Cloudflare R2'));
+    };
+
+    const formData = new FormData();
+    const fileName = (fileOrBlob instanceof File && fileOrBlob.name) 
+      ? fileOrBlob.name 
+      : `${folder}_${Date.now()}.jpg`;
+    formData.append('file', fileOrBlob, fileName);
+    formData.append('folder', folder);
+
+    xhr.send(formData);
+  });
+}
 
 

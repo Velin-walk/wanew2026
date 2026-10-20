@@ -11,7 +11,7 @@ import {
   Link as LinkIcon,
   Sparkles,
 } from 'lucide-react';
-import { apiFetch } from '../../services/api';
+import { apiFetch, uploadImageToR2WithProgress } from '../../services/api';
 import { ImageCropperModal } from './ImageCropperModal';
 import {
   HeroBannerItem,
@@ -190,34 +190,16 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
       let finalImageUrl = sourceImage;
       let publicId = '';
 
-      // Upload data URLs / cropped images to Cloudinary (auto-optimized so size limits are never exceeded)
+      // Upload data URLs / cropped images directly to Cloudflare R2 (auto-optimized so size limits are never exceeded)
       if (sourceImage.startsWith('data:') || sourceImage.startsWith('blob:')) {
         let blob = await dataUrlToBlob(sourceImage);
         if (blob.size >= 8 * 1024 * 1024) {
           blob = await optimizeHeroImage(blob);
         }
-        const formData = new FormData();
-        formData.append('file', blob, `hero_${Date.now()}.jpg`);
-        formData.append('upload_preset', UPLOAD_PRESET);
 
-        const uploadRes = await fetch(
-          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-          {
-            method: 'POST',
-            body: formData,
-          }
-        );
-
-        if (!uploadRes.ok) {
-          const errBody = await uploadRes.json().catch(() => ({}));
-          throw new Error(
-            errBody.error?.message || `Cloudinary upload failed (${uploadRes.status})`
-          );
-        }
-
-        const uploadData = await uploadRes.json();
-        finalImageUrl = uploadData.secure_url;
-        publicId = uploadData.public_id || '';
+        const uploadData = await uploadImageToR2WithProgress(blob, 'hero');
+        finalImageUrl = uploadData.url;
+        publicId = uploadData.fileName || '';
       }
 
       const newRecord = {

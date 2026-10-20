@@ -13,7 +13,8 @@ import {
   ChevronRight,
   Camera,
   Trophy,
-  Star
+  Star,
+  BookOpen
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { isAdminEmail } from '../adminUtils';
@@ -344,6 +345,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => handleSubPageClick('blogs')}
+                  className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <BookOpen className="w-4 h-4 text-[#7ABA42] shrink-0 group-hover:scale-110 transition-transform" />
+                    <div>
+                      <div className="leading-tight font-bold text-[#1F1F1F]">Blogs &amp; Stories</div>
+                      <div className="text-[10px] font-normal text-[#8B8680]">Community Trail Posts</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => handleSubPageClick('trek_tips')}
                   className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
                 >
@@ -555,6 +571,14 @@ export const DesktopResourcesBar: React.FC<{
       activeClass: 'ring-2 ring-amber-400 bg-amber-50/90 border-amber-300',
     },
     {
+      id: 'blogs',
+      label: 'Blogs & Stories',
+      sub: 'Trail Wisdom & News',
+      icon: <BookOpen className="w-4 h-4 text-[#7ABA42]" />,
+      accentBg: 'bg-emerald-50 border-emerald-200/70',
+      activeClass: 'ring-2 ring-[#7ABA42] bg-emerald-50/90 border-[#7ABA42]',
+    },
+    {
       id: 'payment',
       label: 'Payment & Pricing',
       sub: 'QR & Voucher Upload',
@@ -601,7 +625,7 @@ export const DesktopResourcesBar: React.FC<{
       aria-label="Quick Resources & Guides"
       className="hidden lg:block w-full"
     >
-      <div className="grid grid-cols-6 gap-2.5">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
         {items.map((item) => {
           const isActive = activeInfoPage === item.id;
           const isHighlight = item.id === 'request_private_trek';

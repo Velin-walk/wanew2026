@@ -278,6 +278,12 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
               className="w-full h-full object-cover object-center block"
               referrerPolicy="no-referrer"
               draggable={false}
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (target.src !== defaultHeroImg) {
+                  target.src = defaultHeroImg;
+                }
+              }}
             />
           </div>
         ))}

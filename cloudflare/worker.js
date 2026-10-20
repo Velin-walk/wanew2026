@@ -10,7 +10,7 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Admin-Email',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Admin-Email, X-User-Email, X-Edit-Token, *',
 };
 
 function jsonResponse(data, status = 200, customHeaders = {}) {
@@ -134,6 +134,20 @@ async function verifyFirebaseToken(token) {
   }
 }
 
+async function getAuthUser(request) {
+  if (!request) return null;
+  const authHeader = request.headers.get('Authorization') || request.headers.get('authorization') || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (bearerToken) {
+    const verified = await verifyFirebaseToken(bearerToken);
+    if (verified) return verified;
+  }
+  const adminEmail = (request.headers.get('X-Admin-Email') || '').trim().toLowerCase();
+  if (adminEmail && ADMIN_EMAILS.includes(adminEmail)) {
+    return { valid: true, email: adminEmail, isAdmin: true };
+  }
+  return null;
+}
 
 function formatDisplayName(fullName, rankTitle) {
   const rawName = String(fullName || 'Hiker').trim();
@@ -572,53 +586,35 @@ async function recomputeLeaderboardSnapshot(env, force = false) {
 /**
  * Syncs aggregated participant statistics into the precomputed trek_participant_summary table.
  * Keeps total_pax, male_pax, female_pax, and recent_participants immediately fresh and fast.
+ * Optimized with set-based batch operations and sargable queries.
  */
 async function updateTrekParticipantSummary(env, hikeNumber) {
   if (!env || !env.DB) return;
   memTreksSnap = null;
   try {
-    const hikeNumbers = [];
     if (hikeNumber) {
-      hikeNumbers.push(String(hikeNumber).trim());
-    } else {
-      const { results: allHikes } = await env.DB.prepare(`
-        SELECT DISTINCT hike_number FROM bookings_roster WHERE hike_number IS NOT NULL AND hike_number != ''
-        UNION
-        SELECT DISTINCT hike_number FROM treks WHERE hike_number IS NOT NULL AND hike_number != ''
-      `).all();
-      if (allHikes) {
-        for (const row of allHikes) {
-          if (row.hike_number) hikeNumbers.push(String(row.hike_number).trim());
-        }
-      }
-    }
-
-    for (const hNum of hikeNumbers) {
-      if (!hNum) continue;
+      const cleanH = String(hikeNumber).replace(/^#/, '').trim();
+      const hashH = '#' + cleanH;
 
       let regList = [];
       try {
-        const cleanH = String(hNum).replace(/^#/, '').trim();
         const { results } = await env.DB.prepare(`
           SELECT 
-            b.id, b.registration_id, b.hike_number, b.full_name, b.gender, b.age_group, b.registration_status,
+            b.id, b.registration_id, b.hike_number, b.full_name,
+            COALESCE(b.gender, '') as gender,
+            COALESCE(b.age_group, '') as age_group,
+            b.registration_status,
             COALESCE(b.created_at, b.updated_at, '') as timestamp
           FROM bookings_roster b
-          WHERE (
-            b.hike_number = ?
-            OR b.hike_number = ?
-            OR REPLACE(b.hike_number, '#', '') = ?
-            OR TRIM(b.hike_number) = ?
-          )
+          WHERE (b.hike_number = ? OR b.hike_number = ?)
             AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
             AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
             AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
           ORDER BY b.id ASC
-        `).bind(cleanH, '#' + cleanH, cleanH, cleanH).all();
+        `).bind(cleanH, hashH).all();
         regList = results || [];
-      } catch (err) {
+      } catch (_) {
         try {
-          const cleanH = String(hNum).replace(/^#/, '').trim();
           const { results } = await env.DB.prepare(`
             SELECT 
               b.id, b.registration_id, b.hike_number, b.full_name,
@@ -627,20 +623,15 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
               b.registration_status,
               COALESCE(b.created_at, b.updated_at, '') as timestamp
             FROM bookings_roster b
-            LEFT JOIN registrations r ON b.registration_id = CAST(r.id AS TEXT)
-            WHERE (
-              b.hike_number = ?
-              OR b.hike_number = ?
-              OR REPLACE(b.hike_number, '#', '') = ?
-              OR TRIM(b.hike_number) = ?
-            )
+            LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
+            WHERE (b.hike_number = ? OR b.hike_number = ?)
               AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
               AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
               AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
             ORDER BY b.id ASC
-          `).bind(cleanH, '#' + cleanH, cleanH, cleanH).all();
+          `).bind(cleanH, hashH).all();
           regList = results || [];
-        } catch (_) {
+        } catch (e) {
           regList = [];
         }
       }
@@ -664,15 +655,11 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
 
         const rawName = (reg.full_name || '').trim();
         const lowerName = rawName.toLowerCase();
-        if (!rawName) {
-          continue;
-        }
-        if (!regIdKey && seenNames.has(lowerName)) {
-          continue;
-        }
+        if (!rawName) continue;
+        if (!regIdKey && seenNames.has(lowerName)) continue;
         seenNames.add(lowerName);
 
-        // Each confirmed unique individual attendee counts as 1
+        // Each confirmed attendee counts as 1
         totalPax += 1;
 
         const g = String(reg.gender || '').trim().toLowerCase();
@@ -694,9 +681,7 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
       }
 
       const recentJson = JSON.stringify(recentParticipants);
-
-      const cleanH = String(hNum).replace(/^#/, '').trim();
-      for (const keyToSave of Array.from(new Set([cleanH, '#' + cleanH, hNum]))) {
+      for (const keyToSave of [cleanH, hashH]) {
         if (!keyToSave) continue;
         await env.DB.prepare(`
           INSERT INTO trek_participant_summary (hike_number, total_pax, male_pax, female_pax, recent_participants, updated_at)
@@ -715,9 +700,71 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
           recentJson
         ).run();
       }
+    } else {
+      // Bulk aggregation across all hikes in a single set-based query
+      let summaryRows = [];
+      try {
+        const { results } = await env.DB.prepare(`
+          SELECT 
+            REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
+            COUNT(*) AS total_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(b.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(b.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+          FROM bookings_roster b
+          WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
+            AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
+            AND b.hike_number IS NOT NULL AND TRIM(b.hike_number) != ''
+          GROUP BY clean_hike
+        `).all();
+        summaryRows = results || [];
+      } catch (_) {
+        const { results } = await env.DB.prepare(`
+          SELECT 
+            REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
+            COUNT(*) AS total_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+          FROM bookings_roster b
+          LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
+          WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
+            AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
+            AND b.hike_number IS NOT NULL AND TRIM(b.hike_number) != ''
+          GROUP BY clean_hike
+        `).all();
+        summaryRows = results || [];
+      }
+
+      if (summaryRows.length > 0) {
+        const stmts = [];
+        for (const row of summaryRows) {
+          const cHike = row.clean_hike;
+          if (!cHike) continue;
+          const total = Number(row.total_pax) || 0;
+          const female = Number(row.female_pax) || 0;
+          const male = Number(row.male_pax) || 0;
+          for (const k of [cHike, '#' + cHike]) {
+            stmts.push(
+              env.DB.prepare(`
+                INSERT INTO trek_participant_summary (hike_number, total_pax, male_pax, female_pax, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(hike_number) DO UPDATE SET
+                  total_pax = excluded.total_pax,
+                  male_pax = excluded.male_pax,
+                  female_pax = excluded.female_pax,
+                  updated_at = CURRENT_TIMESTAMP
+              `).bind(k, total, male, female)
+            );
+          }
+        }
+        for (let i = 0; i < stmts.length; i += 50) {
+          await env.DB.batch(stmts.slice(i, i + 50));
+        }
+      }
     }
-    // Refresh snapshot in background after participant summary updates
-    rebuildTreksSnapshot(env).catch(() => {});
   } catch (err) {
     console.warn('Notice updating trek_participant_summary table:', err);
   }
@@ -732,19 +779,18 @@ async function rebuildTreksSnapshot(env) {
   let results = [];
   try {
     const { results: joined } = await env.DB.prepare(`
-      WITH roster_summary AS (
+      WITH roster_summary AS MATERIALIZED (
         SELECT
-          REPLACE(REPLACE(TRIM(b.hike_number), '#', ''), ' ', '') AS clean_hike,
+          REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
           COUNT(*) AS total_pax,
-          SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
-          SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(b.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(b.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
         FROM bookings_roster b
-        LEFT JOIN registrations r ON (
-          r.id = CAST(b.registration_id AS INTEGER)
-          OR CAST(r.id AS TEXT) = b.registration_id
-        )
         WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+          AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+          AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
           AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
+          AND b.hike_number IS NOT NULL AND TRIM(b.hike_number) != ''
         GROUP BY clean_hike
       )
       SELECT 
@@ -768,21 +814,66 @@ async function rebuildTreksSnapshot(env) {
         t.hike_number = e.hike_number
       )
       LEFT JOIN roster_summary rs
-        ON REPLACE(REPLACE(TRIM(t.hike_number), '#', ''), ' ', '') = rs.clean_hike
+        ON REPLACE(TRIM(t.hike_number), '#', '') = rs.clean_hike
       LEFT JOIN trek_participant_summary s
-        ON (s.hike_number = REPLACE(TRIM(t.hike_number), '#', '') OR s.hike_number = TRIM(t.hike_number))
+        ON s.hike_number = REPLACE(TRIM(t.hike_number), '#', '')
       ORDER BY t.created_at DESC
     `).all();
     results = joined || [];
   } catch (joinErr) {
-    console.warn('Failed to join treks with summary table in rebuildTreksSnapshot:', joinErr);
     try {
-      const { results: rawTreks } = await env.DB.prepare(
-        'SELECT * FROM treks ORDER BY created_at DESC'
-      ).all();
-      results = rawTreks || [];
+      const { results: fallbackJoined } = await env.DB.prepare(`
+        WITH roster_summary AS MATERIALIZED (
+          SELECT
+            REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
+            COUNT(*) AS total_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+          FROM bookings_roster b
+          LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
+          WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
+            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
+            AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
+            AND b.hike_number IS NOT NULL AND TRIM(b.hike_number) != ''
+          GROUP BY clean_hike
+        )
+        SELECT 
+          t.hike_number, t.id, t.title, t.category, t.status, t.cover_image_url,
+          t.hike_date, t.min_price, t.max_price, t.currency, t.meeting_point,
+          t.meeting_time, t.expected_duration, t.difficulty, t.approx_distance,
+          t.elevation_range, t.elevation_gross, t.ending_point, t.team_leader,
+          t.whatsapp_link, t.itinerary_link, t.faq_link, t.max_capacity,
+          t.author_email, t.created_at, t.updated_at, t.data_json,
+          e.execution_status,
+          e.is_cancelled as exec_is_cancelled,
+          e.cancellation_reason as exec_cancellation_reason,
+          e.capacity as exec_capacity,
+          e.assigned_leader as exec_assigned_leader,
+          COALESCE(rs.total_pax, s.total_pax, 0) as agg_total_pax,
+          COALESCE(rs.male_pax, s.male_pax, 0) as agg_male_pax,
+          COALESCE(rs.female_pax, s.female_pax, 0) as agg_female_pax,
+          s.recent_participants as agg_recent_json
+        FROM treks t
+        LEFT JOIN event_executions e ON (
+          t.hike_number = e.hike_number
+        )
+        LEFT JOIN roster_summary rs
+          ON REPLACE(TRIM(t.hike_number), '#', '') = rs.clean_hike
+        LEFT JOIN trek_participant_summary s
+          ON s.hike_number = REPLACE(TRIM(t.hike_number), '#', '')
+        ORDER BY t.created_at DESC
+      `).all();
+      results = fallbackJoined || [];
     } catch (_) {
-      results = [];
+      try {
+        const { results: rawTreks } = await env.DB.prepare(
+          'SELECT * FROM treks ORDER BY created_at DESC'
+        ).all();
+        results = rawTreks || [];
+      } catch (rawErr) {
+        results = [];
+      }
     }
   }
 
@@ -873,20 +964,17 @@ async function getTreksSnapshot(env, forceFresh = false) {
     try {
       const obj = await env.BUCKET.get(TREKS_SNAP_KEY);
       if (obj) {
-        const uploadTime = obj.uploaded ? new Date(obj.uploaded).getTime() : 0;
-        // Keep R2 cache TTL to 60 seconds so live rosters stay fresh
-        if (uploadTime && (now - uploadTime < 60000)) {
-          const text = await obj.text();
-          if (text) {
-            memTreksSnap = text;
-            memTreksSnapAt = now;
-            return text;
-          }
+        const text = await obj.text();
+        if (text) {
+          memTreksSnap = text;
+          memTreksSnapAt = now;
+          return text;
         }
       }
     } catch (_) {}
   }
 
+  // Only rebuild if none exists yet in R2 or if forceFresh is requested
   return await rebuildTreksSnapshot(env);
 }
 
@@ -909,9 +997,68 @@ function ensureDbIndexes(env, ctx) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_reg_ts ON registrations (timestamp DESC)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_regid ON bookings_roster (registration_id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_hike ON bookings_roster (hike_number)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_hike_status ON bookings_roster (hike_number, registration_status)'),
   ]).catch(() => {});
   if (ctx && ctx.waitUntil) {
     ctx.waitUntil(p);
+  }
+}
+
+let migrationsEnsured = false;
+function ensureDbMigrations(env, ctx) {
+  if (migrationsEnsured || !env || !env.DB) return;
+  migrationsEnsured = true;
+  const p = (async () => {
+    try {
+      // 1. Add gender and age_group columns to bookings_roster if not present
+      await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN gender TEXT').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN age_group TEXT').run().catch(() => {});
+
+      // 2. (one-time backfill already completed; removed to avoid full-table scans on every cold start)
+
+      // 3. One-time normalization of hike_numbers (remove leading #)
+      await env.DB.prepare(`UPDATE bookings_roster SET hike_number = REPLACE(TRIM(hike_number), '#', '') WHERE hike_number LIKE '#%'`).run().catch(() => {});
+      await env.DB.prepare(`UPDATE treks SET hike_number = REPLACE(TRIM(hike_number), '#', '') WHERE hike_number LIKE '#%'`).run().catch(() => {});
+      await env.DB.prepare(`UPDATE event_executions SET hike_number = REPLACE(TRIM(hike_number), '#', '') WHERE hike_number LIKE '#%'`).run().catch(() => {});
+      await env.DB.prepare(`UPDATE registrations SET hike_number = REPLACE(TRIM(hike_number), '#', '') WHERE hike_number LIKE '#%'`).run().catch(() => {});
+    } catch (_) {}
+  })();
+  if (ctx && ctx.waitUntil) {
+    ctx.waitUntil(p);
+  }
+}
+
+let blogsTableEnsured = false;
+async function ensureBlogsTable(env) {
+  if (blogsTableEnsured || !env || !env.DB) return;
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS blogs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slug TEXT UNIQUE,
+        title TEXT NOT NULL,
+        summary TEXT,
+        content TEXT NOT NULL,
+        cover_image_url TEXT,
+        author_name TEXT NOT NULL,
+        author_email TEXT,
+        category TEXT DEFAULT 'Trail Stories',
+        tags TEXT,
+        reading_time_mins INTEGER DEFAULT 3,
+        likes_count INTEGER DEFAULT 0,
+        views_count INTEGER DEFAULT 0,
+        edit_token TEXT,
+        status TEXT DEFAULT 'published',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.DB.prepare('ALTER TABLE blogs ADD COLUMN edit_token TEXT').run().catch(() => {});
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_blogs_status_created ON blogs(status, created_at DESC)').run().catch(() => {});
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_blogs_slug ON blogs(slug)').run().catch(() => {});
+    blogsTableEnsured = true;
+  } catch (err) {
+    console.warn('ensureBlogsTable warning:', err && err.message);
   }
 }
 
@@ -921,7 +1068,13 @@ export default {
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
+      const reqHeaders = request.headers.get('Access-Control-Request-Headers') || '*';
+      return new Response(null, {
+        headers: {
+          ...corsHeaders,
+          'Access-Control-Allow-Headers': reqHeaders,
+        }
+      });
     }
 
     const url = new URL(request.url);
@@ -1184,16 +1337,35 @@ export default {
       if (method === 'GET' && (path === '/treks' || path === '/admin/itineraries')) {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
 
-        const isForceFresh = url.searchParams.has('forceFresh');
+        // Only allow forceFresh if admin authentication is provided
+        let isForceFresh = false;
+        if (url.searchParams.has('forceFresh') || url.searchParams.has('fresh')) {
+          const authUser = await getAuthUser(request);
+          if (authUser && authUser.isAdmin) {
+            isForceFresh = true;
+          }
+        }
+
+        if (!isForceFresh) {
+          const cached = await matchEdgeCache(request);
+          if (cached) return cached;
+        }
+
         const snap = await getTreksSnapshot(env, isForceFresh);
 
-        return new Response(snap, {
+        const resp = new Response(snap, {
           headers: {
             ...corsHeaders,
             'Content-Type': 'application/json',
-            'Cache-Control': 'public, max-age=30, s-maxage=30'
+            'Cache-Control': 'public, max-age=60, s-maxage=60'
           }
         });
+
+        if (!isForceFresh) {
+          await putEdgeCache(request, resp, ctx, 60);
+        }
+
+        return resp;
       }
 
       // GET /treks/:id or GET /admin/itineraries/:id - Get single trek
@@ -1207,6 +1379,9 @@ export default {
           if (cached) return cached;
         }
 
+        const cleanHikeNum = String(idOrNum || '').replace(/^#/, '').trim();
+        const hashHikeNum = '#' + cleanHikeNum;
+
         let row;
         try {
           row = await env.DB.prepare(`
@@ -1217,26 +1392,23 @@ export default {
               e.is_cancelled as exec_is_cancelled, 
               e.cancellation_reason as exec_cancellation_reason
             FROM treks t
-            LEFT JOIN event_executions e ON (
-              t.hike_number = e.hike_number
-              OR REPLACE(t.hike_number, '#', '') = REPLACE(e.hike_number, '#', '')
-              OR TRIM(t.hike_number) = TRIM(e.hike_number)
-            )
-            WHERE t.id = ? OR t.hike_number = ? OR REPLACE(t.hike_number, '#', '') = ?
-          `).bind(idOrNum, idOrNum, idOrNum).first();
+            LEFT JOIN event_executions e ON e.hike_number = t.hike_number
+            WHERE t.id = ? OR t.hike_number = ? OR t.hike_number = ?
+          `).bind(idOrNum, cleanHikeNum, hashHikeNum).first();
         } catch (_) {
           row = await env.DB.prepare(
-            'SELECT * FROM treks WHERE id = ? OR hike_number = ?'
-          ).bind(idOrNum, idOrNum).first();
+            'SELECT * FROM treks WHERE id = ? OR hike_number = ? OR hike_number = ?'
+          ).bind(idOrNum, cleanHikeNum, hashHikeNum).first();
         }
 
         if (!row) {
           return errorResponse('Trek not found', 404);
         }
 
-        const cleanHikeNum = String(row.hike_number || idOrNum || '').replace(/^#/, '').trim();
+        const trekHikeClean = String(row.hike_number || cleanHikeNum).replace(/^#/, '').trim();
+        const trekHikeHash = '#' + trekHikeClean;
 
-        // Strict hike_number matching for live roster from bookings_roster (confirmed only, excluding cancelled & waitlisted)
+        // Fetch confirmed roster entries directly from bookings_roster using index
         let regs = { results: [] };
         try {
           regs = await env.DB.prepare(`
@@ -1244,17 +1416,12 @@ export default {
               b.id, b.registration_id, b.hike_number, b.full_name, b.gender, b.age_group, b.registration_status,
               COALESCE(b.created_at, b.updated_at, '') as timestamp
             FROM bookings_roster b
-            WHERE (
-              b.hike_number = ?
-              OR b.hike_number = ?
-              OR REPLACE(b.hike_number, '#', '') = ?
-              OR TRIM(b.hike_number) = ?
-            )
+            WHERE (b.hike_number = ? OR b.hike_number = ?)
               AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
               AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
               AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
             ORDER BY b.id ASC
-          `).bind(cleanHikeNum, '#' + cleanHikeNum, cleanHikeNum, cleanHikeNum).all();
+          `).bind(trekHikeClean, trekHikeHash).all();
         } catch (_) {
           try {
             regs = await env.DB.prepare(`
@@ -1265,18 +1432,13 @@ export default {
                 b.registration_status,
                 COALESCE(b.created_at, b.updated_at, '') as timestamp
               FROM bookings_roster b
-              LEFT JOIN registrations r ON b.registration_id = CAST(r.id AS TEXT)
-              WHERE (
-                b.hike_number = ?
-                OR b.hike_number = ?
-                OR REPLACE(b.hike_number, '#', '') = ?
-                OR TRIM(b.hike_number) = ?
-              )
+              LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
+              WHERE (b.hike_number = ? OR b.hike_number = ?)
                 AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
                 AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
                 AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
               ORDER BY b.id ASC
-            `).bind(cleanHikeNum, '#' + cleanHikeNum, cleanHikeNum, cleanHikeNum).all();
+            `).bind(trekHikeClean, trekHikeHash).all();
           } catch (e) {
             regs = { results: [] };
           }
@@ -1390,8 +1552,10 @@ export default {
         await updateTrekParticipantSummary(env);
 
         if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
           ctx.waitUntil(logAdminActivity(env, request, 'SYNC_LEADERBOARD', 'Recomputed community stats, leaderboard, and participant summaries from D1 tables'));
         } else {
+          rebuildTreksSnapshot(env).catch(() => {});
           await logAdminActivity(env, request, 'SYNC_LEADERBOARD', 'Recomputed community stats, leaderboard, and participant summaries from D1 tables');
         }
 
@@ -1414,6 +1578,20 @@ export default {
         ).bind(newStatus, idOrNum, idOrNum).run();
 
         await logAdminActivity(env, request, 'UPDATE_TREK_STATUS', `Updated trek ${idOrNum} status to '${newStatus}'`, { trekId: idOrNum, status: newStatus });
+
+        // Invalidate edge cache and rebuild snapshot so status updates instantly
+        await purgeEdgeCache([
+          `${url.origin}/treks`,
+          `${url.origin}/admin/itineraries`,
+          `${url.origin}/treks/${idOrNum}`,
+          `${url.origin}/admin/itineraries/${idOrNum}`
+        ], ctx);
+
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
+        }
 
         return jsonResponse({ success: true, message: `Status updated to ${newStatus}` });
       }
@@ -2256,34 +2434,61 @@ export default {
         // 3. Upsert into bookings_roster table
         try {
           if (existingRoster) {
-            await env.DB.prepare(`
-              UPDATE bookings_roster SET
-                registration_status = ?,
-                payment_status = ?,
-                paid_amount = ?,
-                due_amount = ?,
-                admin_notes = ?,
-                pickup_point = ?,
-                updated_at = CURRENT_TIMESTAMP
-              WHERE registration_id = ?
-            `).bind(
-              status,
-              payment_status,
-              paid,
-              due,
-              updates,
-              pickup_point,
-              String(id)
-            ).run();
+            try {
+              await env.DB.prepare(`
+                UPDATE bookings_roster SET
+                  registration_status = ?,
+                  payment_status = ?,
+                  paid_amount = ?,
+                  due_amount = ?,
+                  admin_notes = ?,
+                  pickup_point = ?,
+                  gender = COALESCE(?, gender),
+                  age_group = COALESCE(?, age_group),
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE registration_id = ?
+              `).bind(
+                status,
+                payment_status,
+                paid,
+                due,
+                updates,
+                pickup_point,
+                body.gender !== undefined ? body.gender : null,
+                body.age_group !== undefined ? body.age_group : null,
+                String(id)
+              ).run();
+            } catch (_) {
+              await env.DB.prepare(`
+                UPDATE bookings_roster SET
+                  registration_status = ?,
+                  payment_status = ?,
+                  paid_amount = ?,
+                  due_amount = ?,
+                  admin_notes = ?,
+                  pickup_point = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE registration_id = ?
+              `).bind(
+                status,
+                payment_status,
+                paid,
+                due,
+                updates,
+                pickup_point,
+                String(id)
+              ).run();
+            }
           } else {
             await env.DB.prepare(`
               INSERT INTO bookings_roster (
                 registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
-                registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point,
+                gender, age_group, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `).bind(
               String(id),
-              regRow ? String(regRow.hike_number || '') : '',
+              regRow ? String(regRow.hike_number || '').replace(/^#/, '').trim() : '',
               regRow ? String(regRow.trek_name || '') : '',
               regRow ? String(regRow.trek_date || regRow.timestamp || '') : '',
               regRow ? String(regRow.full_name || '') : '',
@@ -2295,7 +2500,9 @@ export default {
               paid,
               due,
               updates,
-              pickup_point
+              pickup_point,
+              body.gender || regRow?.gender || '',
+              body.age_group || regRow?.age_group || ''
             ).run();
           }
 
@@ -2308,6 +2515,13 @@ export default {
         const targetHikeNum = body.hike_number || regRow?.hike_number || existingRoster?.hike_number;
         if (targetHikeNum) {
           await updateTrekParticipantSummary(env, targetHikeNum);
+        }
+
+        // Rebuild treks snapshot in background
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
         }
 
         await logAdminActivity(env, request, 'UPDATE_BOOKING', `Updated booking/roster for '${regRow?.full_name || 'Hiker'}' (#${regRow?.hike_number || ''})`, {
@@ -2342,6 +2556,11 @@ export default {
           await env.DB.prepare('DELETE FROM bookings_roster WHERE registration_id = ?').bind(String(id)).run();
           cachedTrekAggMap = null;
           if (regHikeNum) await updateTrekParticipantSummary(env, regHikeNum);
+          if (ctx && ctx.waitUntil) {
+            ctx.waitUntil(rebuildTreksSnapshot(env));
+          } else {
+            rebuildTreksSnapshot(env).catch(() => {});
+          }
           await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, { registration_id: id });
           return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully' });
         } catch (dbErr) {
@@ -2351,6 +2570,11 @@ export default {
             await env.DB.prepare('DELETE FROM bookings_roster WHERE registration_id = ?').bind(String(id)).run();
             cachedTrekAggMap = null;
             if (regHikeNum) await updateTrekParticipantSummary(env, regHikeNum);
+            if (ctx && ctx.waitUntil) {
+              ctx.waitUntil(rebuildTreksSnapshot(env));
+            } else {
+              rebuildTreksSnapshot(env).catch(() => {});
+            }
             await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, { registration_id: id });
             return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully (fallback ID type)' });
           } catch (fallbackErr) {
@@ -2364,6 +2588,7 @@ export default {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
 
         const body = await request.json();
+        const cleanHikeNum = String(body.hike_number || '').replace(/^#/, '').trim();
         const whatsappVal = body.whatsapp_number || body.whatsapp || '';
         const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
@@ -2378,7 +2603,7 @@ export default {
             transport_mode, list_name, timestamp
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          String(body.hike_number || ''),
+          cleanHikeNum,
           body.trek_name || '',
           body.full_name || 'Anonymous Hiker',
           body.email_address || '',
@@ -2417,11 +2642,12 @@ export default {
             await env.DB.prepare(`
               INSERT INTO bookings_roster (
                 registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
-                registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point,
+                gender, age_group, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `).bind(
               String(insertedId),
-              String(body.hike_number || ''),
+              cleanHikeNum,
               body.trek_name || '',
               body.trek_date || body.timestamp || currentTimestamp,
               body.full_name || 'Anonymous Hiker',
@@ -2433,7 +2659,9 @@ export default {
               paid,
               due,
               body.admin_notes || '',
-              body.pickup_point || body.pickupPoint || body.pickup || ''
+              body.pickup_point || body.pickupPoint || body.pickup || '',
+              body.gender || '',
+              body.age_group || ''
             ).run();
           } catch (rErr) {
             console.warn('Error auto-populating bookings_roster from registration:', rErr);
@@ -2441,9 +2669,17 @@ export default {
         }
 
         cachedTrekAggMap = null;
-        if (body.hike_number) {
-          await updateTrekParticipantSummary(env, body.hike_number);
+        if (cleanHikeNum) {
+          await updateTrekParticipantSummary(env, cleanHikeNum);
         }
+
+        // Rebuild treks snapshot in background
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
+        }
+
         return jsonResponse({ success: true, message: 'Registration saved successfully', id: insertedId });
       }
 
@@ -2467,7 +2703,7 @@ export default {
           const stmts = [];
 
           for (const item of chunk) {
-            const hikeNum = String(item.hike_number || item.hikeNumber || '').trim();
+            const hikeNum = String(item.hike_number || item.hikeNumber || '').replace(/^#/, '').trim();
             if (hikeNum) affectedHikeNumbers.add(hikeNum);
             const trekName = String(item.trek_name || item.trekName || item.which_hike || '').trim();
             const fullName = String(item.full_name || item.name || 'Anonymous Hiker').trim();
@@ -2526,11 +2762,11 @@ export default {
                 INSERT INTO bookings_roster (
                   registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
                   registration_status, payment_status, paid_amount, due_amount, pickup_point,
-                  created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                  gender, age_group, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `).bind(
                 insertedRegId, hikeNum, trekName, regTimestamp, fullName, phone, email, whatsapp,
-                payStatus, paid, due, pickupPoint
+                payStatus, paid, due, pickupPoint, gender, ageGroup
               )
             );
           }
@@ -2545,6 +2781,13 @@ export default {
         // Synchronize precomputed trek participant summaries for all affected hikes
         for (const hn of affectedHikeNumbers) {
           await updateTrekParticipantSummary(env, hn);
+        }
+
+        // Rebuild treks snapshot ONCE in background after batch completes
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(rebuildTreksSnapshot(env));
+        } else {
+          rebuildTreksSnapshot(env).catch(() => {});
         }
 
         return jsonResponse({
@@ -3110,9 +3353,455 @@ export default {
         }
       }
 
+      // --------------------------------------------------------------------------
+      // COMMUNITY BLOGS & STORIES (Stored in Cloudflare D1 & R2)
+      // --------------------------------------------------------------------------
+      // Explicit endpoint to initialize / verify blogs table in D1
+      if ((method === 'POST' || method === 'GET') && (path === '/admin/init-blogs-table' || path === '/api/admin/init-blogs-table' || path === '/admin/migrate-blogs')) {
+        if (!env.DB) return errorResponse('Database not configured', 503);
+        blogsTableEnsured = false;
+        await ensureBlogsTable(env);
+        return jsonResponse({ success: true, message: 'blogs table created and verified in D1 successfully' });
+      }
+
+      // GET /blogs - list recent blogs (lean projection, excludes heavy content for D1 read efficiency)
+      if (method === 'GET' && (path === '/blogs' || path === '/api/blogs')) {
+        if (!env.DB) return jsonResponse({ success: true, data: [] });
+        try {
+          const category = url.searchParams.get('category');
+          let query = `
+            SELECT id, slug, title, summary, cover_image_url, author_name, author_email, category, tags, reading_time_mins, likes_count, views_count, created_at
+            FROM blogs
+            WHERE status = 'published'
+          `;
+          const params = [];
+          if (category && category !== 'All') {
+            query += ' AND category = ?';
+            params.push(category);
+          }
+          query += ' ORDER BY created_at DESC LIMIT 50';
+
+          const stmt = env.DB.prepare(query);
+          const { results } = params.length > 0 ? await stmt.bind(...params).all() : await stmt.all();
+
+          return jsonResponse({
+            success: true,
+            data: results || []
+          }, 200, {
+            'Cache-Control': 'public, max-age=60, s-maxage=120'
+          });
+        } catch (err) {
+          const errStr = String(err && (err.message || err));
+          if (errStr.includes('no such table') || errStr.includes('SQLITE_ERROR')) {
+            blogsTableEnsured = false;
+            await ensureBlogsTable(env);
+          }
+          return jsonResponse({ success: true, data: [] });
+        }
+      }
+
+      // GET /blogs/:idOrSlug - full blog details including content
+      if (method === 'GET' && (path.startsWith('/blogs/') || path.startsWith('/api/blogs/'))) {
+        if (!env.DB) return errorResponse('Database not configured', 503);
+        const param = decodeURIComponent(path.replace(/^\/(?:api\/)?blogs\//, '').split('?')[0]);
+        if (!param) return errorResponse('Missing blog identifier', 400);
+
+        try {
+          const isNumeric = /^\d+$/.test(param);
+          const blog = isNumeric
+            ? await env.DB.prepare('SELECT * FROM blogs WHERE id = ?').bind(parseInt(param, 10)).first()
+            : await env.DB.prepare('SELECT * FROM blogs WHERE slug = ?').bind(param).first();
+
+          if (!blog) {
+            return errorResponse('Blog not found', 404);
+          }
+
+          // Asynchronously increment view count without blocking
+          if (ctx && ctx.waitUntil) {
+            ctx.waitUntil(
+              env.DB.prepare('UPDATE blogs SET views_count = views_count + 1 WHERE id = ?')
+                .bind(blog.id)
+                .run()
+                .catch(() => {})
+            );
+          }
+
+          return jsonResponse({ success: true, data: blog });
+        } catch (err) {
+          const errStr = String(err && (err.message || err));
+          if (errStr.includes('no such table') || errStr.includes('SQLITE_ERROR')) {
+            blogsTableEnsured = false;
+            await ensureBlogsTable(env);
+            return errorResponse('Blog not found', 404);
+          }
+          return errorResponse(err.message, 500);
+        }
+      }
+
+      // POST /blogs - create a new blog post
+      if (method === 'POST' && (path === '/blogs' || path === '/api/blogs')) {
+        if (!env.DB) return errorResponse('Database not configured', 503);
+        try {
+          const body = await request.json();
+          const title = (body.title || '').trim();
+          const content = (body.content || '').trim();
+          const authorName = (body.author_name || body.authorName || 'Himalayan Explorer').trim();
+          const authorEmail = (body.author_email || body.authorEmail || '').trim().toLowerCase();
+          const plainText = content.replace(/<[^>]*>|[#*_~`>[\]()!-]/g, ' ').replace(/\s+/g, ' ').trim();
+          const summary = (body.summary || plainText.slice(0, 180)).trim();
+          const coverImageUrl = (body.cover_image_url || body.coverImageUrl || '').trim();
+          const category = (body.category || 'Trail Stories').trim();
+          const tags = (body.tags || '').trim();
+          const editToken = (body.edit_token || body.editToken || '').trim() || null;
+
+          if (!title || !content) {
+            return errorResponse('Title and content are required', 400);
+          }
+
+          // Calculate estimated reading time by stripping formatting tags
+          const cleanText = content.replace(/<[^>]*>|[#*_~`>[\]()!-]/g, ' ');
+          const words = cleanText.split(/\s+/).filter(Boolean).length;
+          const readingTimeMins = Math.max(1, Math.ceil(words / 200));
+
+          // Generate URL-friendly slug
+          const baseSlug = title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '')
+            .substring(0, 60);
+          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+          const slug = `${baseSlug || 'story'}-${randomSuffix}`;
+
+          const now = new Date().toISOString();
+          let result;
+          try {
+            result = await env.DB.prepare(`
+              INSERT INTO blogs (
+                slug, title, summary, content, cover_image_url,
+                author_name, author_email, category, tags,
+                reading_time_mins, edit_token, status, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)
+            `).bind(
+              slug, title, summary, content, coverImageUrl || null,
+              authorName, authorEmail || null, category, tags || null,
+              readingTimeMins, editToken, now, now
+            ).run();
+          } catch (insertErr) {
+            const errStr = String(insertErr && (insertErr.message || insertErr));
+            if (errStr.includes('no such table') || errStr.includes('SQLITE_ERROR') || errStr.includes('column')) {
+              blogsTableEnsured = false;
+              await ensureBlogsTable(env);
+              result = await env.DB.prepare(`
+                INSERT INTO blogs (
+                  slug, title, summary, content, cover_image_url,
+                  author_name, author_email, category, tags,
+                  reading_time_mins, edit_token, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)
+              `).bind(
+                slug, title, summary, content, coverImageUrl || null,
+                authorName, authorEmail || null, category, tags || null,
+                readingTimeMins, editToken, now, now
+              ).run();
+            } else {
+              throw insertErr;
+            }
+          }
+
+          return jsonResponse({
+            success: true,
+            data: {
+              id: result?.meta?.last_row_id,
+              slug,
+              title,
+              edit_token: editToken,
+              created_at: now
+            }
+          }, 201);
+        } catch (err) {
+          return errorResponse(err.message, 500);
+        }
+      }
+
+      // POST /blogs/images - Direct photo upload to R2 for blog stories
+      if (method === 'POST' && (path === '/blogs/images' || path === '/api/blogs/images')) {
+        const bucket = env.BUCKET;
+        if (!bucket) return errorResponse('R2 Storage binding BUCKET missing', 500);
+
+        try {
+          const contentType = request.headers.get('content-type') || '';
+          let fileBytes;
+          let mimeType = 'image/jpeg';
+          let ext = 'jpg';
+
+          if (contentType.includes('multipart/form-data')) {
+            const formData = await request.formData();
+            const file = formData.get('file') || formData.get('image');
+            if (!file) {
+              return errorResponse('No image file provided in form data', 400);
+            }
+            mimeType = file.type || 'image/jpeg';
+            if (mimeType.includes('png')) ext = 'png';
+            else if (mimeType.includes('webp')) ext = 'webp';
+            else if (mimeType.includes('gif')) ext = 'gif';
+            fileBytes = await file.arrayBuffer();
+          } else {
+            const body = await request.json();
+            const base64Data = body.image || body.data || body.file;
+            if (!base64Data) {
+              return errorResponse('No image data provided', 400);
+            }
+            const match = base64Data.match(/^data:(image\/[a-zA-Z0-9.+_-]+);base64,(.+)$/);
+            let rawBase64 = base64Data;
+            if (match) {
+              mimeType = match[1];
+              rawBase64 = match[2];
+              if (mimeType.includes('png')) ext = 'png';
+              else if (mimeType.includes('webp')) ext = 'webp';
+              else if (mimeType.includes('gif')) ext = 'gif';
+            }
+            const binaryString = atob(rawBase64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            fileBytes = bytes.buffer;
+          }
+
+          if (!fileBytes || fileBytes.byteLength === 0) {
+            return errorResponse('Invalid image file', 400);
+          }
+
+          if (fileBytes.byteLength > 10 * 1024 * 1024) {
+            return errorResponse('Image file size exceeds 10MB limit', 400);
+          }
+
+          const uniqueId = `blog_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+          const fileName = `${uniqueId}.${ext}`;
+
+          await bucket.put(fileName, fileBytes, {
+            httpMetadata: { contentType: mimeType }
+          });
+
+          const imageUrl = `${urlOrigin}/images/${fileName}`;
+
+          return jsonResponse({
+            success: true,
+            data: {
+              url: imageUrl,
+              fileName,
+              mimeType,
+              size: fileBytes.byteLength
+            }
+          }, 201);
+        } catch (err) {
+          return errorResponse(err.message || 'Image upload failed', 500);
+        }
+      }
+
+      // PUT /blogs/:id - edit/update an existing blog post
+      if (method === 'PUT' && path.match(/^\/(?:api\/)?blogs\/\d+$/)) {
+        if (!env.DB) return errorResponse('Database not configured', 503);
+        try {
+          const match = path.match(/\/blogs\/(\d+)/);
+          const blogId = parseInt(match[1], 10);
+
+          const existing = await env.DB.prepare('SELECT * FROM blogs WHERE id = ?').bind(blogId).first();
+          if (!existing) {
+            return errorResponse('Blog not found', 404);
+          }
+
+          const authUser = await getAuthUser(request);
+          const headerUserEmail = (request.headers.get('X-User-Email') || '').trim().toLowerCase();
+          const headerAdminEmail = (request.headers.get('X-Admin-Email') || '').trim().toLowerCase();
+          const headerEditToken = (request.headers.get('X-Edit-Token') || '').trim();
+
+          let body = {};
+          try {
+            body = await request.json();
+          } catch (_) {}
+
+          const bodyEmail = (body.author_email || body.authorEmail || body.email || '').trim().toLowerCase();
+          const bodyEditToken = (body.edit_token || body.editToken || '').trim();
+
+          const effectiveUserEmail = (authUser?.email || headerUserEmail || bodyEmail || '').toLowerCase();
+          const effectiveEditToken = headerEditToken || bodyEditToken || '';
+
+          const isAdmin = Boolean(
+            authUser?.isAdmin ||
+            (headerAdminEmail && ADMIN_EMAILS.includes(headerAdminEmail)) ||
+            (effectiveUserEmail && ADMIN_EMAILS.includes(effectiveUserEmail))
+          );
+
+          const isAuthorEmail = Boolean(
+            existing.author_email &&
+            effectiveUserEmail &&
+            existing.author_email.toLowerCase() === effectiveUserEmail
+          );
+
+          const isEditTokenMatch = Boolean(
+            existing.edit_token &&
+            effectiveEditToken &&
+            existing.edit_token === effectiveEditToken
+          );
+
+          if (!isAdmin && !isAuthorEmail && !isEditTokenMatch) {
+            return errorResponse('You are not authorized to edit this blog post', 403);
+          }
+
+          const title = (body.title || existing.title || '').trim();
+          const content = (body.content || existing.content || '').trim();
+          const authorName = (body.author_name || body.authorName || existing.author_name || '').trim();
+          const plainText = content.replace(/<[^>]*>|[#*_~`>[\]()!-]/g, ' ').replace(/\s+/g, ' ').trim();
+          const summary = (body.summary || (plainText ? plainText.slice(0, 180) : existing.summary || '')).trim();
+          const coverImageUrl = body.cover_image_url !== undefined ? body.cover_image_url.trim() : (existing.cover_image_url || '');
+          const category = (body.category || existing.category || 'Trail Stories').trim();
+          const tags = body.tags !== undefined ? body.tags.trim() : (existing.tags || '');
+
+          if (!title || !content) {
+            return errorResponse('Title and content are required', 400);
+          }
+
+          const cleanText = content.replace(/<[^>]*>|[#*_~`>[\]()!-]/g, ' ');
+          const words = cleanText.split(/\s+/).filter(Boolean).length;
+          const readingTimeMins = Math.max(1, Math.ceil(words / 200));
+          const now = new Date().toISOString();
+
+          await env.DB.prepare(`
+            UPDATE blogs SET
+              title = ?,
+              content = ?,
+              summary = ?,
+              author_name = ?,
+              cover_image_url = ?,
+              category = ?,
+              tags = ?,
+              reading_time_mins = ?,
+              updated_at = ?
+            WHERE id = ?
+          `).bind(
+            title, content, summary, authorName,
+            coverImageUrl || null, category, tags || null,
+            readingTimeMins, now, blogId
+          ).run();
+
+          return jsonResponse({
+            success: true,
+            message: 'Blog updated successfully',
+            data: {
+              id: blogId,
+              title,
+              summary,
+              content,
+              cover_image_url: coverImageUrl || null,
+              author_name: authorName,
+              category,
+              tags,
+              reading_time_mins: readingTimeMins,
+              updated_at: now
+            }
+          });
+        } catch (err) {
+          return errorResponse(err.message, 500);
+        }
+      }
+
+      // DELETE /blogs/:id - delete a blog post
+      if (method === 'DELETE' && path.match(/^\/(?:api\/)?blogs\/\d+$/)) {
+        if (!env.DB) return errorResponse('Database not configured', 503);
+        try {
+          const match = path.match(/\/blogs\/(\d+)/);
+          const blogId = parseInt(match[1], 10);
+
+          const existing = await env.DB.prepare('SELECT * FROM blogs WHERE id = ?').bind(blogId).first();
+          if (!existing) {
+            return errorResponse('Blog not found', 404);
+          }
+
+          const authUser = await getAuthUser(request);
+          const headerUserEmail = (request.headers.get('X-User-Email') || '').trim().toLowerCase();
+          const headerAdminEmail = (request.headers.get('X-Admin-Email') || '').trim().toLowerCase();
+          const headerEditToken = (request.headers.get('X-Edit-Token') || '').trim();
+
+          let body = {};
+          try {
+            body = await request.json();
+          } catch (_) {}
+
+          const bodyEmail = (body.author_email || body.authorEmail || body.email || '').trim().toLowerCase();
+          const bodyEditToken = (body.edit_token || body.editToken || '').trim();
+
+          const effectiveUserEmail = (authUser?.email || headerUserEmail || bodyEmail || '').toLowerCase();
+          const effectiveEditToken = headerEditToken || bodyEditToken || '';
+
+          const isAdmin = Boolean(
+            authUser?.isAdmin ||
+            (headerAdminEmail && ADMIN_EMAILS.includes(headerAdminEmail)) ||
+            (effectiveUserEmail && ADMIN_EMAILS.includes(effectiveUserEmail))
+          );
+
+          const isAuthorEmail = Boolean(
+            existing.author_email &&
+            effectiveUserEmail &&
+            existing.author_email.toLowerCase() === effectiveUserEmail
+          );
+
+          const isEditTokenMatch = Boolean(
+            existing.edit_token &&
+            effectiveEditToken &&
+            existing.edit_token === effectiveEditToken
+          );
+
+          if (!isAdmin && !isAuthorEmail && !isEditTokenMatch) {
+            return errorResponse('You are not authorized to delete this blog post', 403);
+          }
+
+          await env.DB.prepare('DELETE FROM blogs WHERE id = ?').bind(blogId).run();
+
+          return jsonResponse({
+            success: true,
+            message: 'Blog deleted successfully',
+            data: { id: blogId }
+          });
+        } catch (err) {
+          return errorResponse(err.message, 500);
+        }
+      }
+
+      // POST /blogs/:id/like - increment heart/like count
+      if (method === 'POST' && (path.match(/^\/(?:api\/)?blogs\/\d+\/like$/))) {
+        if (!env.DB) return errorResponse('Database not configured', 503);
+        try {
+          const match = path.match(/\/blogs\/(\d+)\/like/);
+          const blogId = parseInt(match[1], 10);
+          try {
+            await env.DB.prepare('UPDATE blogs SET likes_count = likes_count + 1 WHERE id = ?').bind(blogId).run();
+          } catch (likeErr) {
+            const errStr = String(likeErr && (likeErr.message || likeErr));
+            if (errStr.includes('no such table') || errStr.includes('SQLITE_ERROR')) {
+              blogsTableEnsured = false;
+              await ensureBlogsTable(env);
+            } else {
+              throw likeErr;
+            }
+          }
+          return jsonResponse({ success: true, blogId });
+        } catch (err) {
+          return errorResponse(err.message, 500);
+        }
+      }
+
       return errorResponse(`Route ${method} ${path} not found`, 404);
     } catch (err) {
       return errorResponse(err.message || 'Server error', 500);
+    }
+  },
+
+  async scheduled(event, env, ctx) {
+    if (ctx && ctx.waitUntil) {
+      ctx.waitUntil(rebuildTreksSnapshot(env));
+    } else {
+      await rebuildTreksSnapshot(env);
     }
   },
 };

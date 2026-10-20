@@ -12,7 +12,8 @@ import {
   ChevronRight,
   Camera,
   Trophy,
-  Star
+  Star,
+  BookOpen
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { useAuth } from '../context/AuthContext';
@@ -247,6 +248,18 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               <div className="px-3 py-1.5 border-b border-[#F9F7F5] mb-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-[#8B8680]">Guides & Support</span>
               </div>
+
+              <button
+                type="button"
+                onClick={() => handleSubPageClick('blogs')}
+                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-bold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-[#7ABA42]" />
+                  <span>Blogs &amp; Stories</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
+              </button>
 
               <button
                 type="button"

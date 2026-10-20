@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Trek } from '../types';
-import { apiFetch, fetchPhotoComments } from '../services/api';
+import { apiFetch, fetchPhotoComments, uploadImageToR2WithProgress } from '../services/api';
 import { PhotoCommentsSection } from './PhotoCommentsSection';
 
 interface TrekPhotosModalProps {
@@ -67,46 +67,14 @@ const safeSetItem = (key: string, value: string): void => {
 
 function uploadToCloudinaryWithProgress(
   formData: FormData,
-  cloudName: string,
+  _cloudName?: string,
   onProgress?: (percent: number) => void
 ): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
-
-    if (xhr.upload && onProgress) {
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && event.total > 0) {
-          const pct = Math.round((event.loaded / event.total) * 100);
-          onProgress(pct);
-        }
-      };
-    }
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const resData = JSON.parse(xhr.responseText);
-          resolve(resData);
-        } catch (e) {
-          reject(new Error('Invalid response from Cloudinary'));
-        }
-      } else {
-        try {
-          const errBody = JSON.parse(xhr.responseText);
-          reject(new Error(errBody.error?.message || xhr.statusText));
-        } catch (_) {
-          reject(new Error(xhr.statusText || 'Upload failed'));
-        }
-      }
-    };
-
-    xhr.onerror = () => {
-      reject(new Error('Network error during photo upload'));
-    };
-
-    xhr.send(formData);
-  });
+  const file = formData.get('file') as (File | Blob);
+  if (!file) {
+    return Promise.reject(new Error('No file found to upload'));
+  }
+  return uploadImageToR2WithProgress(file, 'gallery', onProgress);
 }
 
 export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
@@ -872,6 +840,11 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
                       alt={`${photo.trekName} photo by ${photo.uploadedBy}`}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.style.opacity = '0.75';
+                        target.src = 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=600&q=80';
+                      }}
                     />
 
                     {/* Gradient Overlay */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Trek, Booking, TeamMember, BookingFormData } from './types';
 import { Navbar, DesktopResourcesBar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
@@ -376,6 +376,19 @@ function MainApp() {
   });
 
   const activeUserEmail = userEmail || '';
+
+  // Up to 10 most recent past hikes for the feedback dropdown
+  const recentFeedbackHikes = useMemo(() => {
+    const parse = (d?: string) => {
+      const t = Date.parse(d || '');
+      return Number.isNaN(t) ? null : t;
+    };
+    const dated = treks.filter((t) => parse(t.date) !== null);
+        const past = dated.filter((t) => (parse(t.date) as number) < new Date().setHours(0, 0, 0, 0));
+    return past
+      .sort((a, b) => (parse(b.date) as number) - (parse(a.date) as number))
+      .slice(0, 10);
+  }, [treks]);
 
   // Look up the most recent booking/registration made by the user to prefill future forms
   const latestUserBooking = React.useMemo(() => {
@@ -1601,6 +1614,7 @@ function MainApp() {
             onSubmitSuccess={() => {
               showToast('Thank you for your feedback! Review saved.', 'success');
             }}
+            recentHikes={recentFeedbackHikes}
           />
         )}
 

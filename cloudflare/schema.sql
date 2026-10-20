@@ -277,5 +277,26 @@ CREATE INDEX IF NOT EXISTS idx_behavior_event_type ON user_behavior_events(event
 CREATE INDEX IF NOT EXISTS idx_behavior_session ON user_behavior_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_behavior_created_at ON user_behavior_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_behavior_target ON user_behavior_events(target_id);
+-- 15. Community Blogs Table (Stored in Cloudflare D1)
+CREATE TABLE IF NOT EXISTS blogs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT UNIQUE,
+  title TEXT NOT NULL,
+  summary TEXT,
+  content TEXT NOT NULL,
+  cover_image_url TEXT,
+  author_name TEXT NOT NULL,
+  author_email TEXT,
+  category TEXT DEFAULT 'Trail Stories',
+  tags TEXT,
+  reading_time_mins INTEGER DEFAULT 3,
+  likes_count INTEGER DEFAULT 0,
+  views_count INTEGER DEFAULT 0,
+  edit_token TEXT,
+  status TEXT DEFAULT 'published',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
-
+CREATE INDEX IF NOT EXISTS idx_blogs_status_created ON blogs(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_blogs_slug ON blogs(slug);

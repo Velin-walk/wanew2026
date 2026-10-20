@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Booking } from '../types';
-import { apiFetch } from '../services/api';
+import { apiFetch, uploadImageToR2WithProgress } from '../services/api';
 import { logUserActivity } from '../services/userActivityNotifier';
 import {
   UploadCloud,
@@ -166,27 +166,10 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
         // 1. Compress image
         const compressedBlob = await compressImage(item.file);
 
-        // 2. Upload to Cloudinary
-        const formData = new FormData();
-        formData.append('file', compressedBlob, item.file.name);
-        formData.append('upload_preset', UPLOAD_PRESET);
-
-        const response = await fetch(
-          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-          {
-            method: 'POST',
-            body: formData,
-          }
-        );
-
-        if (!response.ok) {
-          const errBody = await response.json().catch(() => ({}));
-          throw new Error(errBody.error?.message || 'Cloudinary upload failed');
-        }
-
-        const resData = await response.json();
-        if (resData.secure_url) {
-          uploadedUrls.push(resData.secure_url);
+        // 2. Upload directly to Cloudflare R2
+        const resData = await uploadImageToR2WithProgress(compressedBlob, 'vouchers');
+        if (resData.url) {
+          uploadedUrls.push(resData.url);
         }
       }
 

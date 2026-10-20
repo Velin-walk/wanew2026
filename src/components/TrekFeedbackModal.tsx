@@ -14,7 +14,10 @@ interface TrekFeedbackModalProps {
     email?: string;
   };
   onSubmitSuccess?: () => void;
+  recentHikes?: Trek[];
 }
+
+const hikeKey = (t?: Trek | null) => (t ? `${t.name}|${t.date || ''}` : '');
 
 export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   isOpen,
@@ -23,9 +26,23 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   booking,
   currentUser,
   onSubmitSuccess,
+  recentHikes,
 }) => {
-  const trekName = trek?.name || booking?.trek_name || 'Himalayan Hike';
-  const trekLeader = trek?.leader || 'Trail Coordinator';
+  const [selectedKey, setSelectedKey] = useState<string>('');
+
+  // Up to 10 recent hikes; make sure the originally passed trek is included
+  const hikeOptions: Trek[] = (() => {
+    const list = (recentHikes || []).slice(0, 10);
+    if (trek && !list.some((t) => hikeKey(t) === hikeKey(trek))) {
+      return [trek, ...list].slice(0, 10);
+    }
+    return list;
+  })();
+  const activeTrek =
+    hikeOptions.find((t) => hikeKey(t) === selectedKey) || trek || null;
+
+  const trekName = activeTrek?.name || booking?.trek_name || 'Himalayan Hike';
+  const trekLeader = activeTrek?.leader || 'Trail Coordinator';
   const defaultName = currentUser?.name || booking?.full_name || 'Hiker';
   const defaultEmail = currentUser?.email || booking?.user_email || booking?.email || '';
 
@@ -45,6 +62,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setHikerName(currentUser?.name || booking?.full_name || 'Hiker');
+      setSelectedKey('');
       setTeamRating(5);
       setHoverTeamRating(0);
       setTeamFeedback('');
@@ -63,8 +81,10 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
     setSubmitting(true);
     setErrorMessage(null);
 
-    const resolvedTrekName = `${trekName} ${trek?.date ? `(${trek.date})` : ''}`.trim();
-    const resolvedHikeNumber = trek?.hike_number || booking?.hike_number || '';
+    const resolvedTrekName = `${trekName} ${activeTrek?.date ? `(${activeTrek.date})` : ''}`.trim();
+    const resolvedHikeNumber = activeTrek
+      ? activeTrek.hike_number || ''
+      : booking?.hike_number || '';
 
     const payload = {
       name: hikerName || 'Anonymous Hiker',
@@ -169,7 +189,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   return (
     <div
       id="feedback-modal-overlay"
-      className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -234,6 +254,37 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
                   Verified Hiker
                 </span>
               </div>
+
+              {/* Hike selector (recent 10 hikes) */}
+              {hikeOptions.length > 0 && (
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="feedback-hike-select"
+                    className="text-xs font-bold text-neutral-800"
+                  >
+                    Which hike are you reviewing?
+                  </label>
+                  <select
+                    id="feedback-hike-select"
+                    value={selectedKey || hikeKey(trek)}
+                    onChange={(e) => setSelectedKey(e.target.value)}
+                    className="w-full text-xs p-2.5 bg-white border border-neutral-200 rounded-lg focus:outline-hidden focus:border-[#7ABA42] focus:ring-1 focus:ring-[#7ABA42] cursor-pointer"
+                  >
+                    {!trek && !selectedKey && (
+                      <option value="" disabled>
+                        Select a hike…
+                      </option>
+                    )}
+                    {hikeOptions.map((t) => (
+                      <option key={hikeKey(t)} value={hikeKey(t)}>
+                        {t.hike_number ? `#${String(t.hike_number).replace(/^#/, '')} · ` : ''}
+                        {t.name}
+                        {t.date ? ` (${t.date})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Question 1: Trail Coordinator / Team Leader */}
               <div className="bg-neutral-50/70 border border-neutral-200/80 rounded-xl p-4 space-y-3">
