@@ -27,6 +27,7 @@ import {
   fetchSiteVisibilitySettings,
   saveSiteVisibilitySettings,
 } from '../../services/siteVisibilityService';
+import { apiFetch } from '../../services/api';
 
 interface SiteVisibilityManagerProps {
   currentUserEmail?: string;
@@ -40,6 +41,32 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [clearingPhotos, setClearingPhotos] = useState(false);
+
+  const handleClearOldPhotos = async () => {
+    if (!window.confirm('Are you sure you want to remove all old Cloudinary photo links from the database? Non-Cloudinary R2 photos will be preserved.')) {
+      return;
+    }
+    setClearingPhotos(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+    try {
+      const res = await apiFetch('admin/clear-trek-photos', {
+        method: 'POST',
+        forceFresh: true,
+      });
+      if (res.ok) {
+        setSuccessMsg('All old Cloudinary photo links were successfully removed from the database.');
+        setTimeout(() => setSuccessMsg(null), 6000);
+      } else {
+        throw new Error('Failed to clear photos from server.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to clear old photos.');
+    } finally {
+      setClearingPhotos(false);
+    }
+  };
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -242,6 +269,22 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
               <CreditCard className="w-5 h-5" />,
               'Cloudinary Critical'
             )}
+
+            {/* Clear Old Gallery Photos Action */}
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 mt-3">
+              <div className="space-y-0.5 text-left">
+                <h4 className="text-sm font-bold text-rose-900">Remove All Old Gallery Photo Links</h4>
+                <p className="text-xs text-rose-700">Clear all legacy Cloudinary photo links from the database to prepare for fresh reuploads.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearOldPhotos}
+                disabled={clearingPhotos}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-stone-300 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+              >
+                {clearingPhotos ? 'Clearing...' : '🗑️ Remove Old Cloudinary Links Only'}
+              </button>
+            </div>
           </div>
         </div>
 

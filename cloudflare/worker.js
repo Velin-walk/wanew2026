@@ -2861,6 +2861,21 @@ export default {
         });
       }
 
+      // POST /admin/clear-trek-photos - Remove only old Cloudinary photo links from trek_photos
+      if (method === 'POST' && (path === '/admin/clear-trek-photos' || path === '/admin/clear_trek_photos')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        try {
+          const res = await env.DB.prepare("DELETE FROM trek_photos WHERE url LIKE '%cloudinary%'").run();
+          return jsonResponse({
+            success: true,
+            message: 'All old Cloudinary photo links successfully removed from trek_photos',
+            meta: res.meta
+          });
+        } catch (err) {
+          return errorResponse('Failed to clear Cloudinary photo links: ' + err.message, 500);
+        }
+      }
+
       // POST /admin/recompute-participant-summary - Trigger participant summary recalculation
       if (method === 'POST' && (path === '/admin/recompute-participant-summary' || path === '/admin/recompute-summaries')) {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);

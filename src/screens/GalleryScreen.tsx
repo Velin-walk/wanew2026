@@ -84,7 +84,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
   // View mode & Sort order state
   const [viewMode, setViewMode] = useState<'boxed' | 'grid'>('boxed');
-  const [sortBy, setSortBy] = useState<'hike_desc' | 'hike_asc' | 'newest'>('hike_desc');
+  const [sortBy, setSortBy] = useState<'hike_desc' | 'hike_asc' | 'newest'>('newest');
 
   // Upload modal state
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
