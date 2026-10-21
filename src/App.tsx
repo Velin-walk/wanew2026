@@ -29,6 +29,8 @@ import {
 } from './services/api';
 import { isAdminEmail } from './adminUtils';
 import AdminDashboard from './components/admin/AdminDashboard';
+import { useSiteVisibility } from './services/siteVisibilityService';
+import { MaintenanceStateCard } from './components/MaintenanceStateCard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
@@ -54,6 +56,35 @@ import { triggerHaptic } from './utils/haptics';
 
 function MainApp() {
   const { user, userEmail, userPhone, isAdmin, openAuthModal, authModalOpen, closeAuthModal } = useAuth();
+  const { visibility, isSectionVisible } = useSiteVisibility();
+  const [adminBypassedTabs, setAdminBypassedTabs] = useState<Record<string, boolean>>({});
+
+  const activeUserEmail = userEmail || user?.email || '';
+  const userIsAdmin = Boolean(isAdmin || isAdminEmail(activeUserEmail));
+
+  const renderProtectedTab = (
+    tabKey: 'gallery' | 'mapminers' | 'leaderboard' | 'saved',
+    sectionName: string,
+    component: React.ReactNode
+  ) => {
+    const visible = isSectionVisible(tabKey);
+    const bypassed = adminBypassedTabs[tabKey];
+
+    if (visible || (userIsAdmin && bypassed)) {
+      return component;
+    }
+
+    return (
+      <MaintenanceStateCard
+        title={visibility.maintenanceNoticeTitle}
+        message={visibility.maintenanceNoticeMessage}
+        sectionName={sectionName}
+        isAdmin={userIsAdmin}
+        onBypassAdmin={() => setAdminBypassedTabs((p) => ({ ...p, [tabKey]: true }))}
+        onReturnHome={() => setCurrentTab('treks')}
+      />
+    );
+  };
   const [currentTab, setCurrentTab] = useState<'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin'>(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
@@ -374,8 +405,6 @@ function MainApp() {
       return [];
     }
   });
-
-  const activeUserEmail = userEmail || '';
 
   // Up to 10 most recent past hikes for the feedback dropdown
   const recentFeedbackHikes = useMemo(() => {
@@ -1397,41 +1426,44 @@ function MainApp() {
             />
           )}
 
-          {currentTab === 'saved' && (
-            <TrekListScreen
-              treks={treks}
-              loading={loadingTreks}
-              favorites={favorites}
-              onToggleFavorite={toggleFavorite}
-              onRegister={(trek) => {
-                trackRegistrationStart(trek.hike_number || trek.id, trek.name);
-                setSelectedTrekForRegister(trek);
-              }}
-              onShare={(trek) => {
-                setSelectedTrekForInvite(trek);
-                setShowInviteModal(true);
-              }}
-              onViewItinerary={(trek) => {
-                trackItineraryView(trek.hike_number || trek.id, trek.name);
-                setItineraryModalTrek(trek);
-                setItineraryModalType('itinerary');
-              }}
-              onViewFaq={(trek) => {
-                trackFaqView(trek.hike_number || trek.id, trek.name);
-                setItineraryModalTrek(trek);
-                setItineraryModalType('faq');
-              }}
-              savedOnly={true}
-              onExploreAll={() => setCurrentTab('treks')}
-              onLeaveFeedback={(trek) => {
-                setFeedbackModalTrek(trek);
-                setFeedbackModalBooking(null);
-                setShowFeedbackModal(true);
-              }}
-              activeInfoPage={infoModalPage}
-              onOpenInfoPage={handleOpenInfoPage}
-            />
-          )}
+          {currentTab === 'saved' &&
+            renderProtectedTab(
+              'saved',
+              'Saved Hikes',
+              <TrekListScreen
+                treks={treks}
+                loading={loadingTreks}
+                favorites={favorites}
+                onToggleFavorite={toggleFavorite}
+                onRegister={(trek) => {
+                  trackRegistrationStart(trek.hike_number || trek.id, trek.name);
+                  setSelectedTrekForRegister(trek);
+                }}
+                onShare={(trek) => {
+                  setSelectedTrekForInvite(trek);
+                  setShowInviteModal(true);
+                }}
+                onViewItinerary={(trek) => {
+                  trackItineraryView(trek.hike_number || trek.id, trek.name);
+                  setItineraryModalTrek(trek);
+                  setItineraryModalType('itinerary');
+                }}
+                onViewFaq={(trek) => {
+                  trackFaqView(trek.hike_number || trek.id, trek.name);
+                  setItineraryModalTrek(trek);
+                  setItineraryModalType('faq');
+                }}
+                savedOnly={true}
+                onExploreAll={() => setCurrentTab('treks')}
+                onLeaveFeedback={(trek) => {
+                  setFeedbackModalTrek(trek);
+                  setFeedbackModalBooking(null);
+                  setShowFeedbackModal(true);
+                }}
+                activeInfoPage={infoModalPage}
+                onOpenInfoPage={handleOpenInfoPage}
+              />
+            )}
 
           {currentTab === 'bookings' && (
             <MyBookingsScreen
@@ -1504,25 +1536,31 @@ function MainApp() {
             )
           )}
 
-          {currentTab === 'mapminers' && (
-            <MapMinersDashboard
-              currentUserEmail={activeUserEmail}
-              isContributionOpen={showMapMinerContribute}
-              onOpenContribution={() => setShowMapMinerContribute(true)}
-              onCloseContribution={() => setShowMapMinerContribute(false)}
-            />
-          )}
+          {currentTab === 'mapminers' &&
+            renderProtectedTab(
+              'mapminers',
+              'MapMiners GPS Trails',
+              <MapMinersDashboard
+                currentUserEmail={activeUserEmail}
+                isContributionOpen={showMapMinerContribute}
+                onOpenContribution={() => setShowMapMinerContribute(true)}
+                onCloseContribution={() => setShowMapMinerContribute(false)}
+              />
+            )}
 
-          {currentTab === 'gallery' && (
-            <GalleryScreen
-              treks={treks}
-              onOpenAuthModal={openAuthModal}
-            />
-          )}
+          {currentTab === 'gallery' &&
+            renderProtectedTab(
+              'gallery',
+              'Community Gallery',
+              <GalleryScreen treks={treks} onOpenAuthModal={openAuthModal} />
+            )}
 
-          {currentTab === 'leaderboard' && (
-            <LeaderboardScreen onNavigateToMapMiners={() => handleMainTabChange('mapminers')} />
-          )}
+          {currentTab === 'leaderboard' &&
+            renderProtectedTab(
+              'leaderboard',
+              'Community Leaderboard',
+              <LeaderboardScreen onNavigateToMapMiners={() => handleMainTabChange('mapminers')} />
+            )}
 
           {/* Micro App Footer inside shell */}
           {currentTab !== 'mapminers' && (

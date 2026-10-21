@@ -26,7 +26,8 @@ import {
   Link2,
   AlertCircle,
   Smartphone,
-  Bell
+  Bell,
+  EyeOff
 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -56,6 +57,7 @@ import { AdminActivityLogs } from './AdminActivityLogs';
 import { PWAInstallStats } from './PWAInstallStats';
 import { HomepageHeroManager } from './HomepageHeroManager';
 import { NoticeBoardManager } from './NoticeBoardManager';
+import { SiteVisibilityManager } from './SiteVisibilityManager';
 import { UserActivityNotificationsPanel } from './UserActivityNotificationsPanel';
 import {
   fetchAllUserActivities,
@@ -97,7 +99,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     } catch {}
     return 'bookings';
   });
-  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice'>(() => {
+  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility'>(() => {
     try {
       const saved = sessionStorage.getItem('wnw_admin_system_subtab');
       if (
@@ -106,7 +108,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'leaderboard' ||
         saved === 'pwa' ||
         saved === 'hero' ||
-        saved === 'notice'
+        saved === 'notice' ||
+        saved === 'visibility'
       ) {
         return saved;
       }
@@ -2093,6 +2096,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 <Bell className="w-3.5 h-3.5" />
                 <span>Notice Board</span>
               </button>
+              <button
+                id="admin-system-subtab-visibility"
+                onClick={() => setSystemSubTab('visibility')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'visibility'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                }`}
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+                <span>Page Visibility</span>
+              </button>
             </div>
 
             <div className="mt-6">
@@ -2204,6 +2219,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
               {systemSubTab === 'notice' && (
                 <NoticeBoardManager />
+              )}
+
+              {systemSubTab === 'visibility' && (
+                <SiteVisibilityManager currentUserEmail={currentUserEmail} />
               )}
             </div>
           </div>
