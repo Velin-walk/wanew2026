@@ -90,8 +90,11 @@ function MainApp() {
       const searchParams = new URLSearchParams(window.location.search);
       const hash = window.location.hash || '';
       const tabParam = searchParams.get('tab');
-      if (tabParam === 'admin' || hash === '#admin') return 'admin';
-      if (tabParam === 'mapminers' || searchParams.has('route') || hash === '#mapminers') return 'mapminers';
+      if (tabParam && ['treks', 'bookings', 'saved', 'mapminers', 'gallery', 'leaderboard', 'admin'].includes(tabParam)) {
+        return tabParam as any;
+      }
+      if (hash === '#admin') return 'admin';
+      if (searchParams.has('route') || hash === '#mapminers') return 'mapminers';
       const savedTab = sessionStorage.getItem('wnw_active_tab');
       if (
         savedTab === 'treks' ||
@@ -143,7 +146,24 @@ function MainApp() {
   const [feedbackModalBooking, setFeedbackModalBooking] = useState<Booking | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showMapMinerContribute, setShowMapMinerContribute] = useState(false);
-  const [infoModalPage, setInfoModalPage] = useState<SubPageType | null>(null);
+  const [infoModalPage, setInfoModalPage] = useState<SubPageType | null>(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const pageParam = searchParams.get('page') || searchParams.get('info') || searchParams.get('view');
+      if (pageParam) {
+        const norm = pageParam.toLowerCase().replace(/[^a-z0-9_]/g, '');
+        if (norm === 'reviews' || norm === 'review' || norm === 'rateandreview' || norm === 'feedback' || norm === 'hikerreviews') return 'reviews';
+        if (norm === 'payment' || norm === 'pricing' || norm === 'pay' || norm === 'qr') return 'payment';
+        if (norm === 'blogs' || norm === 'blog' || norm === 'stories') return 'blogs';
+        if (norm === 'trek_tips' || norm === 'trektips' || norm === 'tips' || norm === 'gear' || norm === 'packing') return 'trek_tips';
+        if (norm === 'safety_policy' || norm === 'safetypolicy' || norm === 'safety' || norm === 'refund') return 'safety_policy';
+        if (norm === 'request_private_trek' || norm === 'requestprivatetrek' || norm === 'privatetrek' || norm === 'private') return 'request_private_trek';
+        if (norm === 'contact' || norm === 'support') return 'contact';
+        if (norm === 'about') return 'about';
+      }
+    } catch {}
+    return null;
+  });
   const [showVoucherModal, setShowVoucherModal] = useState(false);
   const [voucherTargetBooking, setVoucherTargetBooking] = useState<Booking | null>(null);
 
@@ -816,20 +836,71 @@ function MainApp() {
     [treks]
   );
 
-  // On mount & URL change: Check if URL targets a specific shared trek (?trek=..., ?hike=..., or #itinerary-...) or tab (?tab=admin or #admin)
+  // On mount & URL change: Check if URL targets a specific shared trek, tab, info page, or register form
   useEffect(() => {
     const handleUrlRouting = () => {
       try {
         const searchParams = new URLSearchParams(window.location.search);
         const hash = window.location.hash || '';
 
+        // 1. Tab Routing (?tab=bookings, ?tab=leaderboard, ?tab=gallery, ?tab=mapminers, ?tab=admin, etc.)
         const tabParam = searchParams.get('tab');
-        if (tabParam === 'admin' || hash === '#admin') {
+        if (tabParam && ['treks', 'bookings', 'saved', 'mapminers', 'gallery', 'leaderboard', 'admin'].includes(tabParam)) {
+          setCurrentTab(tabParam as any);
+        } else if (hash === '#admin') {
           setCurrentTab('admin');
-        } else if (tabParam === 'mapminers' || searchParams.has('route') || hash === '#mapminers') {
+        } else if (searchParams.has('route') || hash === '#mapminers') {
           setCurrentTab('mapminers');
         }
 
+        // 2. Info Pages Modal Routing (?page=reviews, ?page=payment, ?page=blogs, ?page=trek_tips, etc.)
+        const pageParam = searchParams.get('page') || searchParams.get('info') || searchParams.get('view');
+        if (pageParam) {
+          const norm = pageParam.toLowerCase().replace(/[^a-z0-9_]/g, '');
+          if (norm === 'reviews' || norm === 'review' || norm === 'rateandreview' || norm === 'feedback' || norm === 'hikerreviews') {
+            setInfoModalPage('reviews');
+          } else if (norm === 'payment' || norm === 'pricing' || norm === 'pay' || norm === 'qr') {
+            setInfoModalPage('payment');
+          } else if (norm === 'blogs' || norm === 'blog' || norm === 'stories') {
+            setInfoModalPage('blogs');
+          } else if (norm === 'trek_tips' || norm === 'trektips' || norm === 'tips' || norm === 'gear' || norm === 'packing') {
+            setInfoModalPage('trek_tips');
+          } else if (norm === 'safety_policy' || norm === 'safetypolicy' || norm === 'safety' || norm === 'refund') {
+            setInfoModalPage('safety_policy');
+          } else if (norm === 'request_private_trek' || norm === 'requestprivatetrek' || norm === 'privatetrek' || norm === 'private') {
+            setInfoModalPage('request_private_trek');
+          } else if (norm === 'contact' || norm === 'support') {
+            setInfoModalPage('contact');
+          } else if (norm === 'about') {
+            setInfoModalPage('about');
+          }
+        }
+
+        // 3. Register Form Direct Routing (?page=register or ?register=... or ?action=register)
+        const isRegisterPage = pageParam === 'register' || searchParams.has('register') || searchParams.get('action') === 'register';
+        let regTrekTarget = searchParams.get('register');
+        if (regTrekTarget === 'true' || regTrekTarget === '1') regTrekTarget = '';
+
+        if (isRegisterPage) {
+          const targetId = regTrekTarget || searchParams.get('hike') || searchParams.get('trek') || searchParams.get('id') || '';
+          const cleanTarget = targetId.trim().toLowerCase();
+          const cleanNum = targetId.match(/\d+/)?.[0] || '';
+
+          if (treks && treks.length > 0) {
+            const match = treks.find((t) => {
+              if (cleanTarget && String(t.id || '').toLowerCase() === cleanTarget) return true;
+              if (cleanTarget && String(t.hike_number || '').toLowerCase() === cleanTarget) return true;
+              if (cleanNum && (String(t.hike_number) === cleanNum || String(t.id).toLowerCase() === `hike-${cleanNum}`)) return true;
+              return false;
+            }) || treks[0];
+
+            if (match) {
+              setSelectedTrekForRegister(match);
+            }
+          }
+        }
+
+        // 4. Trek Itinerary Modal Routing (?hike=..., ?trek=..., ?id=..., #itinerary-...)
         let targetTrekId = searchParams.get('trek') || searchParams.get('hike') || searchParams.get('id') || '';
 
         if (!targetTrekId && hash) {
@@ -839,7 +910,7 @@ function MainApp() {
           }
         }
 
-        if (targetTrekId && targetTrekId !== 'preview') {
+        if (targetTrekId && targetTrekId !== 'preview' && !isRegisterPage) {
           const cleanTarget = targetTrekId.trim().toLowerCase();
           const cleanNum = targetTrekId.match(/\d+/)?.[0] || '';
 
@@ -863,7 +934,7 @@ function MainApp() {
           });
         }
       } catch (e) {
-        console.warn('Could not parse shared trek URL parameter:', e);
+        console.warn('Could not parse shared URL parameters:', e);
       }
     };
 
@@ -874,7 +945,7 @@ function MainApp() {
       window.removeEventListener('hashchange', handleUrlRouting);
       window.removeEventListener('popstate', handleUrlRouting);
     };
-  }, []);
+  }, [treks]);
 
   // When user visits Bookings tab or opens Profile modal, refresh bookings so Admin roster updates appear immediately
   useEffect(() => {
