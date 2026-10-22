@@ -59,6 +59,35 @@ CREATE TABLE IF NOT EXISTS registrations (
   payment_voucher_submitted_at TEXT
 );
 
+-- 2b. Original Registrations Backup Table (Immutable backup of original submissions)
+CREATE TABLE IF NOT EXISTS original_registrations_backup (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  original_registration_id INTEGER,
+  timestamp TEXT,
+  trek_name TEXT,
+  full_name TEXT,
+  pax INTEGER,
+  whatsapp_number TEXT,
+  emergency_backup_contact TEXT,
+  email_address TEXT,
+  profession TEXT,
+  part_of_group TEXT,
+  list_name TEXT,
+  age_group TEXT,
+  gender TEXT,
+  fitness TEXT,
+  medical_condition TEXT,
+  recent_hikes TEXT,
+  agreement TEXT,
+  suggestions TEXT,
+  guide_mode TEXT,
+  transport_mode TEXT,
+  hike_number TEXT,
+  payment_voucher_url TEXT,
+  payment_voucher_submitted_at TEXT,
+  backed_up_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 3. Bookings Roster / Active Edits Table
 CREATE TABLE IF NOT EXISTS bookings_roster (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

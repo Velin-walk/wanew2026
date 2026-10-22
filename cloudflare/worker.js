@@ -1010,6 +1010,37 @@ function ensureDbMigrations(env, ctx) {
   migrationsEnsured = true;
   const p = (async () => {
     try {
+      // Ensure original_registrations_backup table exists
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS original_registrations_backup (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          original_registration_id INTEGER,
+          timestamp TEXT,
+          trek_name TEXT,
+          full_name TEXT,
+          pax INTEGER,
+          whatsapp_number TEXT,
+          emergency_backup_contact TEXT,
+          email_address TEXT,
+          profession TEXT,
+          part_of_group TEXT,
+          list_name TEXT,
+          age_group TEXT,
+          gender TEXT,
+          fitness TEXT,
+          medical_condition TEXT,
+          recent_hikes TEXT,
+          agreement TEXT,
+          suggestions TEXT,
+          guide_mode TEXT,
+          transport_mode TEXT,
+          hike_number TEXT,
+          payment_voucher_url TEXT,
+          payment_voucher_submitted_at TEXT,
+          backed_up_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run().catch(() => {});
+
       // 1. Add gender and age_group columns to bookings_roster if not present
       await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN gender TEXT').run().catch(() => {});
       await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN age_group TEXT').run().catch(() => {});
@@ -2298,9 +2329,15 @@ export default {
             b.due_amount AS roster_due_amount,
             b.admin_notes AS roster_admin_notes,
             b.pickup_point AS roster_pickup_point,
-            b.trek_date AS roster_trek_date
+            b.trek_date AS roster_trek_date,
+            b.full_name AS roster_full_name,
+            b.phone AS roster_phone,
+            b.email AS roster_email,
+            b.whatsapp AS roster_whatsapp,
+            b.trek_name AS roster_trek_name,
+            b.hike_number AS roster_hike_number
           FROM registrations r
-          LEFT JOIN bookings_roster b ON b.registration_id = CAST(r.id AS TEXT)
+          LEFT JOIN bookings_roster b ON (b.registration_id = CAST(r.id AS TEXT) OR b.registration_id = r.id)
         `;
         let regParams = [];
 
@@ -2353,6 +2390,13 @@ export default {
 
         const mapped = rawRows.map((r) => ({
           ...r,
+          full_name: r.roster_full_name || r.full_name,
+          phone: r.roster_phone || r.phone,
+          email_address: r.roster_email || r.email_address,
+          whatsapp_number: r.roster_whatsapp || r.whatsapp_number,
+          trek_name: r.roster_trek_name || r.trek_name,
+          hike_number: r.roster_hike_number || r.hike_number,
+          trek_date: r.roster_trek_date || r.trek_date,
           person_remarks: r.list_name || '', // Backward-compatibility mapping for companion parsing
           registration_status: r.roster_registration_status || r.registration_status || 'Confirmed',
           status: r.roster_registration_status || r.registration_status || r.status || 'Confirmed',
@@ -2403,11 +2447,77 @@ export default {
         const updates = body.admin_notes !== undefined ? body.admin_notes : (existingRoster?.admin_notes ?? '');
         const pickup_point = body.pickup_point !== undefined ? body.pickup_point : (existingRoster?.pickup_point ?? (regRow?.pickup_point || ''));
 
-        // Keep raw registrations table status in sync if status was explicitly updated
-        if (body.status !== undefined) {
-          try {
-            await env.DB.prepare('UPDATE registrations SET status = ? WHERE id = ?').bind(body.status, String(id)).run();
-          } catch (_) {}
+        const cleanRegId = String(id).trim();
+        const numericRegId = parseInt(cleanRegId, 10);
+        const resolvedRegId = !isNaN(numericRegId) ? numericRegId : cleanRegId;
+        const targetRowId = regRow && regRow.id !== undefined ? regRow.id : resolvedRegId;
+
+        // Ensure columns exist on registrations so UPDATE never fails due to missing optional columns
+        try {
+          await env.DB.prepare('ALTER TABLE registrations ADD COLUMN phone TEXT').run();
+        } catch (_) {}
+        try {
+          await env.DB.prepare('ALTER TABLE registrations ADD COLUMN status TEXT').run();
+        } catch (_) {}
+        try {
+          await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN gender TEXT').run();
+        } catch (_) {}
+        try {
+          await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN age_group TEXT').run();
+        } catch (_) {}
+
+        // Update active registrations table with all modified fields
+        try {
+          await env.DB.prepare(`
+            UPDATE registrations SET
+              full_name = COALESCE(?, full_name),
+              email_address = COALESCE(?, email_address),
+              phone = COALESCE(?, phone),
+              whatsapp_number = COALESCE(?, whatsapp_number),
+              emergency_backup_contact = COALESCE(?, emergency_backup_contact),
+              profession = COALESCE(?, profession),
+              part_of_group = COALESCE(?, part_of_group),
+              pax = COALESCE(?, pax),
+              age_group = COALESCE(?, age_group),
+              gender = COALESCE(?, gender),
+              fitness = COALESCE(?, fitness),
+              medical_condition = COALESCE(?, medical_condition),
+              recent_hikes = COALESCE(?, recent_hikes),
+              guide_mode = COALESCE(?, guide_mode),
+              transport_mode = COALESCE(?, transport_mode),
+              suggestions = COALESCE(?, suggestions),
+              list_name = COALESCE(?, list_name),
+              trek_name = COALESCE(?, trek_name),
+              hike_number = COALESCE(?, hike_number),
+              status = COALESCE(?, status)
+            WHERE id = ? OR id = ? OR id = ?
+          `).bind(
+            body.full_name !== undefined ? body.full_name : null,
+            body.email_address !== undefined ? body.email_address : (body.email !== undefined ? body.email : null),
+            body.phone !== undefined ? body.phone : null,
+            body.whatsapp_number !== undefined ? body.whatsapp_number : (body.whatsapp !== undefined ? body.whatsapp : null),
+            body.emergency_backup_contact !== undefined ? body.emergency_backup_contact : (body.emergency_contact !== undefined ? body.emergency_contact : null),
+            body.profession !== undefined ? body.profession : null,
+            body.part_of_group !== undefined ? body.part_of_group : (body.is_group !== undefined ? body.is_group : null),
+            body.pax !== undefined ? Number(body.pax) : (body.paxCount !== undefined ? Number(body.paxCount) : null),
+            body.age_group !== undefined ? body.age_group : null,
+            body.gender !== undefined ? body.gender : null,
+            body.fitness !== undefined ? body.fitness : null,
+            body.medical_condition !== undefined ? body.medical_condition : (body.specify_medical !== undefined ? body.specify_medical : null),
+            body.recent_hikes !== undefined ? body.recent_hikes : null,
+            body.guide_mode !== undefined ? body.guide_mode : (body.guide_preference !== undefined ? body.guide_preference : null),
+            body.transport_mode !== undefined ? body.transport_mode : (body.transport_preference !== undefined ? body.transport_preference : null),
+            body.suggestions !== undefined ? body.suggestions : null,
+            body.list_name !== undefined ? body.list_name : (body.person_remarks !== undefined ? body.person_remarks : null),
+            body.trek_name !== undefined ? body.trek_name : null,
+            body.hike_number !== undefined ? String(body.hike_number).replace(/^#/, '').trim() : null,
+            body.status !== undefined ? body.status : null,
+            targetRowId,
+            resolvedRegId,
+            cleanRegId
+          ).run();
+        } catch (regUpdateErr) {
+          console.warn('Could not update active registrations table:', regUpdateErr);
         }
 
         // Persist payment_voucher_url and payment_voucher_submitted_at on registrations when provided
@@ -2434,51 +2544,45 @@ export default {
         // 3. Upsert into bookings_roster table
         try {
           if (existingRoster) {
-            try {
-              await env.DB.prepare(`
-                UPDATE bookings_roster SET
-                  registration_status = ?,
-                  payment_status = ?,
-                  paid_amount = ?,
-                  due_amount = ?,
-                  admin_notes = ?,
-                  pickup_point = ?,
-                  gender = COALESCE(?, gender),
-                  age_group = COALESCE(?, age_group),
-                  updated_at = CURRENT_TIMESTAMP
-                WHERE registration_id = ?
-              `).bind(
-                status,
-                payment_status,
-                paid,
-                due,
-                updates,
-                pickup_point,
-                body.gender !== undefined ? body.gender : null,
-                body.age_group !== undefined ? body.age_group : null,
-                String(id)
-              ).run();
-            } catch (_) {
-              await env.DB.prepare(`
-                UPDATE bookings_roster SET
-                  registration_status = ?,
-                  payment_status = ?,
-                  paid_amount = ?,
-                  due_amount = ?,
-                  admin_notes = ?,
-                  pickup_point = ?,
-                  updated_at = CURRENT_TIMESTAMP
-                WHERE registration_id = ?
-              `).bind(
-                status,
-                payment_status,
-                paid,
-                due,
-                updates,
-                pickup_point,
-                String(id)
-              ).run();
-            }
+            await env.DB.prepare(`
+              UPDATE bookings_roster SET
+                full_name = COALESCE(?, full_name),
+                phone = COALESCE(?, phone),
+                email = COALESCE(?, email),
+                whatsapp = COALESCE(?, whatsapp),
+                trek_name = COALESCE(?, trek_name),
+                trek_date = COALESCE(?, trek_date),
+                hike_number = COALESCE(?, hike_number),
+                registration_status = ?,
+                payment_status = ?,
+                paid_amount = ?,
+                due_amount = ?,
+                admin_notes = ?,
+                pickup_point = ?,
+                gender = COALESCE(?, gender),
+                age_group = COALESCE(?, age_group),
+                updated_at = CURRENT_TIMESTAMP
+              WHERE registration_id = ? OR registration_id = ? OR registration_id = ?
+            `).bind(
+              body.full_name !== undefined ? body.full_name : null,
+              body.phone !== undefined ? body.phone : null,
+              body.email_address !== undefined ? body.email_address : (body.email !== undefined ? body.email : null),
+              body.whatsapp_number !== undefined ? body.whatsapp_number : (body.whatsapp !== undefined ? body.whatsapp : null),
+              body.trek_name !== undefined ? body.trek_name : null,
+              body.trek_date !== undefined ? body.trek_date : null,
+              body.hike_number !== undefined ? String(body.hike_number).replace(/^#/, '').trim() : null,
+              status,
+              payment_status,
+              paid,
+              due,
+              updates,
+              pickup_point,
+              body.gender !== undefined ? body.gender : null,
+              body.age_group !== undefined ? body.age_group : null,
+              cleanRegId,
+              String(resolvedRegId),
+              String(targetRowId)
+            ).run();
           } else {
             await env.DB.prepare(`
               INSERT INTO bookings_roster (
@@ -2487,14 +2591,14 @@ export default {
                 gender, age_group, created_at, updated_at
               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `).bind(
-              String(id),
-              regRow ? String(regRow.hike_number || '').replace(/^#/, '').trim() : '',
-              regRow ? String(regRow.trek_name || '') : '',
-              regRow ? String(regRow.trek_date || regRow.timestamp || '') : '',
-              regRow ? String(regRow.full_name || '') : '',
-              regRow ? String(regRow.phone || '') : '',
-              regRow ? String(regRow.email_address || '') : '',
-              regRow ? String(regRow.whatsapp || regRow.whatsapp_number || '') : '',
+              cleanRegId,
+              body.hike_number ? String(body.hike_number).replace(/^#/, '').trim() : (regRow ? String(regRow.hike_number || '').replace(/^#/, '').trim() : ''),
+              body.trek_name || (regRow ? String(regRow.trek_name || '') : ''),
+              body.trek_date || (regRow ? String(regRow.trek_date || regRow.timestamp || '') : ''),
+              body.full_name || (regRow ? String(regRow.full_name || '') : ''),
+              body.phone || (regRow ? String(regRow.phone || '') : ''),
+              body.email_address || body.email || (regRow ? String(regRow.email_address || '') : ''),
+              body.whatsapp_number || body.whatsapp || (regRow ? String(regRow.whatsapp || regRow.whatsapp_number || '') : ''),
               status,
               payment_status,
               paid,
@@ -2505,7 +2609,6 @@ export default {
               body.age_group || regRow?.age_group || ''
             ).run();
           }
-
         } catch (rosterErr) {
           console.error('Error syncing bookings_roster table:', rosterErr);
           return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
@@ -2628,6 +2731,44 @@ export default {
 
         const insertedId = regResult?.meta?.last_row_id || regResult?.lastRowId;
         if (insertedId) {
+          try {
+            await env.DB.prepare(`
+              INSERT INTO original_registrations_backup (
+                original_registration_id, hike_number, trek_name, full_name, email_address, phone, whatsapp_number,
+                emergency_backup_contact, profession, part_of_group, pax, age_group, gender,
+                fitness, medical_condition, recent_hikes, agreement, suggestions, guide_mode,
+                transport_mode, list_name, timestamp, payment_voucher_url, payment_voucher_submitted_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              Number(insertedId),
+              cleanHikeNum,
+              body.trek_name || '',
+              body.full_name || 'Anonymous Hiker',
+              body.email_address || '',
+              body.phone || '',
+              whatsappVal,
+              body.emergency_backup_contact || '',
+              body.profession || '',
+              body.part_of_group || 'Solo',
+              Number(body.pax) || 1,
+              body.age_group || '',
+              body.gender || '',
+              body.fitness || '',
+              body.medical_condition || 'No',
+              body.recent_hikes || '',
+              body.agreement || 'Yes',
+              body.suggestions || '',
+              body.guide_mode || 'Guided',
+              body.transport_mode || 'Bus',
+              finalListName,
+              body.timestamp || currentTimestamp,
+              body.payment_voucher_url || '',
+              body.payment_voucher_submitted_at || ''
+            ).run();
+          } catch (backupErr) {
+            console.warn('Error saving to original_registrations_backup:', backupErr);
+          }
+
           try {
             const paid = Number(body.paid_amount) || 0;
             const due = Number(body.due_amount) || 0;

@@ -31,9 +31,11 @@ import {
   ArrowUp,
   ArrowDown,
   UserPlus,
+  Pencil,
 } from 'lucide-react';
 import { Trek, BookingFormData } from '../../types';
 import { AdminHikerProfileModal } from './AdminHikerProfileModal';
+import { AdminEditApplicationModal } from './AdminEditApplicationModal';
 import { RegistrationModal } from '../RegistrationModal';
 import { apiFetch } from '../../services/api';
 
@@ -46,9 +48,11 @@ export interface AdminRegistration {
   full_name: string;
   phone: string;
   whatsapp?: string;
+  whatsapp_number?: string;
   email: string;
   paxCount?: number;
   emergency_contact?: string;
+  emergency_backup_contact?: string;
   profession?: string;
   pickup_point?: string;
   gender?: string;
@@ -57,13 +61,15 @@ export interface AdminRegistration {
   team_members?: Array<{ full_name: string; gender?: string }>;
   has_medical?: string;
   specify_medical?: string;
+  fitness?: string;
+  medical_condition?: string;
   recent_hikes?: string;
   guide_preference?: string;
   transport_preference?: string;
   suggestions?: string;
   person_remarks?: string;
-  status?: 'Pending' | 'Confirmed' | 'Waitlisted' | 'Cancelled' | 'Cancelled by User' | string;
-  payment_status?: 'Unpaid' | 'Deposit Paid' | 'Fully Paid' | 'Refunded';
+  status?: 'Double Registration' | 'Pending' | 'Confirmed' | 'Waitlisted' | 'Cancelled' | 'Cancelled by User' | string;
+  payment_status?: 'Unpaid' | 'Deposit Paid' | 'Fully Paid' | 'Refunded' | string;
   paid_amount?: number;
   due_amount?: number;
   admin_notes?: string;
@@ -195,11 +201,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
   const [bookingTypeFilter, setBookingTypeFilter] = useState<'all' | 'public' | 'private'>('all');
-  const [sortField, setSortField] = useState<'participant' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | null>(null);
+  const [sortField, setSortField] = useState<'participant' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showZeroParticipants, setShowZeroParticipants] = useState(false);
 
-  const handleSort = (field: 'participant' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point') => {
+  const handleSort = (field: 'participant' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point') => {
     if (sortField === field) {
       if (sortOrder === 'asc') {
         setSortOrder('desc');
@@ -228,6 +234,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [viewingAdminVoucherUrl, setViewingAdminVoucherUrl] = useState<string | null>(null);
   const [viewingAdminVoucherReg, setViewingAdminVoucherReg] = useState<AdminRegistration | null>(null);
   const [activeProfileHiker, setActiveProfileHiker] = useState<{ name: string; phone?: string; email?: string } | null>(null);
+  const [editingRegistration, setEditingRegistration] = useState<AdminRegistration | null>(null);
 
   const parseTrekDate = (dateStr?: string): Date | null => {
     if (!dateStr) return null;
@@ -607,6 +614,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       statusFilter === 'all' ||
       (filterLower === 'cancelled'
         ? regStatusLower.includes('cancelled')
+        : (filterLower === 'double registration' || filterLower === 'pending')
+        ? (regStatusLower === 'double registration' || regStatusLower === 'pending')
         : regStatusLower === filterLower);
 
     const draft = rowDrafts[reg.id];
@@ -633,6 +642,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       if (sortField === 'participant') {
         valA = (a.full_name || '').toLowerCase();
         valB = (b.full_name || '').toLowerCase();
+      } else if (sortField === 'pax') {
+        valA = Number(draftA.paxCount !== undefined ? draftA.paxCount : (a.paxCount ?? (a as any).pax ?? 1));
+        valB = Number(draftB.paxCount !== undefined ? draftB.paxCount : (b.paxCount ?? (b as any).pax ?? 1));
+        if (isNaN(valA)) valA = 0;
+        if (isNaN(valB)) valB = 0;
       } else if (sortField === 'status') {
         valA = String(draftA.status ?? a.status ?? 'Confirmed').toLowerCase();
         valB = String(draftB.status ?? b.status ?? 'Confirmed').toLowerCase();
@@ -675,7 +689,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   // Status counts across current search/trek selection
   const statusCounts = useMemo(() => {
     let confirmed = 0;
-    let pending = 0;
+    let doubleRegistration = 0;
     let waitlisted = 0;
     let cancelled = 0;
 
@@ -714,12 +728,12 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
       const st = String(reg.status || 'Confirmed').toLowerCase();
       if (st === 'confirmed') confirmed++;
-      else if (st === 'pending') pending++;
+      else if (st === 'double registration' || st === 'pending') doubleRegistration++;
       else if (st === 'waitlisted') waitlisted++;
       else if (st.includes('cancel')) cancelled++;
     });
 
-    return { confirmed, pending, waitlisted, cancelled };
+    return { confirmed, doubleRegistration, pending: doubleRegistration, waitlisted, cancelled };
   }, [registrations, selectedTrekFilter, bookingTypeFilter, searchTerm, treks]);
 
   // Payment status counts across current search/trek selection
@@ -810,7 +824,12 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
   const handleSaveRow = async (reg: AdminRegistration) => {
     const draft = rowDrafts[reg.id];
+    const rawPax = draft?.paxCount !== undefined ? draft.paxCount : (reg.paxCount ?? (reg as any).pax ?? 1);
+    const resolvedPax = typeof rawPax === 'number'
+      ? rawPax
+      : (rawPax === '' ? 1 : (!isNaN(Number(rawPax)) ? Number(rawPax) : (parseInt(String(rawPax), 10) || rawPax)));
     const updates: Partial<AdminRegistration> = {
+      paxCount: resolvedPax,
       status: draft?.status !== undefined ? draft.status : reg.status || 'Confirmed',
       payment_status: draft?.payment_status !== undefined ? draft.payment_status : reg.payment_status || 'Unpaid',
       paid_amount: draft?.paid_amount !== undefined ? Number(draft.paid_amount || 0) : Number(reg.paid_amount || 0),
@@ -1183,7 +1202,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               </button>
             )}
 
-            {/* 4 Status Filter Buttons: Confirmed, Pending, Waitlisted, Cancelled (including Cancelled by User) */}
+            {/* 4 Status Filter Buttons: Confirmed, Double Registration, Waitlisted, Cancelled (including Cancelled by User) */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
@@ -1204,18 +1223,18 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
               <button
                 type="button"
-                onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}
+                onClick={() => setStatusFilter(statusFilter === 'double registration' || statusFilter === 'pending' ? 'all' : 'double registration')}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
-                  statusFilter === 'pending'
+                  statusFilter === 'double registration' || statusFilter === 'pending'
                     ? 'bg-amber-600 border-amber-700 text-white shadow-xs'
                     : 'bg-amber-50/70 hover:bg-amber-100 border-amber-200/80 text-amber-800'
                 }`}
-                title="Filter Pending applications"
+                title="Filter Double Registration applications"
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'pending' ? 'bg-white' : 'bg-amber-500'}`} />
-                <span>Pending</span>
-                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${statusFilter === 'pending' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-900'}`}>
-                  {statusCounts.pending}
+                <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'double registration' || statusFilter === 'pending' ? 'bg-white' : 'bg-amber-500'}`} />
+                <span>Double Registration</span>
+                <span className={`text-[9.5px] px-1 py-0.2 rounded font-extrabold ${statusFilter === 'double registration' || statusFilter === 'pending' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-900'}`}>
+                  {statusCounts.doubleRegistration}
                 </span>
               </button>
 
@@ -1406,6 +1425,24 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                     </div>
                   </th>
                   <th
+                    onClick={() => handleSort('pax')}
+                    className="py-1.5 px-1.5 w-[65px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group text-center"
+                    title="Click to sort by Pax"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Pax</span>
+                      {sortField === 'pax' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+                  <th
                     onClick={() => handleSort('status')}
                     className="py-1.5 px-2 w-[125px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group"
                     title="Click to sort by Reg Status"
@@ -1502,7 +1539,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               <tbody className="divide-y divide-[#F0EBE5]">
                 {sortedRegistrations.map((reg) => {
                   const draft = rowDrafts[reg.id] || {};
-                  const curStatus = draft.status !== undefined ? draft.status : reg.status || 'Confirmed';
+                  const curPax = draft.paxCount !== undefined ? draft.paxCount : (reg.paxCount !== undefined ? reg.paxCount : (reg as any).pax ?? 1);
+                  const curStatus = draft.status !== undefined ? draft.status : (reg.status === 'Pending' ? 'Double Registration' : reg.status || 'Confirmed');
                   const curPayment = draft.payment_status !== undefined ? draft.payment_status : reg.payment_status || 'Unpaid';
                   const curPaidAmount = draft.paid_amount !== undefined ? draft.paid_amount : reg.paid_amount ?? '';
                   const curDueAmount = draft.due_amount !== undefined ? draft.due_amount : reg.due_amount ?? '';
@@ -1629,6 +1667,18 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                           </div>
                         </td>
 
+                        {/* Pax Count (Directly editable like admin notes) */}
+                        <td className="py-1.5 px-1.5 align-middle w-[65px]">
+                          <input
+                            type="text"
+                            value={curPax}
+                            onChange={(e) => handleRowChange(reg.id, 'paxCount', e.target.value)}
+                            placeholder="1"
+                            title="Pax count"
+                            className="w-full py-1 px-1 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-semibold text-center text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
+                          />
+                        </td>
+
                         {/* Registration Status */}
                         <td className="py-1.5 px-2 align-middle">
                           <select
@@ -1637,13 +1687,13 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                             className={`w-full py-1 px-1.5 rounded-lg text-[11px] font-medium border focus:outline-none cursor-pointer ${
                               curStatus === 'Confirmed'
                                 ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                                : curStatus === 'Pending'
+                                : curStatus === 'Double Registration' || curStatus === 'Pending'
                                 ? 'bg-amber-50 border-amber-300 text-amber-900'
                                 : 'bg-rose-50 border-rose-300 text-rose-900'
                             }`}
                           >
                             <option value="Confirmed">Confirmed</option>
-                            <option value="Pending">Pending</option>
+                            <option value="Double Registration">Double Registration</option>
                             <option value="Waitlisted">Waitlisted</option>
                             <option value="Cancelled">Cancelled</option>
                             <option value="Cancelled by User">Cancelled by User</option>
@@ -1759,16 +1809,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
                             <button
                               type="button"
-                              onClick={() => setPendingDeleteReg(reg)}
-                              disabled={isDeleting}
-                              className="p-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                              title="Delete Application"
+                              onClick={() => setEditingRegistration(reg)}
+                              className="p-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg transition-colors cursor-pointer"
+                              title="Edit Original Application (Columnar Format)"
                             >
-                              {isDeleting ? (
-                                <RefreshCw className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3 h-3" />
-                              )}
+                              <Pencil className="w-3 h-3" />
                             </button>
                           </div>
                         </td>
@@ -1777,7 +1822,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                       {/* Expandable Specifications and Notes Drawer */}
                       {isExpanded && (
                         <tr className="bg-purple-50/50 border-b border-purple-200">
-                          <td colSpan={9} className="p-4">
+                          <td colSpan={10} className="p-4">
                             <div className="bg-white rounded-xl border border-purple-200 p-4 shadow-xs space-y-3">
                               <div className="flex items-center justify-between border-b border-purple-100 pb-2">
                                 <div className="flex items-center gap-2">
@@ -2084,6 +2129,20 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           onSubmit={handleAdminSubmitRegistration}
           isAdminProxy={true}
           pastHikers={registrations}
+        />
+      )}
+
+      {/* Exact Original Form Structured Edit Application Modal */}
+      {editingRegistration && (
+        <AdminEditApplicationModal
+          registration={editingRegistration}
+          treks={treks}
+          isOpen={Boolean(editingRegistration)}
+          onClose={() => setEditingRegistration(null)}
+          onSave={async (id, updates) => {
+            await onUpdateRegistration(id, updates);
+            onRefresh();
+          }}
         />
       )}
     </div>

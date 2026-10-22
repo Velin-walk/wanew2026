@@ -479,6 +479,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       setRawRegistrations(sampleBookings);
     }
 
+    // Merge any locally saved registration edits so edits are permanently preserved across refreshes
+    try {
+      const existingEditsRaw = localStorage.getItem('wnw_admin_edited_registrations');
+      if (existingEditsRaw) {
+        const editsMap = JSON.parse(existingEditsRaw);
+        loaded = loaded.map((r) => {
+          const edit = editsMap[String(r.id)];
+          return edit ? { ...r, ...edit } : r;
+        });
+      }
+    } catch (_) {}
+
     setRegistrations(loaded);
     if (rawRegistrations.length === 0 && loaded.length > 0) {
       setRawRegistrations(loaded);
@@ -521,22 +533,50 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const handleUpdateRegistration = async (id: string, updates: Partial<AdminRegistration>) => {
-    // 1. Update API
+    const normalizedUpdates: any = {
+      ...updates,
+      pax: updates.paxCount !== undefined ? updates.paxCount : (updates as any).pax,
+      paxCount: updates.paxCount !== undefined ? updates.paxCount : (updates as any).pax,
+      email: updates.email || updates.email_address,
+      email_address: updates.email_address || updates.email,
+      phone: updates.phone,
+      whatsapp: updates.whatsapp || updates.whatsapp_number,
+      whatsapp_number: updates.whatsapp_number || updates.whatsapp,
+      emergency_contact: updates.emergency_contact || updates.emergency_backup_contact,
+      emergency_backup_contact: updates.emergency_backup_contact || updates.emergency_contact,
+      medical_condition: updates.medical_condition || updates.specify_medical,
+      specify_medical: updates.specify_medical || updates.medical_condition,
+      guide_preference: updates.guide_preference || (updates as any).guide_mode,
+      transport_preference: updates.transport_preference || (updates as any).transport_mode,
+    };
+
+    // 1. Persist to local storage edits map immediately so local UI never reverts
+    try {
+      const existingEditsRaw = localStorage.getItem('wnw_admin_edited_registrations');
+      const editsMap = existingEditsRaw ? JSON.parse(existingEditsRaw) : {};
+      editsMap[String(id)] = {
+        ...(editsMap[String(id)] || {}),
+        ...normalizedUpdates,
+      };
+      localStorage.setItem('wnw_admin_edited_registrations', JSON.stringify(editsMap));
+    } catch (_) {}
+
+    // 2. Update Cloudflare D1 via API
     try {
       await apiFetch(`registrations/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify(normalizedUpdates),
       });
     } catch (err) {
       console.warn('API update registration fallback:', err);
     }
 
     setRegistrations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+      prev.map((r) => (String(r.id) === String(id) ? { ...r, ...normalizedUpdates } : r))
     );
     setRawRegistrations((prev) =>
-      prev.map((r) => (String(r.id) === String(id) ? { ...r, ...updates } : r))
+      prev.map((r) => (String(r.id) === String(id) ? { ...r, ...normalizedUpdates } : r))
     );
     try {
       const devRaw = localStorage.getItem('wnw_device_bookings');

@@ -48,6 +48,7 @@ type SortCol =
   | 'due'
   | 'gender'
   | 'age'
+  | 'pax'
   | 'suggestions'
   | 'updates'
   | 'medical'
@@ -593,6 +594,10 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           valA = (a.age_group || '').toLowerCase();
           valB = (b.age_group || '').toLowerCase();
           break;
+        case 'pax':
+          valA = a.paxCount ?? (a as any).pax ?? 1;
+          valB = b.paxCount ?? (b as any).pax ?? 1;
+          break;
         case 'updates':
           valA = (a.admin_notes || '').toLowerCase();
           valB = (b.admin_notes || '').toLowerCase();
@@ -1052,6 +1057,12 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
               <tr className="bg-[#F8FAFC] border-b border-stone-200 text-[10px] font-bold uppercase text-stone-500 tracking-wider">
                 <th className="py-2 px-2.5 text-center w-[40px]">S.N.</th>
                 <th
+                  onClick={() => handleSort('pax')}
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  PAX {sortCol === 'pax' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
                   onClick={() => handleSort('name')}
                   className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
@@ -1113,7 +1124,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <tbody className="divide-y divide-stone-100">
               {paginatedRegistrations.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-6 text-center text-stone-400 font-semibold text-xs">
+                  <td colSpan={13} className="py-6 text-center text-stone-400 font-semibold text-xs">
                     No registered hikers found matching criteria
                   </td>
                 </tr>
@@ -1139,6 +1150,10 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                         {sn}
                       </td>
 
+                      {/* PAX */}
+                      <td className="py-2 px-2.5 font-bold text-stone-600 text-xs">
+                        {r.paxCount ?? (r as any).pax ?? 1}
+                      </td>
                       {/* NAME */}
                       <td className="py-2 px-2.5 font-semibold text-[#1F2937] text-xs">
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -1156,11 +1171,6 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                           >
                             {r.full_name}
                           </button>
-                          {r.paxCount && r.paxCount > 1 && (
-                            <span className="font-bold text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.2 rounded text-[9.5px]">
-                              {r.paxCount} Pax
-                            </span>
-                          )}
                         </div>
                       </td>
 
