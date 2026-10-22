@@ -50,7 +50,7 @@ export interface AdminRegistration {
   whatsapp?: string;
   whatsapp_number?: string;
   email: string;
-  paxCount?: number;
+  paxCount?: number | string;
   emergency_contact?: string;
   emergency_backup_contact?: string;
   profession?: string;
@@ -643,10 +643,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         valA = (a.full_name || '').toLowerCase();
         valB = (b.full_name || '').toLowerCase();
       } else if (sortField === 'pax') {
-        valA = Number(draftA.paxCount !== undefined ? draftA.paxCount : (a.paxCount ?? (a as any).pax ?? 1));
-        valB = Number(draftB.paxCount !== undefined ? draftB.paxCount : (b.paxCount ?? (b as any).pax ?? 1));
-        if (isNaN(valA)) valA = 0;
-        if (isNaN(valB)) valB = 0;
+        valA = draftA.paxCount !== undefined ? draftA.paxCount : (a.paxCount ?? (a as any).pax ?? 1);
+        valB = draftB.paxCount !== undefined ? draftB.paxCount : (b.paxCount ?? (b as any).pax ?? 1);
       } else if (sortField === 'status') {
         valA = String(draftA.status ?? a.status ?? 'Confirmed').toLowerCase();
         valB = String(draftB.status ?? b.status ?? 'Confirmed').toLowerCase();
@@ -825,9 +823,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const handleSaveRow = async (reg: AdminRegistration) => {
     const draft = rowDrafts[reg.id];
     const rawPax = draft?.paxCount !== undefined ? draft.paxCount : (reg.paxCount ?? (reg as any).pax ?? 1);
-    const resolvedPax = typeof rawPax === 'number'
-      ? rawPax
-      : (rawPax === '' ? 1 : (!isNaN(Number(rawPax)) ? Number(rawPax) : (parseInt(String(rawPax), 10) || rawPax)));
+    const resolvedPax = rawPax; // Allow both number and string
     const updates: Partial<AdminRegistration> = {
       paxCount: resolvedPax,
       status: draft?.status !== undefined ? draft.status : reg.status || 'Confirmed',
@@ -1631,7 +1627,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                                 </button>
                               )}
 
-                              {reg.paxCount && reg.paxCount > 1 && (
+                              {reg.paxCount && Number(reg.paxCount) > 1 && (
                                 <span className="font-medium text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.2 rounded text-[9px]">
                                   {reg.paxCount} Pax Group
                                 </span>

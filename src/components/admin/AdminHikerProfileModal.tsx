@@ -478,7 +478,7 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
                         <div className="flex items-center gap-3">
                           <span>Paid: <strong className="text-[#1F1F1F]">NPR {Number(reg.paid_amount || 0).toLocaleString()}</strong></span>
                           <span>Due: <strong className={`${Number(reg.due_amount || 0) > 0 ? 'text-amber-700 font-bold' : 'text-stone-500'}`}>NPR {Number(reg.due_amount || 0).toLocaleString()}</strong></span>
-                          {reg.paxCount && reg.paxCount > 1 && (
+                          {reg.paxCount && Number(reg.paxCount) > 1 && (
                             <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 text-[10px]">
                               {reg.paxCount} Pax Group
                             </span>

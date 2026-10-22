@@ -96,7 +96,7 @@ export const AdminEditApplicationModal: React.FC<AdminEditApplicationModalProps>
       const isGrp =
         registration.is_group ||
         (Array.isArray(registration.team_members) && registration.team_members.length > 0) ||
-        (registration.paxCount && registration.paxCount > 1);
+        (registration.paxCount && Number(registration.paxCount) > 1);
       setIsGroup(isGrp ? 'Group' : 'Solo');
       setAgeGroup(registration.age_group || '20-30');
       setGender(registration.gender || 'Female');

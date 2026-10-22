@@ -1152,7 +1152,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
                       {/* PAX */}
                       <td className="py-2 px-2.5 font-bold text-stone-600 text-xs">
-                        {r.paxCount ?? (r as any).pax ?? 1}
+                        {String(r.paxCount ?? (r as any).pax ?? 1)}
                       </td>
                       {/* NAME */}
                       <td className="py-2 px-2.5 font-semibold text-[#1F2937] text-xs">
