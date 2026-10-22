@@ -50,6 +50,7 @@ import { ItineraryBuilder } from './ItineraryBuilder';
 import { HikeLibraryList } from './HikeLibraryList';
 import { BookingsManager, AdminRegistration } from './BookingsManager';
 import { EventExecutionManager } from './EventExecutionManager';
+import { AdminLinkLibrary } from './AdminLinkLibrary';
 import { SalesAnalyticsManager } from './SalesAnalyticsManager';
 import { CoordinatorHub } from './CoordinatorHub';
 import { CloudflareRegistrationsTable } from './CloudflareRegistrationsTable';
@@ -79,7 +80,7 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<
-    'bookings' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps' | 'notifications' | 'system'
+    'bookings' | 'execution' | 'coordinator' | 'library' | 'editor' | 'maps' | 'notifications' | 'system' | 'links'
   >(() => {
     try {
       const saved = sessionStorage.getItem('wnw_admin_active_tab');
@@ -87,19 +88,19 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'bookings' ||
         saved === 'execution' ||
         saved === 'coordinator' ||
-        saved === 'sales' ||
         saved === 'library' ||
         saved === 'editor' ||
         saved === 'maps' ||
         saved === 'notifications' ||
-        saved === 'system'
+        saved === 'system' ||
+        saved === 'links'
       ) {
         return saved;
       }
     } catch {}
     return 'bookings';
   });
-  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility'>(() => {
+  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales'>(() => {
     try {
       const saved = sessionStorage.getItem('wnw_admin_system_subtab');
       if (
@@ -109,7 +110,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'pwa' ||
         saved === 'hero' ||
         saved === 'notice' ||
-        saved === 'visibility'
+        saved === 'visibility' ||
+        saved === 'sales'
       ) {
         return saved;
       }
@@ -1673,6 +1675,21 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             <span>Event Execution</span>
           </button>
 
+          {/* Links Tab */}
+          <button
+            id="admin-tab-links"
+            type="button"
+            onClick={() => setActiveTab('links')}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'links'
+                ? 'bg-sky-600 text-white shadow-xs'
+                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+            }`}
+          >
+            <Link2 className="w-4 h-4" />
+            <span>Links</span>
+          </button>
+
           {/* Coordinator Hub Tab */}
           <button
             id="admin-tab-coordinator"
@@ -1686,21 +1703,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           >
             <Shield className="w-4 h-4" />
             <span>Coordinator Hub</span>
-          </button>
-
-          {/* Sales Analytics Tab */}
-          <button
-            id="admin-tab-sales"
-            type="button"
-            onClick={() => setActiveTab('sales')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'sales'
-                ? 'bg-rose-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
-            }`}
-          >
-            <DollarSign className="w-4 h-4" />
-            <span>Sales Analytics</span>
           </button>
 
           {/* Library Tab */}
@@ -1830,17 +1832,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             registrations={registrations}
             loading={loadingRegistrations}
             onRefresh={fetchRegistrations}
-          />
-        )}
-
-        {activeTab === 'sales' && (
-          <SalesAnalyticsManager
-            treks={enrichedTreks}
-            registrations={registrations}
-            onSelectTrekRoster={(trekFilterId) => {
-              setSelectedBookingsTrekFilter(trekFilterId || 'all');
-              setActiveTab('bookings');
-            }}
           />
         )}
 
@@ -2148,6 +2139,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 <EyeOff className="w-3.5 h-3.5" />
                 <span>Page Visibility</span>
               </button>
+              <button
+                id="admin-system-subtab-sales"
+                onClick={() => setSystemSubTab('sales')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'sales'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                }`}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Sales Analytics</span>
+              </button>
             </div>
 
             <div className="mt-6">
@@ -2264,8 +2267,23 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               {systemSubTab === 'visibility' && (
                 <SiteVisibilityManager currentUserEmail={currentUserEmail} />
               )}
+
+              {systemSubTab === 'sales' && (
+                <SalesAnalyticsManager
+                  treks={enrichedTreks}
+                  registrations={registrations}
+                  onSelectTrekRoster={(trekFilterId) => {
+                    setSelectedBookingsTrekFilter(trekFilterId || 'all');
+                    setActiveTab('bookings');
+                  }}
+                />
+              )}
             </div>
           </div>
+        )}
+
+        {activeTab === 'links' && (
+          <AdminLinkLibrary baseURL={window.location.origin} treks={enrichedTreks} />
         )}
       </div>
 

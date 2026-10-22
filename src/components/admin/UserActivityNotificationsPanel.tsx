@@ -27,7 +27,7 @@ import {
 
 interface UserActivityNotificationsPanelProps {
   onNavigateTab?: (
-    tab: 'bookings' | 'execution' | 'coordinator' | 'sales' | 'library' | 'editor' | 'maps' | 'system'
+    tab: 'bookings' | 'execution' | 'coordinator' | 'library' | 'editor' | 'maps' | 'system'
   ) => void;
   onUnreadCountChange?: (count: number) => void;
 }
