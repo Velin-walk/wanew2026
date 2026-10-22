@@ -155,7 +155,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   const registrations = useMemo(() => {
     return rawRegistrations.filter((r) => {
       const st = (r.status || 'Confirmed').toLowerCase().trim();
-      return st !== 'cancelled' && st !== 'waitlisted' && st !== 'cancelled by user' && !st.includes('cancelled');
+      return st !== 'cancelled' && st !== 'waitlisted' && st !== 'cancelled by user' && st !== 'double registration' && !st.includes('cancelled');
     });
   }, [rawRegistrations]);
 
