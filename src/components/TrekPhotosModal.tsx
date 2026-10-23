@@ -340,7 +340,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
           trekName: trek.name,
           url: imageUrl,
           publicId: publicId,
-          uploadedBy: user.displayName || user.email?.split('@')[0] || 'Nepal Hiker',
+          uploadedBy: user.displayName || user.email?.split('@')[0] || 'Verified Hiker',
           userUid: user.uid,
           uploadedAt: new Date().toISOString(),
           caption: uploadCaption.trim() || undefined,
@@ -617,7 +617,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
                   </div>
                   <div>
                     <p className="text-xs font-black text-[#1F1F1F]">
-                      {user?.displayName || user?.email?.split('@')[0] || 'Nepal Hiker'}
+                      {user?.displayName || user?.email?.split('@')[0] || 'Hiker'}
                     </p>
                     <span className="text-[10px] text-[#8B8680] font-bold">Creating a hike post</span>
                   </div>

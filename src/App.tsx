@@ -1717,7 +1717,31 @@ function MainApp() {
             trek={feedbackModalTrek}
             booking={feedbackModalBooking}
             currentUser={{
-              name: feedbackModalBooking?.full_name || user?.displayName || 'Nepal Hiker',
+              name: (() => {
+                if (feedbackModalBooking?.full_name?.trim() && !/nepal hiker/i.test(feedbackModalBooking.full_name)) {
+                  return feedbackModalBooking.full_name.trim();
+                }
+                if (user?.displayName?.trim() && !/nepal hiker/i.test(user.displayName)) {
+                  return user.displayName.trim();
+                }
+                try {
+                  const reg = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
+                  if (reg) {
+                    const parsed = JSON.parse(reg);
+                    const name = parsed.fullName || parsed.full_name || parsed.name;
+                    if (name?.trim() && !/nepal hiker/i.test(name)) return name.trim();
+                  }
+                  const savedName = localStorage.getItem('wnw_user_name');
+                  if (savedName?.trim() && !/nepal hiker/i.test(savedName)) return savedName.trim();
+                } catch {}
+                if (activeUserEmail) {
+                  const prefix = activeUserEmail.split('@')[0].replace(/[._-]/g, ' ').trim();
+                  if (prefix && !/nepal hiker/i.test(prefix)) {
+                    return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                  }
+                }
+                return 'Verified Hiker';
+              })(),
               email: activeUserEmail,
             }}
             onSubmitSuccess={() => {

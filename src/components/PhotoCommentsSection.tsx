@@ -82,7 +82,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
 
     setSubmitting(true);
     try {
-      const authorName = user.displayName || user.email?.split('@')[0] || 'Nepal Hiker';
+      const authorName = user.displayName || user.email?.split('@')[0] || 'Verified Hiker';
       const authorAvatar = user.photoURL || '';
       
       const newComment = await postPhotoComment(

@@ -158,7 +158,10 @@ export const HikerReviewsSection: React.FC<{
   const allReviewsCombined = useMemo(() => {
     const normalizedLive = (liveReviews || []).map((r: any) => ({
       id: r.id ? `live-${r.id}` : `live-${r.uid || Math.random()}`,
-      full_name: r.full_name || r.name || 'Verified Hiker',
+      full_name: (() => {
+        const raw = (r.full_name || r.name || '').trim();
+        return (!raw || /nepal hiker/i.test(raw)) ? 'Verified Hiker' : raw;
+      })(),
       hike_number: String(r.hike_number || r.hikeNumber || '').replace(/^#/, ''),
       trek_name: r.trek_name || r.recentWalk || 'Himalayan Trek',
       overall_rating: Math.min(5, Math.max(1, Number(r.overall_rating || r.overallRating) || 5)),
@@ -608,7 +611,10 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   const allReviewsCombined = useMemo(() => {
     const normalizedLive = (liveReviews || []).map((r: any) => ({
       id: r.id ? `live-${r.id}` : `live-${r.uid || Math.random()}`,
-      full_name: r.full_name || r.name || 'Verified Hiker',
+      full_name: (() => {
+        const raw = (r.full_name || r.name || '').trim();
+        return (!raw || /nepal hiker/i.test(raw)) ? 'Verified Hiker' : raw;
+      })(),
       hike_number: String(r.hike_number || r.hikeNumber || '').replace(/^#/, ''),
       trek_name: r.trek_name || r.recentWalk || 'Himalayan Trek',
       overall_rating: Math.min(5, Math.max(1, Number(r.overall_rating || r.overallRating) || 5)),

@@ -43,7 +43,29 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
 
   const trekName = activeTrek?.name || booking?.trek_name || 'Himalayan Hike';
   const trekLeader = activeTrek?.leader || 'Trail Coordinator';
-  const defaultName = currentUser?.name || booking?.full_name || 'Hiker';
+  const resolveInitialName = () => {
+    const raw = currentUser?.name || booking?.full_name || '';
+    if (raw && !/nepal hiker/i.test(raw)) return raw.trim();
+    try {
+      const reg = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
+      if (reg) {
+        const parsed = JSON.parse(reg);
+        const name = parsed.fullName || parsed.full_name || parsed.name;
+        if (name?.trim() && !/nepal hiker/i.test(name)) return name.trim();
+      }
+      const savedName = localStorage.getItem('wnw_user_name');
+      if (savedName?.trim() && !/nepal hiker/i.test(savedName)) return savedName.trim();
+    } catch {}
+    if (currentUser?.email) {
+      const prefix = currentUser.email.split('@')[0].replace(/[._-]/g, ' ').trim();
+      if (prefix && !/nepal hiker/i.test(prefix)) {
+        return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+      }
+    }
+    return 'Verified Hiker';
+  };
+
+  const defaultName = resolveInitialName();
   const defaultEmail = currentUser?.email || booking?.user_email || booking?.email || '';
 
   const [hikerName, setHikerName] = useState(defaultName);
@@ -61,7 +83,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setHikerName(currentUser?.name || booking?.full_name || 'Hiker');
+      setHikerName(resolveInitialName());
       setSelectedKey('');
       setTeamRating(5);
       setHoverTeamRating(0);
@@ -235,22 +257,27 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Prefilled Hiker Name Banner */}
+              {/* Prefilled / Editable Hiker Name Banner */}
               <div className="bg-[#FAF8F5] border border-[#EAE4DC] p-3.5 rounded-xl flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
                   <div className="w-8 h-8 rounded-full bg-[#7ABA42]/20 text-[#7ABA42] flex items-center justify-center font-bold text-xs shrink-0">
                     <User className="w-4 h-4" />
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <span className="text-[10px] uppercase font-bold text-[#8B8680] block tracking-wider">
                       Reviewing As
                     </span>
-                    <span className="text-xs font-bold text-[#1F1F1F]">
-                      {hikerName || 'Hiker'}
-                    </span>
+                    <input
+                      type="text"
+                      value={hikerName}
+                      onChange={(e) => setHikerName(e.target.value)}
+                      placeholder="Your Full Name"
+                      className="text-xs font-bold text-[#1F1F1F] bg-transparent border-b border-dashed border-[#8B8680]/50 focus:border-[#7ABA42] focus:outline-none w-full py-0.5"
+                      required
+                    />
                   </div>
                 </div>
-                <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold border border-emerald-200">
+                <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold border border-emerald-200 shrink-0">
                   Verified Hiker
                 </span>
               </div>

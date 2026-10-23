@@ -409,7 +409,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           trekName: targetTrek.name,
           url: imageUrl,
           publicId: publicId,
-          uploadedBy: user.displayName || user.email?.split('@')[0] || 'Nepal Hiker',
+          uploadedBy: user.displayName || user.email?.split('@')[0] || 'Verified Hiker',
           userUid: user.uid,
           uploadedAt: new Date().toISOString(),
           caption: uploadCaption.trim() || undefined,
@@ -451,7 +451,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       localStorage.setItem(uploadCountKey, String(currentCount + uploadedThisBatch));
 
       if (newPhotosToAppend.length > 0) {
-        const uploaderName = user.displayName || user.email?.split('@')[0] || 'Nepal Hiker';
+        const uploaderName = user.displayName || user.email?.split('@')[0] || 'Verified Hiker';
         logUserActivity({
           type: 'gallery_photo_uploaded',
           title: 'Gallery Photo Uploaded',
@@ -1160,7 +1160,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       </div>
                       <div>
                         <p className="text-xs font-black text-[#1F1F1F]">
-                          {user?.displayName || user?.email?.split('@')[0] || 'Nepal Hiker'}
+                          {user?.displayName || user?.email?.split('@')[0] || 'Hiker'}
                         </p>
                         <span className="text-[10px] text-[#8B8680] font-bold">Posting to Gallery</span>
                       </div>
