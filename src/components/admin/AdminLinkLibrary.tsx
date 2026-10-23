@@ -1,10 +1,12 @@
-import React from 'react';
-import { Copy, Link2, FileText, Calendar } from 'lucide-react';
+import React, { useState } from 'react';
+import { Copy, Check } from 'lucide-react';
 
 export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ baseURL, treks }) => {
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+
   const pages = [
     { name: 'Rate and Review Form', path: '/?page=reviews' },
-    { name: 'Register Form', path: '/?tab=treks' },
+    { name: 'Register Form', path: '/?page=register' },
     { name: 'Payment Page', path: '/?page=payment' },
     { name: 'Blogs & Stories', path: '/?page=blogs' },
     { name: 'Trek Tips & Gear', path: '/?page=trek_tips' },
@@ -20,75 +22,100 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('Link copied to clipboard!');
+    setCopiedPath(text);
+    setTimeout(() => setCopiedPath(null), 2000);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Table 1: General Pages */}
-      <div className="bg-white p-6 rounded-2xl border border-[#E5E1DB] shadow-2xs">
-        <h3 className="text-sm font-bold text-[#1F1F1F] mb-4">Application Page Links</h3>
-        <table className="w-full text-left text-xs">
-          <thead>
-            <tr className="border-b border-[#F0EBE5] text-[#8B8680] uppercase">
-              <th className="py-2">Page Name</th>
-              <th className="py-2">Page Link</th>
-              <th className="py-2 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F0EBE5]">
-            {pages.map((page) => {
-              const fullLink = `${baseURL}${page.path}`;
-              return (
-                <tr key={page.name}>
-                  <td className="py-3 font-semibold text-[#1F1F1F]">{page.name}</td>
-                  <td className="py-3 text-[#5A5551] font-mono">{fullLink}</td>
-                  <td className="py-3 text-right">
-                    <button
-                      onClick={() => copyToClipboard(fullLink)}
-                      className="p-1.5 hover:bg-[#F9F7F5] rounded-lg text-[#8B8680] hover:text-[#1F1F1F] cursor-pointer"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="bg-white p-3 rounded-xl border border-[#E5E1DB] shadow-2xs">
+        <h3 className="text-xs font-bold text-[#1F1F1F] mb-2 uppercase tracking-wide">Application Page Links</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse table-auto">
+            <thead>
+              <tr className="border-b border-[#E5E1DB] text-[#8B8680] uppercase text-[10px] bg-[#FAF8F5]">
+                <th className="py-1 px-2 font-bold w-px whitespace-nowrap">Page Name</th>
+                <th className="py-1 px-2 font-bold w-px whitespace-nowrap">Page Link</th>
+                <th className="py-1 px-2 font-bold text-left whitespace-nowrap">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F0EBE5]">
+              {pages.map((page) => {
+                const fullLink = `${baseURL}${page.path}`;
+                const isCopied = copiedPath === fullLink;
+                return (
+                  <tr key={page.name} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
+                    <td className="py-1 px-2 font-semibold whitespace-nowrap w-px">{page.name}</td>
+                    <td className="py-1 px-2 font-mono text-[11px] whitespace-nowrap w-px select-all text-[#5A5551]">{fullLink}</td>
+                    <td className="py-1 px-2 text-left whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(fullLink);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-[#E5E1DB] rounded text-[11px] font-bold text-[#1F1F1F] shadow-2xs hover:bg-stone-100 transition-colors cursor-pointer"
+                        title="Copy link"
+                      >
+                        {isCopied ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <Copy className="w-3 h-3 text-[#8B8680] shrink-0" />}
+                        <span className="text-[#1F1F1F]">{isCopied ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Table 2: Event Specific */}
-      <div className="bg-white p-6 rounded-2xl border border-[#E5E1DB] shadow-2xs">
-        <h3 className="text-sm font-bold text-[#1F1F1F] mb-4">Event Specific Itinerary Links</h3>
-        <table className="w-full text-left text-xs">
-          <thead>
-            <tr className="border-b border-[#F0EBE5] text-[#8B8680] uppercase">
-              <th className="py-2">Hike Name & Number</th>
-              <th className="py-2">Itinerary Link</th>
-              <th className="py-2 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F0EBE5]">
-            {upcomingTreks.map((trek) => {
-              const hikeLink = `${baseURL}/?hike=${trek.hike_number || trek.id}`;
-              return (
-                <tr key={trek.id}>
-                  <td className="py-3 font-semibold text-[#1F1F1F]">{trek.name} (#{trek.hike_number})</td>
-                  <td className="py-3 text-[#5A5551] font-mono">{hikeLink}</td>
-                  <td className="py-3 text-right">
-                    <button
-                      onClick={() => copyToClipboard(hikeLink)}
-                      className="p-1.5 hover:bg-[#F9F7F5] rounded-lg text-[#8B8680] hover:text-[#1F1F1F] cursor-pointer"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="bg-white p-3 rounded-xl border border-[#E5E1DB] shadow-2xs">
+        <h3 className="text-xs font-bold text-[#1F1F1F] mb-2 uppercase tracking-wide">Event Specific Itinerary Links</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse table-auto">
+            <thead>
+              <tr className="border-b border-[#E5E1DB] text-[#8B8680] uppercase text-[10px] bg-[#FAF8F5]">
+                <th className="py-1 px-2 font-bold w-px whitespace-nowrap">Hike Name &amp; Number</th>
+                <th className="py-1 px-2 font-bold w-px whitespace-nowrap">Event Date</th>
+                <th className="py-1 px-2 font-bold w-px whitespace-nowrap">Itinerary Link</th>
+                <th className="py-1 px-2 font-bold text-left whitespace-nowrap">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F0EBE5]">
+              {upcomingTreks.map((trek) => {
+                const hikeLink = `${baseURL}/?hike=${trek.hike_number || trek.id}`;
+                const isCopied = copiedPath === hikeLink;
+                return (
+                  <tr key={trek.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
+                    <td className="py-1 px-2 font-semibold whitespace-nowrap w-px">
+                      {trek.name} (#{trek.hike_number})
+                    </td>
+                    <td className="py-1 px-2 whitespace-nowrap font-medium text-[11px] w-px text-[#5A5551]">
+                      {trek.date || trek.data?.hikeDate || 'TBA'}
+                    </td>
+                    <td className="py-1 px-2 font-mono text-[11px] whitespace-nowrap w-px select-all text-[#5A5551]">{hikeLink}</td>
+                    <td className="py-1 px-2 text-left whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(hikeLink);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-[#E5E1DB] rounded text-[11px] font-bold text-[#1F1F1F] shadow-2xs hover:bg-stone-100 transition-colors cursor-pointer"
+                        title="Copy link"
+                      >
+                        {isCopied ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <Copy className="w-3 h-3 text-[#8B8680] shrink-0" />}
+                        <span className="text-[#1F1F1F]">{isCopied ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

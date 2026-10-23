@@ -356,7 +356,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                   return (
                     <tr
                       key={t.id}
-                      className={`hover:bg-[#FAF8F5] transition-colors ${
+                      className={`hover:bg-[#FF6600]/15 transition-colors cursor-pointer ${
                         isCancelled ? 'bg-rose-50/20' : ''
                       }`}
                     >

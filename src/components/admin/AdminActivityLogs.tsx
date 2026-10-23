@@ -389,7 +389,7 @@ export function AdminActivityLogs() {
                       <tr
                         onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
                         className={`transition-colors cursor-pointer ${
-                          isExpanded ? 'bg-[#FAF8F5]' : 'hover:bg-stone-50/70'
+                          isExpanded ? 'bg-[#FAF8F5]' : 'hover:bg-[#FF6600]/15'
                         }`}
                       >
                         {/* 1. Action Type & ID */}

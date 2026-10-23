@@ -1557,7 +1557,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
                   return (
                     <React.Fragment key={reg.id}>
-                      <tr className={`transition-colors ${isPrivate ? 'bg-purple-50/25 hover:bg-purple-50/50' : 'hover:bg-[#FAF8F5]'}`}>
+                      <tr className={`transition-colors hover:bg-[#FF6600]/15 cursor-pointer ${isPrivate ? 'bg-purple-50/25' : ''}`}>
                         {/* Batch Selection Checkbox */}
                         <td className="py-1.5 px-2.5 text-center align-middle w-[34px]">
                           <input

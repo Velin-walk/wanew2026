@@ -535,7 +535,7 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
                   return (
                     <tr
                       key={recordId}
-                      className="hover:bg-[#FAF6F0] transition-colors group"
+                      className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer group"
                     >
                       {/* Row Index */}
                       <td className="py-2 px-3 text-[10px] text-stone-400 font-mono text-center border-r border-[#EFEAE4] bg-[#FBF9F6] sticky left-0 z-10 group-hover:bg-[#F3EFE9]">

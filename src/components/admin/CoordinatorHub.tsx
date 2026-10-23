@@ -1141,9 +1141,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                   return (
                     <tr
                       key={r.id}
-                      className={`transition-colors ${
-                        isFemale ? 'bg-pink-50/50 hover:bg-pink-100/50' : 'hover:bg-stone-50/80'
-                      }`}
+                      className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer"
                     >
                       {/* S.N. */}
                       <td className="py-2 px-2.5 text-center font-bold text-stone-600 text-xs">

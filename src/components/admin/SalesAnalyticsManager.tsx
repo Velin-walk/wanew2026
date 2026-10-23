@@ -323,7 +323,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
                 const isCancelled = !!t.data?.is_cancelled || !!t.is_cancelled;
 
                 return (
-                  <tr key={t.id} className="hover:bg-[#FAF8F5] transition-colors">
+                  <tr key={t.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
                     <td className="p-4 font-bold text-[#1F1F1F]">
                       <div className="text-xs text-[#E08828] font-extrabold">Hike #{t.hike_number || t.id}</div>
                       <div className="text-sm font-black text-[#1F1F1F]">{t.name}</div>

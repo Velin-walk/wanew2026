@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { X } from 'lucide-react';
+import { X, Star } from 'lucide-react';
 
 export interface ReviewItem {
   id: string;
@@ -62,16 +62,24 @@ export const ReviewsAnalyticsBoard: React.FC<ReviewsAnalyticsBoardProps> = ({
     return { avgScore, total, distribution: counts, percentages };
   }, [reviews]);
 
-  // Recent 10 Unique Treks from the chronological dataset (latest first)
-  const recent10Treks = useMemo(() => {
-    const treks: string[] = [];
+  // Recent 10 Unique Treks from the dataset with aggregated review count & avg rating
+  const recent10TreksWithStats = useMemo(() => {
+    const treks: { name: string; count: number; avgRating: string }[] = [];
     const seen = new Set<string>();
 
     for (const r of reviews) {
       const name = (r.trek_name || '').trim();
-      if (name && !seen.has(name)) {
-        seen.add(name);
-        treks.push(name);
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+
+        const trekReviews = reviews.filter(
+          (rev) => (rev.trek_name || '').trim().toLowerCase() === name.toLowerCase()
+        );
+        const count = trekReviews.length;
+        const sum = trekReviews.reduce((acc, rev) => acc + (Number(rev.overall_rating) || 5), 0);
+        const avg = count > 0 ? (sum / count).toFixed(1) : '5.0';
+
+        treks.push({ name, count, avgRating: avg });
         if (treks.length >= 10) break;
       }
     }
@@ -114,7 +122,7 @@ export const ReviewsAnalyticsBoard: React.FC<ReviewsAnalyticsBoardProps> = ({
                   type="button"
                   onClick={() => onSelectRating && onSelectRating(isSelected ? 'all' : star)}
                   className={`w-full flex items-center gap-2.5 group text-left cursor-pointer transition-all rounded-md px-2 py-1 ${
-                    isSelected ? 'bg-amber-50/80 ring-1 ring-amber-200' : 'hover:bg-[#FAF8F5]'
+                    isSelected ? 'bg-amber-50/80 ring-1 ring-amber-200' : 'hover:bg-[#FF6600]/5 hover:ring-1 hover:ring-[#FF6600]/20'
                   }`}
                   title={`Filter by ${star} star reviews (${count})`}
                 >
@@ -135,45 +143,74 @@ export const ReviewsAnalyticsBoard: React.FC<ReviewsAnalyticsBoardProps> = ({
         </div>
 
         {/* Right Card: RECENT 10 TREKS */}
-        <div className="lg:col-span-8 p-5 rounded-3xl bg-white border border-[#E5E1DB] shadow-2xs flex flex-col">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <h3 className="text-[10px] font-bold tracking-wider text-[#8B8680] uppercase">
-              Recent 10 Treks
-            </h3>
+        <div className="lg:col-span-8 p-4 sm:p-5 rounded-3xl bg-white border border-[#E5E1DB] shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-3 mb-2 shrink-0">
+            <div>
+              <h3 className="text-[10px] font-bold tracking-wider text-[#8B8680] uppercase">
+                Recent 10 Treks
+              </h3>
+            </div>
             {selectedTrek && (
               <button
                 type="button"
                 onClick={() => onSelectTrek && onSelectTrek('')}
-                className="text-[10px] font-semibold text-amber-800 hover:text-amber-900 flex items-center gap-1 bg-amber-50/80 px-2 py-0.5 rounded-md border border-amber-200/60 cursor-pointer"
+                className="text-[10px] font-semibold text-amber-900 hover:text-amber-950 flex items-center gap-1 bg-amber-50/90 px-2 py-0.5 rounded-lg border border-amber-200 cursor-pointer transition-colors shadow-2xs shrink-0"
               >
-                <span>Filtered: {selectedTrek.slice(0, 24)}</span>
-                <X className="w-2.5 h-2.5" />
+                <span className="truncate max-w-[140px] sm:max-w-[200px]">Filtered: {selectedTrek}</span>
+                <X className="w-3 h-3 text-amber-700 shrink-0" />
               </button>
             )}
           </div>
 
-          <div className="flex-1 flex flex-wrap gap-1.5 content-start overflow-y-auto max-h-[190px] pr-1 scrollbar-thin">
-            {recent10Treks.map((trek) => {
-              const isSelected = selectedTrek?.toLowerCase() === trek.toLowerCase();
-              return (
-                <button
-                  key={trek}
-                  type="button"
-                  onClick={() => onSelectTrek && onSelectTrek(isSelected ? '' : trek)}
-                  className={`px-2 py-0.5 rounded-md text-[9px] font-medium transition-all text-left truncate max-w-[240px] cursor-pointer border ${
-                    isSelected
-                      ? 'bg-[#1F1F1F] text-white border-[#1F1F1F] shadow-xs'
-                      : 'bg-[#FAF9F6] text-[#4A4540] border-[#EBE8E2] hover:bg-[#F2EFE9] hover:border-[#DFDAD2]'
-                  }`}
-                  title={`Filter by ${trek}`}
-                >
-                  {trek}
-                </button>
-              );
-            })}
-          </div>
+          {recent10TreksWithStats.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center p-4 text-xs text-[#8B8680]">
+              No trek activity recorded yet
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2">
+              {recent10TreksWithStats.map((trek) => {
+                const isSelected = selectedTrek?.toLowerCase() === trek.name.toLowerCase();
+                return (
+                  <button
+                    key={trek.name}
+                    type="button"
+                    onClick={() => onSelectTrek && onSelectTrek(isSelected ? '' : trek.name)}
+                    className={`group relative py-1 px-2.5 rounded-lg border text-left cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                      isSelected
+                        ? 'bg-[#1F1F1F] text-white border-[#1F1F1F] shadow-xs'
+                        : 'bg-[#FAF9F6] text-[#1F1F1F] border-[#EBE8E2] hover:border-[#FF6600]/40 hover:bg-[#FF6600]/5'
+                    }`}
+                    title={`Filter reviews by ${trek.name}`}
+                  >
+                    <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                      <h4 className={`text-[11px] font-semibold truncate leading-tight ${
+                        isSelected ? 'text-white' : 'text-[#1F1F1F]'
+                      }`}>
+                        {trek.name}
+                      </h4>
+                      <span className={`text-[9px] font-medium shrink-0 ${
+                        isSelected ? 'text-stone-300' : 'text-[#8B8680]'
+                      }`}>
+                        ({trek.count})
+                      </span>
+                    </div>
+
+                    <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded shrink-0 text-[10px] font-bold tabular-nums ${
+                      isSelected
+                        ? 'bg-stone-800/80 text-amber-300 border border-stone-700'
+                        : 'bg-white text-stone-800 border border-[#E5E1DB] group-hover:border-amber-200'
+                    }`}>
+                      <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
+                      <span>{trek.avgRating}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
+

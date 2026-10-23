@@ -511,7 +511,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                     'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80';
 
                   return (
-                    <tr key={`${hike.id}-${index}`} className="hover:bg-[#FAF8F5] transition-colors">
+                    <tr key={`${hike.id}-${index}`} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
                       {/* Hike # & Title */}
                       <td className="py-3 px-4 align-middle">
                         <div className="flex items-center gap-3">

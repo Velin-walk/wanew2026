@@ -1646,7 +1646,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'bookings'
                 ? 'bg-[#E08828] text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -1668,7 +1668,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'execution'
                 ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
             }`}
           >
             <CheckCircle className="w-4 h-4" />
@@ -1683,7 +1683,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'links'
                 ? 'bg-sky-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
             }`}
           >
             <Link2 className="w-4 h-4" />
@@ -1698,7 +1698,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'coordinator'
                 ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
             }`}
           >
             <Shield className="w-4 h-4" />
@@ -1713,7 +1713,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'library'
                 ? 'bg-stone-800 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
             }`}
           >
             <Layers className="w-4 h-4 text-[#7ABA42]" />
@@ -1728,7 +1728,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'maps'
                 ? 'bg-purple-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
             }`}
           >
             <MapPin className="w-4 h-4" />
@@ -1746,7 +1746,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'notifications'
                 ? 'bg-[#E08828] text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
             }`}
           >
             <Zap className={`w-4 h-4 ${activeTab === 'notifications' ? 'text-white' : 'text-[#E08828]'}`} />
@@ -1772,7 +1772,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'system'
                 ? 'bg-red-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
             }`}
           >
             <Database className="w-4 h-4" />
@@ -2064,13 +2064,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             </div>
 
             {/* System Zone Sub-navigation */}
-            <div className="flex items-center gap-2 border-b border-[#E5E1DB] pb-4">
+            <div className="flex items-center gap-2 border-b border-[#E5E1DB] pb-4 flex-wrap">
               <button
                 onClick={() => setSystemSubTab('applications')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'applications'
                     ? 'bg-red-600 text-white'
-                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
                 Applications
@@ -2080,7 +2080,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'audit'
                     ? 'bg-red-600 text-white'
-                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
                 Audit Trail
@@ -2090,7 +2090,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'leaderboard'
                     ? 'bg-red-600 text-white'
-                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
                 Leaderboard Manager
@@ -2100,7 +2100,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'pwa'
                     ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
                 <Smartphone className="w-3.5 h-3.5" />
@@ -2111,7 +2111,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'hero'
                     ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
                 <span>Homepage Hero</span>
@@ -2121,7 +2121,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'notice'
                     ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
                 <Bell className="w-3.5 h-3.5" />
@@ -2133,7 +2133,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'visibility'
                     ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
                 <EyeOff className="w-3.5 h-3.5" />
@@ -2145,7 +2145,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'sales'
                     ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#F9F7F5]'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
                 <DollarSign className="w-3.5 h-3.5" />
