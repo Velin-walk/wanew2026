@@ -45,24 +45,24 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   const trekLeader = activeTrek?.leader || 'Trail Coordinator';
   const resolveInitialName = () => {
     const raw = currentUser?.name || booking?.full_name || '';
-    if (raw && !/nepal hiker/i.test(raw)) return raw.trim();
+    if (raw && !/nepal hiker|verified hiker/i.test(raw)) return raw.trim();
     try {
       const reg = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
       if (reg) {
         const parsed = JSON.parse(reg);
         const name = parsed.fullName || parsed.full_name || parsed.name;
-        if (name?.trim() && !/nepal hiker/i.test(name)) return name.trim();
+        if (name?.trim() && !/nepal hiker|verified hiker/i.test(name)) return name.trim();
       }
       const savedName = localStorage.getItem('wnw_user_name');
-      if (savedName?.trim() && !/nepal hiker/i.test(savedName)) return savedName.trim();
+      if (savedName?.trim() && !/nepal hiker|verified hiker/i.test(savedName)) return savedName.trim();
     } catch {}
     if (currentUser?.email) {
       const prefix = currentUser.email.split('@')[0].replace(/[._-]/g, ' ').trim();
-      if (prefix && !/nepal hiker/i.test(prefix)) {
+      if (prefix && !/nepal hiker|verified hiker/i.test(prefix)) {
         return prefix.charAt(0).toUpperCase() + prefix.slice(1);
       }
     }
-    return 'Verified Hiker';
+    return '';
   };
 
   const defaultName = resolveInitialName();
@@ -100,8 +100,19 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmedName = hikerName.trim();
+
+    if (!trimmedName || /^(verified hiker|nepal hiker|anonymous hiker|anonymous)$/i.test(trimmedName)) {
+      setErrorMessage('Please enter your real full name to submit a review.');
+      return;
+    }
+
     setSubmitting(true);
     setErrorMessage(null);
+
+    try {
+      localStorage.setItem('wnw_user_name', trimmedName);
+    } catch {}
 
     const resolvedTrekName = `${trekName} ${activeTrek?.date ? `(${activeTrek.date})` : ''}`.trim();
     const resolvedHikeNumber = activeTrek
@@ -109,8 +120,8 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
       : booking?.hike_number || '';
 
     const payload = {
-      name: hikerName || 'Anonymous Hiker',
-      full_name: hikerName || 'Anonymous Hiker',
+      name: trimmedName,
+      full_name: trimmedName,
       email: defaultEmail,
       email_address: defaultEmail,
       trek_name: resolvedTrekName,

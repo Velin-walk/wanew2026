@@ -160,7 +160,7 @@ export const HikerReviewsSection: React.FC<{
       id: r.id ? `live-${r.id}` : `live-${r.uid || Math.random()}`,
       full_name: (() => {
         const raw = (r.full_name || r.name || '').trim();
-        return (!raw || /nepal hiker/i.test(raw)) ? 'Verified Hiker' : raw;
+        return raw || 'Verified Hiker';
       })(),
       hike_number: String(r.hike_number || r.hikeNumber || '').replace(/^#/, ''),
       trek_name: r.trek_name || r.recentWalk || 'Himalayan Trek',
@@ -613,7 +613,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
       id: r.id ? `live-${r.id}` : `live-${r.uid || Math.random()}`,
       full_name: (() => {
         const raw = (r.full_name || r.name || '').trim();
-        return (!raw || /nepal hiker/i.test(raw)) ? 'Verified Hiker' : raw;
+        return raw || 'Verified Hiker';
       })(),
       hike_number: String(r.hike_number || r.hikeNumber || '').replace(/^#/, ''),
       trek_name: r.trek_name || r.recentWalk || 'Himalayan Trek',

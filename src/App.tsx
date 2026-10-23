@@ -1740,7 +1740,7 @@ function MainApp() {
                     return prefix.charAt(0).toUpperCase() + prefix.slice(1);
                   }
                 }
-                return 'Verified Hiker';
+                return '';
               })(),
               email: activeUserEmail,
             }}
