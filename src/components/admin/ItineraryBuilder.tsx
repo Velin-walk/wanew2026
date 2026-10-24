@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   TrekItineraryData,
+  TrekFaqItem,
   INITIAL_ITINERARY_TEMPLATE,
   normalizeItineraryData,
   SavedHikeRecord,
@@ -39,6 +40,7 @@ import {
   ArrowLeft,
   Share2,
   Copy,
+  Check,
   Radio,
   Loader2,
   ChevronRight,
@@ -91,6 +93,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [copiedFaqLink, setCopiedFaqLink] = useState(false);
   
   // Image Cropping States
   const [croppingImage, setCroppingImage] = useState<string | null>(null);
@@ -399,6 +402,55 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         .filter((d) => d.id !== dayId)
         .map((d, idx) => ({ ...d, dayNumber: idx + 1 })),
     }));
+  };
+
+  // Section 9: FAQ Handlers
+  const handleAddFaq = () => {
+    const newFaq: TrekFaqItem = {
+      id: `faq-${Date.now()}`,
+      question: '',
+      answer: '',
+    };
+    updateData((prev) => ({
+      ...prev,
+      faqs: [...(prev.faqs || []), newFaq],
+    }));
+  };
+
+  const handleRemoveFaq = (faqId: string) => {
+    updateData((prev) => ({
+      ...prev,
+      faqs: (prev.faqs || []).filter((f) => f.id !== faqId),
+    }));
+  };
+
+  const handleUpdateFaq = (faqId: string, field: 'question' | 'answer', value: string) => {
+    updateData((prev) => ({
+      ...prev,
+      faqs: (prev.faqs || []).map((f) => (f.id === faqId ? { ...f, [field]: value } : f)),
+    }));
+  };
+
+  const handleAddPresetFaq = (presetQuestion: string, presetAnswer: string) => {
+    const newFaq: TrekFaqItem = {
+      id: `faq-${Date.now()}`,
+      question: presetQuestion,
+      answer: presetAnswer,
+    };
+    updateData((prev) => ({
+      ...prev,
+      faqs: [...(prev.faqs || []), newFaq],
+    }));
+  };
+
+  const handleCopyBuilderFaqLink = async () => {
+    const hikeNum = formData.hikeNumber || initialRecord?.hikeNumber || recordId || 'preview';
+    const link = `${window.location.origin}${window.location.pathname}?trek=${encodeURIComponent(hikeNum)}&view=faq`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedFaqLink(true);
+      setTimeout(() => setCopiedFaqLink(false), 2200);
+    } catch (_) {}
   };
 
   const handleResetToExample = () => {
@@ -1857,6 +1909,180 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
               />
             </div>
           </div>
+        </div>
+
+        {/* ========================================================
+            SECTION 9: Trek-Specific Frequently Asked Questions (FAQ)
+        ======================================================== */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#EFEAE4] shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F5F2ED]">
+            <div className="flex items-center gap-2.5">
+              <span className="w-6 h-6 rounded-lg bg-[#E08828]/10 text-[#E08828] flex items-center justify-center text-xs font-black shrink-0">
+                9
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">
+                    Section 9: Trek-Specific FAQ (Questions & Answers)
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                    Private by default
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#8B8680]">
+                  Visible in Admin preview. Public hikers will only see this section when accessing via the shared FAQ link.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyBuilderFaqLink}
+                className="flex items-center gap-1.5 text-xs font-bold text-[#5A5551] hover:text-[#1F1F1F] bg-[#FAF8F5] hover:bg-[#F0EBE5] px-3 py-1.5 rounded-xl border border-[#E5E1DB] transition-all cursor-pointer shadow-3xs"
+                title="Copy shareable link that reveals this FAQ section"
+              >
+                {copiedFaqLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">FAQ Link Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-[#E08828]" />
+                    <span>Copy FAQ Link</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAddFaq}
+                className="flex items-center gap-1 text-xs font-bold text-white bg-[#E08828] hover:bg-[#C86B1A] px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Question</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick-Add Preset Chips */}
+          <div className="flex items-center gap-2 flex-wrap text-[11px]">
+            <span className="text-[10px] font-bold uppercase text-[#8B8680]">Quick Presets:</span>
+            <button
+              type="button"
+              onClick={() =>
+                handleAddPresetFaq(
+                  'What essential packing items are recommended for this hike?',
+                  'Sturdy hiking shoes with grip, 1.5L to 2L drinking water, rain poncho/windcheater, sunscreen, personal medication, lightweight backpack, and energetic trail snacks.'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#EAE4DC] border border-[#E5E1DB] text-[#5A5551] font-semibold transition-colors cursor-pointer"
+            >
+              + Packing List
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleAddPresetFaq(
+                  'Where and when will the pickup take place?',
+                  'Central pickup starts at Sundhara Kathmandu at the listed meeting time. En-route pickups at Koteshwor and Bhaktapur Highway can be requested in advance.'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#EAE4DC] border border-[#E5E1DB] text-[#5A5551] font-semibold transition-colors cursor-pointer"
+            >
+              + Pickup & Timing
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleAddPresetFaq(
+                  'What is the policy if it rains or weather changes suddenly?',
+                  'Our hikes proceed safely rain or shine under certified guides. Should adverse mountain weather occur, coordinators adjust timing or trails to ensure group safety.'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#EAE4DC] border border-[#E5E1DB] text-[#5A5551] font-semibold transition-colors cursor-pointer"
+            >
+              + Rain & Weather Policy
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleAddPresetFaq(
+                  'Can beginners or first-time hikers join this route?',
+                  'Yes, provided you have baseline walking fitness. The team coordinators maintain a steady, supportive pace with regular hydration breaks.'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#EAE4DC] border border-[#E5E1DB] text-[#5A5551] font-semibold transition-colors cursor-pointer"
+            >
+              + Beginner Suitability
+            </button>
+          </div>
+
+          {/* List of FAQ Cards */}
+          {(!formData.faqs || formData.faqs.length === 0) ? (
+            <div className="p-6 text-center bg-[#FAF8F5] rounded-2xl border border-dashed border-[#E5E1DB] space-y-2">
+              <HelpCircle className="w-8 h-8 text-[#8B8680] mx-auto opacity-70" />
+              <p className="text-xs font-bold text-[#5A5551]">No custom questions added yet</p>
+              <p className="text-[11px] text-[#8B8680] max-w-md mx-auto">
+                Add trek-specific questions about trails, logistics, gear, or teahouses. Use the presets above or click "Add Question".
+              </p>
+              <button
+                type="button"
+                onClick={handleAddFaq}
+                className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#E08828] text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-[#C86B1A] transition-all shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add First Question</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              {formData.faqs.map((faq, index) => (
+                <div
+                  key={faq.id || index}
+                  className="p-4 bg-[#FAF8F5] rounded-2xl border border-[#E5E1DB] space-y-3 hover:border-[#D5CFC7] transition-all"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[#E08828] bg-white px-2.5 py-0.5 rounded-md border border-[#E5E1DB]">
+                      Question #{index + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFaq(faq.id)}
+                      className="text-neutral-400 hover:text-rose-600 p-1 rounded-lg hover:bg-white transition-colors cursor-pointer"
+                      title="Delete Question"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={faq.question}
+                      onChange={(e) => handleUpdateFaq(faq.id, 'question', e.target.value)}
+                      placeholder="e.g. Can beginners join this trek?"
+                      className="w-full px-3 py-2 text-xs font-bold text-[#1F1F1F] bg-white border border-[#E5E1DB] rounded-xl focus:outline-[#E08828]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-[#8B8680] block mb-1">
+                      Answer / Details
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={faq.answer}
+                      onChange={(e) => handleUpdateFaq(faq.id, 'answer', e.target.value)}
+                      placeholder="Write comprehensive, helpful answer for hikers..."
+                      className="w-full px-3 py-2 text-xs text-[#3D3A37] bg-white border border-[#E5E1DB] rounded-xl focus:outline-[#E08828] leading-relaxed"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Bottom Floating Action Bar */}

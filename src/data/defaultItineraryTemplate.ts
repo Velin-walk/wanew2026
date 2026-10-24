@@ -28,6 +28,12 @@ export interface SafetyRule {
   description: string;
 }
 
+export interface TrekFaqItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
 export interface TrekItineraryData {
   status?: 'draft' | 'published' | 'archived' | string;
   schedule?: any;
@@ -83,6 +89,9 @@ export interface TrekItineraryData {
   participationGuidelines: string;
   safetyRules: SafetyRule[];
   helpContacts: string[];
+
+  // Section 9: Trek-Specific FAQ (Questions & Answers)
+  faqs?: TrekFaqItem[];
 }
 
 export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
@@ -206,6 +215,23 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
     },
   ],
   helpContacts: ['+977-9860071064', '+977-9803568612'],
+  faqs: [
+    {
+      id: 'faq-1',
+      question: 'What are the essential items and gear I should pack?',
+      answer: 'Wear comfortable hiking boots/shoes with solid trail grip. Bring a 15–20L daypack with 1.5–2L drinking water, windproof jacket/poncho, sun protection (cap/sunscreen), personal medication, and light trail snacks.'
+    },
+    {
+      id: 'faq-2',
+      question: 'Where is the assembly and pickup point?',
+      answer: 'Our designated central assembly is at Sundhara, Kathmandu at the scheduled morning departure time. En-route pickup along Koteshwor or Bhaktapur highway can be coordinated with the leader in advance.'
+    },
+    {
+      id: 'faq-3',
+      question: 'What is the policy for weather changes or rain?',
+      answer: 'Walk Nepal Walk operates safely rain or shine under experienced leadership. If severe adverse conditions arise, trail coordinators may adjust timing or route segments to prioritize participant safety.'
+    }
+  ],
 };
 
 export const normalizeItineraryData = (raw?: Partial<TrekItineraryData> | null): TrekItineraryData => {
@@ -256,6 +282,7 @@ export const normalizeItineraryData = (raw?: Partial<TrekItineraryData> | null):
     participationGuidelines: d.participationGuidelines ?? INITIAL_ITINERARY_TEMPLATE.participationGuidelines,
     safetyRules: Array.isArray(d.safetyRules) ? d.safetyRules : [...INITIAL_ITINERARY_TEMPLATE.safetyRules],
     helpContacts: Array.isArray(d.helpContacts) ? d.helpContacts : [...INITIAL_ITINERARY_TEMPLATE.helpContacts],
+    faqs: Array.isArray(d.faqs) ? d.faqs : [],
   };
 };
 

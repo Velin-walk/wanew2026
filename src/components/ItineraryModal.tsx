@@ -29,15 +29,18 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { Trek } from '../types';
-import { TrekItineraryData } from '../data/defaultItineraryTemplate';
+import { TrekItineraryData, TrekFaqItem } from '../data/defaultItineraryTemplate';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import { useCitizenPricing } from '../hooks/useCitizenPricing';
+import { useAuth } from '../context/AuthContext';
+import { isAdminEmail } from '../adminUtils';
 
 interface ItineraryModalProps {
   isOpen: boolean;
   onClose: () => void;
   trek: Trek | null;
   type?: 'itinerary' | 'faq';
+  showFaq?: boolean;
   onRegister?: (trek: Trek) => void;
 }
 
@@ -46,10 +49,29 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
   onClose,
   trek,
   type = 'itinerary',
+  showFaq = false,
   onRegister,
 }) => {
+  const { user, userEmail, isAdmin } = useAuth();
+  const activeUserEmail = userEmail || user?.email || '';
+  const userIsAdmin = Boolean(isAdmin || isAdminEmail(activeUserEmail));
+
+  // Determine if direct shared FAQ link was used (?view=faq or ?faq=... or #faq)
+  const isFaqLinkAccessed = (() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const viewParam = searchParams.get('view');
+      const faqParam = searchParams.get('faq');
+      return viewParam === 'faq' || faqParam !== null || window.location.hash === '#faq';
+    } catch {
+      return false;
+    }
+  })();
+
   const [activeTab, setActiveTab] = useState<'experience' | 'logistics'>('experience');
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+  const [expandedFaqs, setExpandedFaqs] = useState<Record<string, boolean>>({});
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const { isNepaliCitizen } = useCitizenPricing();
 
@@ -81,17 +103,33 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
 
   if (!isOpen || !trek) return null;
 
-  const isFaq = type === 'faq';
+  const isFaq = type === 'faq' || isFaqLinkAccessed;
+  const canViewFaqSection = Boolean(userIsAdmin || isFaqLinkAccessed || showFaq || type === 'faq');
 
   // Determine if database has custom itinerary JSON data
   const hasDbCustomData = trek.data && typeof trek.data === 'object' && (trek.data as any).title;
   const dbData: TrekItineraryData | null = hasDbCustomData ? (trek.data as any) : null;
+  const customFaqs: TrekFaqItem[] = (
+    (dbData?.faqs && dbData.faqs.length > 0)
+      ? dbData.faqs
+      : (trek.faqs && trek.faqs.length > 0)
+      ? trek.faqs
+      : (Array.isArray((trek.data as any)?.faqs) ? (trek.data as any).faqs : [])
+  ) as TrekFaqItem[];
 
   // Toggle Day Expand
   const toggleDay = (dayId: string) => {
     setExpandedDays((prev) => ({
       ...prev,
       [dayId]: !prev[dayId],
+    }));
+  };
+
+  // Toggle FAQ Expand
+  const toggleFaq = (faqId: string) => {
+    setExpandedFaqs((prev) => ({
+      ...prev,
+      [faqId]: !prev[faqId],
     }));
   };
 
@@ -705,6 +743,61 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                 )}
               </div>
 
+              {/* Section 9: Trek-Specific Frequently Asked Questions (Unlocked via Coordinator FAQ Link or Admin) */}
+              {canViewFaqSection && customFaqs && customFaqs.length > 0 && (
+                <div id="trek-specific-faq-card" className="bg-white rounded-2xl p-5 border border-[#E5E1DB] shadow-xs space-y-4 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#F0EBE5]">
+                    <div className="flex items-center gap-2">
+                      <HelpCircle className="w-4 h-4 text-[#E08828]" />
+                      <h4 className="text-xs sm:text-sm font-black text-[#1F1F1F]">
+                        Trek-Specific Frequently Asked Questions
+                      </h4>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      Coordinator Link Unlocked
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-[#5A5551] leading-relaxed font-semibold">
+                    Custom questions and guidance for {dbData?.title || trek.name}:
+                  </p>
+
+                  <div className="space-y-2 pt-1">
+                    {customFaqs.map((faq, idx) => {
+                      const faqKey = faq.id || `faq-${idx}`;
+                      const isExpanded = expandedFaqs[faqKey] !== false;
+                      return (
+                        <div
+                          key={faqKey}
+                          className="bg-[#FAF8F5] rounded-xl border border-[#E5E1DB] overflow-hidden transition-all"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleFaq(faqKey)}
+                            className="w-full text-left p-3 flex items-start justify-between gap-3 cursor-pointer hover:bg-[#F2ECE5] transition-colors"
+                          >
+                            <span className="text-xs font-bold text-[#1F1F1F] flex items-start gap-2 leading-snug">
+                              <span className="w-4 h-4 rounded-full bg-[#E08828]/15 text-[#E08828] flex items-center justify-center text-[9px] font-black shrink-0 mt-0.5">
+                                Q
+                              </span>
+                              <span>{faq.question}</span>
+                            </span>
+                            <span className="text-[#8B8680] mt-0.5 shrink-0">
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </span>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 pt-1 text-[11px] text-[#5A5551] leading-relaxed border-t border-[#EAE4DC] pl-8 font-medium whitespace-pre-line">
+                              {faq.answer}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Return to Hike Experience Navigation Helper */}
               <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-[#E5E1DB] shadow-xs">
                 <button
@@ -734,35 +827,104 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
 
             </div>
           ) : (
-            /* FAQ Mode Fallback */
-            <div className="bg-white rounded-2xl p-6 border border-[#E5E1DB] shadow-xs space-y-4">
-              <h3 className="text-sm font-black text-[#1F1F1F] flex items-center gap-1.5">
-                <HelpCircle className="w-5 h-5 text-[#E08828]" />
-                <span>Frequently Asked Questions & Participation Guide</span>
-              </h3>
-              <p className="text-xs text-[#5A5551] leading-relaxed font-semibold">
-                To prepare for our Walk Nepal Walk adventures, here is standard hiking etiquette and registration rules:
-              </p>
-              
-              <div className="space-y-3 pt-2">
-                <div className="p-3 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl">
-                  <span className="text-xs font-bold text-[#1F1F1F] block">What is the booking security policy?</span>
-                  <p className="text-[11px] text-[#6A6560] mt-1 leading-relaxed">
-                    Advance deposit ensures reservation. Deposits are fully utilized for logistics reservations and are non-transferable past the roster confirmation date.
-                  </p>
+            /* FAQ Mode (Direct Shared Link or Admin) */
+            <div className="bg-white rounded-2xl p-6 border border-[#E5E1DB] shadow-xs space-y-5 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#F0EBE5]">
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5 text-[#E08828]" />
+                  <div>
+                    <h3 className="text-sm font-black text-[#1F1F1F]">
+                      Hike FAQ & Participant Briefing
+                    </h3>
+                    <span className="text-[11px] text-[#8B8680] font-semibold">
+                      {dbData?.title || trek.name} • Hike #{dbData?.hikeNumber || trek.hike_number || ''}
+                    </span>
+                  </div>
                 </div>
-                <div className="p-3 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl">
-                  <span className="text-xs font-bold text-[#1F1F1F] block">Are there medical support resources on trail?</span>
-                  <p className="text-[11px] text-[#6A6560] mt-1 leading-relaxed">
-                    Yes, every official hike is led by a first-aid-trained coordinator carrying basic medical support kits.
-                  </p>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                  Direct Coordinator Link
+                </span>
+              </div>
+
+              {/* Trek-Specific FAQs if available */}
+              {customFaqs && customFaqs.length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-wider text-[#E08828]">
+                    Trek-Specific Questions & Answers
+                  </div>
+                  <div className="space-y-2.5">
+                    {customFaqs.map((faq, idx) => {
+                      const faqKey = faq.id || `faq-${idx}`;
+                      const isExpanded = expandedFaqs[faqKey] !== false;
+                      return (
+                        <div
+                          key={faqKey}
+                          className="bg-[#FAF8F5] rounded-xl border border-[#E5E1DB] overflow-hidden transition-all shadow-3xs"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleFaq(faqKey)}
+                            className="w-full text-left p-3.5 flex items-start justify-between gap-3 cursor-pointer hover:bg-[#F2ECE5] transition-colors"
+                          >
+                            <span className="text-xs font-bold text-[#1F1F1F] flex items-start gap-2 leading-snug">
+                              <span className="w-4 h-4 rounded-full bg-[#E08828]/15 text-[#E08828] flex items-center justify-center text-[9px] font-black shrink-0 mt-0.5">
+                                Q
+                              </span>
+                              <span>{faq.question}</span>
+                            </span>
+                            <span className="text-[#8B8680] mt-0.5 shrink-0">
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </span>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-3.5 pb-3.5 pt-1 text-xs text-[#5A5551] leading-relaxed border-t border-[#EAE4DC] pl-8 font-medium whitespace-pre-line">
+                              {faq.answer}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="p-3 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl">
-                  <span className="text-xs font-bold text-[#1F1F1F] block">What is the "Leave No Trace" protocol?</span>
-                  <p className="text-[11px] text-[#6A6560] mt-1 leading-relaxed">
-                    Hikers are required to carry back all generated waste. Tampering with trail agricultural resources or local structures is strictly forbidden.
-                  </p>
+              )}
+
+              {/* Standard Hiking Etiquette & Safety FAQ */}
+              <div className="pt-2 space-y-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#8B8680] block">
+                  General Guidelines & Trail Safety
+                </span>
+                <div className="space-y-2.5">
+                  <div className="p-3 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl">
+                    <span className="text-xs font-bold text-[#1F1F1F] block">What is the booking deposit policy?</span>
+                    <p className="text-[11px] text-[#6A6560] mt-1 leading-relaxed font-medium">
+                      Advance deposit ensures vehicle, teahouse, and permit booking. Logistics are non-refundable after group roster finalization.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl">
+                    <span className="text-xs font-bold text-[#1F1F1F] block">Are there medical support kits on trail?</span>
+                    <p className="text-[11px] text-[#6A6560] mt-1 leading-relaxed font-medium">
+                      Yes, every official hike is led by a first-aid-certified coordinator carrying wilderness first aid support.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl">
+                    <span className="text-xs font-bold text-[#1F1F1F] block">What is the "Leave No Trace" protocol?</span>
+                    <p className="text-[11px] text-[#6A6560] mt-1 leading-relaxed font-medium">
+                      Hikers must carry back all non-biodegradable waste. Respect local farming, property, and shrines.
+                    </p>
+                  </div>
                 </div>
+              </div>
+
+              {/* Jump to Full Itinerary button */}
+              <div className="pt-3 border-t border-[#F0EBE5] flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => switchTab('experience')}
+                  className="flex items-center gap-1.5 text-xs font-bold text-[#E08828] hover:text-[#C86B1A] py-1 cursor-pointer"
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>Explore Full Trail Itinerary & Timeline</span>
+                </button>
               </div>
             </div>
           )}

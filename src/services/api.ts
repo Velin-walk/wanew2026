@@ -463,6 +463,7 @@ export function normalizeTrek(row: any): Trek {
     })(),
     itinerary_link: row.itinerary_link || "",
     faq_link: row.faq_link || "",
+    faqs: Array.isArray(mergedData.faqs) ? mergedData.faqs : (Array.isArray(d.faqs) ? d.faqs : (Array.isArray(rawJsonData.faqs) ? rawJsonData.faqs : [])),
     whatsapp_link: row.whatsapp_link || "",
     price: displayPrice,
     featured_image: d.cardImageUrl || d.coverImageUrl || rawJsonData.cardImageUrl || rawJsonData.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",

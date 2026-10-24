@@ -12,7 +12,8 @@ import {
   MessageSquare,
   Globe,
   Radio,
-  Eye
+  Eye,
+  HelpCircle,
 } from 'lucide-react';
 
 interface ShareHikeModalProps {
@@ -29,11 +30,13 @@ export const ShareHikeModal: React.FC<ShareHikeModalProps> = ({
   onPreview,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedFaqLink, setCopiedFaqLink] = useState(false);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
 
   // Generate web link based on current origin and hike number / id
   const targetIdentifier = (hike.hikeNumber && hike.hikeNumber !== 'TBD' ? hike.hikeNumber : hike.id) || 'preview';
   const shareableUrl = `${window.location.origin}${window.location.pathname}?trek=${encodeURIComponent(targetIdentifier)}`;
+  const faqShareableUrl = `${window.location.origin}${window.location.pathname}?trek=${encodeURIComponent(targetIdentifier)}&view=faq`;
   const whatsappSummary = generateWhatsAppSummary(hike);
 
   const handleCopyLink = async () => {
@@ -43,6 +46,16 @@ export const ShareHikeModal: React.FC<ShareHikeModalProps> = ({
       setTimeout(() => setCopiedLink(false), 2200);
     } catch (e) {
       console.error('Failed to copy link:', e);
+    }
+  };
+
+  const handleCopyFaqLink = async () => {
+    try {
+      await navigator.clipboard.writeText(faqShareableUrl);
+      setCopiedFaqLink(true);
+      setTimeout(() => setCopiedFaqLink(false), 2200);
+    } catch (e) {
+      console.error('Failed to copy FAQ link:', e);
     }
   };
 
@@ -251,6 +264,42 @@ export const ShareHikeModal: React.FC<ShareHikeModalProps> = ({
                   <span className="hidden sm:inline">Preview</span>
                 </button>
               )}
+            </div>
+          </div>
+
+          {/* Option 3: Dedicated Coordinator Trek FAQ Link */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#1F1F1F]">
+                <HelpCircle className="w-4 h-4 text-[#E08828]" />
+                <span>Dedicated Trek FAQ & Guidelines Link</span>
+              </div>
+              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                Reveals FAQ to Hikers
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={faqShareableUrl}
+                className="flex-1 text-xs px-3.5 py-2.5 bg-[#FAF8F5] text-[#5A5551] rounded-xl border border-[#E5E1DB] focus:outline-none select-all font-mono"
+              />
+
+              <button
+                id="btn-copy-faq-link"
+                type="button"
+                onClick={handleCopyFaqLink}
+                className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  copiedFaqLink
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-[#E08828] hover:bg-[#C86B1A] text-white shadow-xs active:scale-95'
+                }`}
+              >
+                {copiedFaqLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedFaqLink ? 'Copied' : 'Copy FAQ Link'}</span>
+              </button>
             </div>
           </div>
         </div>

@@ -243,6 +243,33 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
         });
       }
 
+      // FAQs
+      if (data.faqs && data.faqs.length > 0) {
+        checkPageOverflow(25);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(31, 31, 31);
+        doc.text('Frequently Asked Questions (FAQ)', 15, y);
+        y += 6;
+
+        data.faqs.forEach((faq) => {
+          checkPageOverflow(18);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.setTextColor(224, 136, 40);
+          const qLines = doc.splitTextToSize(`Q: ${faq.question}`, 175);
+          doc.text(qLines, 15, y);
+          y += (qLines.length * 4.5) + 1;
+
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(60, 60, 60);
+          const aLines = doc.splitTextToSize(`A: ${faq.answer}`, 175);
+          doc.text(aLines, 15, y);
+          y += (aLines.length * 4.5) + 3;
+        });
+        y += 4;
+      }
+
       // Save PDF document
       const safeTitle = (data.title || 'hike_itinerary')
         .toLowerCase()
@@ -664,6 +691,43 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
             </a>
           </div>
         </div>
+
+        {/* Section 9: Trek-Specific Frequently Asked Questions (FAQ Preview) */}
+        {data.faqs && data.faqs.length > 0 && (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EFEAE4] shadow-xs space-y-4">
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#F0EBE5]">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-[#E08828]" />
+                <h2 className="text-base sm:text-lg font-black text-[#1F1F1F]">
+                  Trek-Specific Frequently Asked Questions (FAQ)
+                </h2>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                Shared via FAQ Link Only
+              </span>
+            </div>
+
+            <p className="text-xs text-[#5A5551] leading-relaxed">
+              These questions and answers are specifically prepared for {data.title || `Hike #${data.hikeNumber}`}. Public users only see this section when accessing through the dedicated coordinator FAQ link.
+            </p>
+
+            <div className="space-y-3 pt-2">
+              {data.faqs.map((faq, idx) => (
+                <div key={faq.id || idx} className="p-4 bg-[#FAF8F5] rounded-2xl border border-[#EFEAE4] space-y-1.5">
+                  <div className="text-xs font-bold text-[#1F1F1F] flex items-start gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-[#E08828]/15 text-[#C86B1A] flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">
+                      Q
+                    </span>
+                    <span className="leading-snug">{faq.question}</span>
+                  </div>
+                  <div className="text-xs text-[#5A5551] leading-relaxed pl-7 whitespace-pre-line font-medium">
+                    {faq.answer}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

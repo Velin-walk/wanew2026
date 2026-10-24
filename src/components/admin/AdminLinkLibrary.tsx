@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Copy, Check, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Copy, Check, Plus, Trash2, Cloud, RefreshCw } from 'lucide-react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 interface CustomColumn {
   id: string;
@@ -51,20 +53,28 @@ const CellWithCopyBox: React.FC<CellWithCopyBoxProps> = ({
 }) => {
   const isCopied = copiedPath === value && value.length > 0;
   const hasLink = containsLink(value);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [value]);
 
   return (
-    <div className="flex items-center justify-between gap-2 border border-[#E5E1DB] rounded-md px-2.5 py-1 bg-white focus-within:border-[#FF6600] focus-within:ring-1 focus-within:ring-[#FF6600]/30 shadow-2xs transition-all w-full min-w-0">
+    <div className="flex items-start justify-between gap-1.5 border border-[#E5E1DB] rounded-md px-2 py-0.5 bg-white focus-within:border-[#FF6600] focus-within:ring-1 focus-within:ring-[#FF6600]/30 shadow-2xs transition-all w-full min-w-0">
       {isEditable ? (
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
           placeholder={placeholder}
-          className="flex-1 text-xs font-mono text-[#1F1F1F] bg-transparent focus:outline-none whitespace-nowrap min-w-[120px]"
-          style={{ width: `${Math.max((value || '').length + 1, 24)}ch` }}
+          rows={1}
+          className="flex-1 text-xs font-mono text-[#1F1F1F] bg-transparent focus:outline-none break-all resize-none w-full min-w-0 leading-snug py-0.5 overflow-hidden block"
         />
       ) : (
-        <span className="flex-1 text-xs font-mono text-[#1F1F1F] select-all whitespace-nowrap">
+        <span className="flex-1 text-xs font-mono text-[#1F1F1F] select-all break-all whitespace-normal leading-snug py-0.5 min-w-0 block">
           {value}
         </span>
       )}
@@ -76,13 +86,13 @@ const CellWithCopyBox: React.FC<CellWithCopyBoxProps> = ({
             e.stopPropagation();
             onCopy(value);
           }}
-          className="ml-auto p-1 text-[#8B8680] hover:text-[#1F1F1F] rounded hover:bg-stone-100 transition-colors shrink-0 cursor-pointer border border-[#E5E1DB]/70 bg-[#FAF8F5] inline-flex items-center justify-center"
+          className="ml-auto p-1 text-[#8B8680] hover:text-[#1F1F1F] rounded hover:bg-stone-100 transition-colors shrink-0 cursor-pointer border border-[#E5E1DB]/70 bg-[#FAF8F5] inline-flex items-center justify-center self-start mt-0.5"
           title="Copy link"
         >
           {isCopied ? (
-            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
           ) : (
-            <Copy className="w-4 h-4 text-[#FF6600] shrink-0" />
+            <Copy className="w-3.5 h-3.5 text-[#FF6600] shrink-0" />
           )}
         </button>
       )}
@@ -92,6 +102,7 @@ const CellWithCopyBox: React.FC<CellWithCopyBoxProps> = ({
 
 export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ baseURL, treks }) => {
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [isSynced, setIsSynced] = useState<boolean>(false);
 
   const copyToClipboard = (text: string) => {
     if (!text) return;
@@ -146,31 +157,97 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
     }
   });
 
-  // Persist Table 1
+  const [t2TrekCustomData, setT2TrekCustomData] = useState<Record<string, Record<string, string>>>(() => {
+    try {
+      const saved = localStorage.getItem('wnw_link_lib_t2_trek_data');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Flag to prevent echo saves when receiving remote updates
+  const isSyncingFromRemoteRef = useRef(false);
+
+  // Firestore Real-Time Listener
+  useEffect(() => {
+    const docRef = doc(db, 'pwa_metrics', 'link_library');
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          isSyncingFromRemoteRef.current = true;
+          if (Array.isArray(data.t1Cols)) setT1Cols(data.t1Cols);
+          if (Array.isArray(data.t1Rows)) setT1Rows(data.t1Rows);
+          if (Array.isArray(data.t2Cols)) setT2Cols(data.t2Cols);
+          if (Array.isArray(data.t2CustomRows)) setT2CustomRows(data.t2CustomRows);
+          if (data.t2TrekCustomData && typeof data.t2TrekCustomData === 'object') {
+            setT2TrekCustomData(data.t2TrekCustomData);
+          }
+          setIsSynced(true);
+          setTimeout(() => {
+            isSyncingFromRemoteRef.current = false;
+          }, 150);
+        } else {
+          setIsSynced(true);
+        }
+      },
+      (err) => {
+        console.warn('Firestore link library listener error:', err);
+        setIsSynced(true);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Save changes to Firestore & local storage
+  const saveToFirestore = useCallback(
+    (
+      nextT1Cols: CustomColumn[],
+      nextT1Rows: PageRow[],
+      nextT2Cols: CustomColumn[],
+      nextT2CustomRows: EventRow[],
+      nextT2TrekCustomData: Record<string, Record<string, string>>
+    ) => {
+      if (isSyncingFromRemoteRef.current) return;
+      try {
+        const docRef = doc(db, 'pwa_metrics', 'link_library');
+        setDoc(
+          docRef,
+          {
+            t1Cols: nextT1Cols,
+            t1Rows: nextT1Rows,
+            t2Cols: nextT2Cols,
+            t2CustomRows: nextT2CustomRows,
+            t2TrekCustomData: nextT2TrekCustomData,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        ).catch((e) => console.warn('Failed to save link library to Firestore:', e));
+      } catch (e) {
+        console.warn('Firestore setDoc error:', e);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     try {
       localStorage.setItem('wnw_link_lib_t1_cols', JSON.stringify(t1Cols));
-    } catch {}
-  }, [t1Cols]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem('wnw_link_lib_t1_rows', JSON.stringify(t1Rows));
-    } catch {}
-  }, [t1Rows]);
-
-  // Persist Table 2
-  useEffect(() => {
-    try {
       localStorage.setItem('wnw_link_lib_t2_cols', JSON.stringify(t2Cols));
-    } catch {}
-  }, [t2Cols]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem('wnw_link_lib_t2_rows', JSON.stringify(t2CustomRows));
+      localStorage.setItem('wnw_link_lib_t2_trek_data', JSON.stringify(t2TrekCustomData));
     } catch {}
-  }, [t2CustomRows]);
+
+    if (!isSyncingFromRemoteRef.current) {
+      const timer = setTimeout(() => {
+        saveToFirestore(t1Cols, t1Rows, t2Cols, t2CustomRows, t2TrekCustomData);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [t1Cols, t1Rows, t2Cols, t2CustomRows, t2TrekCustomData, saveToFirestore]);
 
   // Table 1 Handlers
   const handleAddT1Column = () => {
@@ -219,6 +296,25 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
 
   const handleDeleteT2Column = (colId: string) => {
     setT2Cols((prev) => prev.filter((c) => c.id !== colId));
+    setT2CustomRows((prev) =>
+      prev.map((r) => {
+        if (!r.customData) return r;
+        const next = { ...r.customData };
+        delete next[colId];
+        return { ...r, customData: next };
+      })
+    );
+    setT2TrekCustomData((prev) => {
+      const updated = { ...prev };
+      for (const rId in updated) {
+        if (updated[rId]) {
+          const next = { ...updated[rId] };
+          delete next[colId];
+          updated[rId] = next;
+        }
+      }
+      return updated;
+    });
   };
 
   const handleAddT2Row = () => {
@@ -245,27 +341,36 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
 
   const trekEventRows: EventRow[] = upcomingTreks.map((t) => {
     const baseLink = `${baseURL}/?hike=${t.hike_number || t.id}`;
+    const rowId = `trek_${t.id}`;
     return {
-      id: `trek_${t.id}`,
+      id: rowId,
       hikeName: `${t.name} (#${t.hike_number || t.id})`,
       eventDate: t.date || t.data?.hikeDate || 'TBA',
       itineraryLink: `${baseLink} Namaste! Here is the link please.`,
       isCustom: false,
-      customData: {},
+      customData: t2TrekCustomData[rowId] || {},
     };
   });
 
   const allT2Rows = [...trekEventRows, ...t2CustomRows];
 
   return (
-    <div className="space-y-5 font-sans select-none">
+    <div className="space-y-5 font-sans select-none w-full max-w-full">
       {/* ==================== TABLE 1: APPLICATION PAGE LINKS ==================== */}
-      <div className="bg-white p-3.5 rounded-xl border border-[#E5E1DB] shadow-2xs space-y-3">
+      <div className="bg-white p-3.5 rounded-xl border border-[#E5E1DB] shadow-2xs space-y-3 w-full overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-xs font-bold text-[#1F1F1F] uppercase tracking-wide">
-              Application Page Links
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold text-[#1F1F1F] uppercase tracking-wide">
+                Application Page Links
+              </h3>
+              {isSynced && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200" title="Real-time global cloud sync active">
+                  <Cloud className="w-3 h-3 text-emerald-600" />
+                  <span>Cloud Synced</span>
+                </span>
+              )}
+            </div>
             <p className="text-[11px] text-[#8B8680] mt-0.5">
               Add, edit, or copy links for general application pages
             </p>
@@ -290,14 +395,14 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-auto text-left text-xs border-collapse table-auto">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse table-fixed">
             <thead>
               <tr className="border-b border-[#E5E1DB] text-[#8B8680] uppercase text-[10px] bg-[#FAF8F5]">
-                <th className="py-2 px-2.5 font-bold whitespace-nowrap min-w-[160px]">Page Name</th>
-                <th className="py-2 px-2.5 font-bold whitespace-nowrap min-w-[220px]">Page Link</th>
+                <th className="py-2 px-2 font-bold w-1/4">Page Name</th>
+                <th className="py-2 px-2 font-bold">Page Link</th>
                 {t1Cols.map((col) => (
-                  <th key={col.id} className="py-2 px-2.5 font-bold whitespace-nowrap min-w-[220px]">
+                  <th key={col.id} className="py-2 px-2 font-bold">
                     <div className="flex items-center justify-between gap-1">
                       <input
                         type="text"
@@ -306,7 +411,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                           const val = e.target.value;
                           setT1Cols((prev) => prev.map((c) => (c.id === col.id ? { ...c, name: val } : c)));
                         }}
-                        className="bg-transparent text-[10px] font-bold uppercase tracking-wider text-[#1F1F1F] border-b border-dashed border-[#8B8680]/40 focus:border-[#FF6600] focus:outline-none py-0.5 w-full"
+                        className="bg-transparent text-[10px] font-bold uppercase tracking-wider text-[#1F1F1F] border-b border-dashed border-[#8B8680]/40 focus:border-[#FF6600] focus:outline-none py-0.5 w-full min-w-0"
                         title="Click to rename column header"
                       />
                       <button
@@ -330,7 +435,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                 return (
                   <tr key={row.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
                     {/* Page Name */}
-                    <td className="py-1.5 px-2.5 font-semibold whitespace-nowrap">
+                    <td className="py-1.5 px-2 font-semibold align-top">
                       {row.isCustom ? (
                         <div className="flex items-center gap-1.5">
                           <input
@@ -341,8 +446,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                               setT1Rows((prev) => prev.map((r) => (r.id === row.id ? { ...r, name: val } : r)));
                             }}
                             placeholder="Page Name..."
-                            className="bg-white border border-[#E5E1DB] rounded px-2.5 py-1 text-xs font-semibold text-[#1F1F1F] focus:border-[#FF6600] focus:outline-none min-w-[150px]"
-                            style={{ width: `${Math.max((row.name || '').length + 1, 16)}ch` }}
+                            className="bg-white border border-[#E5E1DB] rounded px-2 py-1 text-xs font-semibold text-[#1F1F1F] focus:border-[#FF6600] focus:outline-none w-full min-w-0"
                           />
                           <button
                             type="button"
@@ -357,12 +461,14 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                           </button>
                         </div>
                       ) : (
-                        <span className="break-all whitespace-normal leading-relaxed">{row.name}</span>
+                        <span className="break-words whitespace-normal leading-relaxed text-xs text-[#1F1F1F] block py-1">
+                          {row.name}
+                        </span>
                       )}
                     </td>
 
                     {/* Page Link with Independent Copy Box */}
-                    <td className="py-1.5 px-2.5 whitespace-nowrap">
+                    <td className="py-1.5 px-2 align-top">
                       <CellWithCopyBox
                         value={row.isCustom ? row.path : fullLink}
                         onChange={(val) => {
@@ -381,7 +487,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                     {t1Cols.map((col) => {
                       const cellVal = row.customData?.[col.id] || '';
                       return (
-                        <td key={col.id} className="py-1.5 px-2.5 whitespace-nowrap min-w-[220px]">
+                        <td key={col.id} className="py-1.5 px-2 align-top">
                           <CellWithCopyBox
                             value={cellVal}
                             onChange={(val) => {
@@ -412,7 +518,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
       </div>
 
       {/* ==================== TABLE 2: EVENT SPECIFIC ITINERARY LINKS ==================== */}
-      <div className="bg-white p-3.5 rounded-xl border border-[#E5E1DB] shadow-2xs space-y-3">
+      <div className="bg-white p-3.5 rounded-xl border border-[#E5E1DB] shadow-2xs space-y-3 w-full overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-xs font-bold text-[#1F1F1F] uppercase tracking-wide">
@@ -442,15 +548,15 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-auto text-left text-xs border-collapse table-auto">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse table-fixed">
             <thead>
               <tr className="border-b border-[#E5E1DB] text-[#8B8680] uppercase text-[10px] bg-[#FAF8F5]">
-                <th className="py-2 px-2.5 font-bold whitespace-nowrap min-w-[180px]">Hike Name &amp; Number</th>
-                <th className="py-2 px-2.5 font-bold whitespace-nowrap min-w-[120px]">Event Date</th>
-                <th className="py-2 px-2.5 font-bold whitespace-nowrap min-w-[220px]">Itinerary Link</th>
+                <th className="py-2 px-2 font-bold w-1/5">Hike Name &amp; Number</th>
+                <th className="py-2 px-2 font-bold w-24">Event Date</th>
+                <th className="py-2 px-2 font-bold">Itinerary Link</th>
                 {t2Cols.map((col) => (
-                  <th key={col.id} className="py-2 px-2.5 font-bold whitespace-nowrap min-w-[220px]">
+                  <th key={col.id} className="py-2 px-2 font-bold">
                     <div className="flex items-center justify-between gap-1">
                       <input
                         type="text"
@@ -459,7 +565,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                           const val = e.target.value;
                           setT2Cols((prev) => prev.map((c) => (c.id === col.id ? { ...c, name: val } : c)));
                         }}
-                        className="bg-transparent text-[10px] font-bold uppercase tracking-wider text-[#1F1F1F] border-b border-dashed border-[#8B8680]/40 focus:border-[#FF6600] focus:outline-none py-0.5 w-full"
+                        className="bg-transparent text-[10px] font-bold uppercase tracking-wider text-[#1F1F1F] border-b border-dashed border-[#8B8680]/40 focus:border-[#FF6600] focus:outline-none py-0.5 w-full min-w-0"
                         title="Click to rename column header"
                       />
                       <button
@@ -480,7 +586,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                 return (
                   <tr key={row.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
                     {/* Hike Name & Number */}
-                    <td className="py-1.5 px-2.5 font-semibold whitespace-nowrap">
+                    <td className="py-1.5 px-2 font-semibold align-top">
                       {row.isCustom ? (
                         <div className="flex items-center gap-1.5">
                           <input
@@ -491,8 +597,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                               setT2CustomRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, hikeName: val } : r)));
                             }}
                             placeholder="Hike Name..."
-                            className="bg-white border border-[#E5E1DB] rounded px-2.5 py-1 text-xs font-semibold text-[#1F1F1F] focus:border-[#FF6600] focus:outline-none min-w-[160px]"
-                            style={{ width: `${Math.max((row.hikeName || '').length + 1, 18)}ch` }}
+                            className="bg-white border border-[#E5E1DB] rounded px-2 py-1 text-xs font-semibold text-[#1F1F1F] focus:border-[#FF6600] focus:outline-none w-full min-w-0"
                           />
                           <button
                             type="button"
@@ -507,12 +612,14 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                           </button>
                         </div>
                       ) : (
-                        <span className="break-all whitespace-normal leading-relaxed">{row.hikeName}</span>
+                        <span className="break-words whitespace-normal leading-relaxed text-xs text-[#1F1F1F] block py-1">
+                          {row.hikeName}
+                        </span>
                       )}
                     </td>
 
                     {/* Event Date */}
-                    <td className="py-1.5 px-2.5 whitespace-nowrap font-medium text-[11px] text-[#5A5551]">
+                    <td className="py-1.5 px-2 align-top font-medium text-[11px] text-[#5A5551]">
                       {row.isCustom ? (
                         <input
                           type="text"
@@ -522,16 +629,15 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                             setT2CustomRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, eventDate: v } : r)));
                           }}
                           placeholder="Date..."
-                          className="bg-white border border-[#E5E1DB] rounded px-2.5 py-1 text-xs text-[#5A5551] focus:border-[#FF6600] focus:outline-none min-w-[100px]"
-                          style={{ width: `${Math.max((row.eventDate || '').length + 1, 12)}ch` }}
+                          className="bg-white border border-[#E5E1DB] rounded px-2 py-1 text-xs text-[#5A5551] focus:border-[#FF6600] focus:outline-none w-full min-w-0"
                         />
                       ) : (
-                        <span>{row.eventDate}</span>
+                        <span className="block py-1">{row.eventDate}</span>
                       )}
                     </td>
 
                     {/* Itinerary Link with Independent Copy Box */}
-                    <td className="py-1.5 px-2.5 whitespace-nowrap">
+                    <td className="py-1.5 px-2 align-top">
                       <CellWithCopyBox
                         value={row.itineraryLink}
                         onChange={(val) => {
@@ -550,19 +656,29 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
                     {t2Cols.map((col) => {
                       const cellVal = row.customData?.[col.id] || '';
                       return (
-                        <td key={col.id} className="py-1.5 px-2.5 whitespace-nowrap min-w-[220px]">
+                        <td key={col.id} className="py-1.5 px-2 align-top">
                           <CellWithCopyBox
                             value={cellVal}
                             onChange={(val) => {
-                              setT2CustomRows((prev) =>
-                                prev.map((r) => {
-                                  if (r.id !== row.id) return r;
-                                  return {
-                                    ...r,
-                                    customData: { ...(r.customData || {}), [col.id]: val },
-                                  };
-                                })
-                              );
+                              if (row.isCustom) {
+                                setT2CustomRows((prev) =>
+                                  prev.map((r) => {
+                                    if (r.id !== row.id) return r;
+                                    return {
+                                      ...r,
+                                      customData: { ...(r.customData || {}), [col.id]: val },
+                                    };
+                                  })
+                                );
+                              } else {
+                                setT2TrekCustomData((prev) => ({
+                                  ...prev,
+                                  [row.id]: {
+                                    ...(prev[row.id] || {}),
+                                    [col.id]: val,
+                                  },
+                                }));
+                              }
                             }}
                             isEditable={true}
                             placeholder="Type text or URL..."
@@ -582,3 +698,4 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
     </div>
   );
 };
+

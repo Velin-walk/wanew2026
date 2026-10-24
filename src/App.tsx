@@ -900,11 +900,12 @@ function MainApp() {
           }
         }
 
-        // 4. Trek Itinerary Modal Routing (?hike=..., ?trek=..., ?id=..., #itinerary-...)
-        let targetTrekId = searchParams.get('trek') || searchParams.get('hike') || searchParams.get('id') || '';
+        // 4. Trek Itinerary Modal Routing (?hike=..., ?trek=..., ?id=..., ?faq=..., #itinerary-...)
+        let targetTrekId = searchParams.get('trek') || searchParams.get('hike') || searchParams.get('id') || searchParams.get('faq') || '';
+        const isFaqView = searchParams.get('view') === 'faq' || searchParams.has('faq') || hash === '#faq';
 
         if (!targetTrekId && hash) {
-          const hashMatch = hash.match(/^#(?:itinerary|trek)-(.+)$/i);
+          const hashMatch = hash.match(/^#(?:itinerary|trek|faq)-(.+)$/i);
           if (hashMatch) {
             targetTrekId = decodeURIComponent(hashMatch[1]);
           }
@@ -917,7 +918,7 @@ function MainApp() {
           fetchSingleTrek(targetTrekId).then((singleTrek) => {
             if (singleTrek) {
               setItineraryModalTrek(singleTrek);
-              setItineraryModalType('itinerary');
+              setItineraryModalType(isFaqView ? 'faq' : 'itinerary');
             } else {
               const localMatch = treks.find((t) => {
                 if (String(t.id || '').toLowerCase() === cleanTarget) return true;
@@ -928,7 +929,7 @@ function MainApp() {
               });
               if (localMatch) {
                 setItineraryModalTrek(localMatch);
-                setItineraryModalType('itinerary');
+                setItineraryModalType(isFaqView ? 'faq' : 'itinerary');
               }
             }
           });

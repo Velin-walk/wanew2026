@@ -16,6 +16,7 @@ export interface Trek {
   itinerary?: string;
   itinerary_link?: string;
   faq_link?: string;
+  faqs?: Array<{ id: string; question: string; answer: string }>;
   whatsapp_link?: string;
   participants?: number;
   participants_by_gender?: ParticipantCount;
