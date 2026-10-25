@@ -133,7 +133,7 @@ export const AdminEditApplicationModal: React.FC<AdminEditApplicationModalProps>
       setAgreeRules('Yes');
       setSuggestions(registration.suggestions || '');
 
-      setStatus(registration.status === 'Pending' ? 'Double Registration' : registration.status || 'Confirmed');
+      setStatus(registration.status === 'Pending' || registration.status === 'Double Registration' ? 'Duplicate' : registration.status || 'Confirmed');
       setPaymentStatus(registration.payment_status || 'Unpaid');
       setPaidAmount(registration.paid_amount ?? 0);
       setDueAmount(registration.due_amount ?? 0);
@@ -752,7 +752,7 @@ export const AdminEditApplicationModal: React.FC<AdminEditApplicationModalProps>
                     className="w-full px-2.5 py-1.5 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] font-semibold focus:outline-none focus:ring-1 focus:ring-[#7ABA42]"
                   >
                     <option value="Confirmed">Confirmed</option>
-                    <option value="Double Registration">Double Registration</option>
+                    <option value="Duplicate">Duplicate</option>
                     <option value="Waitlisted">Waitlisted</option>
                     <option value="Cancelled">Cancelled</option>
                     <option value="Cancelled by User">Cancelled by User</option>

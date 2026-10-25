@@ -60,6 +60,7 @@ import { HomepageHeroManager } from './HomepageHeroManager';
 import { NoticeBoardManager } from './NoticeBoardManager';
 import { SiteVisibilityManager } from './SiteVisibilityManager';
 import { UserActivityNotificationsPanel } from './UserActivityNotificationsPanel';
+import { AdminAccessManager } from './AdminAccessManager';
 import {
   fetchAllUserActivities,
   getAdminLastSeenTimestamp,
@@ -72,6 +73,7 @@ import {
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { Trek } from '../../types';
 import { db } from '../../lib/firebase';
+import { isFullAdminEmail, isCoordinatorEmail } from '../../adminUtils';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 
 interface AdminDashboardProps {
@@ -79,9 +81,21 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps) {
+  const isFullAdmin = isFullAdminEmail(currentUserEmail);
+  const isCoordinatorOnly = !isFullAdmin && isCoordinatorEmail(currentUserEmail);
+
   const [activeTab, setActiveTab] = useState<
     'bookings' | 'execution' | 'coordinator' | 'library' | 'editor' | 'maps' | 'notifications' | 'system' | 'links'
   >(() => {
+    if (isCoordinatorOnly) {
+      try {
+        const saved = sessionStorage.getItem('wnw_admin_active_tab');
+        if (saved === 'coordinator' || saved === 'links') {
+          return saved;
+        }
+      } catch {}
+      return 'coordinator';
+    }
     try {
       const saved = sessionStorage.getItem('wnw_admin_active_tab');
       if (
@@ -100,10 +114,17 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     } catch {}
     return 'bookings';
   });
-  const [systemSubTab, setSystemSubTab] = useState<'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales'>(() => {
+
+  useEffect(() => {
+    if (isCoordinatorOnly && activeTab !== 'coordinator' && activeTab !== 'links') {
+      setActiveTab('coordinator');
+    }
+  }, [isCoordinatorOnly, activeTab]);
+  const [systemSubTab, setSystemSubTab] = useState<'roles' | 'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales'>(() => {
     try {
       const saved = sessionStorage.getItem('wnw_admin_system_subtab');
       if (
+        saved === 'roles' ||
         saved === 'applications' ||
         saved === 'audit' ||
         saved === 'leaderboard' ||
@@ -116,7 +137,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         return saved;
       }
     } catch {}
-    return 'applications';
+    return 'roles';
   });
   const [unreadActivityCount, setUnreadActivityCount] = useState<number>(0);
 
@@ -1638,150 +1659,186 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       {/* Admin Navigation Segment */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-white p-2 sm:p-2.5 rounded-2xl border border-[#E5E1DB] shadow-2xs gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          {/* Bookings & Roster Tab */}
-          <button
-            id="admin-tab-bookings"
-            type="button"
-            onClick={() => setActiveTab('bookings')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'bookings'
-                ? 'bg-[#E08828] text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Bookings & Roster</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-md ${
-                activeTab === 'bookings' ? 'bg-white/20 text-white' : 'bg-[#EFEAE4] text-[#5A5551]'
-              }`}
-            >
-              {registrations.length}
-            </span>
-          </button>
-
-          {/* Event Execution Tab */}
-          <button
-            id="admin-tab-execution"
-            type="button"
-            onClick={() => setActiveTab('execution')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'execution'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-            }`}
-          >
-            <CheckCircle className="w-4 h-4" />
-            <span>Event Execution</span>
-          </button>
-
-          {/* Links Tab */}
-          <button
-            id="admin-tab-links"
-            type="button"
-            onClick={() => setActiveTab('links')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'links'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-            }`}
-          >
-            <Link2 className="w-4 h-4" />
-            <span>Links</span>
-          </button>
-
-          {/* Coordinator Hub Tab */}
-          <button
-            id="admin-tab-coordinator"
-            type="button"
-            onClick={() => setActiveTab('coordinator')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'coordinator'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            <span>Coordinator Hub</span>
-          </button>
-
-          {/* Library Tab */}
-          <button
-            id="admin-tab-library"
-            type="button"
-            onClick={() => setActiveTab('library')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'library'
-                ? 'bg-stone-800 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-            }`}
-          >
-            <Layers className="w-4 h-4 text-[#7ABA42]" />
-            <span>Itinerary Library</span>
-          </button>
-
-          {/* Map Moderation Tab */}
-          <button
-            id="admin-tab-maps"
-            type="button"
-            onClick={() => setActiveTab('maps')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'maps'
-                ? 'bg-purple-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-            }`}
-          >
-            <MapPin className="w-4 h-4" />
-            <span>Map Moderation</span>
-            {trails.filter(t => t.status === 'pending').length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-            )}
-          </button>
-
-          {/* User Activity Notifications Tab */}
-          <button
-            id="admin-tab-notifications"
-            type="button"
-            onClick={() => setActiveTab('notifications')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'notifications'
-                ? 'bg-[#E08828] text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-            }`}
-          >
-            <Zap className={`w-4 h-4 ${activeTab === 'notifications' ? 'text-white' : 'text-[#E08828]'}`} />
-            <span>User Activity</span>
-            {unreadActivityCount > 0 && (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
-                  activeTab === 'notifications'
-                    ? 'bg-white text-[#E08828]'
-                    : 'bg-[#E08828] text-white'
+          {isCoordinatorOnly ? (
+            <>
+              {/* Coordinator Hub Tab */}
+              <button
+                id="admin-tab-coordinator"
+                type="button"
+                onClick={() => setActiveTab('coordinator')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'coordinator'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
-                {unreadActivityCount}
-              </span>
-            )}
-          </button>
+                <Shield className="w-4 h-4" />
+                <span>Coordinator Hub</span>
+              </button>
 
-          {/* System Zone Tab */}
-          <button
-            id="admin-tab-system"
-            type="button"
-            onClick={() => setActiveTab('system')}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'system'
-                ? 'bg-red-600 text-white shadow-xs'
-                : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-            }`}
-          >
-            <Database className="w-4 h-4" />
-            <span>System Zone</span>
-          </button>
+              {/* Links Tab */}
+              <button
+                id="admin-tab-links"
+                type="button"
+                onClick={() => setActiveTab('links')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'links'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Link2 className="w-4 h-4" />
+                <span>Links</span>
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Bookings & Roster Tab */}
+              <button
+                id="admin-tab-bookings"
+                type="button"
+                onClick={() => setActiveTab('bookings')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'bookings'
+                    ? 'bg-[#E08828] text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Bookings & Roster</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                    activeTab === 'bookings' ? 'bg-white/20 text-white' : 'bg-[#EFEAE4] text-[#5A5551]'
+                  }`}
+                >
+                  {registrations.length}
+                </span>
+              </button>
+
+              {/* Event Execution Tab */}
+              <button
+                id="admin-tab-execution"
+                type="button"
+                onClick={() => setActiveTab('execution')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'execution'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>Event Execution</span>
+              </button>
+
+              {/* Links Tab */}
+              <button
+                id="admin-tab-links"
+                type="button"
+                onClick={() => setActiveTab('links')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'links'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Link2 className="w-4 h-4" />
+                <span>Links</span>
+              </button>
+
+              {/* Coordinator Hub Tab */}
+              <button
+                id="admin-tab-coordinator"
+                type="button"
+                onClick={() => setActiveTab('coordinator')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'coordinator'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Shield className="w-4 h-4" />
+                <span>Coordinator Hub</span>
+              </button>
+
+              {/* Library Tab */}
+              <button
+                id="admin-tab-library"
+                type="button"
+                onClick={() => setActiveTab('library')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'library'
+                    ? 'bg-stone-800 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-[#7ABA42]" />
+                <span>Itinerary Library</span>
+              </button>
+
+              {/* Map Moderation Tab */}
+              <button
+                id="admin-tab-maps"
+                type="button"
+                onClick={() => setActiveTab('maps')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'maps'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <MapPin className="w-4 h-4" />
+                <span>Map Moderation</span>
+                {trails.filter(t => t.status === 'pending').length > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                )}
+              </button>
+
+              {/* User Activity Notifications Tab */}
+              <button
+                id="admin-tab-notifications"
+                type="button"
+                onClick={() => setActiveTab('notifications')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'notifications'
+                    ? 'bg-[#E08828] text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Zap className={`w-4 h-4 ${activeTab === 'notifications' ? 'text-white' : 'text-[#E08828]'}`} />
+                <span>User Activity</span>
+                {unreadActivityCount > 0 && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                      activeTab === 'notifications'
+                        ? 'bg-white text-[#E08828]'
+                        : 'bg-[#E08828] text-white'
+                    }`}
+                  >
+                    {unreadActivityCount}
+                  </span>
+                )}
+              </button>
+
+              {/* System Zone Tab */}
+              <button
+                id="admin-tab-system"
+                type="button"
+                onClick={() => setActiveTab('system')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'system'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Database className="w-4 h-4" />
+                <span>System Zone</span>
+              </button>
+            </>
+          )}
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-2">
-          {activeTab === 'library' && (
+          {!isCoordinatorOnly && activeTab === 'library' && (
             <button
               id="btn-create-new-hike"
               type="button"
@@ -1801,7 +1858,20 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
       {/* Main Tab Content */}
       <div className="w-full">
-        {activeTab === 'bookings' && (
+        {isCoordinatorOnly ? (
+          activeTab === 'links' ? (
+            <AdminLinkLibrary baseURL={window.location.origin} treks={enrichedTreks} />
+          ) : (
+            <CoordinatorHub
+              treks={enrichedTreks}
+              registrations={registrations}
+              loading={loadingRegistrations}
+              onRefresh={fetchRegistrations}
+            />
+          )
+        ) : (
+          <>
+            {activeTab === 'bookings' && (
           <BookingsManager
             registrations={registrations}
             treks={enrichedTreks}
@@ -2066,6 +2136,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             {/* System Zone Sub-navigation */}
             <div className="flex items-center gap-2 border-b border-[#E5E1DB] pb-4 flex-wrap">
               <button
+                id="admin-system-subtab-roles"
+                onClick={() => setSystemSubTab('roles')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'roles'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Admin & Coordinator Roles</span>
+              </button>
+              <button
                 onClick={() => setSystemSubTab('applications')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'applications'
@@ -2154,6 +2236,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             </div>
 
             <div className="mt-6">
+              {systemSubTab === 'roles' && (
+                <AdminAccessManager currentUserEmail={currentUserEmail} />
+              )}
+
               {systemSubTab === 'applications' && (
                 <CloudflareRegistrationsTable
                   registrations={rawRegistrations.length > 0 ? rawRegistrations : registrations}
@@ -2284,6 +2370,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
         {activeTab === 'links' && (
           <AdminLinkLibrary baseURL={window.location.origin} treks={enrichedTreks} />
+        )}
+          </>
         )}
       </div>
 

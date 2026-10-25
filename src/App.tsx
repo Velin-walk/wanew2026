@@ -156,6 +156,7 @@ function MainApp() {
         if (norm === 'payment' || norm === 'pricing' || norm === 'pay' || norm === 'qr') return 'payment';
         if (norm === 'blogs' || norm === 'blog' || norm === 'stories') return 'blogs';
         if (norm === 'trek_tips' || norm === 'trektips' || norm === 'tips' || norm === 'gear' || norm === 'packing') return 'trek_tips';
+        if (norm === 'creator_guide' || norm === 'creator' || norm === 'creatorguide') return 'creator_guide';
         if (norm === 'safety_policy' || norm === 'safetypolicy' || norm === 'safety' || norm === 'refund') return 'safety_policy';
         if (norm === 'request_private_trek' || norm === 'requestprivatetrek' || norm === 'privatetrek' || norm === 'private') return 'request_private_trek';
         if (norm === 'contact' || norm === 'support') return 'contact';

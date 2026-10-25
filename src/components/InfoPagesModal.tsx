@@ -34,7 +34,7 @@ import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
 import { ReviewsAnalyticsBoard } from './ReviewsAnalyticsBoard';
 import { CommunityBlogsSection } from './CommunityBlogsSection';
 
-export type SubPageType = 'payment' | 'trek_tips' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about';
+export type SubPageType = 'payment' | 'trek_tips' | 'creator_guide' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about';
 
 interface InfoPagesModalProps {
   isOpen: boolean;
@@ -999,9 +999,9 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
               </div>
             )}
 
-            {/* 2. TREK TIPS & PACKING */}
-            {activeTab === 'trek_tips' && (
-              <TrekTipsContent />
+            {/* 2. TREK TIPS & PACKING / CREATOR GUIDE */}
+            {(activeTab === 'trek_tips' || activeTab === 'creator_guide') && (
+              <TrekTipsContent initialSubPage={activeTab === 'creator_guide' ? 'creator' : undefined} />
             )}
 
             {/* 3. SAFETY & REFUND POLICY */}

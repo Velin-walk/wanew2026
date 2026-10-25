@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { ChevronRight, ArrowLeft, Camera, CheckSquare, HeartPulse, Backpack } from 'lucide-react';
 
-export const TrekTipsContent: React.FC = () => {
-  const [activeSubPage, setActiveSubPage] = useState<string | null>(null);
+export const TrekTipsContent: React.FC<{ initialSubPage?: string }> = ({ initialSubPage }) => {
+  const [activeSubPage, setActiveSubPage] = useState<string | null>(initialSubPage || null);
 
   if (activeSubPage === 'preparation') return <PreparationGuide onBack={() => setActiveSubPage(null)} />;
   if (activeSubPage === 'creator') return <CreatorGuide onBack={() => setActiveSubPage(null)} />;

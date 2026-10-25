@@ -63,7 +63,13 @@ const CellWithCopyBox: React.FC<CellWithCopyBoxProps> = ({
   }, [value]);
 
   return (
-    <div className="flex items-start justify-between gap-1.5 border border-[#E5E1DB] rounded-md px-2 py-0.5 bg-white focus-within:border-[#FF6600] focus-within:ring-1 focus-within:ring-[#FF6600]/30 shadow-2xs transition-all w-full min-w-0">
+    <div
+      className={`flex items-start justify-between gap-1.5 border rounded-md px-2 py-0.5 shadow-2xs transition-all w-full min-w-0 ${
+        isEditable
+          ? 'bg-white border-[#E5E1DB] focus-within:border-[#FF6600] focus-within:ring-1 focus-within:ring-[#FF6600]/30'
+          : 'bg-stone-100/90 border-[#D8D3CC]'
+      }`}
+    >
       {isEditable ? (
         <textarea
           ref={textareaRef}
@@ -122,20 +128,38 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
   });
 
   const [t1Rows, setT1Rows] = useState<PageRow[]>(() => {
-    try {
-      const saved = localStorage.getItem('wnw_link_lib_t1_rows');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
+    const defaultRows: PageRow[] = [
       { id: '1', name: 'Rate and Review Form', path: '/?page=reviews' },
       { id: '2', name: 'Register Form', path: '/?page=register' },
       { id: '3', name: 'Payment Page', path: '/?page=payment' },
       { id: '4', name: 'Blogs & Stories', path: '/?page=blogs' },
       { id: '5', name: 'Trek Tips & Gear', path: '/?page=trek_tips' },
-      { id: '6', name: 'Safety & Refund Policy', path: '/?page=safety_policy' },
-      { id: '7', name: 'Request Private Trek', path: '/?page=request_private_trek' },
-      { id: '8', name: 'Contact Support', path: '/?page=contact' },
+      { id: '6', name: 'Creator Guide', path: '/?page=creator_guide' },
+      { id: '7', name: 'Safety & Refund Policy', path: '/?page=safety_policy' },
+      { id: '8', name: 'Request Private Trek', path: '/?page=request_private_trek' },
+      { id: '9', name: 'Contact Support', path: '/?page=contact' },
     ];
+
+    try {
+      const saved = localStorage.getItem('wnw_link_lib_t1_rows');
+      if (saved) {
+        let parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          if (!parsed.some((r: PageRow) => r.name === 'Creator Guide' || r.path?.includes('creator'))) {
+            const index = parsed.findIndex((r: PageRow) => r.path?.includes('trek_tips') || r.name?.includes('Trek Tips'));
+            const creatorRow: PageRow = { id: `row_cg_${Date.now()}`, name: 'Creator Guide', path: '/?page=creator_guide' };
+            parsed = [...parsed];
+            if (index !== -1) {
+              parsed.splice(index + 1, 0, creatorRow);
+            } else {
+              parsed.push(creatorRow);
+            }
+          }
+          return parsed;
+        }
+      }
+    } catch {}
+    return defaultRows;
   });
 
   // ---------------- TABLE 2 STATE (Event Specific Itinerary Links) ----------------
@@ -179,7 +203,20 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
           const data = snapshot.data();
           isSyncingFromRemoteRef.current = true;
           if (Array.isArray(data.t1Cols)) setT1Cols(data.t1Cols);
-          if (Array.isArray(data.t1Rows)) setT1Rows(data.t1Rows);
+          if (Array.isArray(data.t1Rows)) {
+            let rows = data.t1Rows;
+            if (!rows.some((r: PageRow) => r.name === 'Creator Guide' || r.path?.includes('creator'))) {
+              const index = rows.findIndex((r: PageRow) => r.path?.includes('trek_tips') || r.name?.includes('Trek Tips'));
+              const creatorRow: PageRow = { id: `row_cg_${Date.now()}`, name: 'Creator Guide', path: '/?page=creator_guide' };
+              rows = [...rows];
+              if (index !== -1) {
+                rows.splice(index + 1, 0, creatorRow);
+              } else {
+                rows.push(creatorRow);
+              }
+            }
+            setT1Rows(rows);
+          }
           if (Array.isArray(data.t2Cols)) setT2Cols(data.t2Cols);
           if (Array.isArray(data.t2CustomRows)) setT2CustomRows(data.t2CustomRows);
           if (data.t2TrekCustomData && typeof data.t2TrekCustomData === 'object') {
