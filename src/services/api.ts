@@ -1,6 +1,7 @@
 import { Trek, PhotoComment } from "../types";
 import { auth, db } from "../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
+import { isAdminEmail, isFullAdminEmail } from "../adminUtils";
 
 export const CLOUDFLARE_WORKER_URL =
   ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
@@ -133,6 +134,9 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
     }
     if (userEmail) {
       headers.set("X-Admin-Email", userEmail);
+      if (isAdminEmail(userEmail)) {
+        headers.set("X-Admin-Role", isFullAdminEmail(userEmail) ? "full" : "coordinator");
+      }
     }
 
     if (!headers.has("Authorization")) {

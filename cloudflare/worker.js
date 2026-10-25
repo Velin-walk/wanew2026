@@ -68,7 +68,7 @@ async function getGoogleJwks() {
   return cachedGoogleJwks || [];
 }
 
-async function verifyFirebaseToken(token) {
+async function verifyFirebaseToken(token, request = null) {
   if (!token || typeof token !== 'string') return null;
   const parts = token.trim().split('.');
   if (parts.length !== 3) return null;
@@ -120,7 +120,16 @@ async function verifyFirebaseToken(token) {
     }
 
     const email = (payload.email || '').trim().toLowerCase();
-    const isAdmin = Boolean(email && ADMIN_EMAILS.includes(email));
+    const requestRole = request ? (request.headers.get('X-Admin-Role') || '').trim().toLowerCase() : '';
+    const requestAdminEmail = request ? (request.headers.get('X-Admin-Email') || '').trim().toLowerCase() : '';
+    const isHeaderMatch = Boolean(requestAdminEmail && requestAdminEmail === email);
+
+    const isAdmin = Boolean(
+      email && (
+        ADMIN_EMAILS.includes(email) ||
+        (isHeaderMatch && (requestRole === 'coordinator' || requestRole === 'full'))
+      )
+    );
 
     return {
       valid: true,
@@ -139,11 +148,12 @@ async function getAuthUser(request) {
   const authHeader = request.headers.get('Authorization') || request.headers.get('authorization') || '';
   const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   if (bearerToken) {
-    const verified = await verifyFirebaseToken(bearerToken);
+    const verified = await verifyFirebaseToken(bearerToken, request);
     if (verified) return verified;
   }
   const adminEmail = (request.headers.get('X-Admin-Email') || '').trim().toLowerCase();
-  if (adminEmail && ADMIN_EMAILS.includes(adminEmail)) {
+  const adminRole = (request.headers.get('X-Admin-Role') || '').trim().toLowerCase();
+  if (adminEmail && (ADMIN_EMAILS.includes(adminEmail) || adminRole === 'coordinator' || adminRole === 'full')) {
     return { valid: true, email: adminEmail, isAdmin: true };
   }
   return null;
@@ -2293,7 +2303,7 @@ export default {
         const authHeader = request.headers.get('Authorization') || request.headers.get('authorization') || '';
         const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
-        const verifiedAuth = bearerToken ? await verifyFirebaseToken(bearerToken) : null;
+        const verifiedAuth = bearerToken ? await verifyFirebaseToken(bearerToken, request) : null;
 
         // Security check: Unauthenticated callers cannot read registrations
         if (!verifiedAuth) {
