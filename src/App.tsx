@@ -161,6 +161,7 @@ function MainApp() {
         if (norm === 'request_private_trek' || norm === 'requestprivatetrek' || norm === 'privatetrek' || norm === 'private') return 'request_private_trek';
         if (norm === 'contact' || norm === 'support') return 'contact';
         if (norm === 'about') return 'about';
+        if (norm === 'notices' || norm === 'notice' || norm === 'bulletin' || norm === 'announcements') return 'notices';
       }
     } catch {}
     return null;
@@ -980,14 +981,25 @@ function MainApp() {
     const handleTreksUpdated = () => {
       refreshDataRef.current({ force: true });
     };
+    const handleNavigateTabEvent = (e: any) => {
+      if (e.detail) {
+        const targetTab = typeof e.detail === 'string' ? e.detail : e.detail.tab;
+        const targetId = typeof e.detail === 'object' ? e.detail.targetId : undefined;
+        if (targetTab) {
+          handleMainTabChange(targetTab as any, targetId);
+        }
+      }
+    };
     window.addEventListener('wnw-treks-updated', handleTreksUpdated);
     window.addEventListener('wnw-data-source-changed', handleTreksUpdated);
+    window.addEventListener('wnw-navigate-tab', handleNavigateTabEvent);
 
     return () => {
       window.removeEventListener('focus', handleFocusOrVisibility);
       document.removeEventListener('visibilitychange', handleFocusOrVisibility);
       window.removeEventListener('wnw-treks-updated', handleTreksUpdated);
       window.removeEventListener('wnw-data-source-changed', handleTreksUpdated);
+      window.removeEventListener('wnw-navigate-tab', handleNavigateTabEvent);
     };
   }, []); // Empty dependency array prevents double-fetching on auth resolution
 
@@ -1489,6 +1501,9 @@ function MainApp() {
                 setItineraryModalTrek(trek);
                 setItineraryModalType('faq');
               }}
+              onViewGallery={(trek) => {
+                handleMainTabChange('gallery', trek?.id);
+              }}
               onLeaveFeedback={(trek) => {
                 setFeedbackModalTrek(trek);
                 setFeedbackModalBooking(null);
@@ -1525,6 +1540,9 @@ function MainApp() {
                   trackFaqView(trek.hike_number || trek.id, trek.name);
                   setItineraryModalTrek(trek);
                   setItineraryModalType('faq');
+                }}
+                onViewGallery={(trek) => {
+                  handleMainTabChange('gallery', trek?.id);
                 }}
                 savedOnly={true}
                 onExploreAll={() => setCurrentTab('treks')}
@@ -1674,6 +1692,7 @@ function MainApp() {
             isOpen={Boolean(selectedTrekForRegister)}
             onClose={() => setSelectedTrekForRegister(null)}
             onSubmit={handleRegisterSubmit}
+            onNavigateToBookings={() => handleMainTabChange('bookings')}
             onNavigateToPayment={() => {
               setSelectedTrekForRegister(null);
               setInfoModalPage('payment');

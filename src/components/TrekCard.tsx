@@ -31,6 +31,7 @@ interface TrekCardProps {
   onShare: (trek: Trek) => void;
   onViewItinerary?: (trek: Trek) => void;
   onViewFaq?: (trek: Trek) => void;
+  onViewGallery?: (trek?: Trek) => void;
 }
 
 export const TrekCard: React.FC<TrekCardProps> = ({
@@ -41,6 +42,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   onShare,
   onViewItinerary,
   onViewFaq,
+  onViewGallery,
 }) => {
   const [showItinerary, setShowItinerary] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
@@ -464,7 +466,13 @@ export const TrekCard: React.FC<TrekCardProps> = ({
             {/* Photos / Gallery Button */}
             <button
               type="button"
-              onClick={() => setPhotosOpen(true)}
+              onClick={() => {
+                if (onViewGallery) {
+                  onViewGallery(trek);
+                } else {
+                  window.dispatchEvent(new CustomEvent('wnw-navigate-tab', { detail: { tab: 'gallery', targetId: trek.id } }));
+                }
+              }}
               className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FFF8F0] hover:bg-[#FFEEDD] border border-[#E08828]/40 hover:border-[#E08828]/70 text-[#E08828] font-bold text-[10px] rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
             >
               <Camera className="w-3.5 h-3.5 text-[#E08828]" />

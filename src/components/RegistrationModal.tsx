@@ -13,6 +13,7 @@ import {
   FileText,
   AlertCircle,
   CheckCircle2,
+  BookmarkCheck,
   Trash2,
   ArrowLeft,
   Calendar,
@@ -35,6 +36,7 @@ interface RegistrationModalProps {
   userEmail?: string;
   latestBooking?: any;
   onNavigateToPayment?: () => void;
+  onNavigateToBookings?: () => void;
   isAdminProxy?: boolean;
   pastHikers?: any[];
 }
@@ -48,6 +50,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   userEmail = '',
   latestBooking,
   onNavigateToPayment,
+  onNavigateToBookings,
   isAdminProxy = false,
   pastHikers = [],
 }) => {
@@ -717,29 +720,21 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     <CheckCircle2 className="w-4 h-4" />
                   </button>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onNavigateToPayment) {
-                          onNavigateToPayment();
-                        } else {
-                          onClose();
-                        }
-                      }}
-                      className="w-full py-3 px-3 sm:px-5 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <span>Pay Now (Pricing & Payment)</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      className="w-full py-2.5 px-3 sm:px-5 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#5A5551] font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
-                    >
-                      Pay Later (Return to Homepage)
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      if (onNavigateToBookings) {
+                        onNavigateToBookings();
+                      } else {
+                        window.dispatchEvent(new CustomEvent('wnw-navigate-tab', { detail: { tab: 'bookings' } }));
+                      }
+                    }}
+                    className="w-full py-3 px-3 sm:px-5 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <BookmarkCheck className="w-4 h-4" />
+                    <span>View my bookings</span>
+                  </button>
                 )}
               </div>
             </div>

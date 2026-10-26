@@ -29,12 +29,17 @@ import {
   Search,
   UploadCloud,
   BookOpen,
+  Bell,
+  AlertTriangle,
+  Info,
+  Wrench,
 } from 'lucide-react';
 import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
 import { ReviewsAnalyticsBoard } from './ReviewsAnalyticsBoard';
 import { CommunityBlogsSection } from './CommunityBlogsSection';
+import { fetchSiteNotice, SiteNotice } from '../services/noticeService';
 
-export type SubPageType = 'payment' | 'trek_tips' | 'creator_guide' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about';
+export type SubPageType = 'payment' | 'trek_tips' | 'creator_guide' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about' | 'notices';
 
 interface InfoPagesModalProps {
   isOpen: boolean;
@@ -533,6 +538,280 @@ export const HikerReviewsSection: React.FC<{
   );
 };
 
+export const NoticesSection: React.FC<{
+  onContactSupport?: () => void;
+}> = ({ onContactSupport }) => {
+  const [notice, setNotice] = useState<SiteNotice | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const loadNotice = async (fresh = false) => {
+    setLoading(true);
+    try {
+      const data = await fetchSiteNotice(fresh);
+      setNotice(data);
+    } catch (e) {
+      console.warn('[NoticesSection] Failed to load notice:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadNotice(false);
+
+    const handleUpdate = (e: Event) => {
+      const customEvt = e as CustomEvent<SiteNotice>;
+      if (customEvt.detail) {
+        setNotice(customEvt.detail);
+      } else {
+        loadNotice(true);
+      }
+    };
+
+    window.addEventListener('wnw-notice-updated', handleUpdate);
+    return () => window.removeEventListener('wnw-notice-updated', handleUpdate);
+  }, []);
+
+  const getTypeConfig = (type?: string) => {
+    switch (type) {
+      case 'urgent':
+        return {
+          icon: <AlertTriangle className="w-5 h-5 text-rose-500" />,
+          badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+          badgeText: 'Urgent Announcement',
+          headerBg: 'bg-gradient-to-r from-rose-50 to-orange-50',
+          btnClass: 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-200',
+        };
+      case 'event':
+        return {
+          icon: <Calendar className="w-5 h-5 text-[#E08828]" />,
+          badgeClass: 'bg-amber-50 text-[#C06F17] border-amber-200',
+          badgeText: 'Trek & Event Alert',
+          headerBg: 'bg-gradient-to-r from-amber-50 to-orange-50',
+          btnClass: 'bg-[#E08828] hover:bg-[#C06F17] text-white shadow-amber-200',
+        };
+      case 'maintenance':
+        return {
+          icon: <Wrench className="w-5 h-5 text-purple-600" />,
+          badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+          badgeText: 'Service Update',
+          headerBg: 'bg-gradient-to-r from-purple-50 to-indigo-50',
+          btnClass: 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-200',
+        };
+      case 'info':
+      default:
+        return {
+          icon: <Info className="w-5 h-5 text-sky-600" />,
+          badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+          badgeText: 'Official Notice',
+          headerBg: 'bg-gradient-to-r from-sky-50 to-blue-50',
+          btnClass: 'bg-[#1F1F1F] hover:bg-neutral-800 text-white shadow-stone-200',
+        };
+    }
+  };
+
+  const handleCtaClick = (link?: string) => {
+    if (!link) return;
+    const trimmed = link.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      window.open(trimmed, '_blank', 'noopener,noreferrer');
+    } else if (trimmed.startsWith('#')) {
+      const el = document.querySelector(trimmed);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else {
+      window.location.href = trimmed;
+    }
+  };
+
+  const config = getTypeConfig(notice?.type);
+  const hasActiveNotice = notice && notice.enabled && (notice.title || notice.message);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-150">
+      {/* Header and Refresh Bar */}
+      <div className="border-b border-[#F0EBE5] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-extrabold text-[#1F1F1F] leading-snug">
+              Official Notices &amp; Bulletins
+            </h3>
+            <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-[#C06F17] border border-orange-200 shrink-0">
+              Live Updates
+            </span>
+          </div>
+          <p className="text-xs text-[#8B8680] mt-0.5">
+            Trail advisories, weather updates, schedule changes, and community announcements.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => loadNotice(true)}
+          disabled={loading}
+          className="h-8 sm:h-9 px-3 rounded-lg sm:rounded-xl border border-[#E5E1DB] bg-white hover:bg-[#F9F7F5] text-[#5A5551] text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all shrink-0 cursor-pointer active:scale-95 disabled:opacity-50 self-start sm:self-auto"
+          title="Refresh latest notice bulletin"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#E08828]' : ''}`} />
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      {/* Main Notice Display */}
+      {loading ? (
+        <div className="p-6 rounded-3xl bg-[#FAF8F5] border border-[#E5E1DB] animate-pulse space-y-3">
+          <div className="h-4 bg-neutral-200 rounded-md w-1/4" />
+          <div className="h-6 bg-neutral-200 rounded-md w-3/4" />
+          <div className="h-16 bg-neutral-200 rounded-xl w-full" />
+        </div>
+      ) : hasActiveNotice ? (
+        <div className="rounded-3xl border border-[#E5E1DB] bg-white overflow-hidden shadow-sm">
+          {/* Top header strip */}
+          <div className={`px-5 py-4 border-b border-[#E5E1DB] ${config.headerBg} flex items-center justify-between flex-wrap gap-2`}>
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-white rounded-2xl shadow-xs border border-black/5 flex items-center justify-center shrink-0">
+                {config.icon}
+              </div>
+              <div>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${config.badgeClass}`}>
+                  {config.badgeText}
+                </span>
+                <h4 className="text-sm sm:text-base font-extrabold text-[#1F1F1F] tracking-tight mt-0.5">
+                  {notice.title || 'Official Community Notice'}
+                </h4>
+              </div>
+            </div>
+
+            {notice.updatedAt && (
+              <span className="text-[11px] font-medium text-[#8B8680]">
+                Updated: {new Date(notice.updatedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+              </span>
+            )}
+          </div>
+
+          {/* Body */}
+          <div className="p-5 sm:p-6 space-y-4">
+            <p className="text-xs sm:text-sm text-[#4A4541] leading-relaxed whitespace-pre-line font-medium">
+              {notice.message}
+            </p>
+
+            {notice.expiresAt && (
+              <div className="flex items-center gap-1.5 text-[11px] text-[#8B8680] pt-1">
+                <Calendar className="w-3.5 h-3.5 text-[#E08828]" />
+                <span>
+                  Valid until: {new Date(notice.expiresAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                </span>
+              </div>
+            )}
+
+            {notice.ctaText && notice.ctaLink && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleCtaClick(notice.ctaLink)}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${config.btnClass}`}
+                >
+                  <span>{notice.ctaText}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="p-5 sm:p-6 rounded-3xl bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-3.5">
+          <div className="w-9 h-9 rounded-2xl bg-white border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs text-[#7ABA42]">
+            <CheckCircle2 className="w-5 h-5 text-[#7ABA42]" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-sm font-bold text-[#1F1F1F]">
+              All Himalayan Trails &amp; Scheduled Hikes Operating Normally
+            </h4>
+            <p className="text-xs text-[#5A5551] leading-relaxed">
+              There are no emergency weather disruptions or route closures currently in effect. Weekend events, meeting schedules, and registration rosters are proceeding as scheduled.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Standing Community Advisories & Guidelines */}
+      <div className="space-y-3 pt-2">
+        <h4 className="text-xs font-extrabold text-[#8B8680] uppercase tracking-wider">
+          Standard Himalayan Trail Advisories
+        </h4>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs text-[#5A5551]">
+          {/* Weather & Seasonal Gear */}
+          <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+            <h5 className="font-bold text-sm text-[#1F1F1F] flex items-center gap-2">
+              <Compass className="w-4 h-4 text-[#7ABA42]" />
+              Weather &amp; Trail Conditions
+            </h5>
+            <p className="leading-relaxed">
+              Mountain weather in Nepal changes rapidly. Always carry a lightweight waterproof rain shell, thermal layer, and dependable broken-in hiking boots with good grip.
+            </p>
+          </div>
+
+          {/* Acclimatization & Pacing */}
+          <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+            <h5 className="font-bold text-sm text-[#1F1F1F] flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[#E08828]" />
+              Pacing &amp; Acclimatization
+            </h5>
+            <p className="leading-relaxed">
+              Stay well hydrated (at least 3 liters of fluids daily). Avoid rapid elevation gains, never hike alone, and notify your Trail Coordinator immediately if feeling dizzy or fatigued.
+            </p>
+          </div>
+
+          {/* WhatsApp Group & Coordination */}
+          <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+            <h5 className="font-bold text-sm text-[#1F1F1F] flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-[#25D366]" />
+              Real-Time WhatsApp Alerts
+            </h5>
+            <p className="leading-relaxed">
+              Meeting point checkpoints and pickup buses are coordinated directly via event WhatsApp groups 24 hours prior to departure. Keep your registered phone number active.
+            </p>
+          </div>
+
+          {/* Eco-Trekking Policy */}
+          <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+            <h5 className="font-bold text-sm text-[#1F1F1F] flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#7ABA42]" />
+              Leave No Trace Policy
+            </h5>
+            <p className="leading-relaxed">
+              Walk Nepal Walk strictly follows zero-trace eco-trekking. Bring all plastic wrappers and waste back to designated collection bins. Respect sacred chortens, prayer flags, and local wildlife.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Direct Contact Coordinators Bar */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF8F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div>
+          <h5 className="font-bold text-sm text-[#1F1F1F]">Have questions about trail safety or notice updates?</h5>
+          <p className="text-[11px] text-[#8B8680] mt-0.5">
+            Our Operations Desk and Trail Coordinators are available on WhatsApp for immediate support.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <a
+            href="https://wa.me/9779860071064?text=Hello%20Walk%20Nepal%20Walk%20team,%20I%20have%20an%20inquiry%20regarding%20the%20latest%20notices."
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>WhatsApp Coordinator</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   isOpen,
   onClose,
@@ -887,15 +1166,15 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => setActiveTab('payment')}
+                onClick={() => setActiveTab('notices')}
                 className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
-                  activeTab === 'payment'
-                    ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
+                  activeTab === 'notices'
+                    ? 'bg-white text-[#E08828] shadow-xs border border-[#E08828]/30 font-extrabold'
                     : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
                 }`}
               >
-                <CreditCard className={`w-4 h-4 shrink-0 ${activeTab === 'payment' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
-                <span>Payment & Pricing</span>
+                <Bell className={`w-4 h-4 shrink-0 ${activeTab === 'notices' ? 'text-[#E08828]' : 'text-[#8B8680]'}`} />
+                <span>Notices &amp; Bulletins</span>
               </button>
 
               <button
@@ -909,6 +1188,19 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
               >
                 <Compass className={`w-4 h-4 shrink-0 ${activeTab === 'trek_tips' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
                 <span>Trek Tips & Packing</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('payment')}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                  activeTab === 'payment'
+                    ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
+                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <CreditCard className={`w-4 h-4 shrink-0 ${activeTab === 'payment' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
+                <span>Payment & Pricing</span>
               </button>
 
               <button
@@ -1685,6 +1977,11 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
             {/* 7. COMMUNITY BLOGS & STORIES */}
             {activeTab === 'blogs' && (
               <CommunityBlogsSection />
+            )}
+
+            {/* 8. OFFICIAL NOTICES & BULLETINS */}
+            {activeTab === 'notices' && (
+              <NoticesSection />
             )}
 
           </div>

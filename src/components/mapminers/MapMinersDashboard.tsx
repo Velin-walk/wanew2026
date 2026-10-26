@@ -171,26 +171,42 @@ export default function MapMinersDashboard({
       // 1. Fetch Cloudflare Trails
       let cloudflareRoutes: any[] = [];
       try {
-        const communityRes = await apiFetch('mapminers/trails');
+        let communityRes = await apiFetch('mapminers/trails', { forceFresh: true });
+        if (!communityRes.ok) {
+          communityRes = await apiFetch('community_trails', { forceFresh: true });
+        }
         if (communityRes.ok) {
           const communityData = await communityRes.json();
-          if (communityData.success && communityData.data) {
-            const rawItems = Array.isArray(communityData.data)
-              ? communityData.data
-              : Object.values(communityData.data);
+          let rawItems: any[] = [];
+          if (Array.isArray(communityData)) {
+            rawItems = communityData;
+          } else if (Array.isArray(communityData?.data)) {
+            rawItems = communityData.data;
+          } else if (Array.isArray(communityData?.trails)) {
+            rawItems = communityData.trails;
+          } else if (Array.isArray(communityData?.results)) {
+            rawItems = communityData.results;
+          } else if (communityData?.data && typeof communityData.data === 'object') {
+            rawItems = Object.values(communityData.data);
+          }
 
+          if (rawItems.length > 0) {
             cloudflareRoutes = rawItems.map((anyMeta: any, index: number) => {
-              const startPosObj = parseStartPos(anyMeta.start_pos || anyMeta.startPos);
-              const realFileName = anyMeta.fileName || anyMeta.file_name || anyMeta.name || `trail_${index}.gpx`;
-              const trailId = anyMeta.id || realFileName;
-              const moderationStatus = (anyMeta.status || 'approved').toLowerCase();
-
               let parsedBounds = anyMeta.bounds;
               if (typeof anyMeta.bounds === 'string') {
                 try {
                   parsedBounds = JSON.parse(anyMeta.bounds);
                 } catch (_) {}
               }
+
+              const parsedStart = parseStartPos(anyMeta.start_pos || anyMeta.startPos);
+              const startPosObj = parsedStart ||
+                (parsedBounds && Array.isArray(parsedBounds) && parsedBounds[0] && typeof parsedBounds[0][0] === 'number' && !isNaN(parsedBounds[0][0])
+                  ? { lat: Number(parsedBounds[0][0]), lng: Number(parsedBounds[0][1]) }
+                  : { lat: 27.7172, lng: 85.3240 });
+              const realFileName = anyMeta.fileName || anyMeta.file_name || anyMeta.name || `trail_${index}.gpx`;
+              const trailId = anyMeta.id || realFileName;
+              const moderationStatus = (anyMeta.status || 'approved').toLowerCase();
 
               return {
                 ...anyMeta,
@@ -218,7 +234,8 @@ export default function MapMinersDashboard({
                 contributorEmail: anyMeta.contributorEmail || anyMeta.contributor_email || '',
                 contributorName: anyMeta.contributorName || 'Community Member',
                 bounds: parsedBounds,
-                coordinates: startPosObj ? [startPosObj, startPosObj] : [],
+                startPos: startPosObj,
+                coordinates: [startPosObj, startPosObj],
                 isLazyLoaded: false,
                 isCommunityTrail: true,
                 moderationStatus
@@ -261,22 +278,7 @@ export default function MapMinersDashboard({
       });
 
       if (filteredRoutes.length > 0) {
-        setRoutes(prev => {
-          const merged = new Map<string, any>();
-          prev.forEach(r => {
-            if (r.id) merged.set(r.id, r);
-          });
-          filteredRoutes.forEach(r => {
-            merged.set(r.id, r);
-          });
-          const mergedArray = Array.from(merged.values());
-          mergedArray.sort((a, b) => {
-            const timeA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
-            const timeB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
-            return timeB - timeA;
-          });
-          return mergedArray;
-        });
+        setRoutes(filteredRoutes);
         setLoadingState({ status: 'done', errors: [] });
       } else {
         console.warn('No community trails found in Cloudflare. Loading offline demo trails.');

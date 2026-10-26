@@ -112,43 +112,46 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
 
   // Dynamically attach authenticated user's credentials (Firebase ID token and email)
   const headers = new Headers(options?.headers);
-  try {
-    let userEmail = headers.get("X-Admin-Email") || auth.currentUser?.email;
-    if (!userEmail && import.meta.env?.DEV) {
-      try {
-        const savedDev = localStorage.getItem("wnw_dev_user");
-        if (savedDev) {
-          const parsed = JSON.parse(savedDev);
-          if (parsed?.email) userEmail = parsed.email;
-        }
-      } catch (_) {}
-    }
-    if (!userEmail) {
-      try {
-        const savedProf = localStorage.getItem("wnw_user_registration_profile") || localStorage.getItem("wnw_last_registration_data");
-        if (savedProf) {
-          const parsed = JSON.parse(savedProf);
-          if (parsed?.email || parsed?.email_address) userEmail = parsed.email || parsed.email_address;
-        }
-      } catch (_) {}
-    }
-    if (userEmail) {
-      headers.set("X-Admin-Email", userEmail);
-      if (isAdminEmail(userEmail)) {
-        headers.set("X-Admin-Role", isFullAdminEmail(userEmail) ? "full" : "coordinator");
+  const skipAuthForMapMinersGet = isMapMinersPath && method === "GET" && !options?.headers;
+  if (!skipAuthForMapMinersGet) {
+    try {
+      let userEmail = headers.get("X-Admin-Email") || auth.currentUser?.email;
+      if (!userEmail && import.meta.env?.DEV) {
+        try {
+          const savedDev = localStorage.getItem("wnw_dev_user");
+          if (savedDev) {
+            const parsed = JSON.parse(savedDev);
+            if (parsed?.email) userEmail = parsed.email;
+          }
+        } catch (_) {}
       }
-    }
+      if (!userEmail) {
+        try {
+          const savedProf = localStorage.getItem("wnw_user_registration_profile") || localStorage.getItem("wnw_last_registration_data");
+          if (savedProf) {
+            const parsed = JSON.parse(savedProf);
+            if (parsed?.email || parsed?.email_address) userEmail = parsed.email || parsed.email_address;
+          }
+        } catch (_) {}
+      }
+      if (userEmail) {
+        headers.set("X-Admin-Email", userEmail);
+        if (!isMapMinersPath && isAdminEmail(userEmail)) {
+          headers.set("X-Admin-Role", isFullAdminEmail(userEmail) ? "full" : "coordinator");
+        }
+      }
 
-    if (!headers.has("Authorization")) {
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        const token = await currentUser.getIdToken();
-        if (token) {
-          headers.set("Authorization", `Bearer ${token}`);
+      if (!headers.has("Authorization")) {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const token = await currentUser.getIdToken();
+          if (token) {
+            headers.set("Authorization", `Bearer ${token}`);
+          }
         }
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
+  }
 
   const fetchOptions: RequestInit = {
     ...options,

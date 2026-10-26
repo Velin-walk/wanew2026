@@ -14,7 +14,8 @@ import {
   Camera,
   Trophy,
   Star,
-  BookOpen
+  BookOpen,
+  Bell
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { isAdminEmail } from '../adminUtils';
@@ -299,16 +300,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             type="button"
-            id="nav-tab-pricing"
-            onClick={() => handleSubPageClick('payment')}
+            id="nav-tab-trektips"
+            onClick={() => handleSubPageClick('trek_tips')}
             className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-              activeInfoPage === 'payment'
-                ? 'bg-white text-[#E08828] shadow-xs font-bold'
+              activeInfoPage === 'trek_tips'
+                ? 'bg-white text-[#7ABA42] shadow-xs font-bold'
                 : 'text-[#5A5551] hover:text-[#1F1F1F]'
             }`}
           >
-            <CreditCard className="w-4 h-4 text-[#E08828] shrink-0" />
-            <span>Payment</span>
+            <Compass className="w-4 h-4 text-[#7ABA42] shrink-0" />
+            <span>Trek Tips</span>
           </button>
 
           <div ref={dropdownRef} className="relative shrink-0">
@@ -318,10 +319,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95 whitespace-nowrap cursor-pointer group ${
                 dropdownOpen ||
-                activeInfoPage === 'trek_tips' ||
+                activeInfoPage === 'payment' ||
                 activeInfoPage === 'safety_policy' ||
                 activeInfoPage === 'request_private_trek' ||
-                activeInfoPage === 'contact'
+                activeInfoPage === 'contact' ||
+                activeInfoPage === 'notices'
                   ? 'bg-white text-[#E08828] shadow-xs font-bold'
                   : 'text-[#5A5551] hover:text-[#1F1F1F]'
               }`}
@@ -360,14 +362,29 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => handleSubPageClick('trek_tips')}
+                  onClick={() => handleSubPageClick('notices')}
                   className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5">
-                    <Compass className="w-4 h-4 text-[#7ABA42] shrink-0 group-hover:scale-110 transition-transform" />
+                    <Bell className="w-4 h-4 text-[#E08828] shrink-0 group-hover:scale-110 transition-transform" />
                     <div>
-                      <div className="leading-tight">Trek Tips &amp; Gear</div>
-                      <div className="text-[10px] font-normal text-[#8B8680]">Packing &amp; Prep Guide</div>
+                      <div className="leading-tight font-bold text-[#1F1F1F]">Official Notices</div>
+                      <div className="text-[10px] font-normal text-[#8B8680]">Alerts &amp; Trail Bulletins</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSubPageClick('payment')}
+                  className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <CreditCard className="w-4 h-4 text-[#E08828] shrink-0 group-hover:scale-110 transition-transform" />
+                    <div>
+                      <div className="leading-tight">Payment &amp; Pricing</div>
+                      <div className="text-[10px] font-normal text-[#8B8680]">QR &amp; Voucher Upload</div>
                     </div>
                   </div>
                   <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
@@ -579,10 +596,10 @@ export const DesktopResourcesBar: React.FC<{
       activeClass: 'ring-2 ring-[#7ABA42] bg-emerald-50/90 border-[#7ABA42]',
     },
     {
-      id: 'payment',
-      label: 'Payment & Pricing',
-      sub: 'QR & Voucher Upload',
-      icon: <CreditCard className="w-4 h-4 text-[#E08828]" />,
+      id: 'notices',
+      label: 'Official Notices',
+      sub: 'Alerts & Bulletins',
+      icon: <Bell className="w-4 h-4 text-[#E08828]" />,
       accentBg: 'bg-orange-50 border-orange-200/70',
       activeClass: 'ring-2 ring-[#E08828] bg-orange-50/90 border-[#E08828]',
     },
@@ -593,6 +610,14 @@ export const DesktopResourcesBar: React.FC<{
       icon: <Compass className="w-4 h-4 text-[#7ABA42]" />,
       accentBg: 'bg-emerald-50 border-emerald-200/70',
       activeClass: 'ring-2 ring-[#7ABA42] bg-emerald-50/90 border-[#7ABA42]',
+    },
+    {
+      id: 'payment',
+      label: 'Payment & Pricing',
+      sub: 'QR & Voucher Upload',
+      icon: <CreditCard className="w-4 h-4 text-[#E08828]" />,
+      accentBg: 'bg-orange-50 border-orange-200/70',
+      activeClass: 'ring-2 ring-[#E08828] bg-orange-50/90 border-[#E08828]',
     },
     {
       id: 'safety_policy',
@@ -625,7 +650,7 @@ export const DesktopResourcesBar: React.FC<{
       aria-label="Quick Resources & Guides"
       className="hidden lg:block w-full"
     >
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-2.5">
         {items.map((item) => {
           const isActive = activeInfoPage === item.id;
           const isHighlight = item.id === 'request_private_trek';

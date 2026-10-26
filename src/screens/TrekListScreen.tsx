@@ -30,6 +30,7 @@ interface TrekListScreenProps {
   onShare: (trek: Trek) => void;
   onViewItinerary?: (trek: Trek) => void;
   onViewFaq?: (trek: Trek) => void;
+  onViewGallery?: (trek?: Trek) => void;
   savedOnly?: boolean;
   onExploreAll?: () => void;
   onLeaveFeedback?: (trek: Trek) => void;
@@ -46,6 +47,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
   onShare,
   onViewItinerary,
   onViewFaq,
+  onViewGallery,
   savedOnly = false,
   onExploreAll,
   onLeaveFeedback,
@@ -459,6 +461,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                     onShare={onShare}
                     onViewItinerary={onViewItinerary}
                     onViewFaq={onViewFaq}
+                    onViewGallery={onViewGallery}
                   />
                 ))}
               </div>
