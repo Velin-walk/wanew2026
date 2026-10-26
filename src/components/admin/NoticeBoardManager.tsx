@@ -55,8 +55,18 @@ export const NoticeBoardManager: React.FC = () => {
     setErrorMsg(null);
 
     try {
+      // If expiresAt is in the past, clear it so it doesn't accidentally suppress the notice!
+      let safeExpiresAt = notice.expiresAt || '';
+      if (safeExpiresAt) {
+        const expTime = new Date(safeExpiresAt).getTime();
+        if (!isNaN(expTime) && expTime < Date.now()) {
+          safeExpiresAt = '';
+        }
+      }
+
       const payload: Partial<SiteNotice> = {
         ...notice,
+        expiresAt: safeExpiresAt,
         enabled: notice.enabled,
       };
 
@@ -239,13 +249,37 @@ export const NoticeBoardManager: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-[#4A4541]">Auto-Expiry Date (Optional)</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[#4A4541]">Auto-Expiry Date (Optional)</label>
+              {notice.expiresAt && (
+                <button
+                  type="button"
+                  onClick={() => setNotice({ ...notice, expiresAt: '' })}
+                  className="text-[10px] text-rose-600 hover:underline font-semibold cursor-pointer"
+                >
+                  Clear Expiry
+                </button>
+              )}
+            </div>
             <input
               type="date"
               value={notice.expiresAt ? notice.expiresAt.slice(0, 10) : ''}
-              onChange={(e) => setNotice({ ...notice, expiresAt: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+              onChange={(e) => {
+                if (!e.target.value) {
+                  setNotice({ ...notice, expiresAt: '' });
+                } else {
+                  const d = new Date(e.target.value);
+                  d.setHours(23, 59, 59, 999);
+                  setNotice({ ...notice, expiresAt: d.toISOString() });
+                }
+              }}
               className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
             />
+            {notice.expiresAt && new Date(notice.expiresAt).getTime() < Date.now() && (
+              <p className="text-[11px] text-amber-600 font-medium">
+                ⚠️ This date is in the past and will be cleared when saved so the pop-up shows.
+              </p>
+            )}
           </div>
         </div>
 

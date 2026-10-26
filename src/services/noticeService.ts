@@ -32,7 +32,7 @@ export const DEFAULT_NOTICE: SiteNotice = {
 
 /**
  * Fetch the active notice board from Firestore,
- * with graceful local cache fallback.
+ * with graceful REST fallback and local cache fallback.
  */
 export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | null> {
   try {
@@ -57,7 +57,31 @@ export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | 
       }
     }
   } catch (err) {
-    console.warn('[NoticeService] Failed to fetch notice from Firestore:', err);
+    console.warn('[NoticeService] Firestore SDK fetch issue, trying REST fallback:', err);
+    try {
+      const res = await fetch(
+        `https://firestore.googleapis.com/v1/projects/walk-nepal-walk/databases/(default)/documents/${FIRESTORE_COLLECTION}/${FIRESTORE_DOC_ID}`
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.fields) {
+          const remoteNotice: SiteNotice = {
+            enabled: Boolean(json.fields.enabled?.booleanValue),
+            title: String(json.fields.title?.stringValue || '').trim(),
+            message: String(json.fields.message?.stringValue || '').trim(),
+            type: (json.fields.type?.stringValue as NoticeType) || 'info',
+            ctaText: String(json.fields.ctaText?.stringValue || '').trim(),
+            ctaLink: String(json.fields.ctaLink?.stringValue || '').trim(),
+            expiresAt: String(json.fields.expiresAt?.stringValue || '').trim(),
+            updatedAt: String(json.fields.updatedAt?.stringValue || new Date().toISOString()),
+          };
+          try {
+            localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(remoteNotice));
+          } catch (_) {}
+          return remoteNotice;
+        }
+      }
+    } catch (_) {}
   }
 
   // Fallback to local cache if Firestore is unreachable/offline
@@ -137,7 +161,7 @@ export function markNoticeSeen(updatedAt: string): void {
  * It will pop every time the user visits the site if:
  * 1. Notice is enabled.
  * 2. Notice has title or message.
- * 3. Notice is not expired.
+ * 3. Notice is not expired (an old expiry date from a previous notice doesn't silence a newly published update).
  * 4. Visitor has not already clicked "Got it" to dismiss this notice during their current visit.
  */
 export function shouldPopNotice(notice: SiteNotice | null): boolean {
@@ -147,8 +171,13 @@ export function shouldPopNotice(notice: SiteNotice | null): boolean {
   // Check expiration date
   if (notice.expiresAt) {
     const expiryTime = new Date(notice.expiresAt).getTime();
+    const updateTime = notice.updatedAt ? new Date(notice.updatedAt).getTime() : 0;
+    // An expiry date only expires a notice if the expiry date is in the past relative to now,
+    // AND the notice was not republished/updated after that old expiry date.
     if (!isNaN(expiryTime) && expiryTime < Date.now()) {
-      return false;
+      if (!updateTime || updateTime <= expiryTime) {
+        return false;
+      }
     }
   }
 
@@ -160,3 +189,4 @@ export function shouldPopNotice(notice: SiteNotice | null): boolean {
   // Notice pops every time user visits the site
   return true;
 }
+

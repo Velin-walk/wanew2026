@@ -37,10 +37,10 @@ export const NoticeBoardModal: React.FC<NoticeBoardModalProps> = ({
       if (activeNotice) {
         setNotice(activeNotice);
         if (shouldPopNotice(activeNotice)) {
-          // Delay popup by 1.2s so initial page paint is calm and assets are ready
+          // Delay popup by 400ms so initial page paint is calm and assets are ready
           timer = setTimeout(() => {
             setIsOpen(true);
-          }, 1200);
+          }, 400);
         }
       }
     };
