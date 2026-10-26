@@ -467,7 +467,7 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
             <tbody className="divide-y divide-[#F0EBE5]">
               {t1Rows.map((row) => {
                 const baseLink = row.path.startsWith('http') ? row.path : `${baseURL}${row.path.startsWith('/') ? '' : '/'}${row.path}`;
-                const fullLink = row.isCustom ? baseLink : `${baseLink} Namaste! Here is the link please.`;
+                const fullLink = row.isCustom ? baseLink : `${baseLink} Namaste! Here is the ${row.name} link please.`;
 
                 return (
                   <tr key={row.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">

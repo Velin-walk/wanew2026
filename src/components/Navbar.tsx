@@ -167,7 +167,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Desktop Navigation Center */}
         <nav
           aria-label="Desktop Navigation"
-          className="hidden md:flex items-center gap-0.5 lg:gap-1 bg-[#F9F7F5] border border-[#EFEAE4] p-1 rounded-2xl"
+          className={`${currentTab === 'admin' ? 'flex' : 'hidden md:flex'} items-center gap-0.5 lg:gap-1 bg-[#F9F7F5] border border-[#EFEAE4] p-1 rounded-2xl`}
         >
           <button
             type="button"

@@ -194,6 +194,23 @@ function MainApp() {
     }
   }, [currentTab]);
 
+  // Ensure Admin Panel and all pages inside it always open in desktop mode on all devices
+  useEffect(() => {
+    const metaViewport = document.querySelector('meta[name="viewport"]');
+    if (!metaViewport) return;
+    const defaultViewport = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+
+    if (currentTab === 'admin') {
+      metaViewport.setAttribute('content', 'width=1280, user-scalable=yes, maximum-scale=5.0');
+    } else {
+      metaViewport.setAttribute('content', defaultViewport);
+    }
+
+    return () => {
+      metaViewport.setAttribute('content', defaultViewport);
+    };
+  }, [currentTab]);
+
   const hasAnyModalOpen = Boolean(
     authModalOpen ||
       showVoucherModal ||
@@ -1435,7 +1452,7 @@ function MainApp() {
       )}
 
       {/* Viewport Container: Full screen width layout */}
-      <div className="w-full bg-[#F0EBE5] md:bg-[#F2ECE5] min-h-screen flex flex-col relative">
+      <div className={`w-full bg-[#F0EBE5] md:bg-[#F2ECE5] min-h-screen flex flex-col relative ${currentTab === 'admin' ? 'min-w-[1280px] overflow-x-auto' : ''}`}>
         {/* Mobile Toast notifications (centered, responsive) */}
         {toast && (
           <div
@@ -1476,7 +1493,7 @@ function MainApp() {
         />
 
         {/* Content Area - Full width responsive screen */}
-        <main className={`flex-1 w-full ${currentTab === 'mapminers' ? 'p-0 max-w-none' : 'w-full px-3.5 sm:px-6 lg:px-8 py-3 sm:py-6 pb-28 md:pb-12'}`}>
+        <main className={`flex-1 w-full ${currentTab === 'mapminers' ? 'p-0 max-w-none' : 'w-full px-3.5 sm:px-6 lg:px-8 py-3 sm:py-6 pb-28 md:pb-12'} ${currentTab === 'admin' ? 'min-w-[1280px]' : ''}`}>
           {currentTab === 'treks' && (
             <TrekListScreen
               treks={treks}
@@ -1667,20 +1684,22 @@ function MainApp() {
           )}
         </main>
 
-        {/* Mobile Bottom Tab Navigation */}
-        <BottomNav
-          userEmail={activeUserEmail}
-          currentTab={currentTab}
-          onTabChange={handleMainTabChange}
-          bookingCount={bookings.length}
-          savedCount={favorites.length}
-          onOpenInfoPage={handleOpenInfoPage}
-          onOpenProfile={() => {
-            closeAllOverlays();
-            setProfileModalOpen(true);
-          }}
-          notifications={notifications}
-        />
+        {/* Mobile Bottom Tab Navigation (hidden in Admin desktop mode) */}
+        {currentTab !== 'admin' && (
+          <BottomNav
+            userEmail={activeUserEmail}
+            currentTab={currentTab}
+            onTabChange={handleMainTabChange}
+            bookingCount={bookings.length}
+            savedCount={favorites.length}
+            onOpenInfoPage={handleOpenInfoPage}
+            onOpenProfile={() => {
+              closeAllOverlays();
+              setProfileModalOpen(true);
+            }}
+            notifications={notifications}
+          />
+        )}
 
         {/* Booking Registration Modal (Mobile Bottom Sheet) */}
         {Boolean(selectedTrekForRegister) && (
