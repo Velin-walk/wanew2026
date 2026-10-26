@@ -1,4 +1,5 @@
-import { apiFetch } from './api';
+import { db } from '../lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export type NoticeType = 'info' | 'urgent' | 'event' | 'maintenance';
 
@@ -16,6 +17,8 @@ export interface SiteNotice {
 
 const NOTICE_STORAGE_KEY = 'wnw_site_notice_cache';
 const LAST_SEEN_STORAGE_KEY = 'wnw_last_seen_notice_time';
+const FIRESTORE_COLLECTION = 'pwa_metrics';
+const FIRESTORE_DOC_ID = 'site_notice_board';
 
 export const DEFAULT_NOTICE: SiteNotice = {
   enabled: false,
@@ -28,16 +31,25 @@ export const DEFAULT_NOTICE: SiteNotice = {
 };
 
 /**
- * Fetch the active notice board from the Cloudflare API,
+ * Fetch the active notice board from Firestore,
  * with graceful local cache fallback.
  */
 export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | null> {
   try {
-    const res = await apiFetch('notice', { forceFresh });
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.data) {
-        const remoteNotice = json.data as SiteNotice;
+    const snap = await getDoc(doc(db, FIRESTORE_COLLECTION, FIRESTORE_DOC_ID));
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data) {
+        const remoteNotice: SiteNotice = {
+          enabled: Boolean(data.enabled),
+          title: String(data.title || '').trim(),
+          message: String(data.message || '').trim(),
+          type: (data.type as NoticeType) || 'info',
+          ctaText: String(data.ctaText || '').trim(),
+          ctaLink: String(data.ctaLink || '').trim(),
+          expiresAt: String(data.expiresAt || '').trim(),
+          updatedAt: String(data.updatedAt || new Date().toISOString()),
+        };
         try {
           localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(remoteNotice));
         } catch (_) {}
@@ -45,10 +57,10 @@ export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | 
       }
     }
   } catch (err) {
-    console.warn('[NoticeService] Failed to fetch remote notice:', err);
+    console.warn('[NoticeService] Failed to fetch notice from Firestore:', err);
   }
 
-  // Fallback to local cache if network/API unavailable
+  // Fallback to local cache if Firestore is unreachable/offline
   try {
     const cached = localStorage.getItem(NOTICE_STORAGE_KEY);
     if (cached) {
@@ -60,7 +72,7 @@ export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | 
 }
 
 /**
- * Save / publish notice from Admin Panel.
+ * Save / publish notice from Admin Panel directly to Firestore.
  * Sets updatedAt to current timestamp so it pops for all users.
  */
 export async function saveSiteNotice(notice: Partial<SiteNotice>): Promise<SiteNotice> {
@@ -77,24 +89,15 @@ export async function saveSiteNotice(notice: Partial<SiteNotice>): Promise<SiteN
   };
 
   try {
-    const res = await apiFetch('admin/notice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      forceFresh: true,
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      const saved = (json.data as SiteNotice) || payload;
-      try {
-        localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(saved));
-      } catch (_) {}
-      window.dispatchEvent(new CustomEvent('wnw-notice-updated', { detail: saved }));
-      return saved;
-    }
+    const docRef = doc(db, FIRESTORE_COLLECTION, FIRESTORE_DOC_ID);
+    await setDoc(docRef, payload, { merge: true });
+    try {
+      localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(payload));
+    } catch (_) {}
+    window.dispatchEvent(new CustomEvent('wnw-notice-updated', { detail: payload }));
+    return payload;
   } catch (err) {
-    console.warn('[NoticeService] Error saving notice to backend:', err);
+    console.warn('[NoticeService] Error saving notice to Firestore:', err);
   }
 
   // Save to local cache as local fallback
@@ -105,33 +108,37 @@ export async function saveSiteNotice(notice: Partial<SiteNotice>): Promise<SiteN
   return payload;
 }
 
+// In-memory dismissal state scoped to the user's site visit session
+let dismissedNoticeUpdatedAt: string | null = null;
+
 /**
- * Returns the ISO timestamp string of the last seen notice.
+ * Returns the ISO timestamp string of the last seen notice in this visit, if dismissed.
  */
 export function getLastSeenNoticeTime(): string | null {
-  try {
-    return localStorage.getItem(LAST_SEEN_STORAGE_KEY);
-  } catch (_) {
-    return null;
-  }
+  return dismissedNoticeUpdatedAt;
 }
 
 /**
- * Marks the notice as seen by storing its updatedAt timestamp in localStorage.
+ * Marks the notice as dismissed for this visit when the visitor clicks "Got it".
  */
 export function markNoticeSeen(updatedAt: string): void {
   try {
-    localStorage.setItem(LAST_SEEN_STORAGE_KEY, updatedAt);
+    dismissedNoticeUpdatedAt = updatedAt;
+    // Clear legacy permanent storage key if present so it doesn't linger
+    try {
+      localStorage.removeItem(LAST_SEEN_STORAGE_KEY);
+    } catch (_) {}
     window.dispatchEvent(new CustomEvent('wnw-notice-seen', { detail: updatedAt }));
   } catch (_) {}
 }
 
 /**
  * Determines whether the notice modal should pop up for the user.
- * It will pop if:
+ * It will pop every time the user visits the site if:
  * 1. Notice is enabled.
- * 2. Notice is not expired.
- * 3. User has never seen this notice version, OR the notice updatedAt is newer than the user's last seen timestamp.
+ * 2. Notice has title or message.
+ * 3. Notice is not expired.
+ * 4. Visitor has not already clicked "Got it" to dismiss this notice during their current visit.
  */
 export function shouldPopNotice(notice: SiteNotice | null): boolean {
   if (!notice || !notice.enabled) return false;
@@ -145,14 +152,11 @@ export function shouldPopNotice(notice: SiteNotice | null): boolean {
     }
   }
 
-  const lastSeen = getLastSeenNoticeTime();
-  if (!lastSeen) return true;
+  // If visitor already clicked "Got it" to dismiss this notice during this visit, stay dismissed
+  if (dismissedNoticeUpdatedAt && dismissedNoticeUpdatedAt === notice.updatedAt) {
+    return false;
+  }
 
-  const noticeUpdateTime = new Date(notice.updatedAt).getTime();
-  const lastSeenTime = new Date(lastSeen).getTime();
-
-  if (isNaN(noticeUpdateTime) || isNaN(lastSeenTime)) return true;
-
-  // Notice was updated after the user last dismissed it -> Pop!
-  return noticeUpdateTime > lastSeenTime;
+  // Notice pops every time user visits the site
+  return true;
 }

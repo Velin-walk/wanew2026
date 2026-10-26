@@ -2347,7 +2347,7 @@ export default {
             b.trek_name AS roster_trek_name,
             b.hike_number AS roster_hike_number
           FROM registrations r
-          LEFT JOIN bookings_roster b ON (b.registration_id = CAST(r.id AS TEXT) OR b.registration_id = r.id)
+          LEFT JOIN bookings_roster b ON b.registration_id = CAST(r.id AS TEXT)
         `;
         let regParams = [];
 
