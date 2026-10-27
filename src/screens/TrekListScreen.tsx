@@ -4,6 +4,7 @@ import { TrekCard } from '../components/TrekCard';
 import { PastEventListItem } from '../components/PastEventListItem';
 import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFlags';
 import { HomepageHeroBanner } from '../components/HomepageHeroBanner';
+import { OffersBanner } from '../components/OffersBanner';
 import { DesktopResourcesBar } from '../components/Navbar';
 import { SubPageType } from '../components/InfoPagesModal';
 import { trackFilterChange, trackSearchQuery } from '../services/behaviorTracker';
@@ -272,6 +273,9 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
           onOpenReviews={() => onOpenInfoPage?.('reviews')}
         />
       )}
+
+      {/* Offers / Flashcards Banner (in between hero card and search box) */}
+      {!savedOnly && <OffersBanner />}
 
       {/* Saved header if in saved mode */}
       {savedOnly && (

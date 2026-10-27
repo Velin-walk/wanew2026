@@ -183,6 +183,22 @@
         "desktopInstalls": { "type": "number" }
       },
       "required": ["totalInstalls"]
+    },
+    "coordinator_chat": {
+      "title": "Coordinator Team Chat Message",
+      "description": "Real-time communication message between coordinators and administrators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "text": { "type": "string", "maxLength": 2000 },
+        "senderEmail": { "type": "string", "maxLength": 256 },
+        "senderName": { "type": "string", "maxLength": 128 },
+        "senderRole": { "type": "string", "maxLength": 32 },
+        "hikeTag": { "type": "string", "maxLength": 64 },
+        "timestamp": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["text", "senderEmail", "senderName", "timestamp"]
     }
   },
   "firestore": {
@@ -229,6 +245,10 @@
     "/pwa_metrics/{metricId}": {
       "schema": { "$ref": "#/entities/pwa_install_metrics" },
       "description": "Aggregated PWA installation counters"
+    },
+    "/coordinator_chats/{messageId}": {
+      "schema": { "$ref": "#/entities/coordinator_chat" },
+      "description": "Internal real-time messages between coordinators and admins"
     }
   }
 }

@@ -27,7 +27,9 @@ import {
   AlertCircle,
   Smartphone,
   Bell,
-  EyeOff
+  EyeOff,
+  MessageSquare,
+  Tag,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -53,6 +55,7 @@ import { EventExecutionManager } from './EventExecutionManager';
 import { AdminLinkLibrary } from './AdminLinkLibrary';
 import { SalesAnalyticsManager } from './SalesAnalyticsManager';
 import { CoordinatorHub } from './CoordinatorHub';
+import { InternalCoordinatorChat } from './InternalCoordinatorChat';
 import { CloudflareRegistrationsTable } from './CloudflareRegistrationsTable';
 import { AdminActivityLogs } from './AdminActivityLogs';
 import { PWAInstallStats } from './PWAInstallStats';
@@ -61,6 +64,7 @@ import { NoticeBoardManager } from './NoticeBoardManager';
 import { SiteVisibilityManager } from './SiteVisibilityManager';
 import { UserActivityNotificationsPanel } from './UserActivityNotificationsPanel';
 import { AdminAccessManager } from './AdminAccessManager';
+import { OffersManager } from './OffersManager';
 import {
   fetchAllUserActivities,
   getAdminLastSeenTimestamp,
@@ -72,6 +76,7 @@ import {
 } from '../../data/defaultItineraryTemplate';
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { Trek } from '../../types';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { isFullAdminEmail, isCoordinatorEmail } from '../../adminUtils';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
@@ -85,12 +90,12 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const isCoordinatorOnly = !isFullAdmin && isCoordinatorEmail(currentUserEmail);
 
   const [activeTab, setActiveTab] = useState<
-    'bookings' | 'execution' | 'coordinator' | 'library' | 'editor' | 'maps' | 'notifications' | 'system' | 'links'
+    'bookings' | 'execution' | 'coordinator' | 'chat' | 'library' | 'editor' | 'maps' | 'notifications' | 'system' | 'links'
   >(() => {
     if (isCoordinatorOnly) {
       try {
         const saved = sessionStorage.getItem('wnw_admin_active_tab');
-        if (saved === 'coordinator' || saved === 'links') {
+        if (saved === 'coordinator' || saved === 'links' || saved === 'chat') {
           return saved;
         }
       } catch {}
@@ -102,6 +107,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'bookings' ||
         saved === 'execution' ||
         saved === 'coordinator' ||
+        saved === 'chat' ||
         saved === 'library' ||
         saved === 'editor' ||
         saved === 'maps' ||
@@ -116,11 +122,11 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   });
 
   useEffect(() => {
-    if (isCoordinatorOnly && activeTab !== 'coordinator' && activeTab !== 'links') {
+    if (isCoordinatorOnly && activeTab !== 'coordinator' && activeTab !== 'links' && activeTab !== 'chat') {
       setActiveTab('coordinator');
     }
   }, [isCoordinatorOnly, activeTab]);
-  const [systemSubTab, setSystemSubTab] = useState<'roles' | 'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales'>(() => {
+  const [systemSubTab, setSystemSubTab] = useState<'roles' | 'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales' | 'offers'>(() => {
     try {
       const saved = sessionStorage.getItem('wnw_admin_system_subtab');
       if (
@@ -132,7 +138,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'hero' ||
         saved === 'notice' ||
         saved === 'visibility' ||
-        saved === 'sales'
+        saved === 'sales' ||
+        saved === 'offers'
       ) {
         return saved;
       }
@@ -175,6 +182,62 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       window.removeEventListener('wnw-user-activity-seen', refreshUnreadCount);
     };
   }, []);
+
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
+
+  // Live real-time unread team chat listener for header notification badge
+  useEffect(() => {
+    const getLastSeen = (): number => {
+      try {
+        const val = localStorage.getItem('wnw_chat_last_seen_ts');
+        return val ? Number(val) : Date.now();
+      } catch {
+        return Date.now();
+      }
+    };
+
+    const updateLastSeen = () => {
+      try {
+        const now = Date.now();
+        localStorage.setItem('wnw_chat_last_seen_ts', String(now));
+      } catch {}
+      setUnreadChatCount(0);
+    };
+
+    if (activeTab === 'chat') {
+      updateLastSeen();
+    }
+
+    const q = query(collection(db, 'coordinator_chats'), orderBy('timestamp', 'desc'), limit(25));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (activeTab === 'chat') {
+          updateLastSeen();
+          return;
+        }
+
+        const lastSeen = getLastSeen();
+        let unread = 0;
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const msgTime = Number(data.timestamp) || 0;
+          const sender = (data.senderEmail || '').toLowerCase().trim();
+          const me = (currentUserEmail || '').toLowerCase().trim();
+
+          if (sender !== me && msgTime > lastSeen) {
+            unread++;
+          }
+        });
+        setUnreadChatCount(unread);
+      },
+      (err) => {
+        console.warn('[AdminDashboard] Chat notification listener error:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [activeTab, currentUserEmail]);
   const [hikes, setHikes] = useState<SavedHikeRecord[]>(DEFAULT_SAVED_HIKES);
   const [loadingHikes, setLoadingHikes] = useState(true);
   const [editingHike, setEditingHike] = useState<SavedHikeRecord | null>(null);
@@ -1676,6 +1739,32 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 <span>Coordinator Hub</span>
               </button>
 
+              {/* Team Chat Tab */}
+              <button
+                id="admin-tab-chat"
+                type="button"
+                onClick={() => setActiveTab('chat')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'chat'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Team Chat</span>
+                {unreadChatCount > 0 && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                      activeTab === 'chat'
+                        ? 'bg-white text-indigo-700'
+                        : 'bg-rose-500 text-white animate-pulse shadow-xs'
+                    }`}
+                  >
+                    {unreadChatCount}
+                  </span>
+                )}
+              </button>
+
               {/* Links Tab */}
               <button
                 id="admin-tab-links"
@@ -1730,21 +1819,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 <span>Event Execution</span>
               </button>
 
-              {/* Links Tab */}
-              <button
-                id="admin-tab-links"
-                type="button"
-                onClick={() => setActiveTab('links')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'links'
-                    ? 'bg-sky-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <Link2 className="w-4 h-4" />
-                <span>Links</span>
-              </button>
-
               {/* Coordinator Hub Tab */}
               <button
                 id="admin-tab-coordinator"
@@ -1758,6 +1832,47 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               >
                 <Shield className="w-4 h-4" />
                 <span>Coordinator Hub</span>
+              </button>
+
+              {/* Team Chat Tab */}
+              <button
+                id="admin-tab-chat"
+                type="button"
+                onClick={() => setActiveTab('chat')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'chat'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Team Chat</span>
+                {unreadChatCount > 0 && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                      activeTab === 'chat'
+                        ? 'bg-white text-indigo-700'
+                        : 'bg-rose-500 text-white animate-pulse shadow-xs'
+                    }`}
+                  >
+                    {unreadChatCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Links Tab */}
+              <button
+                id="admin-tab-links"
+                type="button"
+                onClick={() => setActiveTab('links')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'links'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Link2 className="w-4 h-4" />
+                <span>Links</span>
               </button>
 
               {/* Library Tab */}
@@ -1859,7 +1974,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       {/* Main Tab Content */}
       <div className="w-full">
         {isCoordinatorOnly ? (
-          activeTab === 'links' ? (
+          activeTab === 'chat' ? (
+            <InternalCoordinatorChat currentUserEmail={currentUserEmail} treks={enrichedTreks} />
+          ) : activeTab === 'links' ? (
             <AdminLinkLibrary baseURL={window.location.origin} treks={enrichedTreks} />
           ) : (
             <CoordinatorHub
@@ -1903,6 +2020,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             loading={loadingRegistrations}
             onRefresh={fetchRegistrations}
           />
+        )}
+
+        {activeTab === 'chat' && (
+          <InternalCoordinatorChat currentUserEmail={currentUserEmail} treks={enrichedTreks} />
         )}
 
         {activeTab === 'library' && (
@@ -2233,6 +2354,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 <DollarSign className="w-3.5 h-3.5" />
                 <span>Sales Analytics</span>
               </button>
+              <button
+                id="admin-system-subtab-offers"
+                onClick={() => setSystemSubTab('offers')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'offers'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <Tag className="w-3.5 h-3.5" />
+                <span>Offers / Flashcards</span>
+              </button>
             </div>
 
             <div className="mt-6">
@@ -2363,6 +2496,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                     setActiveTab('bookings');
                   }}
                 />
+              )}
+
+              {systemSubTab === 'offers' && (
+                <OffersManager currentUserEmail={currentUserEmail} />
               )}
             </div>
           </div>
