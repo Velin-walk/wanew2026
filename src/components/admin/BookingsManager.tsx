@@ -148,11 +148,11 @@ export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boole
 
   const tId = (t.id || '').toLowerCase().trim();
   const tHikeNum = (t.hike_number || '').toLowerCase().trim();
-  const tDigits = extractDigits(t.hike_number) || extractDigits(t.id);
+  const tDigits = extractDigits(t.hike_number) || extractDigits(t.id) || extractDigits(t.name);
 
   const rTrekId = (r.trek_id || '').toLowerCase().trim();
   const rHikeNum = (r.hike_number || '').toLowerCase().trim();
-  const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
+  const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id) || extractDigits(r.trek_name);
 
   // 1. Direct Hike Number or ID match (e.g. trek_id: "hike-290", hike_number: "290")
   if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
@@ -174,18 +174,15 @@ export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boole
   const tNameNorm = normStr(t.name);
   const rNameNorm = normStr(r.trek_name);
 
-  // 4. Exact date match when names match or one is generic
-  if (datesMatch(tDate, rDate)) {
-    if (!tNameNorm || !rNameNorm || tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm)) {
+  // 4. Substring / Name overlap match if no conflicting dates
+  if (tNameNorm && rNameNorm) {
+    if (tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm)) {
       return true;
     }
   }
 
-  // 5. Fallback name match ONLY if neither side has conflicting dates
-  if (tNameNorm && rNameNorm && tNameNorm === rNameNorm) {
-    if (tDate || rDate) {
-      return datesMatch(tDate, rDate);
-    }
+  // 5. Exact date match when names are present or generic
+  if (datesMatch(tDate, rDate)) {
     return true;
   }
 

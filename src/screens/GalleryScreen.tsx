@@ -866,14 +866,15 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               {/* Hike Box Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#EFEAE4]/80">
                 <div className="flex items-start sm:items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#7ABA42]/15 border border-[#7ABA42]/30 text-[#7ABA42] flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
-                    #{box.hikeNumber || '?'}
-                  </div>
                   <div>
-                    <h3 className="text-base sm:text-lg font-black text-[#1F1F1F] leading-tight flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-black text-[#1F1F1F] leading-tight flex flex-wrap items-center gap-x-2">
                       <span>{box.trekName}</span>
+                      <span className="text-[#7ABA42]">#{box.hikeNumber}</span>
+                      {box.trek?.date && (
+                        <span className="text-[#8B8680] text-sm sm:text-base font-bold">({box.trek.date})</span>
+                      )}
                     </h3>
-                    <div className="flex items-center gap-3 text-xs text-[#8B8680] font-semibold mt-0.5">
+                    <div className="flex items-center gap-3 text-xs text-[#8B8680] font-semibold mt-1">
                       {box.trek?.start_location && (
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3 h-3 text-[#E08828]" />
@@ -1113,7 +1114,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       {treks.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.hike_number ? `Hike #${t.hike_number} - ` : ''}
-                          {t.name}
+                          {t.name} {t.date ? `(${t.date})` : ''}
                         </option>
                       ))}
                     </select>
@@ -1176,7 +1177,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                         {treks.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.hike_number ? `#${t.hike_number} ` : ''}
-                            {t.name}
+                            {t.name} {t.date ? `(${t.date})` : ''}
                           </option>
                         ))}
                       </select>

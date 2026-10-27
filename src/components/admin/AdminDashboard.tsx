@@ -359,7 +359,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   useEffect(() => {
     fetchItineraries();
     fetchRegistrations();
-  }, []);
+  }, [currentUserEmail]);
 
   useEffect(() => {
     if (activeTab === 'maps') {

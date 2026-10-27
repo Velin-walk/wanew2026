@@ -142,11 +142,22 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
       }
 
       if (!headers.has("Authorization")) {
+        if (!auth.currentUser && typeof (auth as any).authStateReady === 'function') {
+          try {
+            await (auth as any).authStateReady();
+          } catch (_) {}
+        }
         const currentUser = auth.currentUser;
         if (currentUser) {
           const token = await currentUser.getIdToken();
           if (token) {
             headers.set("Authorization", `Bearer ${token}`);
+          }
+          if (!headers.has("X-Admin-Email") && currentUser.email) {
+            headers.set("X-Admin-Email", currentUser.email);
+            if (!isMapMinersPath && isAdminEmail(currentUser.email)) {
+              headers.set("X-Admin-Role", isFullAdminEmail(currentUser.email) ? "full" : "coordinator");
+            }
           }
         }
       }

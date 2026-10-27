@@ -21,11 +21,14 @@ import {
   ShieldCheck,
   ChevronRight,
   TrendingUp,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { AdminRegistration } from './BookingsManager';
 import { Trek } from '../../types';
 import { HikerStats, HikerCompletedEvent } from '../../types/leaderboard';
 import { fetchLeaderboardData } from '../../services/api';
+import { isHikerAnonymous, setHikerAnonymity } from '../../utils/anonymity';
 
 /**
  * Exact matching function from public trek card (GuideProfileModal.tsx)

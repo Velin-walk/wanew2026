@@ -44,6 +44,7 @@ import { HISTORICAL_TREKS, HistoricalTrekItem } from '../data/historicalTreks';
 import { fetchLeaderboardData } from '../services/api';
 import { HikerStats } from '../types/leaderboard';
 import { MyBookingsScreen } from '../screens/MyBookingsScreen';
+import { isHikerAnonymous, setHikerAnonymity } from '../utils/anonymity';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -92,6 +93,40 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [editShowImage, setEditShowImage] = useState(showProfileImage);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  const [isAnonymous, setIsAnonymous] = useState(() => {
+    return isHikerAnonymous({
+      name: user?.displayName,
+      email: user?.email,
+      phone: userPhone,
+      uid: user?.uid,
+    });
+  });
+
+  useEffect(() => {
+    setIsAnonymous(
+      isHikerAnonymous({
+        name: user?.displayName || editName,
+        email: user?.email,
+        phone: editPhone || userPhone,
+        uid: user?.uid,
+      })
+    );
+  }, [user?.displayName, user?.email, user?.uid, userPhone, editPhone, editName]);
+
+  const handleToggleAnonymous = async () => {
+    const next = !isAnonymous;
+    setIsAnonymous(next);
+    await setHikerAnonymity(
+      {
+        name: editName || user?.displayName,
+        email: user?.email,
+        phone: editPhone || userPhone,
+        uid: user?.uid,
+      },
+      next
+    );
+  };
 
   // Table search, filter, and sorting states for Completed Hikes
   const [searchQuery, setSearchQuery] = useState('');
@@ -436,6 +471,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         phone: cleanPhone,
         showProfileImage: editShowImage,
       });
+
+      await setHikerAnonymity(
+        {
+          name: editName || user?.displayName,
+          email: user?.email,
+          phone: cleanPhone,
+          uid: user?.uid,
+        },
+        isAnonymous
+      );
+
       setSaveMsg('Profile and verified phone numbers synced successfully!');
       setTimeout(() => setSaveMsg(null), 3500);
     } catch (err) {
@@ -1029,9 +1075,24 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className="space-y-4">
               <form onSubmit={handleSaveProfile} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-black text-[#5A5551] uppercase tracking-wider mb-1.5">
-                    Display Name
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-black text-[#5A5551] uppercase tracking-wider">
+                      Display Name
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleToggleAnonymous}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isAnonymous
+                          ? 'bg-purple-100 text-purple-800 border border-purple-300 shadow-2xs'
+                          : 'bg-[#FAF8F5] text-[#5A5551] border border-[#E5E1DB] hover:bg-stone-100'
+                      }`}
+                      title={isAnonymous ? 'Click to show your name publicly' : 'Click to hide your name on public live rosters, leaderboard, and reviews'}
+                    >
+                      {isAnonymous ? <EyeOff className="w-3.5 h-3.5 text-purple-600" /> : <Eye className="w-3.5 h-3.5 text-stone-400" />}
+                      <span>{isAnonymous ? 'Anonymous: ON' : 'Anonymous: OFF'}</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={editName}
@@ -1039,6 +1100,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#7ABA42] focus:bg-white"
                     placeholder="Your Full Name"
                   />
+                  {isAnonymous && (
+                    <p className="text-[11px] text-purple-700 font-medium mt-1 flex items-center gap-1.5">
+                      <EyeOff className="w-3 h-3 shrink-0" />
+                      <span>Anonymous Mode active: Your name is hidden on public rosters, leaderboard, and reviews (shown as "Anonymous Hiker"). Admins can still view your name for tour safety.</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 flex items-start gap-2.5 shadow-3xs">
@@ -1167,14 +1234,24 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             Walk Nepal Walk • Community Account
           </span>
 
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="px-3.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 border border-red-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
-          </button>
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setActiveProfileTab('settings')}
+              className="px-3.5 py-1.5 text-xs font-bold text-[#5A5551] hover:bg-stone-200/60 border border-stone-300 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 bg-white shadow-2xs"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Settings</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="px-3.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 border border-red-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 bg-white shadow-2xs"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

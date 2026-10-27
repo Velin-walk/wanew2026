@@ -1485,8 +1485,9 @@ function MainApp() {
           }}
           onOpenInfoPage={handleOpenInfoPage}
           userEmail={activeUserEmail}
-          onOpenProfile={() => {
+          onOpenProfile={(tab?: 'hikes' | 'bookings' | 'saved' | 'settings') => {
             closeAllOverlays();
+            setProfileModalTab(tab || 'hikes');
             setProfileModalOpen(true);
           }}
           notifications={notifications}

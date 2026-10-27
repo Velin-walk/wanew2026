@@ -38,6 +38,44 @@ const ADMIN_EMAILS = [
   'walknepalwalk@gmail.com',
 ];
 
+const COORDINATOR_EMAILS = [
+  'raihochhali@gmail.com',
+  'saraswotitamang2004@gmail.com',
+  'themusafir29@gmail.com',
+  'chiranjibisinghsaud484@gmail.com',
+  'sujankhadka6492@gmail.com',
+];
+
+let cachedDynamicRoles = null;
+let lastDynamicRolesCheck = 0;
+
+async function isAuthorizedAdminOrCoordinator(email, env = null) {
+  if (!email || typeof email !== 'string') return false;
+  const cleanEmail = email.trim().toLowerCase();
+  if (ADMIN_EMAILS.includes(cleanEmail) || COORDINATOR_EMAILS.includes(cleanEmail)) {
+    return true;
+  }
+  const now = Date.now();
+  if (cachedDynamicRoles && (now - lastDynamicRolesCheck < 15 * 60 * 1000)) {
+    return cachedDynamicRoles.has(cleanEmail);
+  }
+  if (env && env.DB) {
+    try {
+      const snap = await env.DB.prepare("SELECT data_json FROM system_snapshots WHERE key = 'admin_roles'").first();
+      lastDynamicRolesCheck = now;
+      if (snap && snap.data_json) {
+        const parsed = typeof snap.data_json === 'string' ? JSON.parse(snap.data_json) : snap.data_json;
+        const set = new Set();
+        (parsed.fullAdmins || []).forEach(e => set.add(String(e).toLowerCase().trim()));
+        (parsed.coordinators || []).forEach(e => set.add(String(e).toLowerCase().trim()));
+        cachedDynamicRoles = set;
+        return cachedDynamicRoles.has(cleanEmail);
+      }
+    } catch (_) {}
+  }
+  return false;
+}
+
 let cachedGoogleJwks = null;
 let googleJwksExpiresAt = 0;
 
@@ -121,12 +159,14 @@ async function verifyFirebaseToken(token, request = null) {
 
     const email = (payload.email || '').trim().toLowerCase();
     const isAdmin = Boolean(email && ADMIN_EMAILS.includes(email));
+    const isCoordinator = Boolean(email && COORDINATOR_EMAILS.includes(email));
 
     return {
       valid: true,
       email,
       uid: payload.user_id || payload.sub,
       isAdmin,
+      isCoordinator,
     };
   } catch (err) {
     console.warn('Error verifying Firebase token in worker:', err);
@@ -2320,7 +2360,9 @@ export default {
         }
 
         const isAdmin = Boolean(verifiedAuth.isAdmin);
+        const isCoordinator = Boolean(verifiedAuth.isCoordinator);
         const authEmail = verifiedAuth.email;
+        const isAuthorizedStaff = isAdmin || isCoordinator || (await isAuthorizedAdminOrCoordinator(authEmail, env));
 
         const email = url.searchParams.get('email');
         const phone = url.searchParams.get('phone');
@@ -2330,9 +2372,9 @@ export default {
         const limit = limitParam ? parseInt(limitParam, 10) : 0;
         const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
 
-        // Security check for non-admin users:
+        // Security check for regular hikers:
         // Regular hikers CANNOT perform unfiltered queries and CANNOT query other users' data
-        if (!isAdmin) {
+        if (!isAuthorizedStaff) {
           const requestedEmail = (email || '').trim().toLowerCase();
           if (!requestedEmail || requestedEmail !== authEmail) {
             return errorResponse('Forbidden: Hikers can only access their own registrations.', 403);
@@ -2360,7 +2402,7 @@ export default {
         `;
         let regParams = [];
 
-        if (!isAdmin) {
+        if (!isAuthorizedStaff) {
           // Strictly lock regular hikers to their own verified email
           const cleanEmail = authEmail;
           if (phone) {
@@ -2372,7 +2414,7 @@ export default {
             regParams.push(cleanEmail, cleanEmail);
           }
         } else {
-          // Admin access: support all administrative filters
+          // Staff (Admin & Coordinator) access: support all administrative filters
           if (email && phone) {
             const cleanEmail = email.trim().toLowerCase();
             const cleanPhone = phone.trim().replace(/[^0-9]/g, '');

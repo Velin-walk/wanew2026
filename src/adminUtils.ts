@@ -18,7 +18,13 @@ export const DEFAULT_FULL_ADMIN_EMAILS: string[] = [
 ];
 
 // Default Team Coordinator Level emails
-export const DEFAULT_COORDINATOR_EMAILS: string[] = [];
+export const DEFAULT_COORDINATOR_EMAILS: string[] = [
+  'raihochhali@gmail.com',
+  'saraswotitamang2004@gmail.com',
+  'themusafir29@gmail.com',
+  'chiranjibisinghsaud484@gmail.com',
+  'sujankhadka6492@gmail.com'
+];
 
 export const getFullAdminEmails = (): string[] => {
   try {

@@ -20,7 +20,7 @@ import {
 import { SubPageType } from './InfoPagesModal';
 import { isAdminEmail } from '../adminUtils';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, Settings } from 'lucide-react';
 import { NavigationNotifications } from '../services/notificationService';
 
 interface NavbarProps {
@@ -33,7 +33,7 @@ interface NavbarProps {
   userEmail?: string;
   onOpenContribute?: () => void;
   onOpenInfoPage?: (page: SubPageType) => void;
-  onOpenProfile?: () => void;
+  onOpenProfile?: (tab?: 'hikes' | 'bookings' | 'saved' | 'settings') => void;
   notifications?: NavigationNotifications;
 }
 
@@ -533,6 +533,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAvatarDropdownOpen(false);
+                      onOpenProfile?.('settings');
+                    }}
+                    className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Settings className="w-4 h-4 text-[#5A5551] group-hover:scale-110 transition-transform" />
+                      <span>Settings</span>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
+                  </button>
 
                   <div className="my-1 border-t border-[#F9F7F5]" />
 
