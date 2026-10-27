@@ -141,22 +141,9 @@ const datesConflict = (d1?: string, d2?: string): boolean => {
 export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boolean => {
   if (!t || !r) return false;
 
-  const tDate = t.date || (t.data as any)?.hikeDate || (t.data as any)?.date;
-  const rDate = r.trek_date || (r as any).date;
-
-  // 1. Strict date conflict check: if both have explicit dates and they point to different days/months, NEVER match
-  if (datesConflict(tDate, rDate)) {
+  const regStatus = String(r.status || (r as any).registration_status || 'Confirmed').toLowerCase().trim();
+  if (regStatus.includes('cancel') || regStatus === 'waitlisted' || regStatus === 'double registration' || regStatus === 'duplicate') {
     return false;
-  }
-
-  const tNameNorm = normStr(t.name);
-  const rNameNorm = normStr(r.trek_name);
-
-  // 2. Exact date match when names match or one is generic
-  if (datesMatch(tDate, rDate)) {
-    if (!tNameNorm || !rNameNorm || tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm)) {
-      return true;
-    }
   }
 
   const tId = (t.id || '').toLowerCase().trim();
@@ -167,13 +154,31 @@ export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boole
   const rHikeNum = (r.hike_number || '').toLowerCase().trim();
   const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id);
 
-  // 3. Exact ID / hike number match (only if dates did not conflict)
+  // 1. Direct Hike Number or ID match (e.g. trek_id: "hike-290", hike_number: "290")
   if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
   if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
 
-  // 4. Digits match (e.g. 304 === 304)
-  if (tDigits && rDigits) {
-    return tDigits === rDigits;
+  // 2. Digits match (e.g. 290 === 290)
+  if (tDigits && rDigits && tDigits === rDigits) {
+    return true;
+  }
+
+  const tDate = t.date || (t.data as any)?.hikeDate || (t.data as any)?.date;
+  const rDate = r.trek_date || (r as any).date;
+
+  // 3. Strict date conflict check: if both have explicit dates and they point to different days/months, do NOT match
+  if (datesConflict(tDate, rDate)) {
+    return false;
+  }
+
+  const tNameNorm = normStr(t.name);
+  const rNameNorm = normStr(r.trek_name);
+
+  // 4. Exact date match when names match or one is generic
+  if (datesMatch(tDate, rDate)) {
+    if (!tNameNorm || !rNameNorm || tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm)) {
+      return true;
+    }
   }
 
   // 5. Fallback name match ONLY if neither side has conflicting dates

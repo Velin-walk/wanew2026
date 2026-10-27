@@ -382,7 +382,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           loaded = items.map((r: any) => {
             const extractHikeNum = (obj: any): string => {
               if (!obj) return '';
-              // Only inspect dedicated hike number fields — never obj.id, trek_name, or list_name (which contain row IDs or dates like Oct 2 / Oct 22)
               const fields = [
                 obj.hike_number,
                 obj.hikeNumber,
@@ -393,11 +392,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 if (f !== undefined && f !== null) {
                   const s = String(f).trim();
                   if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') continue;
-                  const hikePrefixMatch = s.match(/^hike-(\d{1,4})$/i);
-                  if (hikePrefixMatch) return hikePrefixMatch[1];
-                  // Skip UUIDs or long composite IDs
-                  if (s.length > 12 || s.includes('-')) continue;
-                  const m = s.match(/^\d{1,4}$/) || s.match(/^#?(\d{1,4})$/) || s.match(/\b(\d{1,4})\b/);
+                  if (s.length > 25) continue; // Skip long UUIDs
+                  const m = s.match(/^hike-(\d{1,4})$/i) || s.match(/^#?(\d{1,4})$/) || s.match(/\b(\d{1,4})\b/);
                   if (m && parseInt(m[1] || m[0], 10) > 0) return m[1] || m[0];
                 }
               }

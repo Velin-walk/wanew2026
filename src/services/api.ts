@@ -495,10 +495,10 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
   const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const extractValidHikeDigits = (s?: string) => {
     const raw = String(s || '').trim();
-    if (!raw || raw.toLowerCase() === 'tbd') return '';
-    // Avoid extracting digits from UUIDs or auto-generated IDs
-    if (raw.length > 12 || raw.includes('-')) return '';
-    return raw.match(/^\d+$/)?.[0] || raw.match(/^#?(\d+)$/)?.[1] || '';
+    if (!raw || raw.toLowerCase() === 'tbd' || raw.toLowerCase() === 'private') return '';
+    if (raw.length > 20) return '';
+    const m = raw.match(/^hike-(\d{1,4})$/i) || raw.match(/^#?(\d{1,4})$/) || raw.match(/\b(\d{1,4})\b/);
+    return m ? m[1] || m[0] : '';
   };
   const extractParenDate = (s?: string) => {
     const m = String(s || '').match(/\(([^)]+)\)/);
@@ -506,7 +506,7 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
   };
 
   return treks.map((trek) => {
-    const tDigits = extractValidHikeDigits(trek.hike_number);
+    const tDigits = extractValidHikeDigits(trek.hike_number) || extractValidHikeDigits(trek.id);
     const tNum = String(trek.hike_number || trek.id || '').trim().toLowerCase();
     const tName = norm(trek.name);
     const tDateNorm = norm(trek.date);
@@ -514,7 +514,7 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
 
     const matched = registrations.filter((r) => {
       const regStatus = String(r.roster_registration_status || r.registration_status || r.status || 'Confirmed').toLowerCase().trim();
-      if (regStatus !== 'confirmed') {
+      if (regStatus.includes('cancel') || regStatus === 'waitlisted' || regStatus === 'double registration' || regStatus === 'duplicate') {
         return false;
       }
 
