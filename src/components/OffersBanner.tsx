@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Tag, ChevronLeft, ChevronRight, X, Eye, Megaphone, Clock } from 'lucide-react';
 import { apiFetch } from '../services/api';
-import { OFFER_TREK_ID, OFFERS_STORAGE_KEY, OfferItem, getOfferThemeStyles, parseOfferMetadata } from './admin/OffersManager';
+import {
+  OFFER_TREK_ID,
+  OFFERS_STORAGE_KEY,
+  OfferItem,
+  getOfferThemeStyles,
+  parseOfferMetadata,
+  cleanOfferCaption,
+} from './admin/OffersManager';
 
 export const OffersBanner: React.FC = () => {
   const isNotExpired = (item: OfferItem) => {
@@ -98,9 +105,10 @@ export const OffersBanner: React.FC = () => {
 
   const currentOffer = activeOffers[currentIndex] || activeOffers[0];
   const meta = parseOfferMetadata(currentOffer);
-  const currentColor = meta.color || currentOffer.color || 'green';
+  const currentColor = meta.color || currentOffer.color || 'orange';
   const currentExpiresAt = meta.expiresAt || currentOffer.expiresAt;
   const theme = getOfferThemeStyles(currentColor);
+  const displayCaption = cleanOfferCaption(currentOffer.caption);
 
   const handleNext = () => {
     setCurrentIndex((prev) => (prev + 1) % activeOffers.length);
@@ -124,7 +132,7 @@ export const OffersBanner: React.FC = () => {
 
   return (
     <div className="w-full my-3 animate-in fade-in slide-in-from-top-2 duration-300">
-      <div className={`relative ${theme.cardBg} text-white rounded-2xl p-3.5 sm:p-5 shadow-md border ${theme.border} overflow-hidden`}>
+      <div className={`relative ${theme.cardBg} rounded-2xl p-3.5 sm:p-5 shadow-md border ${theme.border} overflow-hidden`}>
         {/* Background Ambient Glow & Sparkle accents */}
         <div className={`absolute -top-12 -right-12 w-48 h-48 ${theme.glowBg1} rounded-full blur-2xl pointer-events-none`} />
         <div className={`absolute -bottom-12 -left-12 w-48 h-48 ${theme.glowBg2} rounded-full blur-2xl pointer-events-none`} />
@@ -138,7 +146,7 @@ export const OffersBanner: React.FC = () => {
             </span>
 
             {currentExpiresAt && formatDeadline(currentExpiresAt) && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#1F1F1F]/40 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-stone-900/40 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold">
                 <Clock className="w-3 h-3 text-amber-300" />
                 <span>Expires: {formatDeadline(currentExpiresAt)}</span>
               </span>
@@ -172,7 +180,7 @@ export const OffersBanner: React.FC = () => {
             >
               <img
                 src={currentOffer.url}
-                alt={currentOffer.caption || 'Special Offer'}
+                alt={displayCaption || 'Special Offer'}
                 className="w-full h-auto max-h-72 object-contain rounded-xl group-hover:scale-102 transition-transform duration-300"
               />
               <div className="absolute bottom-1.5 right-1.5 p-1 rounded-md bg-black/60 backdrop-blur-xs text-white opacity-80 group-hover:opacity-100 transition-opacity">
@@ -184,7 +192,7 @@ export const OffersBanner: React.FC = () => {
           {/* Uploaded Offer Text / Caption */}
           <div className="flex-1 space-y-2 text-left w-full">
             <p className={`text-xs sm:text-sm leading-relaxed whitespace-pre-line ${theme.textMain || 'text-white font-bold'}`}>
-              {currentOffer.caption || 'Special announcement from Walk Nepal Walk.'}
+              {displayCaption || 'Special announcement from Walk Nepal Walk.'}
             </p>
 
             <div className="flex items-center justify-between pt-1">

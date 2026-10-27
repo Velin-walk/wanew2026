@@ -35,8 +35,16 @@ export interface OfferItem {
   caption?: string;
 }
 
+export const cleanOfferCaption = (caption?: string): string => {
+  if (!caption) return '';
+  return caption
+    .replace(/\[color:[a-z]+\]/gi, '')
+    .replace(/\[expires:[^\]]+\]/gi, '')
+    .trim();
+};
+
 export const parseOfferMetadata = (item: OfferItem): { color: string; expiresAt?: string } => {
-  let color = item.color || 'green';
+  let color = item.color || 'orange';
   let expiresAt = item.expiresAt;
 
   if (item.publicId) {
@@ -55,11 +63,23 @@ export const parseOfferMetadata = (item: OfferItem): { color: string; expiresAt?
     if (parts[2] && !expiresAt) expiresAt = parts[2];
   }
 
-  return { color, expiresAt };
+  if (item.caption) {
+    const colorMatch = item.caption.match(/\[color:([a-z]+)\]/i);
+    if (colorMatch && colorMatch[1]) {
+      color = colorMatch[1].toLowerCase();
+    }
+    const expiresMatch = item.caption.match(/\[expires:([^\]]+)\]/i);
+    if (expiresMatch && expiresMatch[1] && !expiresAt) {
+      expiresAt = expiresMatch[1];
+    }
+  }
+
+  return { color: color || 'orange', expiresAt };
 };
 
 export const getOfferThemeStyles = (color?: string) => {
-  switch (color) {
+  const normColor = (color || 'orange').toLowerCase();
+  switch (normColor) {
     case 'blue':
       return {
         cardBg: 'bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 text-white',
@@ -72,16 +92,16 @@ export const getOfferThemeStyles = (color?: string) => {
         glowBg2: 'bg-indigo-300/30',
         dotActive: 'bg-white',
       };
-    case 'orange':
+    case 'green':
       return {
-        cardBg: 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white',
-        border: 'border-amber-300/60 shadow-amber-500/20',
+        cardBg: 'bg-gradient-to-r from-emerald-500 via-teal-600 to-emerald-600 text-white',
+        border: 'border-emerald-300/60 shadow-emerald-500/20',
         badgeBg: 'bg-white/20 text-white border-white/30 backdrop-blur-md',
-        badgeIcon: 'text-amber-100',
+        badgeIcon: 'text-emerald-100',
         textMain: 'text-white font-bold',
-        textAccent: 'text-amber-100',
-        glowBg1: 'bg-amber-300/30',
-        glowBg2: 'bg-orange-300/30',
+        textAccent: 'text-emerald-100',
+        glowBg1: 'bg-emerald-300/30',
+        glowBg2: 'bg-teal-300/30',
         dotActive: 'bg-white',
       };
     case 'red':
@@ -120,17 +140,17 @@ export const getOfferThemeStyles = (color?: string) => {
         glowBg2: 'bg-fuchsia-300/30',
         dotActive: 'bg-white',
       };
-    case 'green':
+    case 'orange':
     default:
       return {
-        cardBg: 'bg-gradient-to-r from-emerald-500 via-teal-600 to-emerald-600 text-white',
-        border: 'border-emerald-300/60 shadow-emerald-500/20',
+        cardBg: 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white',
+        border: 'border-amber-300/60 shadow-amber-500/20',
         badgeBg: 'bg-white/20 text-white border-white/30 backdrop-blur-md',
-        badgeIcon: 'text-emerald-100',
+        badgeIcon: 'text-amber-100',
         textMain: 'text-white font-bold',
-        textAccent: 'text-emerald-100',
-        glowBg1: 'bg-emerald-300/30',
-        glowBg2: 'bg-teal-300/30',
+        textAccent: 'text-amber-100',
+        glowBg1: 'bg-amber-300/30',
+        glowBg2: 'bg-orange-300/30',
         dotActive: 'bg-white',
       };
   }
@@ -148,7 +168,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
   const [uploading, setUploading] = useState(false);
   const [offerText, setOfferText] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [cardColor, setCardColor] = useState<string>('green');
+  const [cardColor, setCardColor] = useState<string>('orange');
   const [directUrl, setDirectUrl] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{
@@ -280,6 +300,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
       const expiresAtIso = deadline ? new Date(deadline).toISOString() : '';
       const metaPayload = JSON.stringify({ color: cardColor, expiresAt: expiresAtIso });
       const encodedHikeNumber = `OFFER|${cardColor}|${expiresAtIso}`;
+      const encodedCaption = `${offerText.trim()} [color:${cardColor}]${expiresAtIso ? ` [expires:${expiresAtIso}]` : ''}`;
 
       const newRecord: OfferItem = {
         id: `offer_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -293,7 +314,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
         uploadedAt: new Date().toISOString(),
         expiresAt: expiresAtIso || undefined,
         color: cardColor,
-        caption: offerText.trim(),
+        caption: encodedCaption,
       };
 
       const saveRes = await apiFetch('trek_photos', {
@@ -378,7 +399,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
                 Homepage Offers &amp; Flashcards Page
               </h2>
               <p className="text-xs sm:text-sm text-[#8B8680] font-medium">
-                Upload unframed offer cards, choose custom bright colors (green, blue, orange, red, yellow, purple), and set removal deadlines.
+                Upload unframed offer cards, choose custom bright colors (orange default, green, blue, red, yellow, purple), and set removal deadlines.
               </p>
             </div>
           </div>
@@ -486,13 +507,13 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
           <div>
             <label className="block text-[11px] font-bold text-[#5A5551] mb-1.5 flex items-center gap-1">
               <Palette className="w-3.5 h-3.5 text-[#E08828]" />
-              <span>3. Choose Offer Card Theme Color</span>
+              <span>3. Choose Offer Card Theme Color (Default: Orange)</span>
             </label>
             <div className="flex items-center gap-2 flex-wrap">
               {[
+                { id: 'orange', label: 'Orange (Default)', bg: 'bg-amber-500', ring: 'ring-amber-400' },
                 { id: 'green', label: 'Bright Green', bg: 'bg-emerald-500', ring: 'ring-emerald-400' },
                 { id: 'blue', label: 'Bright Blue', bg: 'bg-sky-500', ring: 'ring-sky-400' },
-                { id: 'orange', label: 'Bright Orange', bg: 'bg-amber-500', ring: 'ring-amber-400' },
                 { id: 'red', label: 'Bright Red', bg: 'bg-rose-500', ring: 'ring-rose-400' },
                 { id: 'yellow', label: 'Bright Yellow', bg: 'bg-yellow-400', ring: 'ring-yellow-300' },
                 { id: 'purple', label: 'Bright Purple', bg: 'bg-purple-500', ring: 'ring-purple-400' },
@@ -630,8 +651,9 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
               {offers.map((item) => {
                 const active = isNotExpired(item);
                 const meta = parseOfferMetadata(item);
-                const itemColor = meta.color || item.color || 'green';
+                const itemColor = meta.color || item.color || 'orange';
                 const itemExpires = meta.expiresAt || item.expiresAt;
+                const displayCaption = cleanOfferCaption(item.caption);
 
                 return (
                   <div
@@ -673,7 +695,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
                           )}
                         </div>
                         <p className="text-xs font-bold text-[#1F1F1F] leading-relaxed whitespace-pre-line">
-                          {item.caption || 'No description text'}
+                          {displayCaption || 'No description text'}
                         </p>
                       </div>
                     </div>
