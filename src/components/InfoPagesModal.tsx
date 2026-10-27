@@ -33,6 +33,9 @@ import {
   AlertTriangle,
   Info,
   Wrench,
+  Archive,
+  Clock,
+  ExternalLink,
 } from 'lucide-react';
 import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
 import { ReviewsAnalyticsBoard } from './ReviewsAnalyticsBoard';
@@ -627,6 +630,7 @@ export const NoticesSection: React.FC<{
 
   const config = getTypeConfig(notice?.type);
   const hasActiveNotice = notice && notice.enabled && (notice.title || notice.message);
+  const pastNotices = (notice?.history || []).filter((h) => h && (h.title || h.message));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
@@ -642,7 +646,7 @@ export const NoticesSection: React.FC<{
             </span>
           </div>
           <p className="text-xs text-[#8B8680] mt-0.5">
-            Trail advisories, weather updates, schedule changes, and community announcements.
+            Trail advisories, weather updates, schedule changes, and official community announcements.
           </p>
         </div>
 
@@ -734,6 +738,103 @@ export const NoticesSection: React.FC<{
           </div>
         </div>
       )}
+
+      {/* Record of Past Notices & Archive */}
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Archive className="w-4 h-4 text-[#8B8680]" />
+            <h4 className="text-xs font-extrabold text-[#8B8680] uppercase tracking-wider">
+              Past Notices &amp; Bulletins Archive
+            </h4>
+            {pastNotices.length > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FAF8F5] text-[#5A5551] border border-[#E5E1DB]">
+                {pastNotices.length} recorded
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] text-[#8B8680]">
+            Permanent historical record
+          </span>
+        </div>
+
+        {pastNotices.length > 0 ? (
+          <div className="space-y-3">
+            {pastNotices.map((item, idx) => {
+              const itemConfig = getTypeConfig(item.type);
+              return (
+                <div
+                  key={item.id || item.updatedAt || `past_notice_${idx}`}
+                  className="rounded-2xl border border-[#E5E1DB] bg-white p-4 sm:p-5 shadow-2xs space-y-2.5 transition-all hover:border-[#D5CFC9]"
+                >
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${itemConfig.badgeClass}`}>
+                        {itemConfig.badgeText}
+                      </span>
+                      <span className="text-[10px] font-semibold text-[#8B8680] px-1.5 py-0.5 rounded bg-[#F5F2ED]">
+                        Archived
+                      </span>
+                    </div>
+
+                    {item.updatedAt && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8B8680]">
+                        <Clock className="w-3.5 h-3.5 text-[#A09890]" />
+                        <span>
+                          {new Date(item.updatedAt).toLocaleDateString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <h5 className="text-sm font-bold text-[#1F1F1F] leading-snug">
+                    {item.title}
+                  </h5>
+
+                  <p className="text-xs text-[#4A4541] leading-relaxed whitespace-pre-line font-medium">
+                    {item.message}
+                  </p>
+
+                  {item.expiresAt && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-[#8B8680] pt-0.5">
+                      <Calendar className="w-3.5 h-3.5 text-[#E08828]" />
+                      <span>
+                        Notice period ended: {new Date(item.expiresAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                      </span>
+                    </div>
+                  )}
+
+                  {item.ctaText && item.ctaLink && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleCtaClick(item.ctaLink)}
+                        className="text-xs font-bold text-[#C06F17] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{item.ctaText}</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF8F5] border border-dashed border-[#E5E1DB] text-center space-y-1">
+            <p className="text-xs font-semibold text-[#5A5551]">
+              No past notices in archive yet
+            </p>
+            <p className="text-[11px] text-[#8B8680]">
+              Whenever new announcements or updates are published, all previous notices will be automatically preserved here.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Standing Community Advisories & Guidelines */}
       <div className="space-y-3 pt-2">

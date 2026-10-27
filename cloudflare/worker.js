@@ -120,16 +120,7 @@ async function verifyFirebaseToken(token, request = null) {
     }
 
     const email = (payload.email || '').trim().toLowerCase();
-    const requestRole = request ? (request.headers.get('X-Admin-Role') || '').trim().toLowerCase() : '';
-    const requestAdminEmail = request ? (request.headers.get('X-Admin-Email') || '').trim().toLowerCase() : '';
-    const isHeaderMatch = Boolean(requestAdminEmail && requestAdminEmail === email);
-
-    const isAdmin = Boolean(
-      email && (
-        ADMIN_EMAILS.includes(email) ||
-        (isHeaderMatch && (requestRole === 'coordinator' || requestRole === 'full'))
-      )
-    );
+    const isAdmin = Boolean(email && ADMIN_EMAILS.includes(email));
 
     return {
       valid: true,
@@ -150,11 +141,6 @@ async function getAuthUser(request) {
   if (bearerToken) {
     const verified = await verifyFirebaseToken(bearerToken, request);
     if (verified) return verified;
-  }
-  const adminEmail = (request.headers.get('X-Admin-Email') || '').trim().toLowerCase();
-  const adminRole = (request.headers.get('X-Admin-Role') || '').trim().toLowerCase();
-  if (adminEmail && (ADMIN_EMAILS.includes(adminEmail) || adminRole === 'coordinator' || adminRole === 'full')) {
-    return { valid: true, email: adminEmail, isAdmin: true };
   }
   return null;
 }
@@ -1008,6 +994,9 @@ function ensureDbIndexes(env, ctx) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_regid ON bookings_roster (registration_id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_hike ON bookings_roster (hike_number)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_roster_hike_status ON bookings_roster (hike_number, registration_status)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_behavior_created ON user_behavior_events (created_at DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback (submitted_at DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_feedback_hike ON feedback (hike_number)'),
   ]).catch(() => {});
   if (ctx && ctx.waitUntil) {
     ctx.waitUntil(p);
@@ -1123,6 +1112,26 @@ export default {
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const method = request.method.toUpperCase();
 
+    const ADMIN_ONLY = [
+      '/admin/sync-all', '/admin/recompute-leaderboard',
+      '/admin/recompute-participant-summary', '/admin/recompute-summaries',
+      '/admin/migrate-images-to-r2', '/admin/migrate_images_to_r2',
+      '/admin/clear-trek-photos', '/admin/clear_trek_photos',
+      '/admin/sync-leaderboard-sheet', '/leaderboard/sync',
+      '/admin/logs', '/admin/behavior_events/summary',
+    ];
+    const isAdminWrite = method !== 'GET' && (
+      path.includes('/admin/') ||
+      path === '/treks' || path === '/treks/sync' || path === '/treks/batch' ||
+      (path.startsWith('/treks/') && method !== 'POST') ||
+      path === '/registrations/batch' ||
+      (method === 'DELETE' && path.startsWith('/registrations/')) ||
+      path === '/notice'
+    );
+    if (ADMIN_ONLY.includes(path) || isAdminWrite) {
+      const u = await getAuthUser(request);
+      if (!u || !u.isAdmin) return errorResponse('Admin authentication required', 401);
+    }
     try {
       // ===== HEALTH CHECK =====
       if (path === '' || path === '/' || path === '/health') {
@@ -3154,9 +3163,9 @@ export default {
         if (!env.DB) return jsonResponse({ success: true, data: [] });
         const hikeNum = url.searchParams.get('hike_number');
 
-        let stmt = env.DB.prepare('SELECT * FROM feedback ORDER BY submitted_at DESC');
+        let stmt = env.DB.prepare('SELECT * FROM feedback ORDER BY submitted_at DESC LIMIT 200');
         if (hikeNum) {
-          stmt = env.DB.prepare('SELECT * FROM feedback WHERE hike_number = ? ORDER BY submitted_at DESC').bind(hikeNum);
+          stmt = env.DB.prepare('SELECT * FROM feedback WHERE hike_number = ? ORDER BY submitted_at DESC LIMIT 200').bind(hikeNum);
         }
 
         const { results } = await stmt.all();
@@ -3469,7 +3478,7 @@ export default {
           });
 
           // Insert batch of up to 50 events atomically
-          const statements = rawEvents.slice(0, 50).map((evt) => {
+          const statements = rawEvents.slice(0, 20).map((evt) => {
             const id = evt.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
             const sessionId = String(evt.sessionId || evt.session_id || 'anonymous').substring(0, 100);
             const userEmail = evt.userEmail || evt.user_email ? String(evt.userEmail || evt.user_email).substring(0, 150) : null;
@@ -3498,22 +3507,57 @@ export default {
       if (method === 'GET' && path === '/admin/behavior_events/summary') {
         if (!env.DB) return jsonResponse({ success: true, total: 0 });
         try {
-          const { results: countRes } = await env.DB.prepare(
-            'SELECT COUNT(*) as total FROM user_behavior_events'
-          ).all();
-          const { results: topEvents } = await env.DB.prepare(
-            'SELECT event_type, COUNT(*) as count FROM user_behavior_events GROUP BY event_type ORDER BY count DESC LIMIT 10'
-          ).all();
-          const { results: topTreks } = await env.DB.prepare(
-            "SELECT target_id, COUNT(*) as count FROM user_behavior_events WHERE event_type IN ('trek_card_click', 'itinerary_view') AND target_id IS NOT NULL GROUP BY target_id ORDER BY count DESC LIMIT 10"
-          ).all();
+          // 1. Serve cached summary if younger than 15 minutes (1 row read)
+          try {
+            const snap = await env.DB.prepare(
+              "SELECT data_json, updated_at FROM system_snapshots WHERE key = 'behavior_summary'"
+            ).first();
+            if (snap && snap.data_json && snap.updated_at) {
+              const updatedAtStr = String(snap.updated_at);
+              const formattedDateStr = updatedAtStr.endsWith('Z')
+                ? updatedAtStr
+                : (updatedAtStr.includes('T') ? updatedAtStr + 'Z' : updatedAtStr.replace(' ', 'T') + 'Z');
+              const ageMs = Date.now() - new Date(formattedDateStr).getTime();
+              if (ageMs < 15 * 60 * 1000) {
+                try {
+                  const cachedData = typeof snap.data_json === 'string' ? JSON.parse(snap.data_json) : snap.data_json;
+                  return jsonResponse(cachedData, 200, {
+                    'Cache-Control': 'private, max-age=60',
+                  });
+                } catch (_) { /* invalid json, fall through to recompute */ }
+              }
+            }
+          } catch (_) {
+            // If system_snapshots read fails, fall through to recompute
+          }
 
-          return jsonResponse({
+          // 2. Recompute windowed to last 30 days, single batch (3 queries in 1 roundtrip)
+          const sinceIso = new Date(Date.now() - 30 * 864e5).toISOString();
+          const [countRes, topEventsRes, topTreksRes] = await env.DB.batch([
+            env.DB.prepare('SELECT COUNT(*) as total FROM user_behavior_events WHERE created_at >= ?').bind(sinceIso),
+            env.DB.prepare('SELECT event_type, COUNT(*) as count FROM user_behavior_events WHERE created_at >= ? GROUP BY event_type ORDER BY count DESC LIMIT 10').bind(sinceIso),
+            env.DB.prepare("SELECT target_id, COUNT(*) as count FROM user_behavior_events WHERE created_at >= ? AND event_type IN ('trek_card_click', 'itinerary_view') AND target_id IS NOT NULL GROUP BY target_id ORDER BY count DESC LIMIT 10").bind(sinceIso),
+          ]);
+
+          const payload = {
             success: true,
-            total: countRes?.[0]?.total || 0,
-            topEvents: topEvents || [],
-            topTreks: topTreks || [],
-          });
+            windowDays: 30,
+            total: countRes?.results?.[0]?.total || 0,
+            topEvents: topEventsRes?.results || [],
+            topTreks: topTreksRes?.results || [],
+          };
+
+          // 3. Cache result in background for next 15 minutes
+          const cachePromise = env.DB.prepare(
+            "INSERT INTO system_snapshots (key, data_json, updated_at) VALUES ('behavior_summary', ?, CURRENT_TIMESTAMP) " +
+            "ON CONFLICT(key) DO UPDATE SET data_json = excluded.data_json, updated_at = CURRENT_TIMESTAMP"
+          ).bind(JSON.stringify(payload)).run().catch(e => console.warn('behavior_summary cache fail:', e.message));
+
+          if (ctx && ctx.waitUntil) {
+            ctx.waitUntil(cachePromise);
+          }
+
+          return jsonResponse(payload);
         } catch (err) {
           return jsonResponse({ success: true, total: 0, note: err.message });
         }
@@ -3793,11 +3837,7 @@ export default {
           const effectiveUserEmail = (authUser?.email || headerUserEmail || bodyEmail || '').toLowerCase();
           const effectiveEditToken = headerEditToken || bodyEditToken || '';
 
-          const isAdmin = Boolean(
-            authUser?.isAdmin ||
-            (headerAdminEmail && ADMIN_EMAILS.includes(headerAdminEmail)) ||
-            (effectiveUserEmail && ADMIN_EMAILS.includes(effectiveUserEmail))
-          );
+          const isAdmin = Boolean(authUser?.isAdmin);
 
           const isAuthorEmail = Boolean(
             existing.author_email &&
@@ -3900,11 +3940,7 @@ export default {
           const effectiveUserEmail = (authUser?.email || headerUserEmail || bodyEmail || '').toLowerCase();
           const effectiveEditToken = headerEditToken || bodyEditToken || '';
 
-          const isAdmin = Boolean(
-            authUser?.isAdmin ||
-            (headerAdminEmail && ADMIN_EMAILS.includes(headerAdminEmail)) ||
-            (effectiveUserEmail && ADMIN_EMAILS.includes(effectiveUserEmail))
-          );
+          const isAdmin = Boolean(authUser?.isAdmin);
 
           const isAuthorEmail = Boolean(
             existing.author_email &&
@@ -3966,6 +4002,10 @@ export default {
   async scheduled(event, env, ctx) {
     if (ctx && ctx.waitUntil) {
       ctx.waitUntil(rebuildTreksSnapshot(env));
+      ctx.waitUntil(
+        env.DB.prepare('DELETE FROM user_behavior_events WHERE created_at < ?')
+          .bind(new Date(Date.now() - 90 * 864e5).toISOString()).run().catch(() => {})
+      );
     } else {
       await rebuildTreksSnapshot(env);
     }

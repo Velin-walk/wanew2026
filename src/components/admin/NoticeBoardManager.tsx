@@ -14,12 +14,18 @@ import {
   Clock,
   Send,
   Power,
+  PlusCircle,
+  Archive,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import {
   SiteNotice,
   NoticeType,
+  NoticeRecord,
   fetchSiteNotice,
   saveSiteNotice,
+  deleteArchivedNotice,
   DEFAULT_NOTICE,
 } from '../../services/noticeService';
 import { NoticeBoardModal } from '../NoticeBoardModal';
@@ -109,6 +115,52 @@ export const NoticeBoardManager: React.FC = () => {
     }
   };
 
+  const handleStartNewDraft = () => {
+    setNotice((prev) => ({
+      ...prev,
+      title: '',
+      message: '',
+      ctaText: '',
+      ctaLink: '',
+      expiresAt: '',
+      enabled: true,
+    }));
+    setSaveSuccessMsg('Form cleared for a new notice. Your previous notice will be preserved in the archive below when you save.');
+    setTimeout(() => setSaveSuccessMsg(null), 5000);
+  };
+
+  const handleLoadFromHistory = (item: NoticeRecord) => {
+    setNotice((prev) => ({
+      ...prev,
+      title: item.title,
+      message: item.message,
+      type: item.type,
+      ctaText: item.ctaText || '',
+      ctaLink: item.ctaLink || '',
+      expiresAt: item.expiresAt || '',
+      enabled: true,
+    }));
+    setSaveSuccessMsg(`Loaded archived notice "${item.title}" into editor.`);
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
+
+  const handleDeleteHistoryItem = async (idOrTime: string) => {
+    if (!confirm('Are you sure you want to remove this notice from the past notices archive?')) return;
+    setSaving(true);
+    try {
+      const res = await deleteArchivedNotice(idOrTime);
+      if (res) {
+        setNotice(res);
+        setSaveSuccessMsg('Archived notice removed.');
+        setTimeout(() => setSaveSuccessMsg(null), 4000);
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Error removing archived notice');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white p-8 rounded-3xl border border-[#E5E1DB] flex flex-col items-center justify-center min-h-[300px]">
@@ -173,6 +225,15 @@ export const NoticeBoardManager: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleStartNewDraft}
+              className="px-3.5 py-2 text-xs font-bold rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] hover:bg-[#F2EFEA] text-[#1F1F1F] inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Clear form to write a new notice without overwriting old notices"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-[#7ABA42]" />
+              <span>Draft New Notice</span>
+            </button>
             <button
               type="button"
               onClick={() => setPreviewOpen(true)}
@@ -334,6 +395,71 @@ export const NoticeBoardManager: React.FC = () => {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Archived Past Notices Records */}
+      <div className="bg-white p-6 rounded-3xl border border-[#E5E1DB] shadow-2xs space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-[#E5E1DB]">
+          <div className="flex items-center gap-2">
+            <Archive className="w-4 h-4 text-[#8B8680]" />
+            <h4 className="text-sm font-black text-[#1F1F1F]">
+              Archived Past Notices ({notice.history?.length || 0})
+            </h4>
+          </div>
+          <span className="text-xs text-[#8B8680]">
+            Visible to visitors on Official Notices page
+          </span>
+        </div>
+
+        {notice.history && notice.history.length > 0 ? (
+          <div className="space-y-3">
+            {notice.history.map((item, idx) => (
+              <div
+                key={item.id || item.updatedAt || idx}
+                className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+              >
+                <div className="space-y-1 max-w-xl">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-stone-100 text-stone-700 border border-stone-200">
+                      {item.type}
+                    </span>
+                    <span className="text-[11px] text-[#8B8680]">
+                      {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString(undefined, { dateStyle: 'medium' }) : 'Archived'}
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-[#1F1F1F] text-sm">{item.title}</h5>
+                  <p className="text-[#5A5551] line-clamp-2 leading-relaxed">{item.message}</p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleLoadFromHistory(item)}
+                    className="px-3 py-1.5 rounded-lg border border-[#E5E1DB] bg-white hover:bg-stone-50 text-[#1F1F1F] text-xs font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    title="Load this notice into the editor"
+                  >
+                    <RotateCcw className="w-3 h-3 text-[#E08828]" />
+                    <span>Load</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteHistoryItem(item.id || item.updatedAt)}
+                    className="p-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-colors"
+                    title="Delete from archive"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-6 rounded-2xl bg-[#FAF8F5] border border-dashed border-[#E5E1DB] text-center">
+            <p className="text-xs text-[#8B8680]">
+              No archived past notices yet. When you update the notice with a new announcement, previous notices are automatically preserved here and on the Official Notices page.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* In-Admin Pop-up Modal Preview */}

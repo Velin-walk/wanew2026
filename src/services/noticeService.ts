@@ -3,6 +3,18 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export type NoticeType = 'info' | 'urgent' | 'event' | 'maintenance';
 
+export interface NoticeRecord {
+  id?: string;
+  enabled?: boolean;
+  title: string;
+  message: string;
+  type: NoticeType;
+  ctaText?: string;
+  ctaLink?: string;
+  expiresAt?: string;
+  updatedAt: string;
+}
+
 export interface SiteNotice {
   id?: string;
   enabled: boolean;
@@ -13,6 +25,7 @@ export interface SiteNotice {
   ctaLink?: string;
   expiresAt?: string;
   updatedAt: string;
+  history?: NoticeRecord[];
 }
 
 const NOTICE_STORAGE_KEY = 'wnw_site_notice_cache';
@@ -28,10 +41,29 @@ export const DEFAULT_NOTICE: SiteNotice = {
   ctaText: 'Explore Upcoming Hikes',
   ctaLink: '#treks',
   updatedAt: new Date().toISOString(),
+  history: [],
 };
 
+function parseRestHistory(historyField: any): NoticeRecord[] {
+  if (!historyField?.arrayValue?.values) return [];
+  return historyField.arrayValue.values.map((v: any, index: number) => {
+    const f = v?.mapValue?.fields || {};
+    return {
+      id: f.id?.stringValue || `hist_${index}`,
+      title: String(f.title?.stringValue || '').trim(),
+      message: String(f.message?.stringValue || '').trim(),
+      type: (f.type?.stringValue as NoticeType) || 'info',
+      ctaText: String(f.ctaText?.stringValue || '').trim(),
+      ctaLink: String(f.ctaLink?.stringValue || '').trim(),
+      expiresAt: String(f.expiresAt?.stringValue || '').trim(),
+      updatedAt: String(f.updatedAt?.stringValue || ''),
+      enabled: Boolean(f.enabled?.booleanValue),
+    };
+  }).filter((h: NoticeRecord) => h.title || h.message);
+}
+
 /**
- * Fetch the active notice board from Firestore,
+ * Fetch the active notice board and past notices history from Firestore,
  * with graceful REST fallback and local cache fallback.
  */
 export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | null> {
@@ -40,6 +72,20 @@ export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | 
     if (snap.exists()) {
       const data = snap.data();
       if (data) {
+        const history: NoticeRecord[] = Array.isArray(data.history)
+          ? data.history.map((h: any, idx: number) => ({
+              id: h.id || `hist_${idx}`,
+              enabled: Boolean(h.enabled),
+              title: String(h.title || '').trim(),
+              message: String(h.message || '').trim(),
+              type: (h.type as NoticeType) || 'info',
+              ctaText: String(h.ctaText || '').trim(),
+              ctaLink: String(h.ctaLink || '').trim(),
+              expiresAt: String(h.expiresAt || '').trim(),
+              updatedAt: String(h.updatedAt || ''),
+            })).filter((h: NoticeRecord) => h.title || h.message)
+          : [];
+
         const remoteNotice: SiteNotice = {
           enabled: Boolean(data.enabled),
           title: String(data.title || '').trim(),
@@ -49,6 +95,7 @@ export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | 
           ctaLink: String(data.ctaLink || '').trim(),
           expiresAt: String(data.expiresAt || '').trim(),
           updatedAt: String(data.updatedAt || new Date().toISOString()),
+          history,
         };
         try {
           localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(remoteNotice));
@@ -74,6 +121,7 @@ export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | 
             ctaLink: String(json.fields.ctaLink?.stringValue || '').trim(),
             expiresAt: String(json.fields.expiresAt?.stringValue || '').trim(),
             updatedAt: String(json.fields.updatedAt?.stringValue || new Date().toISOString()),
+            history: parseRestHistory(json.fields.history),
           };
           try {
             localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(remoteNotice));
@@ -97,10 +145,72 @@ export async function fetchSiteNotice(forceFresh = false): Promise<SiteNotice | 
 
 /**
  * Save / publish notice from Admin Panel directly to Firestore.
- * Sets updatedAt to current timestamp so it pops for all users.
+ * Preserves previous notices in the `history` record so older notices are never overwritten or lost.
  */
-export async function saveSiteNotice(notice: Partial<SiteNotice>): Promise<SiteNotice> {
+export async function saveSiteNotice(
+  notice: Partial<SiteNotice>,
+  options: { archiveCurrent?: boolean } = {}
+): Promise<SiteNotice> {
   const nowIso = new Date().toISOString();
+
+  // 1. Fetch current existing notice to preserve past notices
+  let existing: SiteNotice | null = null;
+  try {
+    const snap = await getDoc(doc(db, FIRESTORE_COLLECTION, FIRESTORE_DOC_ID));
+    if (snap.exists()) {
+      existing = snap.data() as SiteNotice;
+    }
+  } catch (err) {
+    console.warn('[NoticeService] Could not read existing notice before save:', err);
+  }
+
+  if (!existing) {
+    try {
+      const cached = localStorage.getItem(NOTICE_STORAGE_KEY);
+      if (cached) existing = JSON.parse(cached);
+    } catch (_) {}
+  }
+
+  // 2. Build history array, starting with existing history records
+  let history: NoticeRecord[] = Array.isArray(notice.history)
+    ? [...notice.history]
+    : (Array.isArray(existing?.history) ? [...existing.history] : []);
+
+  // 3. If there was a previous notice with real content, archive it if content changed or archiveCurrent requested
+  if (existing && (existing.title?.trim() || existing.message?.trim())) {
+    const newTitle = (notice.title || '').trim();
+    const newMessage = (notice.message || '').trim();
+    const oldTitle = (existing.title || '').trim();
+    const oldMessage = (existing.message || '').trim();
+
+    const isDifferentNotice = newTitle !== oldTitle || newMessage !== oldMessage;
+    const shouldArchive = options.archiveCurrent || isDifferentNotice;
+
+    if (shouldArchive) {
+      const prevRecord: NoticeRecord = {
+        id: existing.id || `notice_${new Date(existing.updatedAt || Date.now()).getTime()}`,
+        title: oldTitle,
+        message: oldMessage,
+        type: existing.type || 'info',
+        ctaText: (existing.ctaText || '').trim(),
+        ctaLink: (existing.ctaLink || '').trim(),
+        expiresAt: existing.expiresAt || '',
+        updatedAt: existing.updatedAt || nowIso,
+        enabled: Boolean(existing.enabled),
+      };
+
+      // Check if already in history by updatedAt or title+message to avoid duplicates
+      const exists = history.some(
+        (h) => (h.updatedAt && h.updatedAt === prevRecord.updatedAt) ||
+               (h.title === prevRecord.title && h.message === prevRecord.message)
+      );
+
+      if (!exists) {
+        history.unshift(prevRecord);
+      }
+    }
+  }
+
   const payload: SiteNotice = {
     enabled: Boolean(notice.enabled),
     title: (notice.title || '').trim(),
@@ -110,6 +220,7 @@ export async function saveSiteNotice(notice: Partial<SiteNotice>): Promise<SiteN
     ctaLink: (notice.ctaLink || '').trim(),
     expiresAt: notice.expiresAt || '',
     updatedAt: nowIso,
+    history,
   };
 
   try {
@@ -130,6 +241,23 @@ export async function saveSiteNotice(notice: Partial<SiteNotice>): Promise<SiteN
   } catch (_) {}
   window.dispatchEvent(new CustomEvent('wnw-notice-updated', { detail: payload }));
   return payload;
+}
+
+/**
+ * Delete an individual archived notice from history.
+ */
+export async function deleteArchivedNotice(idOrUpdatedAt: string): Promise<SiteNotice | null> {
+  try {
+    const current = await fetchSiteNotice(true);
+    if (!current) return null;
+    const updatedHistory = (current.history || []).filter(
+      (h) => h.id !== idOrUpdatedAt && h.updatedAt !== idOrUpdatedAt
+    );
+    return await saveSiteNotice({ ...current, history: updatedHistory });
+  } catch (err) {
+    console.warn('[NoticeService] Error deleting archived notice:', err);
+    return null;
+  }
 }
 
 // In-memory dismissal state scoped to the user's site visit session
