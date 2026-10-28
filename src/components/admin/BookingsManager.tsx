@@ -148,42 +148,54 @@ export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boole
 
   const tId = (t.id || '').toLowerCase().trim();
   const tHikeNum = (t.hike_number || '').toLowerCase().trim();
-  const tDigits = extractDigits(t.hike_number) || extractDigits(t.id) || extractDigits(t.name);
-
   const rTrekId = (r.trek_id || '').toLowerCase().trim();
   const rHikeNum = (r.hike_number || '').toLowerCase().trim();
-  const rDigits = extractDigits(r.hike_number) || extractDigits(r.trek_id) || extractDigits(r.trek_name);
 
-  // 1. Direct Hike Number or ID match (e.g. trek_id: "hike-290", hike_number: "290")
+  // 1. Direct Hike Number or ID match
   if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
-  if (tHikeNum && tHikeNum !== 'tbd' && (rHikeNum === tHikeNum || rTrekId === tHikeNum)) return true;
-
-  // 2. Digits match (e.g. 290 === 290)
-  if (tDigits && rDigits && tDigits === rDigits) {
-    return true;
-  }
-
-  const tDate = t.date || (t.data as any)?.hikeDate || (t.data as any)?.date;
-  const rDate = r.trek_date || (r as any).date;
-
-  // 3. Strict date conflict check: if both have explicit dates and they point to different days/months, do NOT match
-  if (datesConflict(tDate, rDate)) {
-    return false;
+  if (tHikeNum && tHikeNum !== 'tbd' && tHikeNum !== 'undefined') {
+    if (rHikeNum && rHikeNum !== 'tbd' && rHikeNum !== 'undefined') {
+      if (rHikeNum === tHikeNum || rTrekId === tHikeNum) return true;
+      // Explicit hike number mismatch: registration belongs to a different hike number
+      return false;
+    }
   }
 
   const tNameNorm = normStr(t.name);
   const rNameNorm = normStr(r.trek_name);
 
-  // 4. Substring / Name overlap match if no conflicting dates
+  // 2. Substring / Name overlap match
   if (tNameNorm && rNameNorm) {
     if (tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm)) {
       return true;
     }
+    // If both have explicit different names (e.g. "Pachpokhari" vs "North ABC"), do NOT match them
+    if (tNameNorm.length > 3 && rNameNorm.length > 3 && tNameNorm !== rNameNorm) {
+      return false;
+    }
   }
 
-  // 5. Exact date match when names are present or generic
+  const tDate = t.date || (t.data as any)?.hikeDate || (t.data as any)?.date;
+  const rDate = r.trek_date || (r as any).date;
+
+  // 3. Strict date conflict check
+  if (datesConflict(tDate, rDate)) {
+    return false;
+  }
+
+  // 4. If trek has a specific hike number (e.g. #308) and registration has no hike number, do NOT match different named treks on the same date
+  if (tHikeNum && tHikeNum !== 'tbd' && !rHikeNum) {
+    if (tNameNorm && rNameNorm && tNameNorm !== rNameNorm) {
+      return false;
+    }
+  }
+
+  // 5. Exact date match ONLY if names are compatible or generic
   if (datesMatch(tDate, rDate)) {
-    return true;
+    if (!rNameNorm || isGenericTitle(r.trek_name) || !tNameNorm || isGenericTitle(t.name)) {
+      return true;
+    }
+    return tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm);
   }
 
   return false;
