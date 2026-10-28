@@ -160,8 +160,8 @@ function MainApp() {
         if (norm === 'safety_policy' || norm === 'safetypolicy' || norm === 'safety' || norm === 'refund') return 'safety_policy';
         if (norm === 'request_private_trek' || norm === 'requestprivatetrek' || norm === 'privatetrek' || norm === 'private') return 'request_private_trek';
         if (norm === 'contact' || norm === 'support') return 'contact';
-        if (norm === 'about') return 'about';
         if (norm === 'notices' || norm === 'notice' || norm === 'bulletin' || norm === 'announcements') return 'notices';
+        if (norm === 'trek_leaders' || norm === 'trekleaders' || norm === 'leaders' || norm === 'guides' || norm === 'coordinators') return 'trek_leaders';
       }
     } catch {}
     return null;
@@ -1792,12 +1792,13 @@ function MainApp() {
           />
         )}
 
-        {/* Info Pages Modal (Payment, Tips, Safety, Reviews, Private Trek, Contact) */}
+        {/* Info Pages Modal (Payment, Tips, Safety, Reviews, Private Trek, Contact, Trek Leaders) */}
         {Boolean(infoModalPage) && (
           <InfoPagesModal
             isOpen={Boolean(infoModalPage)}
             onClose={() => setInfoModalPage(null)}
             initialPage={infoModalPage || 'payment'}
+            treks={treks}
             onNavigateToBookings={() => {
               setInfoModalPage(null);
               setCurrentTab('bookings');

@@ -1216,14 +1216,15 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                       I accept safety guidelines & club rules *
                     </span>
                   </label>
-                  <a
-                    href="https://www.walknepalwalk.com.np/faq-safety-policy"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#2B6CB0] hover:underline text-[10px] font-bold"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('wnw-navigate-tab', { detail: { tab: 'info', target: 'safety_policy' } }));
+                    }}
+                    className="text-[#E08828] hover:text-[#C86B1A] hover:underline text-[10px] font-bold"
                   >
                     Rules Policy ↗
-                  </a>
+                  </button>
                 </div>
 
                 {/* Optional Note */}

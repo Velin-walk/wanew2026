@@ -3300,6 +3300,65 @@ export default {
         }
       }
 
+      // ===== TREK LEADERS CONFIG ENDPOINTS (system_snapshots Backend - Option 2) =====
+
+      // GET /trek-leaders or GET /admin/trek-leaders - Fetch leader display toggles, custom intros & manual additions
+      if (method === 'GET' && (path === '/trek-leaders' || path === '/admin/trek-leaders')) {
+        if (!env.DB) return jsonResponse({ success: true, data: null });
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS system_snapshots (
+              key TEXT PRIMARY KEY,
+              data_json TEXT NOT NULL,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `).run().catch(() => {});
+
+          const row = await env.DB.prepare(
+            "SELECT data_json, updated_at FROM system_snapshots WHERE key = 'trek_leader_config'"
+          ).first();
+          if (!row || !row.data_json) {
+            return jsonResponse({ success: true, data: null });
+          }
+          const parsed = typeof row.data_json === 'string' ? JSON.parse(row.data_json) : row.data_json;
+          return jsonResponse({ success: true, data: parsed, updated_at: row.updated_at }, 200, {
+            'Cache-Control': 'public, max-age=60, s-maxage=300',
+          });
+        } catch (err) {
+          return errorResponse('Failed to fetch trek leaders config: ' + err.message, 500);
+        }
+      }
+
+      // POST /admin/trek-leaders or POST /trek-leaders - Save leader display toggles, intros & manual additions
+      if (method === 'POST' && (path === '/trek-leaders' || path === '/admin/trek-leaders')) {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS system_snapshots (
+              key TEXT PRIMARY KEY,
+              data_json TEXT NOT NULL,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `).run().catch(() => {});
+
+          const body = await request.json();
+          const nowIso = new Date().toISOString();
+          const configData = {
+            ...body,
+            updated_at: nowIso,
+          };
+          const jsonStr = JSON.stringify(configData);
+
+          await env.DB.prepare(
+            "INSERT OR REPLACE INTO system_snapshots (key, data_json, updated_at) VALUES ('trek_leader_config', ?, ?)"
+          ).bind(jsonStr, nowIso).run();
+
+          return jsonResponse({ success: true, data: configData });
+        } catch (err) {
+          return errorResponse('Failed to update trek leaders config: ' + err.message, 500);
+        }
+      }
+
       // ===== TREK PHOTOS ENDPOINTS (Cloudflare D1 Backend) =====
 
       // GET /trek_photos - List photos for a trek or all photos

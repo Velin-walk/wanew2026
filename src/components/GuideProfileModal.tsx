@@ -22,6 +22,7 @@ import { fetchLeaderboardData, apiFetch } from '../services/api';
 import { HikerStats, HikerCompletedEvent } from '../types/leaderboard';
 import { Trek } from '../types';
 import { TrekFeedbackModal } from './TrekFeedbackModal';
+import { getGuidesSettings } from '../services/guidesService';
 
 interface GuideProfileModalProps {
   isOpen: boolean;
@@ -241,13 +242,26 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
     };
   }, [isOpen]);
 
-  // Known metadata lookup
+  // Known & Custom metadata lookup
   const cleanNameLower = (guideName || '').trim().toLowerCase();
   const known = KNOWN_GUIDES[cleanNameLower] || KNOWN_GUIDES[guideStats?.n?.toLowerCase() || ''];
 
-  const gender: 'Male' | 'Female' = known?.gender || (cleanNameLower.includes('salina') ? 'Female' : 'Male');
-  const roleTitle = known?.role || 'Lead Mountain Guide';
-  const bio = known?.bio;
+  const customGuideSetting = useMemo(() => {
+    try {
+      const settings = getGuidesSettings();
+      const target = cleanNameLower;
+      return settings.custom_guides.find((g) => {
+        const gn = g.name.trim().toLowerCase();
+        return gn === target || target.includes(gn) || gn.includes(target);
+      });
+    } catch {
+      return null;
+    }
+  }, [cleanNameLower]);
+
+  const gender: 'Male' | 'Female' = customGuideSetting?.gender || known?.gender || (cleanNameLower.includes('salina') || cleanNameLower.includes('saraswoti') ? 'Female' : 'Male');
+  const roleTitle = customGuideSetting?.role || known?.role || 'Lead Mountain Guide';
+  const bio = customGuideSetting?.bio || known?.bio;
 
   // Hikes led list from leaderboard (primary source)
   const completedHikes: HikerCompletedEvent[] = useMemo(() => {
@@ -280,6 +294,48 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
     });
   }, [allTreks, cleanNameLower]);
 
+  // Reviews for this guide (synced with localStorage and /feedback API)
+  const guideReviews = useMemo(() => {
+    try {
+      const allReviews = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
+      const cleanGuideTarget = (guideName || '').trim().toLowerCase();
+      const rawGuideReviews = allReviews.filter((r: any) => {
+        if (!r.trek_name) return false;
+        const tn = String(r.trek_name).trim().toLowerCase();
+        return tn === `guide_review:${cleanGuideTarget}` || tn === `guide_review: ${cleanGuideTarget}`;
+      });
+
+      // Deduplicate by author + text + YYYY-MM-DD
+      return rawGuideReviews.filter((rev: any, index: number, self: any[]) => {
+        const normName = (rev.full_name || rev.name || '').trim().toLowerCase();
+        const normText = (rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '').trim().toLowerCase();
+        const normDate = String(rev.submitted_at || '').slice(0, 10);
+
+        return index === self.findIndex((o: any) => {
+          const oName = (o.full_name || o.name || '').trim().toLowerCase();
+          const oText = (o.team_feedback || o.teamFeedback || o.overall_feedback || o.overallFeedback || '').trim().toLowerCase();
+          const oDate = String(o.submitted_at || '').slice(0, 10);
+          return oName === normName && oText === normText && oDate === normDate;
+        });
+      });
+    } catch {
+      return [];
+    }
+  }, [guideName, reviewsTick]);
+
+  // Average of stars and count of ratings
+  const guideRatingStats = useMemo(() => {
+    if (!guideReviews || guideReviews.length === 0) {
+      return { avgScore: '0.0', count: 0 };
+    }
+    const sum = guideReviews.reduce((acc: number, rev: any) => {
+      const val = Math.min(5, Math.max(1, Number(rev.team_rating || rev.teamRating || rev.overall_rating || rev.overallRating || 5)));
+      return acc + val;
+    }, 0);
+    const avg = (sum / guideReviews.length).toFixed(1);
+    return { avgScore: avg, count: guideReviews.length };
+  }, [guideReviews]);
+
   if (!isOpen) return null;
 
   const totalDistance = guideStats?.d ? Math.round(guideStats.d * 10) / 10 : 0;
@@ -296,11 +352,11 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="guide-profile-title"
-      className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-[2500] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-3xl shadow-2xl border border-[#E5E1DB] max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+        className="bg-white rounded-3xl shadow-2xl border border-[#E5E1DB] max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header Card */}
@@ -341,13 +397,21 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
                   </span>
                 </div>
 
-                <h2
-                  id="guide-profile-title"
-                  className="text-base sm:text-xl font-black text-white tracking-tight leading-snug truncate"
-                  title={guideName}
-                >
-                  {guideName}
-                </h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2
+                    id="guide-profile-title"
+                    className="text-base sm:text-xl font-black text-white tracking-tight leading-snug truncate"
+                    title={guideName}
+                  >
+                    {guideName}
+                  </h2>
+
+                  <div className="inline-flex items-center gap-1 bg-black/30 border border-white/20 px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-3xs shrink-0">
+                    <Star className="w-3.5 h-3.5 text-amber-300 fill-amber-300 shrink-0" />
+                    <span>{guideRatingStats.avgScore}</span>
+                    <span className="text-white/80 font-normal">({guideRatingStats.count})</span>
+                  </div>
+                </div>
 
                 <p className="text-[11px] sm:text-xs font-semibold text-[#FED7AA] mt-0.5 leading-tight">
                   {roleTitle}
@@ -464,55 +528,30 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
             </h4>
             
             <div className="space-y-3">
-              {(() => {
-                try {
-                  const allReviews = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
-                  const rawGuideReviews = allReviews.filter((r: any) => 
-                    r.trek_name && r.trek_name.toLowerCase() === `guide_review:${guideName.trim().toLowerCase()}`
-                  );
-                  
-                  // Deduplicate by author + text + YYYY-MM-DD
-                  const guideReviews = rawGuideReviews.filter((rev: any, index: number, self: any[]) => {
-                    const normName = (rev.full_name || rev.name || '').trim().toLowerCase();
-                    const normText = (rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '').trim().toLowerCase();
-                    const normDate = String(rev.submitted_at || '').slice(0, 10);
+              {guideReviews.length === 0 ? (
+                <p className="text-xs text-[#8B8680] italic">No reviews for this guide yet.</p>
+              ) : (
+                guideReviews.map((rev: any, idx: number) => {
+                  const ratingVal = Math.min(5, Math.max(1, Number(rev.team_rating || rev.teamRating || rev.overall_rating || rev.overallRating || 5)));
+                  const feedbackText = rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '';
+                  const dateStr = String(rev.submitted_at || '').slice(0, 10);
 
-                    return index === self.findIndex((o: any) => {
-                      const oName = (o.full_name || o.name || '').trim().toLowerCase();
-                      const oText = (o.team_feedback || o.teamFeedback || o.overall_feedback || o.overallFeedback || '').trim().toLowerCase();
-                      const oDate = String(o.submitted_at || '').slice(0, 10);
-                      return oName === normName && oText === normText && oDate === normDate;
-                    });
-                  });
-
-                  if (guideReviews.length === 0) {
-                    return <p className="text-xs text-[#8B8680] italic">No reviews for this guide yet.</p>;
-                  }
-
-                  return guideReviews.map((rev: any, idx: number) => {
-                    const ratingVal = Math.min(5, Math.max(1, Number(rev.team_rating || rev.teamRating || rev.overall_rating || rev.overallRating || 5)));
-                    const feedbackText = rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '';
-                    const dateStr = String(rev.submitted_at || '').slice(0, 10);
-
-                    return (
-                      <div key={rev.id || idx} className="p-3 rounded-xl bg-[#F9F7F5] border border-[#EFEAE4] space-y-1.5">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-[#1F1F1F]">{rev.full_name || rev.name || 'Verified Hiker'}</span>
-                          <span className="text-[10px] text-[#8B8680]">{dateStr}</span>
-                        </div>
-                        <div className="flex text-amber-500 text-[10px]">
-                          {[...Array(ratingVal)].map((_, i) => (
-                            <Star key={i} className="w-3 h-3 fill-current" />
-                          ))}
-                        </div>
-                        {feedbackText && <p className="text-xs text-[#5A5551]">{feedbackText}</p>}
+                  return (
+                    <div key={rev.id || idx} className="p-3 rounded-xl bg-[#F9F7F5] border border-[#EFEAE4] space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-[#1F1F1F]">{rev.full_name || rev.name || 'Verified Hiker'}</span>
+                        <span className="text-[10px] text-[#8B8680]">{dateStr}</span>
                       </div>
-                    );
-                  });
-                } catch {
-                  return <p className="text-xs text-rose-600">Error loading reviews.</p>;
-                }
-              })()}
+                      <div className="flex text-amber-500 text-[10px]">
+                        {[...Array(ratingVal)].map((_, i) => (
+                          <Star key={i} className="w-3 h-3 fill-current" />
+                        ))}
+                      </div>
+                      {feedbackText && <p className="text-xs text-[#5A5551]">{feedbackText}</p>}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
           

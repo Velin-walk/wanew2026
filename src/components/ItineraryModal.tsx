@@ -745,28 +745,35 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
 
                     {/* Visual Trail Map (Vertical Timeline) */}
                     {isDayExpanded && (
-                      <div className="p-4 sm:p-6 bg-white space-y-4 relative border-t border-[#E5E1DB]">
-                        {/* Continuous vertical trail track */}
-                        <div className="absolute left-[31px] sm:left-[39px] top-6 bottom-6 w-0.5 bg-[#E5E1DB]" />
+                      <div className="p-2 sm:p-3 bg-white space-y-2 relative border-t border-[#E5E1DB]">
+                        {activeDay.items.map((item, idx) => {
+                          const isLast = idx === activeDay.items.length - 1;
+                          return (
+                            <div key={item.id || idx} className="flex items-start gap-1.5 sm:gap-2">
+                              {/* Left Time Indicator */}
+                              <div className="text-[9px] sm:text-[10px] font-mono tabular-nums font-bold text-[#E08828] bg-[#FFF8F0] border border-[#E08828]/25 px-1 py-0.5 rounded shadow-2xs shrink-0 h-fit text-center min-w-[48px] sm:min-w-[56px] mt-0.5">
+                                {item.time}
+                              </div>
 
-                        {activeDay.items.map((item, idx) => (
-                          <div key={item.id || idx} className="flex gap-3 sm:gap-4 relative z-10">
-                            {/* Left Time Indicator */}
-                            <div className="text-[10px] font-mono tabular-nums font-bold text-[#E08828] bg-[#FFF8F0] border border-[#E08828]/25 px-2 py-1 rounded-md shrink-0 h-fit text-center min-w-[64px] sm:min-w-[70px]">
-                              {item.time}
-                            </div>
+                              {/* Center Station Icon + Vertical Connecting Line Column */}
+                              <div className="relative flex flex-col items-center shrink-0 w-5 self-stretch">
+                                {/* Icon Bubble */}
+                                <div className="w-5 h-5 rounded-full bg-white border-1.5 border-[#E08828] text-[#E08828] flex items-center justify-center shrink-0 shadow-2xs z-10 mt-0.5">
+                                  {React.cloneElement(getTimelineIcon(item.activity) as React.ReactElement, { className: "w-3 h-3" })}
+                                </div>
+                                {/* Vertical Connector Line */}
+                                {!isLast && (
+                                  <div className="w-0.5 bg-[#E5E1DB] flex-1 my-0.5" />
+                                )}
+                              </div>
 
-                            {/* Center Trail Station Bubble with Dynamic Icon */}
-                            <div className="w-6 h-6 rounded-full bg-white border-2 border-[#E08828] text-[#E08828] flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                              {getTimelineIcon(item.activity)}
+                              {/* Right Checkpoint Activity Description */}
+                              <div className="bg-[#FAF8F5] border border-[#E5E1DB] px-2 py-1.5 rounded-lg flex-1 min-w-0 text-[11px] sm:text-xs font-medium text-[#2E2B28] leading-snug shadow-3xs">
+                                {item.activity}
+                              </div>
                             </div>
-
-                            {/* Right Checkpoint Activity Description */}
-                            <div className="bg-[#FAF8F5] border border-[#E5E1DB] p-3 rounded-xl flex-1 text-xs font-medium text-[#2E2B28] leading-relaxed shadow-3xs">
-                              {item.activity}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

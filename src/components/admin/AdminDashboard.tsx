@@ -30,6 +30,7 @@ import {
   EyeOff,
   MessageSquare,
   Tag,
+  UserCheck,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -65,6 +66,7 @@ import { SiteVisibilityManager } from './SiteVisibilityManager';
 import { UserActivityNotificationsPanel } from './UserActivityNotificationsPanel';
 import { AdminAccessManager } from './AdminAccessManager';
 import { OffersManager } from './OffersManager';
+import { GuidesManager } from './GuidesManager';
 import {
   fetchAllUserActivities,
   getAdminLastSeenTimestamp,
@@ -126,7 +128,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       setActiveTab('coordinator');
     }
   }, [isCoordinatorOnly, activeTab]);
-  const [systemSubTab, setSystemSubTab] = useState<'roles' | 'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales' | 'offers'>(() => {
+  const [systemSubTab, setSystemSubTab] = useState<'roles' | 'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales' | 'offers' | 'guides'>(() => {
     try {
       const saved = sessionStorage.getItem('wnw_admin_system_subtab');
       if (
@@ -139,7 +141,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'notice' ||
         saved === 'visibility' ||
         saved === 'sales' ||
-        saved === 'offers'
+        saved === 'offers' ||
+        saved === 'guides'
       ) {
         return saved;
       }
@@ -2362,6 +2365,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 <Tag className="w-3.5 h-3.5" />
                 <span>Offers / Flashcards</span>
               </button>
+              <button
+                id="admin-system-subtab-guides"
+                onClick={() => setSystemSubTab('guides')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'guides'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Guide Intros &amp; Toggles</span>
+              </button>
             </div>
 
             <div className="mt-6">
@@ -2496,6 +2511,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
               {systemSubTab === 'offers' && (
                 <OffersManager currentUserEmail={currentUserEmail} />
+              )}
+
+              {systemSubTab === 'guides' && (
+                <GuidesManager currentUserEmail={currentUserEmail} treks={enrichedTreks} />
               )}
             </div>
           </div>

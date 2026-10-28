@@ -36,13 +36,18 @@ import {
   Archive,
   Clock,
   ExternalLink,
+  UserCheck,
+  ArrowUpRight,
 } from 'lucide-react';
 import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
 import { ReviewsAnalyticsBoard } from './ReviewsAnalyticsBoard';
 import { CommunityBlogsSection } from './CommunityBlogsSection';
 import { fetchSiteNotice, SiteNotice } from '../services/noticeService';
+import { GuideProfileModal } from './GuideProfileModal';
+import { Trek } from '../types';
+import { getGuidesSettings } from '../services/guidesService';
 
-export type SubPageType = 'payment' | 'trek_tips' | 'creator_guide' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about' | 'notices';
+export type SubPageType = 'payment' | 'trek_tips' | 'creator_guide' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about' | 'notices' | 'trek_leaders';
 
 interface InfoPagesModalProps {
   isOpen: boolean;
@@ -52,6 +57,7 @@ interface InfoPagesModalProps {
   onNavigateToBookings?: () => void;
   onOpenVoucherUpload?: () => void;
   onLeaveFeedback?: () => void;
+  treks?: Trek[];
 }
 
 export const PaymentAndPricingSection: React.FC<{
@@ -913,6 +919,316 @@ export const NoticesSection: React.FC<{
   );
 };
 
+export interface TrekLeaderItem {
+  name: string;
+  role: string;
+  bio: string;
+  gender: 'Male' | 'Female';
+  experienceKm?: string;
+  badge?: string;
+  specialty?: string;
+}
+
+export const TREK_LEADERS_LIST: TrekLeaderItem[] = [
+  {
+    name: 'Biraj Thing',
+    role: 'Senior Trek Leader & Mountain Guide',
+    bio: 'Experienced mountain leader with over 1,400+ km traversed across high-altitude Himalayan trails with Walk Nepal Walk.',
+    gender: 'Male',
+    experienceKm: '1,400+ km',
+    badge: 'Senior Guide',
+    specialty: 'High-altitude passes & wilderness expeditions',
+  },
+  {
+    name: 'Salina Tamang',
+    role: 'Certified Trek Leader & Community Guide',
+    bio: 'High-altitude circuit trek specialist and community trail leader guiding day hikes and multi-day expeditions.',
+    gender: 'Female',
+    experienceKm: '800+ km',
+    badge: 'Circuit Specialist',
+    specialty: 'Circuit routes, beginner pacing & community care',
+  },
+  {
+    name: 'Sundar Gurung',
+    role: 'Senior Mountain Guide',
+    bio: 'High-altitude expedition leader and veteran trail pioneer across Annapurna, Langtang, and Jugal ranges.',
+    gender: 'Male',
+    experienceKm: '1,200+ km',
+    badge: 'Senior Guide',
+    specialty: 'Annapurna, Langtang & Jugal high ridges',
+  },
+  {
+    name: 'Velin Rai',
+    role: 'Founder & Head of Expeditions',
+    bio: 'Founder of Walk Nepal Walk with nearly 2,000 km of trail-blazing and community leading.',
+    gender: 'Male',
+    experienceKm: '1,900+ km',
+    badge: 'Expedition Head',
+    specialty: 'Expedition logistics & pioneer ridge routes',
+  },
+  {
+    name: 'Saraswoti Tamang',
+    role: 'Senior Coordinator & Trek Guide',
+    bio: 'Patient, friendly mountain coordinator and high-altitude trail guide ensuring group safety and motivation.',
+    gender: 'Female',
+    experienceKm: '600+ km',
+    badge: 'Coordinator',
+    specialty: 'Group safety, medical care & route coordination',
+  },
+  {
+    name: 'Hochhali Rai',
+    role: 'Trek Coordinator & Trail Leader',
+    bio: 'Trail logistics coordinator and Himalayan expedition leader dedicated to sustainable community trekking.',
+    gender: 'Male',
+    experienceKm: '750+ km',
+    badge: 'Coordinator',
+    specialty: 'Trail logistics, group briefings & pacing',
+  },
+  {
+    name: 'Chiranjibi Singh Saud',
+    role: 'Trail Coordinator & Mountain Leader',
+    bio: 'Mountain leader and route specialist guiding wilderness day walks and ridge ascents.',
+    gender: 'Male',
+    experienceKm: '500+ km',
+    badge: 'Coordinator',
+    specialty: 'Day hike ridges & wilderness navigation',
+  },
+  {
+    name: 'Sujan Khadka',
+    role: 'Trek Coordinator & Community Leader',
+    bio: 'Enthusiastic coordinator and trail leader focused on hiker care, trail encouragement, and safety.',
+    gender: 'Male',
+    experienceKm: '450+ km',
+    badge: 'Coordinator',
+    specialty: 'Hiker support, photography & ridge trails',
+  },
+  {
+    name: 'Rajan',
+    role: 'Community Trek Guide',
+    bio: 'Specialist in Kathmandu Valley ridge circuits, day hike exploration, and trail pacing.',
+    gender: 'Male',
+    experienceKm: '350+ km',
+    badge: 'Trail Guide',
+    specialty: 'Kathmandu valley rim & weekend explorer',
+  },
+];
+
+export const TrekLeadersSection: React.FC<{
+  onSelectLeader: (name: string) => void;
+  treks?: Trek[];
+}> = ({ onSelectLeader, treks = [] }) => {
+  const [filterGender, setFilterGender] = useState<'all' | 'Male' | 'Female'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [guideSettings, setGuideSettings] = useState(getGuidesSettings);
+
+  useEffect(() => {
+    const handleSync = () => setGuideSettings(getGuidesSettings());
+    window.addEventListener('wnw-guide-settings-updated', handleSync);
+    return () => window.removeEventListener('wnw-guide-settings-updated', handleSync);
+  }, []);
+
+  // All public trek leaders come strictly from Admin Panel guide settings & toggles
+  const allLeaders = useMemo(() => {
+    const customVisibleGuides = (guideSettings.custom_guides || []).filter((g) => g.is_visible !== false);
+    return customVisibleGuides.map((g) => ({
+      name: g.name,
+      role: g.role,
+      bio: g.bio,
+      gender: g.gender,
+      specialty: g.specialty,
+      badge: g.badge,
+      experienceKm: g.experienceKm,
+    }));
+  }, [guideSettings]);
+
+  const filteredLeaders = useMemo(() => {
+    return allLeaders.filter((l) => {
+      if (filterGender !== 'all' && l.gender !== filterGender) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = l.name.toLowerCase().includes(q);
+        const matchesRole = l.role.toLowerCase().includes(q);
+        const matchesBio = l.bio.toLowerCase().includes(q);
+        const matchesSpecialty = (l.specialty || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesRole && !matchesBio && !matchesSpecialty) return false;
+      }
+      return true;
+    });
+  }, [allLeaders, filterGender, searchQuery]);
+
+  // Helper to retrieve live rating for card previews
+  const getGuideRating = (guideName: string) => {
+    try {
+      const allReviews = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
+      const cleanTarget = guideName.trim().toLowerCase();
+      const rawGuideReviews = allReviews.filter((r: any) => {
+        if (!r.trek_name) return false;
+        const tn = String(r.trek_name).trim().toLowerCase();
+        return tn === `guide_review:${cleanTarget}` || tn === `guide_review: ${cleanTarget}`;
+      });
+      if (rawGuideReviews.length === 0) return { avg: '0.0', count: 0 };
+      const sum = rawGuideReviews.reduce((acc: number, rev: any) => {
+        const val = Math.min(5, Math.max(1, Number(rev.team_rating || rev.teamRating || rev.overall_rating || rev.overallRating || 5)));
+        return acc + val;
+      }, 0);
+      return { avg: (sum / rawGuideReviews.length).toFixed(1), count: rawGuideReviews.length };
+    } catch {
+      return { avg: '0.0', count: 0 };
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-150">
+      {/* Header */}
+      <div className="border-b border-[#F0EBE5] pb-4">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#E08828] mb-1">
+          <UserCheck className="w-4 h-4" />
+          <span>Trail Team &amp; Mountain Leaders</span>
+        </div>
+        <h3 className="text-xl font-black text-[#1F1F1F] tracking-tight">
+          Walk Nepal Walk Trek Leaders &amp; Coordinators
+        </h3>
+        <p className="text-xs text-[#8B8680] mt-1 leading-relaxed">
+          Meet our certified mountain leaders, seasoned coordinators, and trail specialists. Click on any leader's name to view their full verified trail profile, distance stats, reviews, and upcoming schedules.
+        </p>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-[#8B8680] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search trek leaders by name, route specialty, or role..."
+            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F] transition-colors"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setFilterGender('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              filterGender === 'all'
+                ? 'bg-[#1F1F1F] text-white shadow-3xs'
+                : 'bg-[#FAF8F5] text-[#5A5551] hover:bg-[#F3F0EC] border border-[#E5E1DB]'
+            }`}
+          >
+            All Leaders ({allLeaders.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterGender('Male')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              filterGender === 'Male'
+                ? 'bg-sky-600 text-white shadow-3xs'
+                : 'bg-[#FAF8F5] text-[#5A5551] hover:bg-[#F3F0EC] border border-[#E5E1DB]'
+            }`}
+          >
+            Male
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterGender('Female')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              filterGender === 'Female'
+                ? 'bg-rose-600 text-white shadow-3xs'
+                : 'bg-[#FAF8F5] text-[#5A5551] hover:bg-[#F3F0EC] border border-[#E5E1DB]'
+            }`}
+          >
+            Female
+          </button>
+        </div>
+      </div>
+
+      {/* Leaders Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        {filteredLeaders.map((leader, idx) => {
+          const isFemale = leader.gender === 'Female';
+          const ratingInfo = getGuideRating(leader.name);
+
+          return (
+            <div
+              key={`${leader.name}_${idx}`}
+              className="p-4 rounded-2xl bg-[#FAF8F5] hover:bg-white border border-[#E5E1DB] hover:border-[#E08828]/50 shadow-3xs hover:shadow-md transition-all flex flex-col justify-between group"
+            >
+              <div>
+                <div className="flex items-start gap-3">
+                  {/* Avatar Bubble */}
+                  <div
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black text-white shrink-0 shadow-xs ${
+                      isFemale
+                        ? 'bg-gradient-to-br from-rose-500 to-pink-600'
+                        : 'bg-gradient-to-br from-[#E08828] to-[#9E4700]'
+                    }`}
+                  >
+                    {leader.name.charAt(0)}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                      <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider bg-white border border-[#7ABA42]/30 text-[#477322] px-2 py-0.5 rounded-full shadow-3xs">
+                        <ShieldCheck className="w-3 h-3 text-[#7ABA42]" />
+                        <span>Verified Guide</span>
+                      </span>
+                      {leader.badge && (
+                        <span className="text-[9px] font-bold text-[#5A5551] bg-[#F4EFEA] border border-[#E5E1DB] px-2 py-0.5 rounded-full">
+                          {leader.badge}
+                        </span>
+                      )}
+                      {ratingInfo.count > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-[#1F1F1F] bg-[#FFF8F0] border border-[#E08828]/30 px-2 py-0.5 rounded-full">
+                          <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
+                          <span>{ratingInfo.avg}</span>
+                          <span className="text-[#8B8680] font-normal">({ratingInfo.count})</span>
+                        </span>
+                      )}
+                      {leader.experienceKm && (
+                        <span className="text-[9px] font-bold text-[#E08828] bg-[#FFF4E8] border border-[#E08828]/20 px-2 py-0.5 rounded-full">
+                          {leader.experienceKm}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Clickable Guide Name: Clicking their name opens full profile */}
+                    <button
+                      type="button"
+                      onClick={() => onSelectLeader(leader.name)}
+                      className="text-base font-black text-[#1F1F1F] hover:text-[#E08828] transition-colors text-left flex items-center gap-1.5 group/btn cursor-pointer"
+                      title={`Open full profile for ${leader.name}`}
+                    >
+                      <span className="underline decoration-transparent group-hover/btn:decoration-[#E08828] transition-all">
+                        {leader.name}
+                      </span>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-[#8B8680] group-hover/btn:text-[#E08828] group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-all" />
+                    </button>
+
+                    <p className="text-[11px] font-semibold text-[#8B8680] mt-0.5 leading-snug">
+                      {leader.role}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#5A5551] leading-relaxed mt-3">
+                  {leader.bio}
+                </p>
+
+                {leader.specialty && (
+                  <p className="text-[11px] text-[#8B8680] mt-2 pt-2 border-t border-[#EFEAE4]">
+                    <span className="font-semibold text-[#1F1F1F]">Specialty:</span> {leader.specialty}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   isOpen,
   onClose,
@@ -921,8 +1237,30 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   onNavigateToBookings,
   onOpenVoucherUpload,
   onLeaveFeedback,
+  treks = [],
 }) => {
   const [activeTab, setActiveTab] = useState<SubPageType>(initialPage);
+  const [selectedGuide, setSelectedGuide] = useState<string | null>(null);
+  const [guideSettings, setGuideSettings] = useState(getGuidesSettings);
+
+  useEffect(() => {
+    const handleSync = () => setGuideSettings(getGuidesSettings());
+    window.addEventListener('wnw-guide-settings-updated', handleSync);
+    return () => window.removeEventListener('wnw-guide-settings-updated', handleSync);
+  }, []);
+
+  // Available treks for schedule matching
+  const availableTreks = useMemo(() => {
+    if (treks && treks.length > 0) return treks;
+    try {
+      const cached = localStorage.getItem('wnw_cached_cloudflare_treks');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  }, [treks]);
 
   // Sync initial tab when reopened
   useEffect(() => {
@@ -1264,6 +1602,21 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                 <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === 'blogs' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
                 <span>Blogs & Stories</span>
               </button>
+
+              {guideSettings.show_trek_leaders_tab !== false && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('trek_leaders')}
+                  className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                    activeTab === 'trek_leaders'
+                      ? 'bg-white text-[#E08828] shadow-xs border border-[#E08828]/30 font-extrabold'
+                      : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                  }`}
+                >
+                  <UserCheck className={`w-4 h-4 shrink-0 ${activeTab === 'trek_leaders' ? 'text-[#E08828]' : 'text-[#8B8680]'}`} />
+                  <span>Trek Leaders</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -2085,8 +2438,26 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
               <NoticesSection />
             )}
 
+            {/* 9. TREK LEADERS & COORDINATORS */}
+            {activeTab === 'trek_leaders' && (
+              <TrekLeadersSection
+                onSelectLeader={(name) => setSelectedGuide(name)}
+                treks={availableTreks}
+              />
+            )}
+
           </div>
         </div>
+
+        {/* Full Guide Profile View Popup */}
+        {selectedGuide && (
+          <GuideProfileModal
+            isOpen={Boolean(selectedGuide)}
+            guideName={selectedGuide}
+            onClose={() => setSelectedGuide(null)}
+            allTreks={availableTreks}
+          />
+        )}
 
       </div>
     </div>

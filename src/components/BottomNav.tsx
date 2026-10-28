@@ -14,12 +14,14 @@ import {
   Trophy,
   Star,
   BookOpen,
-  Bell
+  Bell,
+  UserCheck,
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { useAuth } from '../context/AuthContext';
 import { User, LogOut } from 'lucide-react';
 import { NavigationNotifications } from '../services/notificationService';
+import { getGuidesSettings } from '../services/guidesService';
 
 interface BottomNavProps {
   currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin';
@@ -44,6 +46,18 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const { user, isAdmin, openAuthModal } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showTrekLeadersTab, setShowTrekLeadersTab] = useState<boolean>(() => {
+    return getGuidesSettings().show_trek_leaders_tab !== false;
+  });
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      setShowTrekLeadersTab(getGuidesSettings().show_trek_leaders_tab !== false);
+    };
+    window.addEventListener('wnw-guide-settings-updated', handleSettingsUpdate);
+    return () => window.removeEventListener('wnw-guide-settings-updated', handleSettingsUpdate);
+  }, []);
 
   const handleMobileTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin', targetId?: string) => {
     if (tab === 'mapminers' && !user) {
@@ -261,6 +275,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
               </button>
+
+              {showTrekLeadersTab && (
+                <button
+                  type="button"
+                  onClick={() => handleSubPageClick('trek_leaders')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-[#E08828]" />
+                    <span>Trek Leaders</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
+                </button>
+              )}
 
               <button
                 type="button"

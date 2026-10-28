@@ -15,13 +15,15 @@ import {
   Trophy,
   Star,
   BookOpen,
-  Bell
+  Bell,
+  UserCheck,
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { isAdminEmail } from '../adminUtils';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, User as UserIcon, Settings } from 'lucide-react';
 import { NavigationNotifications } from '../services/notificationService';
+import { getGuidesSettings } from '../services/guidesService';
 
 interface NavbarProps {
   currentTab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin';
@@ -55,6 +57,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
   const avatarDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showTrekLeadersTab, setShowTrekLeadersTab] = useState<boolean>(() => {
+    return getGuidesSettings().show_trek_leaders_tab !== false;
+  });
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      setShowTrekLeadersTab(getGuidesSettings().show_trek_leaders_tab !== false);
+    };
+    window.addEventListener('wnw-guide-settings-updated', handleSettingsUpdate);
+    return () => window.removeEventListener('wnw-guide-settings-updated', handleSettingsUpdate);
+  }, []);
 
   const handleTabClick = (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin', targetId?: string) => {
     if (tab === 'mapminers' && !user) {
@@ -323,7 +337,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 activeInfoPage === 'safety_policy' ||
                 activeInfoPage === 'request_private_trek' ||
                 activeInfoPage === 'contact' ||
-                activeInfoPage === 'notices'
+                activeInfoPage === 'notices' ||
+                activeInfoPage === 'trek_leaders'
                   ? 'bg-white text-[#E08828] shadow-xs font-bold'
                   : 'text-[#5A5551] hover:text-[#1F1F1F]'
               }`}
@@ -359,6 +374,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                   <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
                 </button>
+
+                {showTrekLeadersTab && (
+                  <button
+                    type="button"
+                    onClick={() => handleSubPageClick('trek_leaders')}
+                    className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <UserCheck className="w-4 h-4 text-[#E08828] shrink-0 group-hover:scale-110 transition-transform" />
+                      <div>
+                        <div className="leading-tight font-bold text-[#1F1F1F]">Trek Leaders</div>
+                        <div className="text-[10px] font-normal text-[#8B8680]">Guides &amp; Coordinators</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -586,6 +618,16 @@ export const DesktopResourcesBar: React.FC<{
   activeInfoPage?: SubPageType | null;
   onOpenInfoPage?: (page: SubPageType) => void;
 }> = ({ activeInfoPage, onOpenInfoPage }) => {
+  const [showTrekLeadersTab, setShowTrekLeadersTab] = useState(() => getGuidesSettings().show_trek_leaders_tab !== false);
+
+  useEffect(() => {
+    const handleSync = () => {
+      setShowTrekLeadersTab(getGuidesSettings().show_trek_leaders_tab !== false);
+    };
+    window.addEventListener('wnw-guide-settings-updated', handleSync);
+    return () => window.removeEventListener('wnw-guide-settings-updated', handleSync);
+  }, []);
+
   const items: Array<{
     id: SubPageType;
     label: string;
@@ -610,6 +652,14 @@ export const DesktopResourcesBar: React.FC<{
       accentBg: 'bg-emerald-50 border-emerald-200/70',
       activeClass: 'ring-2 ring-[#7ABA42] bg-emerald-50/90 border-[#7ABA42]',
     },
+    ...(showTrekLeadersTab ? [{
+      id: 'trek_leaders' as SubPageType,
+      label: 'Trek Leaders',
+      sub: 'Guides & Team',
+      icon: <UserCheck className="w-4 h-4 text-[#E08828]" />,
+      accentBg: 'bg-orange-50 border-orange-200/70',
+      activeClass: 'ring-2 ring-[#E08828] bg-orange-50/90 border-[#E08828]',
+    }] : []),
     {
       id: 'notices',
       label: 'Official Notices',
@@ -665,7 +715,7 @@ export const DesktopResourcesBar: React.FC<{
       aria-label="Quick Resources & Guides"
       className="hidden lg:block w-full"
     >
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-2.5">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
         {items.map((item) => {
           const isActive = activeInfoPage === item.id;
           const isHighlight = item.id === 'request_private_trek';
