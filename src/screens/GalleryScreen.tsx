@@ -32,6 +32,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch, fetchPhotoComments, uploadImageToR2WithProgress } from '../services/api';
 import { logUserActivity } from '../services/userActivityNotifier';
 import { PhotoCommentsSection } from '../components/PhotoCommentsSection';
+import { TrekFeedbackModal } from '../components/TrekFeedbackModal';
 import galleryHeroImg from '../assets/images/gallery_trail_hero_1790246900034.jpg';
 
 interface GalleryPhoto {
@@ -88,6 +89,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
   // Upload modal state
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [selectedUploadTrekId, setSelectedUploadTrekId] = useState<string>('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -717,14 +719,23 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={handleOpenUploadModal}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#7ABA42] hover:bg-[#6AA437] text-white text-[11px] sm:text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer shrink-0 border border-white/30 backdrop-blur-xs self-start md:self-auto mr-auto md:mr-0"
-            >
-              <Camera className="w-3.5 h-3.5 shrink-0" />
-              <span>Upload Hike Photo</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleOpenUploadModal}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#7ABA42] hover:bg-[#6AA437] text-white text-[11px] sm:text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer shrink-0 border border-white/30 backdrop-blur-xs self-start md:self-auto"
+              >
+                <Camera className="w-3.5 h-3.5 shrink-0" />
+                <span>Upload Hike Photo</span>
+              </button>
+            </div>
+            
+            <TrekFeedbackModal
+              isOpen={feedbackModalOpen}
+              onClose={() => setFeedbackModalOpen(false)}
+              currentUser={user ? { name: user.displayName || undefined, email: user.email || undefined } : undefined}
+              recentHikes={treks}
+            />
           </div>
 
           {/* Filter, Sort, and View Mode Bar inside Hero Image */}
@@ -874,30 +885,30 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                         <span className="text-[#8B8680] text-sm sm:text-base font-bold">({box.trek.date})</span>
                       )}
                     </h3>
-                    <div className="flex items-center gap-3 text-xs text-[#8B8680] font-semibold mt-1">
-                      {box.trek?.start_location && (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-[#E08828]" />
-                          <span>{box.trek.start_location}</span>
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1 text-[#7ABA42] font-extrabold bg-[#7ABA42]/10 px-2 py-0.5 rounded-md">
-                        <FolderOpen className="w-3 h-3" />
-                        <span>{box.photos.length} {box.photos.length === 1 ? 'Photo' : 'Photos'}</span>
-                      </span>
-                    </div>
                   </div>
                 </div>
 
-                {/* Quick Add Photos Button for this Hike */}
-                <button
-                  type="button"
-                  onClick={() => handleOpenUploadModalForTrek(box.trekId)}
-                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#FAF8F5] hover:bg-[#7ABA42] hover:text-white border border-[#EFEAE4] hover:border-[#7ABA42] text-stone-700 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Photos to Hike #{box.hikeNumber}</span>
-                </button>
+                {/* Quick Add Photos & Review Buttons for this Hike */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenUploadModalForTrek(box.trekId)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#166534] border border-[#DCFCE7] rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-none"
+                    title="Add Photos"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Photos</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackModalOpen(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-[#FFF7ED] hover:bg-[#FFEDD5] text-[#9A3412] border border-[#FFEDD5] rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-none"
+                    title="Rate & Review"
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    <span>Review</span>
+                  </button>
+                </div>
               </div>
 
               {/* Photos Grid inside Box */}

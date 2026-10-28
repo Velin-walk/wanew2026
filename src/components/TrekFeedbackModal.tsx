@@ -15,6 +15,7 @@ interface TrekFeedbackModalProps {
   };
   onSubmitSuccess?: () => void;
   recentHikes?: Trek[];
+  isGuideReview?: boolean;
 }
 
 const hikeKey = (t?: Trek | null) => (t ? `${t.name}|${t.date || ''}` : '');
@@ -27,6 +28,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   currentUser,
   onSubmitSuccess,
   recentHikes,
+  isGuideReview = false,
 }) => {
   const [selectedKey, setSelectedKey] = useState<string>('');
 
@@ -114,10 +116,14 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
       localStorage.setItem('wnw_user_name', trimmedName);
     } catch {}
 
-    const resolvedTrekName = `${trekName} ${activeTrek?.date ? `(${activeTrek.date})` : ''}`.trim();
-    const resolvedHikeNumber = activeTrek
-      ? activeTrek.hike_number || ''
-      : booking?.hike_number || '';
+    const resolvedTrekName = isGuideReview 
+        ? `GUIDE_REVIEW:${trekName}`
+        : `${trekName} ${activeTrek?.date ? `(${activeTrek.date})` : ''}`.trim();
+    const resolvedHikeNumber = isGuideReview
+        ? "GUIDE"
+        : activeTrek
+          ? activeTrek.hike_number || ''
+          : booking?.hike_number || '';
 
     const payload = {
       name: trimmedName,
@@ -132,10 +138,10 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
       team_feedback: teamFeedback.trim(),
       teamRating: teamRating,
       team_rating: teamRating,
-      overallFeedback: overallFeedback.trim(),
-      overall_feedback: overallFeedback.trim(),
-      overallRating: overallRating,
-      overall_rating: overallRating,
+      overallFeedback: isGuideReview ? "" : overallFeedback.trim(),
+      overall_feedback: isGuideReview ? "" : overallFeedback.trim(),
+      overallRating: isGuideReview ? 5 : overallRating,
+      overall_rating: isGuideReview ? 5 : overallRating,
     };
 
     try {
@@ -294,7 +300,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
               </div>
 
               {/* Hike selector (recent 10 hikes) */}
-              {hikeOptions.length > 0 && (
+              {!isGuideReview && hikeOptions.length > 0 && (
                 <div className="space-y-1.5">
                   <label
                     htmlFor="feedback-hike-select"
@@ -372,51 +378,53 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
               </div>
 
               {/* Question 2: Overall Trek Experience */}
-              <div className="bg-neutral-50/70 border border-neutral-200/80 rounded-xl p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                  <label className="text-xs sm:text-sm font-bold text-neutral-800 flex items-center gap-1.5">
-                    <Heart className="w-4 h-4 text-[#E08828] shrink-0" />
-                    <span>2. Overall Hike Experience &amp; Suggestions</span>
-                  </label>
-                  <span className="text-[11px] font-semibold text-neutral-500">
-                    {getRatingLabel(hoverOverallRating || overallRating)}
-                  </span>
-                </div>
+              {!isGuideReview && (
+                <div className="bg-neutral-50/70 border border-neutral-200/80 rounded-xl p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <label className="text-xs sm:text-sm font-bold text-neutral-800 flex items-center gap-1.5">
+                      <Heart className="w-4 h-4 text-[#E08828] shrink-0" />
+                      <span>2. Overall Hike Experience &amp; Suggestions</span>
+                    </label>
+                    <span className="text-[11px] font-semibold text-neutral-500">
+                      {getRatingLabel(hoverOverallRating || overallRating)}
+                    </span>
+                  </div>
 
-                {/* Star Picker */}
-                <div className="flex items-center gap-1.5 pt-0.5">
-                  {[1, 2, 3, 4, 5].map((star) => {
-                    const isFilled = star <= (hoverOverallRating || overallRating);
-                    return (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setOverallRating(star)}
-                        onMouseEnter={() => setHoverOverallRating(star)}
-                        onMouseLeave={() => setHoverOverallRating(0)}
-                        className="p-1 text-2xl transition-transform hover:scale-115 focus:outline-hidden cursor-pointer"
-                      >
-                        <Star
-                          className={`w-6 h-6 sm:w-7 sm:h-7 transition-colors ${
-                            isFilled
-                              ? 'fill-amber-400 text-amber-400'
-                              : 'text-neutral-300'
-                          }`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
+                  {/* Star Picker */}
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    {[1, 2, 3, 4, 5].map((star) => {
+                      const isFilled = star <= (hoverOverallRating || overallRating);
+                      return (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setOverallRating(star)}
+                          onMouseEnter={() => setHoverOverallRating(star)}
+                          onMouseLeave={() => setHoverOverallRating(0)}
+                          className="p-1 text-2xl transition-transform hover:scale-115 focus:outline-hidden cursor-pointer"
+                        >
+                          <Star
+                            className={`w-6 h-6 sm:w-7 sm:h-7 transition-colors ${
+                              isFilled
+                                ? 'fill-amber-400 text-amber-400'
+                                : 'text-neutral-300'
+                            }`}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                {/* Text Box */}
-                <textarea
-                  value={overallFeedback}
-                  onChange={(e) => setOverallFeedback(e.target.value)}
-                  placeholder="How was the route, atmosphere, vibe? Any ideas for improvement?"
-                  rows={3}
-                  className="w-full text-xs p-3 bg-white border border-neutral-200 rounded-lg focus:outline-hidden focus:border-[#7ABA42] focus:ring-1 focus:ring-[#7ABA42] resize-none"
-                />
-              </div>
+                  {/* Text Box */}
+                  <textarea
+                    value={overallFeedback}
+                    onChange={(e) => setOverallFeedback(e.target.value)}
+                    placeholder="How was the route, atmosphere, vibe? Any ideas for improvement?"
+                    rows={3}
+                    className="w-full text-xs p-3 bg-white border border-neutral-200 rounded-lg focus:outline-hidden focus:border-[#7ABA42] focus:ring-1 focus:ring-[#7ABA42] resize-none"
+                  />
+                </div>
+              )}
 
               {errorMessage && (
                 <p className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">

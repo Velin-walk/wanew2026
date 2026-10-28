@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Trek } from '../types';
 import { Calendar, UserCheck, FileText, ExternalLink, CheckCircle, Star, Ban, Camera } from 'lucide-react';
 import { TrekPhotosModal } from './TrekPhotosModal';
+import { GuideProfileModal } from './GuideProfileModal';
 import { useAuth } from '../context/AuthContext';
 
 interface PastEventListItemProps {
@@ -18,6 +19,7 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
   onLeaveFeedback,
 }) => {
   const [photosOpen, setPhotosOpen] = useState(false);
+  const [guideModalOpen, setGuideModalOpen] = useState(false);
   const { isAdmin } = useAuth();
 
   const formatDate = (dateStr: string) => {
@@ -111,7 +113,12 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
             {trek.leader && (
               <span className="flex items-center gap-1">
                 <UserCheck className="w-3 h-3 text-[#7ABA42] shrink-0" />
-                <span>Guide: <strong className="text-[#5A5551] font-semibold">{trek.leader}</strong></span>
+                <span>Guide: <button
+                  type="button"
+                  onClick={() => setGuideModalOpen(true)}
+                  className="font-bold text-[#E08828] hover:text-[#C86B1A] underline decoration-[#E08828]/60 hover:decoration-[#C86B1A] underline-offset-2 transition-colors truncate cursor-pointer text-left inline"
+                  title={`View guide profile for ${trek.leader}`}
+                ><strong className="text-[#E08828] font-semibold">{trek.leader}</strong></button></span>
               </span>
             )}
             {trek.is_cancelled ? (
@@ -157,6 +164,15 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
         onClose={() => setPhotosOpen(false)}
         trek={trek}
       />
+
+      {trek.leader && (
+        <GuideProfileModal
+          isOpen={guideModalOpen}
+          onClose={() => setGuideModalOpen(false)}
+          guideName={trek.leader}
+          currentTrek={trek}
+        />
+      )}
     </div>
   );
 };

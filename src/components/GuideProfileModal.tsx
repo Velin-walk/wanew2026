@@ -16,10 +16,12 @@ import {
   ArrowUpRight,
   Loader2,
   CheckCircle2,
+  Star,
 } from 'lucide-react';
-import { fetchLeaderboardData } from '../services/api';
+import { fetchLeaderboardData, apiFetch } from '../services/api';
 import { HikerStats, HikerCompletedEvent } from '../types/leaderboard';
 import { Trek } from '../types';
+import { TrekFeedbackModal } from './TrekFeedbackModal';
 
 interface GuideProfileModalProps {
   isOpen: boolean;
@@ -137,6 +139,14 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [guideStats, setGuideStats] = useState<HikerStats | null>(null);
   const [searchHikeQuery, setSearchHikeQuery] = useState('');
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  // Dummy trek object for guide feedback
+  const guideTrek = useMemo(() => ({
+    name: guideName,
+    leader: guideName,
+    date: new Date().toISOString().split('T')[0],
+  } as Trek), [guideName]);
 
   // Fetch leaderboard data on open (Primary Source of Truth)
   useEffect(() => {
@@ -164,6 +174,53 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
       isMounted = false;
     };
   }, [isOpen, guideName]);
+
+  const [reviewsTick, setReviewsTick] = useState(0);
+
+  // Sync reviews when feedback updated or on open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleSync = () => setReviewsTick((v) => v + 1);
+    window.addEventListener('wnw-feedback-updated', handleSync);
+
+    apiFetch('/feedback', { forceFresh: true }).then(async (res) => {
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.data) && json.data.length > 0) {
+          try {
+            const existing = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
+            const merged = [...existing];
+            for (const item of json.data) {
+              const itemDate = String(item.submitted_at || '').slice(0, 10);
+              const itemText = (item.team_feedback || item.overall_feedback || item.teamFeedback || item.overallFeedback || '').trim().toLowerCase();
+              const itemName = (item.full_name || item.name || '').trim().toLowerCase();
+              const itemTrek = (item.trek_name || item.recentWalk || '').trim().toLowerCase();
+
+              const exists = merged.some((m) => {
+                if (m.id === item.id) return true;
+                const mName = (m.full_name || m.name || '').trim().toLowerCase();
+                const mText = (m.team_feedback || m.overall_feedback || m.teamFeedback || m.overallFeedback || '').trim().toLowerCase();
+                const mDate = String(m.submitted_at || '').slice(0, 10);
+                const mTrek = (m.trek_name || m.recentWalk || '').trim().toLowerCase();
+                return mName === itemName && mText === itemText && mDate === itemDate && mTrek === itemTrek;
+              });
+
+              if (!exists) {
+                merged.unshift(item);
+              }
+            }
+            localStorage.setItem('wnw_user_feedbacks', JSON.stringify(merged));
+            setReviewsTick((v) => v + 1);
+          } catch {}
+        }
+      }
+    }).catch(() => {});
+
+    return () => {
+      window.removeEventListener('wnw-feedback-updated', handleSync);
+    };
+  }, [isOpen]);
 
   // Handle ESC key to dismiss
   useEffect(() => {
@@ -295,6 +352,16 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
                 <p className="text-[11px] sm:text-xs font-semibold text-[#FED7AA] mt-0.5 leading-tight">
                   {roleTitle}
                 </p>
+                
+                {/* Rate & Review Button */}
+                <button
+                  type="button"
+                  onClick={() => setFeedbackOpen(true)}
+                  className="mt-2 text-[10px] font-bold bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-lg transition-all cursor-pointer inline-flex items-center gap-1"
+                >
+                  <Award className="w-3 h-3" />
+                  Rate & Review Guide
+                </button>
               </div>
             </div>
 
@@ -378,9 +445,77 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
             </div>
           )}
         </div>
+        
+        {/* Feedback Modal for Guide */}
+        <TrekFeedbackModal
+          isOpen={feedbackOpen}
+          onClose={() => setFeedbackOpen(false)}
+          trek={guideTrek}
+          isGuideReview={true}
+        />
 
         {/* Scrollable Content Body */}
-        <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-4">
+        <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-6">
+          {/* Guide Reviews */}
+          <div>
+            <h4 className="text-xs font-bold text-[#1F1F1F] mb-3 flex items-center gap-1.5">
+              <Award className="w-3.5 h-3.5 text-[#E08828]" />
+              <span>Guide Reviews</span>
+            </h4>
+            
+            <div className="space-y-3">
+              {(() => {
+                try {
+                  const allReviews = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
+                  const rawGuideReviews = allReviews.filter((r: any) => 
+                    r.trek_name && r.trek_name.toLowerCase() === `guide_review:${guideName.trim().toLowerCase()}`
+                  );
+                  
+                  // Deduplicate by author + text + YYYY-MM-DD
+                  const guideReviews = rawGuideReviews.filter((rev: any, index: number, self: any[]) => {
+                    const normName = (rev.full_name || rev.name || '').trim().toLowerCase();
+                    const normText = (rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '').trim().toLowerCase();
+                    const normDate = String(rev.submitted_at || '').slice(0, 10);
+
+                    return index === self.findIndex((o: any) => {
+                      const oName = (o.full_name || o.name || '').trim().toLowerCase();
+                      const oText = (o.team_feedback || o.teamFeedback || o.overall_feedback || o.overallFeedback || '').trim().toLowerCase();
+                      const oDate = String(o.submitted_at || '').slice(0, 10);
+                      return oName === normName && oText === normText && oDate === normDate;
+                    });
+                  });
+
+                  if (guideReviews.length === 0) {
+                    return <p className="text-xs text-[#8B8680] italic">No reviews for this guide yet.</p>;
+                  }
+
+                  return guideReviews.map((rev: any, idx: number) => {
+                    const ratingVal = Math.min(5, Math.max(1, Number(rev.team_rating || rev.teamRating || rev.overall_rating || rev.overallRating || 5)));
+                    const feedbackText = rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '';
+                    const dateStr = String(rev.submitted_at || '').slice(0, 10);
+
+                    return (
+                      <div key={rev.id || idx} className="p-3 rounded-xl bg-[#F9F7F5] border border-[#EFEAE4] space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-[#1F1F1F]">{rev.full_name || rev.name || 'Verified Hiker'}</span>
+                          <span className="text-[10px] text-[#8B8680]">{dateStr}</span>
+                        </div>
+                        <div className="flex text-amber-500 text-[10px]">
+                          {[...Array(ratingVal)].map((_, i) => (
+                            <Star key={i} className="w-3 h-3 fill-current" />
+                          ))}
+                        </div>
+                        {feedbackText && <p className="text-xs text-[#5A5551]">{feedbackText}</p>}
+                      </div>
+                    );
+                  });
+                } catch {
+                  return <p className="text-xs text-rose-600">Error loading reviews.</p>;
+                }
+              })()}
+            </div>
+          </div>
+          
           {/* Upcoming Assigned Treks on Schedule */}
           {upcomingLedTreks.length > 0 && (
             <div>

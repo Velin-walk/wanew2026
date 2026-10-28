@@ -195,6 +195,7 @@ export const HikerReviewsSection: React.FC<{
 
   const displayReviews = useMemo(() => {
     return allReviewsCombined.filter((item) => {
+      if (item.trek_name.startsWith('GUIDE_REVIEW:')) return false;
       if (reviewFilter === '5star' && (item.overall_rating < 5 || item.team_rating < 5)) {
         return false;
       }
@@ -423,26 +424,25 @@ export const HikerReviewsSection: React.FC<{
                             <span>Verified Hiker</span>
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-[11px] text-[#8B8680] mt-0.5">
-                          {rev.hike_number && (
-                            <span className="font-semibold text-[#E08828]">
-                              Hike #{rev.hike_number}
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            {rev.hike_number && (
+                              <span className="font-bold text-[#E08828] bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-100">
+                                #{rev.hike_number}
+                              </span>
+                            )}
+                            {rev.trek_name && (
+                              <span className="text-[#5A5551] font-medium truncate max-w-[200px] sm:max-w-xs">{rev.trek_name}</span>
+                            )}
+                          </div>
+                          {rev.submitted_at && (
+                            <span className="text-[10px] text-[#A09890] font-medium shrink-0">
+                              {rev.submitted_at}
                             </span>
-                          )}
-                          {rev.hike_number && rev.trek_name && <span>•</span>}
-                          {rev.trek_name && (
-                            <span className="truncate max-w-[200px] sm:max-w-xs">{rev.trek_name}</span>
                           )}
                         </div>
                       </div>
                     </div>
-
-                    {/* Date */}
-                    {rev.submitted_at && (
-                      <span className="text-[10px] text-[#8B8680] shrink-0 font-medium">
-                        {rev.submitted_at}
-                      </span>
-                    )}
                   </div>
 
                   {/* Ratings Row */}
