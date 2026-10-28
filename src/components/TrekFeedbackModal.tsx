@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, X, CheckCircle2, User, MessageSquare, Heart, Award, Shield } from 'lucide-react';
+import { Star, X, CheckCircle2, User, MessageSquare, Heart, Award, Shield, Mail } from 'lucide-react';
 import { Trek, Booking } from '../types';
 import { apiFetch } from '../services/api';
 import { logUserActivity } from '../services/userActivityNotifier';
@@ -67,10 +67,27 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
     return '';
   };
 
+  const resolveInitialEmail = () => {
+    const raw = currentUser?.email || booking?.user_email || booking?.email || '';
+    if (raw && !/nepal hiker|verified hiker/i.test(raw)) return raw.trim();
+    try {
+      const reg = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
+      if (reg) {
+        const parsed = JSON.parse(reg);
+        const email = parsed.emailAddress || parsed.email_address || parsed.email;
+        if (email?.trim()) return email.trim();
+      }
+      const savedEmail = localStorage.getItem('wnw_user_email');
+      if (savedEmail?.trim()) return savedEmail.trim();
+    } catch {}
+    return '';
+  };
+
   const defaultName = resolveInitialName();
-  const defaultEmail = currentUser?.email || booking?.user_email || booking?.email || '';
+  const defaultEmail = resolveInitialEmail();
 
   const [hikerName, setHikerName] = useState(defaultName);
+  const [hikerEmail, setHikerEmail] = useState(defaultEmail);
   const [teamRating, setTeamRating] = useState<number>(5);
   const [hoverTeamRating, setHoverTeamRating] = useState<number>(0);
   const [teamFeedback, setTeamFeedback] = useState<string>('');
@@ -86,6 +103,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setHikerName(resolveInitialName());
+      setHikerEmail(resolveInitialEmail());
       setSelectedKey('');
       setTeamRating(5);
       setHoverTeamRating(0);
@@ -103,9 +121,15 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = hikerName.trim();
+    const trimmedEmail = hikerEmail.trim();
 
     if (!trimmedName || /^(verified hiker|nepal hiker|anonymous hiker|anonymous)$/i.test(trimmedName)) {
       setErrorMessage('Please enter your real full name to submit a review.');
+      return;
+    }
+
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      setErrorMessage('Please enter a valid email address to submit a review.');
       return;
     }
 
@@ -114,6 +138,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
 
     try {
       localStorage.setItem('wnw_user_name', trimmedName);
+      localStorage.setItem('wnw_user_email', trimmedEmail);
     } catch {}
 
     const resolvedTrekName = isGuideReview 
@@ -128,8 +153,8 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
     const payload = {
       name: trimmedName,
       full_name: trimmedName,
-      email: defaultEmail,
-      email_address: defaultEmail,
+      email: trimmedEmail,
+      email_address: trimmedEmail,
       trek_name: resolvedTrekName,
       recentWalk: resolvedTrekName,
       hike_number: resolvedHikeNumber,
@@ -273,30 +298,51 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
               </p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Prefilled / Editable Hiker Name Banner */}
-              <div className="bg-[#FAF8F5] border border-[#EAE4DC] p-3.5 rounded-xl flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Prefilled / Editable Hiker Name & Email Banners */}
+              <div className="space-y-3">
+                <div className="bg-[#FAF8F5] border border-[#EAE4DC] p-3.5 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-[#7ABA42]/20 text-[#7ABA42] flex items-center justify-center font-bold text-xs shrink-0">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] uppercase font-bold text-[#8B8680] block tracking-wider">
+                        Reviewing As
+                      </span>
+                      <input
+                        type="text"
+                        value={hikerName}
+                        onChange={(e) => setHikerName(e.target.value)}
+                        placeholder="Your Full Name"
+                        className="text-xs font-bold text-[#1F1F1F] bg-transparent border-b border-dashed border-[#8B8680]/50 focus:border-[#7ABA42] focus:outline-none w-full py-0.5"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold border border-emerald-200 shrink-0">
+                    Verified Hiker
+                  </span>
+                </div>
+
+                <div className="bg-[#FAF8F5] border border-[#EAE4DC] p-3.5 rounded-xl flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-[#7ABA42]/20 text-[#7ABA42] flex items-center justify-center font-bold text-xs shrink-0">
-                    <User className="w-4 h-4" />
+                    <Mail className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-[10px] uppercase font-bold text-[#8B8680] block tracking-wider">
-                      Reviewing As
+                      Email Address
                     </span>
                     <input
-                      type="text"
-                      value={hikerName}
-                      onChange={(e) => setHikerName(e.target.value)}
-                      placeholder="Your Full Name"
+                      type="email"
+                      value={hikerEmail}
+                      onChange={(e) => setHikerEmail(e.target.value)}
+                      placeholder="your.email@example.com"
                       className="text-xs font-bold text-[#1F1F1F] bg-transparent border-b border-dashed border-[#8B8680]/50 focus:border-[#7ABA42] focus:outline-none w-full py-0.5"
                       required
                     />
                   </div>
                 </div>
-                <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold border border-emerald-200 shrink-0">
-                  Verified Hiker
-                </span>
               </div>
 
               {/* Hike selector (recent 10 hikes) */}

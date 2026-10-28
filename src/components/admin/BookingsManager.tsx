@@ -138,6 +138,12 @@ const datesConflict = (d1?: string, d2?: string): boolean => {
   return false;
 };
 
+const isGenericTitle = (title?: string): boolean => {
+  if (!title) return true;
+  const lower = title.toLowerCase().trim();
+  return /himalayan hike|day hike|overnight bus hike|upcoming trek|hike|trek/.test(lower) && lower.length < 25;
+};
+
 export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boolean => {
   if (!t || !r) return false;
 
