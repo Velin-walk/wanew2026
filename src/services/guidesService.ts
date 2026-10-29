@@ -1,3 +1,6 @@
+import { db } from '../lib/firebase';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+
 export interface CustomGuideData {
   id: string;
   name: string;
@@ -13,6 +16,8 @@ export interface CustomGuideData {
 export interface GuidesSettings {
   show_trek_leaders_tab: boolean;
   custom_guides: CustomGuideData[];
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export const DEFAULT_GUIDES: CustomGuideData[] = [
@@ -173,6 +178,7 @@ export const DEFAULT_GUIDES: CustomGuideData[] = [
 ];
 
 export const STORAGE_KEY = 'wnw_guides_settings_v1';
+export const EVENT_NAME = 'wnw-guide-settings-updated';
 
 export function deduplicateGuides(guides: CustomGuideData[]): CustomGuideData[] {
   if (!Array.isArray(guides)) return [];
@@ -224,17 +230,68 @@ export function getGuidesSettings(): GuidesSettings {
   };
 }
 
-export function saveGuidesSettings(settings: GuidesSettings): void {
+export async function saveGuidesSettings(settings: GuidesSettings, adminEmail: string = 'admin'): Promise<void> {
   try {
     const cleanSettings: GuidesSettings = {
       show_trek_leaders_tab: settings.show_trek_leaders_tab !== false,
       custom_guides: deduplicateGuides(settings.custom_guides || []),
+      updatedAt: new Date().toISOString(),
+      updatedBy: adminEmail,
     };
+
+    // 1. Save synchronously to localStorage & broadcast locally
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanSettings));
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('wnw-guide-settings-updated', { detail: cleanSettings }));
+      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: cleanSettings }));
     }
+
+    // 2. Persist to Firestore (pwa_metrics/guides_settings) so all users across devices inherit the changes
+    const docRef = doc(db, 'pwa_metrics', 'guides_settings');
+    await setDoc(docRef, cleanSettings, { merge: true });
   } catch (err) {
     console.error('Failed to save guide settings:', err);
   }
 }
+
+// Global real-time listener to sync Firestore guide settings into localStorage and broadcast to active UI components
+let isListenerInitialized = false;
+
+export function initGuidesSettingsListener(): void {
+  if (isListenerInitialized || typeof window === 'undefined') return;
+  isListenerInitialized = true;
+
+  try {
+    const docRef = doc(db, 'pwa_metrics', 'guides_settings');
+    onSnapshot(
+      docRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as Partial<GuidesSettings>;
+          if (data && Array.isArray(data.custom_guides)) {
+            const merged: GuidesSettings = {
+              show_trek_leaders_tab: data.show_trek_leaders_tab !== false,
+              custom_guides: deduplicateGuides([...data.custom_guides, ...DEFAULT_GUIDES]),
+              updatedAt: data.updatedAt,
+              updatedBy: data.updatedBy,
+            };
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            } catch (_) {}
+            window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: merged }));
+          }
+        }
+      },
+      (err) => {
+        console.warn('[GuidesService] Remote snapshot listener error:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[GuidesService] Failed to initialize Firestore listener:', err);
+  }
+}
+
+// Auto-initialize listener upon module load
+if (typeof window !== 'undefined') {
+  initGuidesSettingsListener();
+}
+
