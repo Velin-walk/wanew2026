@@ -156,7 +156,7 @@ export const ReviewsAnalyticsBoard: React.FC<ReviewsAnalyticsBoardProps> = ({
                 onClick={() => onSelectTrek && onSelectTrek('')}
                 className="text-[10px] font-semibold text-amber-900 hover:text-amber-950 flex items-center gap-1 bg-amber-50/90 px-2 py-0.5 rounded-lg border border-amber-200 cursor-pointer transition-colors shadow-2xs shrink-0"
               >
-                <span className="truncate max-w-[140px] sm:max-w-[200px]">Filtered: {selectedTrek}</span>
+                <span className="truncate max-w-[210px] sm:max-w-[300px]">Filtered: {selectedTrek}</span>
                 <X className="w-3 h-3 text-amber-700 shrink-0" />
               </button>
             )}

@@ -25,7 +25,8 @@ import {
   Plus,
   MapPin,
   MessageSquare,
-  Heart
+  Heart,
+  Sparkles,
 } from 'lucide-react';
 import { Trek } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +34,12 @@ import { apiFetch, fetchPhotoComments, uploadImageToR2WithProgress } from '../se
 import { logUserActivity } from '../services/userActivityNotifier';
 import { PhotoCommentsSection } from '../components/PhotoCommentsSection';
 import { TrekFeedbackModal } from '../components/TrekFeedbackModal';
+import {
+  OFFER_TREK_ID,
+  OfferItem,
+  parseOfferMetadata,
+  cleanOfferCaption,
+} from '../components/admin/OffersManager';
 import galleryHeroImg from '../assets/images/gallery_trail_hero_1790246900034.jpg';
 
 interface GalleryPhoto {
@@ -235,9 +242,85 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     setLoading(false);
   };
 
+  // Special Offers & Flashcards state (preserves all flashcards and keeps them visible at top of gallery)
+  const [flashcardOffers, setFlashcardOffers] = useState<OfferItem[]>(() => {
+    try {
+      const archiveRaw = localStorage.getItem('wnw_flashcards_gallery_archive');
+      const cacheRaw = localStorage.getItem('wnw_offers_cache');
+      const archiveList: OfferItem[] = archiveRaw ? JSON.parse(archiveRaw) : [];
+      const cacheList: OfferItem[] = cacheRaw ? JSON.parse(cacheRaw) : [];
+      const combined = [...archiveList, ...cacheList];
+      const map = new Map<string, OfferItem>();
+      combined.forEach((item) => {
+        if (item && item.url && !map.has(item.id || item.url)) {
+          const meta = parseOfferMetadata(item);
+          map.set(item.id || item.url, {
+            ...item,
+            color: meta.color,
+            expiresAt: meta.expiresAt || item.expiresAt,
+          });
+        }
+      });
+      return Array.from(map.values()).sort(
+        (a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+      );
+    } catch {
+      return [];
+    }
+  });
+
+  const fetchFlashcards = React.useCallback(async () => {
+    try {
+      let serverList: OfferItem[] = [];
+      try {
+        const res = await apiFetch(`trek_photos?trekId=${encodeURIComponent(OFFER_TREK_ID)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && Array.isArray(json.data)) {
+            serverList = json.data;
+          }
+        }
+      } catch (_) {}
+
+      const archiveRaw = localStorage.getItem('wnw_flashcards_gallery_archive');
+      const cacheRaw = localStorage.getItem('wnw_offers_cache');
+      const archiveList: OfferItem[] = archiveRaw ? JSON.parse(archiveRaw) : [];
+      const cacheList: OfferItem[] = cacheRaw ? JSON.parse(cacheRaw) : [];
+
+      const combined = [...serverList, ...archiveList, ...cacheList];
+      const map = new Map<string, OfferItem>();
+      combined.forEach((item) => {
+        if (item && item.url) {
+          const key = item.id || item.url;
+          if (!map.has(key)) {
+            const meta = parseOfferMetadata(item);
+            map.set(key, {
+              ...item,
+              color: meta.color,
+              expiresAt: meta.expiresAt || item.expiresAt,
+            });
+          }
+        }
+      });
+      const sorted = Array.from(map.values()).sort(
+        (a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+      );
+      setFlashcardOffers(sorted);
+      try {
+        localStorage.setItem('wnw_flashcards_gallery_archive', JSON.stringify(sorted));
+      } catch {}
+    } catch (e) {
+      console.warn('Error loading flashcards for gallery:', e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchAllPhotos();
-  }, []);
+    fetchFlashcards();
+    const handleOffersSync = () => fetchFlashcards();
+    window.addEventListener('wnw-offers-updated', handleOffersSync);
+    return () => window.removeEventListener('wnw-offers-updated', handleOffersSync);
+  }, [fetchFlashcards]);
 
   // Pre-select first trek for upload modal if available
   useEffect(() => {
@@ -806,6 +889,120 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Special Offers & Flashcards Section at Top of Gallery */}
+      {flashcardOffers.length > 0 && (
+        <div className="bg-white border border-[#E5E1DB] rounded-3xl p-5 sm:p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#F0EBE5]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-black text-[#1F1F1F] tracking-tight">
+                    Special Offers &amp; Flashcards
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
+                    {flashcardOffers.length} Card{flashcardOffers.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#8B8680] mt-0.5">
+                  Hike flashcards, announcements &amp; promotional offers from Walk Nepal Walk.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Flashcard Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {flashcardOffers.map((card, cardIdx) => {
+              const meta = parseOfferMetadata(card);
+              const cleanCaption = cleanOfferCaption(card.caption);
+              const isExpired = meta.expiresAt ? new Date(meta.expiresAt).getTime() < Date.now() : false;
+
+              return (
+                <div
+                  key={card.id || `flashcard-${cardIdx}`}
+                  className="rounded-2xl overflow-hidden border border-[#E5E1DB] bg-white shadow-2xs hover:shadow-md transition-all flex flex-col group cursor-pointer"
+                  onClick={() => {
+                    const photoObj: GalleryPhoto = {
+                      id: card.id,
+                      trekId: OFFER_TREK_ID,
+                      hikeNumber: 'OFFER',
+                      trekName: 'Special Offers & Flashcards',
+                      url: card.url,
+                      uploadedBy: card.uploadedBy || 'Walk Nepal Walk',
+                      userUid: card.userUid || 'admin',
+                      uploadedAt: card.uploadedAt,
+                      caption: cleanCaption,
+                    };
+                    handleOpenLightbox(photoObj, 0);
+                  }}
+                >
+                  {/* Card Visual / Image */}
+                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-900">
+                    <img
+                      src={card.url}
+                      alt={cleanCaption || 'Walk Nepal Walk Flashcard'}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
+
+                    {/* Badge */}
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs ${
+                        isExpired
+                          ? 'bg-stone-800/80 text-stone-300 border border-stone-600'
+                          : 'bg-amber-500/90 text-white border border-amber-300/40'
+                      }`}>
+                        {isExpired ? 'Flashcard Archive' : 'Special Offer'}
+                      </span>
+                    </div>
+
+                    <div className="absolute bottom-2.5 right-2.5">
+                      <button
+                        type="button"
+                        className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur-md transition-colors"
+                        title="View Full Resolution Flashcard"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card Details */}
+                  <div className="p-3 flex-1 flex flex-col justify-between space-y-2 bg-[#FAF8F5]">
+                    <div>
+                      {cleanCaption ? (
+                        <p className="text-xs font-bold text-[#1F1F1F] line-clamp-2 leading-snug">
+                          {cleanCaption}
+                        </p>
+                      ) : (
+                        <p className="text-xs font-semibold text-[#8B8680] italic">
+                          Walk Nepal Walk Flashcard
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-[#8B8680] pt-1 border-t border-[#EFEAE4]">
+                      <span>
+                        {card.uploadedAt ? new Date(card.uploadedAt).toLocaleDateString() : 'Active'}
+                      </span>
+                      {meta.expiresAt && !isExpired && (
+                        <span className="text-amber-700 font-bold">
+                          Valid until {new Date(meta.expiresAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Main Gallery Grid */}
       {loading ? (

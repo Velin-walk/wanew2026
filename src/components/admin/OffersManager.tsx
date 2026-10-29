@@ -333,6 +333,14 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
         localStorage.setItem(OFFERS_STORAGE_KEY, JSON.stringify(updatedList));
       } catch {}
 
+      // Keep persistent gallery archive of all flashcard images so they never get lost or deleted when new post is made
+      try {
+        const rawArchive = localStorage.getItem('wnw_flashcards_gallery_archive');
+        const existingArchive: OfferItem[] = rawArchive ? JSON.parse(rawArchive) : [];
+        const mergedArchive = [newRecord, ...existingArchive.filter((item) => item.id !== newRecord.id)];
+        localStorage.setItem('wnw_flashcards_gallery_archive', JSON.stringify(mergedArchive));
+      } catch {}
+
       window.dispatchEvent(new CustomEvent('wnw-offers-updated'));
 
       setSelectedImage(null);

@@ -9,6 +9,7 @@ interface ParticipantStackProps {
   trekName?: string;
   hikeNumber?: string;
   trekId?: string;
+  guideName?: string;
 }
 
 export const ParticipantStack: React.FC<ParticipantStackProps> = ({
@@ -18,6 +19,7 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
   trekName,
   hikeNumber,
   trekId,
+  guideName,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const avatars = (recentParticipants || []).slice(0, 8);
@@ -129,6 +131,7 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
         totalCount={totalParticipants}
         participantsCount={participantsCount}
         recentParticipants={recentParticipants}
+        guideName={guideName}
       />
     </>
   );

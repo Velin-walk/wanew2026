@@ -3681,7 +3681,7 @@ export default {
         try {
           const category = url.searchParams.get('category');
           let query = `
-            SELECT id, slug, title, summary, cover_image_url, author_name, author_email, category, tags, reading_time_mins, likes_count, views_count, created_at
+            SELECT id, slug, title, summary, cover_image_url, cover_image_position, author_name, author_email, category, tags, reading_time_mins, likes_count, views_count, created_at
             FROM blogs
             WHERE status = 'published'
           `;
@@ -3763,6 +3763,7 @@ export default {
           const coverImageUrl = (body.cover_image_url || body.coverImageUrl || '').trim();
           const category = (body.category || 'Trail Stories').trim();
           const tags = (body.tags || '').trim();
+          const coverImagePosition = parseInt(body.cover_image_position || body.coverImagePosition || '50', 10);
           const editToken = (body.edit_token || body.editToken || '').trim() || null;
 
           if (!title || !content) {
@@ -3787,13 +3788,12 @@ export default {
           let result;
           try {
             result = await env.DB.prepare(`
-              INSERT INTO blogs (
-                slug, title, summary, content, cover_image_url,
+                slug, title, summary, content, cover_image_url, cover_image_position,
                 author_name, author_email, category, tags,
                 reading_time_mins, edit_token, status, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)
             `).bind(
-              slug, title, summary, content, coverImageUrl || null,
+              slug, title, summary, content, coverImageUrl || null, coverImagePosition || 50,
               authorName, authorEmail || null, category, tags || null,
               readingTimeMins, editToken, now, now
             ).run();
@@ -3803,13 +3803,12 @@ export default {
               blogsTableEnsured = false;
               await ensureBlogsTable(env);
               result = await env.DB.prepare(`
-                INSERT INTO blogs (
-                  slug, title, summary, content, cover_image_url,
+                  slug, title, summary, content, cover_image_url, cover_image_position,
                   author_name, author_email, category, tags,
                   reading_time_mins, edit_token, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)
               `).bind(
-                slug, title, summary, content, coverImageUrl || null,
+                slug, title, summary, content, coverImageUrl || null, coverImagePosition || 50,
                 authorName, authorEmail || null, category, tags || null,
                 readingTimeMins, editToken, now, now
               ).run();
@@ -3964,6 +3963,9 @@ export default {
           const coverImageUrl = body.cover_image_url !== undefined ? body.cover_image_url.trim() : (existing.cover_image_url || '');
           const category = (body.category || existing.category || 'Trail Stories').trim();
           const tags = body.tags !== undefined ? body.tags.trim() : (existing.tags || '');
+          const coverImagePosition = body.cover_image_position !== undefined 
+            ? parseInt(body.cover_image_position, 10) 
+            : (existing.cover_image_position || 50);
 
           if (!title || !content) {
             return errorResponse('Title and content are required', 400);
@@ -3981,6 +3983,7 @@ export default {
               summary = ?,
               author_name = ?,
               cover_image_url = ?,
+              cover_image_position = ?,
               category = ?,
               tags = ?,
               reading_time_mins = ?,
@@ -3988,7 +3991,7 @@ export default {
             WHERE id = ?
           `).bind(
             title, content, summary, authorName,
-            coverImageUrl || null, category, tags || null,
+            coverImageUrl || null, coverImagePosition || 50, category, tags || null,
             readingTimeMins, now, blogId
           ).run();
 

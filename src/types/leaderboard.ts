@@ -69,6 +69,7 @@ export interface LeaderboardResponse {
     event_no: string | number;
     title: string;
     date: string;
+    timestamp?: number;
     hike_km: number;
     trek_km: number;
     total_km: number;
@@ -77,6 +78,7 @@ export interface LeaderboardResponse {
     event_no: string | number;
     title: string;
     date: string;
+    timestamp?: number;
     hike_km: number;
     trek_km: number;
     total_km: number;

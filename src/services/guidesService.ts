@@ -10,6 +10,7 @@ export interface CustomGuideData {
   specialty?: string;
   badge?: string;
   experienceKm?: string;
+  phone?: string;
   is_visible: boolean;
 }
 

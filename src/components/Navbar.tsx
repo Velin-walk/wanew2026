@@ -100,10 +100,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     };
   }, [dropdownOpen, avatarDropdownOpen]);
 
-  const handleSubPageClick = (page: SubPageType) => {
+  const handleSubPageClick = (page: SubPageType | 'settings') => {
     setDropdownOpen(false);
+    if (page === 'settings' && onOpenProfile) {
+      onOpenProfile('settings');
+      return;
+    }
     if (onOpenInfoPage) {
-      onOpenInfoPage(page);
+      onOpenInfoPage(page as SubPageType);
     }
   };
 
@@ -338,7 +342,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 activeInfoPage === 'request_private_trek' ||
                 activeInfoPage === 'contact' ||
                 activeInfoPage === 'notices' ||
-                activeInfoPage === 'trek_leaders'
+                activeInfoPage === 'trek_leaders' ||
+                (activeInfoPage as any) === 'settings'
                   ? 'bg-white text-[#E08828] shadow-xs font-bold'
                   : 'text-[#5A5551] hover:text-[#1F1F1F]'
               }`}
@@ -456,6 +461,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="flex items-center gap-2.5">
                     <Mail className="w-4 h-4 text-[#7ABA42] shrink-0 group-hover:scale-110 transition-transform" />
                     <span>Contact Support</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
+                </button>
+
+                <div className="my-1 border-t border-[#F9F7F5]" />
+
+                <button
+                  type="button"
+                  onClick={() => handleSubPageClick('settings')}
+                  className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Settings className="w-4 h-4 text-[#5A5551] shrink-0 group-hover:scale-110 transition-transform" />
+                    <div>
+                      <div className="leading-tight font-bold text-[#1F1F1F]">Account Settings</div>
+                      <div className="text-[10px] font-normal text-[#8B8680]">Profile &amp; Preferences</div>
+                    </div>
                   </div>
                   <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
                 </button>
@@ -617,7 +639,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 export const DesktopResourcesBar: React.FC<{
   activeInfoPage?: SubPageType | null;
   onOpenInfoPage?: (page: SubPageType) => void;
-}> = ({ activeInfoPage, onOpenInfoPage }) => {
+  onOpenProfile?: (tab?: 'hikes' | 'bookings' | 'saved' | 'settings') => void;
+}> = ({ activeInfoPage, onOpenInfoPage, onOpenProfile }) => {
   const [showTrekLeadersTab, setShowTrekLeadersTab] = useState(() => getGuidesSettings().show_trek_leaders_tab !== false);
 
   useEffect(() => {
@@ -629,7 +652,7 @@ export const DesktopResourcesBar: React.FC<{
   }, []);
 
   const items: Array<{
-    id: SubPageType;
+    id: SubPageType | 'settings';
     label: string;
     sub: string;
     icon: React.ReactNode;
@@ -708,6 +731,14 @@ export const DesktopResourcesBar: React.FC<{
       accentBg: 'bg-emerald-50 border-emerald-200/70',
       activeClass: 'ring-2 ring-[#7ABA42] bg-emerald-50/90 border-[#7ABA42]',
     },
+    {
+      id: 'settings',
+      label: 'Settings',
+      sub: 'Profile & Privacy',
+      icon: <Settings className="w-4 h-4 text-[#5A5551]" />,
+      accentBg: 'bg-stone-50 border-stone-200/70',
+      activeClass: 'ring-2 ring-stone-400 bg-stone-50/90 border-stone-300',
+    },
   ];
 
   return (
@@ -717,13 +748,19 @@ export const DesktopResourcesBar: React.FC<{
     >
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
         {items.map((item) => {
-          const isActive = activeInfoPage === item.id;
+          const isActive = (activeInfoPage as any) === item.id;
           const isHighlight = item.id === 'request_private_trek';
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => onOpenInfoPage?.(item.id)}
+              onClick={() => {
+                if (item.id === 'settings' && onOpenProfile) {
+                  onOpenProfile('settings');
+                } else {
+                  onOpenInfoPage?.(item.id as SubPageType);
+                }
+              }}
               className={`group flex items-center gap-2.5 p-2.5 rounded-2xl border text-left transition-all cursor-pointer shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:scale-98 ${
                 isActive
                   ? item.activeClass

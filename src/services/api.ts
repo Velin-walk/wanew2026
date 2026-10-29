@@ -664,6 +664,46 @@ export async function fetchUserBookings(email?: string, phone?: string, forceFre
 }
 
 /**
+ * Compute the number of events conducted in the recent 30 days.
+ */
+export function computeRecent30DaysEvents(data: any): number {
+  if (typeof data?.stats?.hikesLast30 === 'number' && data.stats.hikesLast30 > 0) {
+    return data.stats.hikesLast30;
+  }
+  const now = Date.now();
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const buffer = 24 * 60 * 60 * 1000;
+
+  const curve = data?.growthCurve || data?.growth_curve;
+  if (Array.isArray(curve) && curve.length > 0) {
+    const count = curve.filter((pt: any) => {
+      const t = pt.timestamp ? Number(pt.timestamp) : (pt.date ? new Date(pt.date).getTime() : 0);
+      return t > 0 && t >= (now - thirtyDaysMs) && t <= (now + buffer);
+    }).length;
+    if (count > 0) return count;
+  }
+
+  if (Array.isArray(data?.hikers)) {
+    const uniqueHikes = new Set<string>();
+    for (const h of data.hikers) {
+      if (Array.isArray(h.hikes)) {
+        for (const hk of h.hikes) {
+          if (hk.date) {
+            const t = new Date(hk.date).getTime();
+            if (t > 0 && t >= (now - thirtyDaysMs) && t <= (now + buffer)) {
+              uniqueHikes.add(String(hk.no || hk.name));
+            }
+          }
+        }
+      }
+    }
+    if (uniqueHikes.size > 0) return uniqueHikes.size;
+  }
+
+  return 0;
+}
+
+/**
  * Fetch Leaderboard aggregated stats designed specifically for Community Dashboard.
  * Tries Cloudflare endpoint first, with fallback to Google Apps Script proxy.
  */
@@ -680,10 +720,14 @@ export async function fetchLeaderboardData(forceFresh = false): Promise<any> {
       const data = await cfRes.json();
       if (data && (data.hikers || data.stats || data.ok || Array.isArray(data.data))) {
         const hikers = data.hikers || (Array.isArray(data.data) ? data.data : []);
+        const stats = { ...(data.stats || {}) };
+        if (!stats.hikesLast30) {
+          stats.hikesLast30 = computeRecent30DaysEvents(data);
+        }
         return {
           ...data,
           hikers,
-          stats: data.stats || {},
+          stats,
         };
       }
     }
@@ -698,10 +742,14 @@ export async function fetchLeaderboardData(forceFresh = false): Promise<any> {
       const data = await gasRes.json();
       if (data && (data.ok || data.hikers || Array.isArray(data.data))) {
         const hikers = data.hikers || (Array.isArray(data.data) ? data.data : []);
+        const stats = { ...(data.stats || {}) };
+        if (!stats.hikesLast30) {
+          stats.hikesLast30 = computeRecent30DaysEvents(data);
+        }
         return {
           ...data,
           hikers,
-          stats: data.stats || {},
+          stats,
         };
       }
     }
@@ -874,6 +922,7 @@ export async function createBlog(blogData: {
   cover_image_url?: string;
   category?: string;
   tags?: string;
+  cover_image_position?: number;
   edit_token?: string;
 }) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -902,6 +951,7 @@ export async function updateBlog(
     cover_image_url?: string;
     category?: string;
     tags?: string;
+    cover_image_position?: number;
   },
   authInfo?: { email?: string; editToken?: string; isAdmin?: boolean }
 ) {

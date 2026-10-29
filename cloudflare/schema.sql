@@ -321,6 +321,7 @@ CREATE TABLE IF NOT EXISTS blogs (
   reading_time_mins INTEGER DEFAULT 3,
   likes_count INTEGER DEFAULT 0,
   views_count INTEGER DEFAULT 0,
+  cover_image_position INTEGER DEFAULT 50,
   edit_token TEXT,
   status TEXT DEFAULT 'published',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

@@ -82,26 +82,24 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
   const { coords, dLine, dArea, maxKm, floorY, paddingLeft, chartWidth } = chartData;
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm space-y-4">
+    <div className="bg-white rounded-2xl border border-stone-200 p-3 sm:p-4 shadow-sm space-y-3 sm:space-y-4">
       {/* Chart Title / Caption */}
       <div className="flex justify-between items-center text-xs text-stone-600 font-semibold px-1">
         <span className="flex items-center gap-1.5">
-          <Footprints className="w-4 h-4 text-[#7ABA42]" />
-          <span>Cumulative Distance Progress Curve</span>
+          <Footprints className="w-4 h-4 text-[#7ABA42] shrink-0" />
+          <span className="text-[11px] sm:text-xs">Cumulative Distance Progress Curve</span>
         </span>
-        <span className="font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded-md">
+        <span className="font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded-md text-[10px] sm:text-xs">
           Peak: {maxKm.toLocaleString()} km
         </span>
       </div>
 
-      {/* SVG Chart Container */}
-      <div className="w-full overflow-x-auto no-scrollbar">
-        <div className="min-w-[650px] w-full relative">
-          <svg
-            viewBox="0 0 1000 300"
-            className="w-full h-auto select-none overflow-visible"
-            style={{ minHeight: '220px' }}
-          >
+      {/* SVG Chart Container - Fits single view with zero horizontal scroll */}
+      <div className="w-full relative">
+        <svg
+          viewBox="0 0 1000 300"
+          className="w-full h-auto select-none overflow-visible"
+        >
             <defs>
               <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#7ABA42" stopOpacity="0.25" />
@@ -248,7 +246,6 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
             )}
           </svg>
         </div>
-      </div>
     </div>
   );
 };

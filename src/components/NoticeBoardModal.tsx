@@ -163,7 +163,7 @@ export const NoticeBoardModal: React.FC<NoticeBoardModalProps> = ({
         if (e.target === e.currentTarget) handleDismiss();
       }}
     >
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-[#E5E1DB] overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border-2 border-orange-500/75 hover:border-orange-600 overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Top Header Strip with notice icon and badge */}
         <div className={`px-6 py-5 border-b border-[#E5E1DB] ${config.headerBg} flex items-center justify-between`}>
           <div className="flex items-center gap-3">

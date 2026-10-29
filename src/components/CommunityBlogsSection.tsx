@@ -1118,7 +1118,7 @@ export const CommunityBlogsSection: React.FC = () => {
           </div>
 
           {formData.cover_image_url ? (
-            <div className="relative group w-full h-44 sm:h-56 rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-2xs bg-neutral-900">
+            <div className="relative group w-full h-64 sm:h-80 rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-2xs bg-neutral-900">
               <img
                 src={formData.cover_image_url}
                 alt="Cover photo preview"
@@ -1628,9 +1628,9 @@ export const CommunityBlogsSection: React.FC = () => {
           {editorTab === 'preview' ? (
             /* 1. Full Live Preview Mode */
             <div className="h-full overflow-y-auto px-4 sm:px-8 py-8 bg-[#FAF8F5]">
-              <div className="max-w-3xl mx-auto space-y-6 bg-white p-6 sm:p-10 rounded-3xl border border-[#E5E1DB] shadow-xs">
+              <div className="max-w-6xl mx-auto space-y-6 bg-white p-6 sm:p-10 rounded-3xl border border-[#E5E1DB] shadow-xs">
                 {formData.cover_image_url && (
-                  <div className="w-full h-64 sm:h-80 rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-2xs">
+                  <div className="w-full h-96 sm:h-[480px] rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-2xs">
                     <img
                       src={formData.cover_image_url}
                       alt={formData.title}
@@ -1712,7 +1712,7 @@ export const CommunityBlogsSection: React.FC = () => {
 
               {/* Right Column: Live Markdown Preview */}
               <div className="h-full overflow-y-auto p-4 sm:p-6 lg:p-8 bg-white">
-                <div className="max-w-2xl mx-auto space-y-5">
+                <div className="max-w-5xl mx-auto space-y-5">
                   <div className="flex items-center justify-between pb-3 border-b border-[#F0EBE5]">
                     <div className="flex items-center gap-2">
                       <Eye className="w-4 h-4 text-[#7ABA42]" />
@@ -1724,7 +1724,7 @@ export const CommunityBlogsSection: React.FC = () => {
                   </div>
 
                   {formData.cover_image_url && (
-                    <div className="w-full h-48 sm:h-60 rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-2xs">
+                    <div className="w-full h-72 sm:h-96 rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-2xs">
                       <img
                         src={formData.cover_image_url}
                         alt="Cover preview"
@@ -1764,7 +1764,7 @@ export const CommunityBlogsSection: React.FC = () => {
           ) : (
             /* 3. Full Write View (Focused, Centered, Clean) */
             <div className="h-full overflow-y-auto p-4 sm:p-8 bg-[#FAF8F5]">
-              <div className="max-w-4xl mx-auto">
+              <div className="max-w-screen-xl mx-auto">
                 {renderEditorForm(false)}
               </div>
             </div>
@@ -1885,7 +1885,7 @@ export const CommunityBlogsSection: React.FC = () => {
         </div>
 
         {activeBlog.cover_image_url && (
-          <div className="w-full h-56 sm:h-72 rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-xs">
+          <div className="w-full h-80 sm:h-[432px] rounded-2xl overflow-hidden border border-[#E5E1DB] shadow-xs">
             <img
               src={activeBlog.cover_image_url}
               alt={activeBlog.title}

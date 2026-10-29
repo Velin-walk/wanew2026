@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Trek, Booking, TeamMember, BookingFormData } from './types';
-import { Navbar, DesktopResourcesBar } from './components/Navbar';
+import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { TrekListScreen } from './screens/TrekListScreen';
 import { MyBookingsScreen } from './screens/MyBookingsScreen';

@@ -445,6 +445,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
           trekName={trek.name}
           hikeNumber={trek.hike_number}
           trekId={trek.id}
+          guideName={trek.leader || trek.team_leader}
         />
 
         {/* Leader Info */}

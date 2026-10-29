@@ -122,24 +122,24 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
   return (
     <div className="rounded-3xl border border-stone-300 bg-white/70 backdrop-blur-md shadow-md shadow-stone-900/5 overflow-hidden transition-all">
       {/* Board Header & Controls */}
-      <div className="p-5 border-b border-stone-200 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-stone-100 border border-stone-200/80">
+      <div className="p-3.5 sm:p-5 border-b border-stone-200 space-y-3 sm:space-y-4">
+        <div className="flex items-center justify-between gap-2 sm:gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="p-2 rounded-xl bg-stone-100 border border-stone-200/80 shrink-0">
               {categoryIcon}
             </div>
             <div>
-              <h2 className="text-lg font-black text-stone-900">{categoryTitle}</h2>
-              <p className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Community Top 100 Rankings</p>
+              <h2 className="text-base sm:text-lg font-black text-stone-900">{categoryTitle}</h2>
+              <p className="text-[9px] sm:text-[10px] font-bold text-stone-600 uppercase tracking-wider">Community Top 100 Rankings</p>
             </div>
           </div>
-          <div className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-black uppercase tracking-tighter shadow-3xs">
+          <div className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-[9px] sm:text-[10px] font-black uppercase tracking-tighter shadow-3xs shrink-0">
             Top 100
           </div>
         </div>
 
         {/* Time Window Pills & Metric Toggle */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2.5 sm:gap-3">
           <div className="flex flex-col gap-1.5 w-full">
             <span className="text-[10px] font-extrabold text-stone-700 shrink-0 flex items-center gap-1 uppercase tracking-wider">
               <Calendar className="w-3 h-3 text-[#E08828]" /> Period:
@@ -158,7 +158,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   key={t.id}
                   type="button"
                   onClick={() => { setPeriod(t.id); setLimit(20); }}
-                  className={`px-0.5 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 cursor-pointer select-none border text-center whitespace-nowrap ${
+                  className={`px-0.5 py-1.5 sm:py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 cursor-pointer select-none border text-center whitespace-nowrap ${
                     period === t.id
                       ? 'bg-stone-900 text-white border-stone-900 shadow-md ring-1 ring-stone-900/20'
                       : 'bg-white text-stone-700 border-stone-300 hover:border-[#E08828] hover:text-[#E08828] hover:bg-amber-50/50 shadow-2xs'
@@ -174,7 +174,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
             <button
               type="button"
               onClick={() => { setMetric('dist'); setLimit(20); }}
-              className={`py-1.5 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1 active:scale-95 select-none ${
+              className={`py-1.5 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1 active:scale-95 select-none min-h-[36px] ${
                 metric === 'dist'
                   ? 'bg-[#E08828] text-white shadow-md shadow-[#E08828]/30 ring-1 ring-[#E08828]/25'
                   : 'bg-white hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-300 shadow-2xs'
@@ -186,7 +186,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
             <button
               type="button"
               onClick={() => { setMetric('count'); setLimit(20); }}
-              className={`py-1.5 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1 active:scale-95 select-none ${
+              className={`py-1.5 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1 active:scale-95 select-none min-h-[36px] ${
                 metric === 'count'
                   ? 'bg-stone-900 text-white shadow-md shadow-stone-900/30 ring-1 ring-stone-900/25'
                   : 'bg-white hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-300 shadow-2xs'
@@ -220,17 +220,28 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
           <p className="text-xs font-bold text-rose-600">{error}</p>
         </div>
       ) : filteredHikers.length === 0 ? (
-        <div className="p-10 text-center space-y-2">
+        <div className="p-8 sm:p-10 text-center space-y-2">
           <Mountain className="w-8 h-8 text-stone-400 mx-auto" />
           <p className="text-xs font-bold text-stone-600">No activity found for this period</p>
         </div>
       ) : (
         <div>
-          <div className="grid grid-cols-12 px-4 py-3 bg-stone-100 border-b border-stone-200 text-[11px] font-black uppercase tracking-wider text-stone-700">
-            <div className="col-span-2 sm:col-span-1 text-center">Rank</div>
-            <div className="col-span-5 sm:col-span-6">Hiker</div>
-            <div className="col-span-3 sm:col-span-3 text-right">Distance</div>
-            <div className="col-span-2 sm:col-span-2 text-right">Trips</div>
+          {/* Desktop Table Header */}
+          <div className="hidden sm:grid sm:grid-cols-12 px-4 py-3 bg-stone-100 border-b border-stone-200 text-[11px] font-black uppercase tracking-wider text-stone-700">
+            <div className="col-span-1 text-center">Rank</div>
+            <div className="col-span-6">Hiker</div>
+            <div className="col-span-3 text-right">Distance</div>
+            <div className="col-span-2 text-right">Trips</div>
+          </div>
+          {/* Mobile Table Header */}
+          <div className="sm:hidden flex items-center justify-between px-3.5 py-2.5 bg-stone-100 border-b border-stone-200 text-[10px] font-black uppercase tracking-wider text-stone-700">
+            <div className="flex items-center gap-2">
+              <span className="w-7 text-center">#</span>
+              <span>Hiker</span>
+            </div>
+            <div className="text-right">
+              <span>Distance & Trips</span>
+            </div>
           </div>
 
           <div className="divide-y divide-stone-200/80 bg-white/60">
@@ -238,71 +249,131 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
               const { d: distKey, c: countKey } = getKeys(category, period);
               const distanceVal = ((hiker as any)[distKey] as number) || 0;
               const countVal = ((hiker as any)[countKey] as number) || 0;
+              const isTop1 = idx === 0;
+              const isTop2 = idx === 1;
+              const isTop3 = idx === 2;
 
               return (
                 <div
                   key={`${hiker.n}-${idx}`}
                   onClick={() => setSelectedHiker(hiker)}
-                  className="grid grid-cols-12 items-center px-4 py-3 bg-transparent hover:bg-stone-100/60 transition-colors cursor-pointer group"
+                  className={`transition-colors cursor-pointer group active:bg-stone-100/90 ${
+                    isTop1
+                      ? 'bg-amber-50/50 hover:bg-amber-100/60'
+                      : isTop2
+                      ? 'bg-slate-50/60 hover:bg-slate-100/70'
+                      : isTop3
+                      ? 'bg-amber-50/25 hover:bg-amber-100/50'
+                      : 'bg-transparent hover:bg-stone-100/60'
+                  }`}
                 >
-                  <div className="col-span-2 sm:col-span-1 flex items-center justify-center">
-                    {idx === 0 ? (
-                      <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
-                        <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
-                      </span>
-                    ) : idx === 1 ? (
-                      <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
-                        <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
-                      </span>
-                    ) : idx === 2 ? (
-                      <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-900 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
-                        <Award className="w-3.5 h-3.5 text-amber-700" /> 3
-                      </span>
-                    ) : (
-                      <span className="text-xs font-black text-stone-500">#{idx + 1}</span>
-                    )}
-                  </div>
-
-                  <div className="col-span-5 sm:col-span-6 flex items-center gap-2 pr-2">
-                    <div className="w-8 h-8 rounded-xl bg-stone-100 border border-stone-300 flex items-center justify-center text-xs font-black text-stone-700 shrink-0 group-hover:border-[#E08828]/60 transition-colors">
-                      {(hiker.n || 'H')[0]?.toUpperCase()}
-                    </div>
-                    <div className="truncate">
-                      <span className="text-xs sm:text-sm font-bold text-stone-900 group-hover:text-[#E08828] transition-colors block truncate">
-                        {maskName(hiker.n)}
-                      </span>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {hiker.d >= 500 ? (
-                          <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-800 text-[9px] font-bold border border-purple-300 flex items-center gap-1">
-                            500KM Legend <Gem className="w-3 h-3 text-purple-600" />
+                  {/* Mobile Row Layout */}
+                  <div className="sm:hidden flex items-center justify-between px-3 py-2.5 gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="w-7 shrink-0 flex items-center justify-center">
+                        {isTop1 ? (
+                          <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
+                            <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
                           </span>
-                        ) : hiker.d >= 100 ? (
-                          <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[9px] font-bold border border-emerald-300 flex items-center gap-1">
-                            100KM Century <Sparkles className="w-3 h-3 text-emerald-600" />
+                        ) : isTop2 ? (
+                          <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
+                            <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
+                          </span>
+                        ) : isTop3 ? (
+                          <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-900 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
+                            <Award className="w-3.5 h-3.5 text-amber-700" /> 3
                           </span>
                         ) : (
-                          <span className="text-[10px] text-stone-500 font-medium">Trail Walker</span>
+                          <span className="text-xs font-black text-stone-500">#{idx + 1}</span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-bold text-stone-900 group-hover:text-[#E08828] transition-colors truncate">
+                          {maskName(hiker.n)}
+                        </span>
+                        {hiker.d >= 500 ? (
+                          <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-800 text-[8px] font-bold border border-purple-300 inline-flex items-center gap-0.5 shrink-0 whitespace-nowrap">
+                            500KM <Gem className="w-2.5 h-2.5 text-purple-600" />
+                          </span>
+                        ) : hiker.d >= 100 ? (
+                          <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[8px] font-bold border border-emerald-300 inline-flex items-center gap-0.5 shrink-0 whitespace-nowrap">
+                            100KM <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[8px] font-medium border border-stone-200 inline-flex items-center shrink-0 whitespace-nowrap">
+                            Trail Walker
+                          </span>
                         )}
                       </div>
                     </div>
+
+                    <div className="text-right shrink-0 pl-1">
+                      <span className="text-xs font-black text-blue-700 block whitespace-nowrap">
+                        {distanceVal.toLocaleString()} km
+                      </span>
+                      <span className="text-[10px] text-stone-500 font-medium block whitespace-nowrap">
+                        {countVal} {category === 'hikers' ? 'hikes' : category === 'trekkers' ? 'treks' : 'trips'}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="col-span-3 sm:col-span-3 text-right">
-                    <span className="text-xs sm:text-sm font-black text-blue-700 block">
-                      {distanceVal.toLocaleString()} km
-                    </span>
-                    <span className="text-[10px] text-stone-500 font-medium">
-                      {period === 'overall' ? 'lifetime' : period}
-                    </span>
-                  </div>
+                  {/* Tablet / Desktop Grid Row Layout */}
+                  <div className="hidden sm:grid sm:grid-cols-12 items-center px-4 py-3">
+                    <div className="col-span-1 flex items-center justify-center">
+                      {isTop1 ? (
+                        <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
+                          <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
+                        </span>
+                      ) : isTop2 ? (
+                        <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
+                          <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
+                        </span>
+                      ) : isTop3 ? (
+                        <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-900 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
+                          <Award className="w-3.5 h-3.5 text-amber-700" /> 3
+                        </span>
+                      ) : (
+                        <span className="text-xs font-black text-stone-500">#{idx + 1}</span>
+                      )}
+                    </div>
 
-                  <div className="col-span-2 sm:col-span-2 text-right">
-                    <span className="text-xs sm:text-sm font-black text-emerald-700 block">
-                      {countVal}
-                    </span>
-                    <span className="text-[10px] text-stone-500 font-medium">
-                      {category === 'hikers' ? 'hikes' : category === 'trekkers' ? 'treks' : 'trips'}
-                    </span>
+                    <div className="col-span-6 flex items-center gap-2 pr-2 flex-wrap">
+                      <span className="text-sm font-bold text-stone-900 group-hover:text-[#E08828] transition-colors truncate">
+                        {maskName(hiker.n)}
+                      </span>
+                      {hiker.d >= 500 ? (
+                        <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-800 text-[9px] font-bold border border-purple-300 inline-flex items-center gap-1 shrink-0 whitespace-nowrap">
+                          500KM Legend <Gem className="w-3 h-3 text-purple-600" />
+                        </span>
+                      ) : hiker.d >= 100 ? (
+                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[9px] font-bold border border-emerald-300 inline-flex items-center gap-1 shrink-0 whitespace-nowrap">
+                          100KM Century <Sparkles className="w-3 h-3 text-emerald-600" />
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[9px] font-medium border border-stone-200 inline-flex items-center shrink-0 whitespace-nowrap">
+                          Trail Walker
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="col-span-3 text-right">
+                      <span className="text-sm font-black text-blue-700 block">
+                        {distanceVal.toLocaleString()} km
+                      </span>
+                      <span className="text-[10px] text-stone-500 font-medium">
+                        {period === 'overall' ? 'lifetime' : period}
+                      </span>
+                    </div>
+
+                    <div className="col-span-2 text-right">
+                      <span className="text-sm font-black text-emerald-700 block">
+                        {countVal}
+                      </span>
+                      <span className="text-[10px] text-stone-500 font-medium">
+                        {category === 'hikers' ? 'hikes' : category === 'trekkers' ? 'treks' : 'trips'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -310,11 +381,11 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
           </div>
 
           {visibleHikers.length < filteredHikers.length && (
-            <div className="p-4 bg-stone-50 border-t border-stone-200 text-center">
+            <div className="p-3.5 sm:p-4 bg-stone-50 border-t border-stone-200 text-center">
               <button
                 type="button"
                 onClick={() => setLimit((prev) => prev + 20)}
-                className="w-full sm:w-auto px-6 py-2 bg-white hover:bg-stone-100 border-2 border-dashed border-emerald-600 text-emerald-800 font-black text-[11px] rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 sm:py-2 bg-white hover:bg-stone-100 border-2 border-dashed border-emerald-600 text-emerald-800 font-black text-xs sm:text-[11px] rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer min-h-[44px] flex items-center justify-center mx-auto"
               >
                 See More ⬇
               </button>
@@ -331,6 +402,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  const [mobileCategory, setMobileCategory] = useState<BoardCategory>('all');
   const [journeyPeriod, setJourneyPeriod] = useState<TimePeriod>('overall');
   const [selectedHiker, setSelectedHiker] = useState<HikerStats | null>(null);
   const [activeJourneyPoint, setActiveJourneyPoint] = useState<any | null>(null);
@@ -378,6 +450,44 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
 
   const currentStats = data?.stats;
 
+  // Dynamic computation of recent 30 days events if not provided or 0 in server stats
+  const recentEventsCount = useMemo(() => {
+    if (typeof currentStats?.hikesLast30 === 'number' && currentStats.hikesLast30 > 0) {
+      return currentStats.hikesLast30;
+    }
+    const now = Date.now();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const buffer = 24 * 60 * 60 * 1000;
+
+    const curve = data?.growthCurve || data?.growth_curve;
+    if (Array.isArray(curve) && curve.length > 0) {
+      const count = curve.filter((pt) => {
+        const ptTime = pt.timestamp ? Number(pt.timestamp) : (pt.date ? new Date(pt.date).getTime() : 0);
+        return ptTime > 0 && ptTime >= now - thirtyDaysMs && ptTime <= now + buffer;
+      }).length;
+      if (count > 0) return count;
+    }
+
+    if (Array.isArray(data?.hikers)) {
+      const uniqueHikeKeys = new Set<string>();
+      for (const h of data.hikers) {
+        if (Array.isArray(h.hikes)) {
+          for (const hk of h.hikes) {
+            if (hk.date) {
+              const t = new Date(hk.date).getTime();
+              if (t > 0 && t >= now - thirtyDaysMs && t <= now + buffer) {
+                uniqueHikeKeys.add(String(hk.no || hk.name));
+              }
+            }
+          }
+        }
+      }
+      if (uniqueHikeKeys.size > 0) return uniqueHikeKeys.size;
+    }
+
+    return currentStats?.hikesLast30 || 0;
+  }, [currentStats?.hikesLast30, data?.growthCurve, data?.growth_curve, data?.hikers]);
+
   const filteredGrowthCurve = useMemo(() => {
     const curve = data?.growthCurve || data?.growth_curve;
     if (!curve || curve.length === 0) return [];
@@ -396,7 +506,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
       {/* Main Foreground Content */}
       <div className="relative z-10 space-y-4 sm:space-y-6">
         {/* Header Banner */}
-        <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-3xl p-5 sm:p-7 shadow-md relative overflow-hidden border border-[#F5A844]/40">
+        <div className="bg-gradient-to-br from-[#9E4700] via-[#E08828] to-[#732D00] text-white rounded-3xl p-4 sm:p-7 shadow-md relative overflow-hidden border border-[#F5A844]/40">
         {/* Glow & ambient accent */}
         <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
         <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-[#FED7AA]">
@@ -404,14 +514,14 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
         </div>
 
         <div className="relative z-10 w-full">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/25 border border-white/20 text-[#FED7AA] text-[10px] sm:text-xs font-bold uppercase tracking-wider shadow-3xs">
-              <Crown className="w-3.5 h-3.5 text-[#F5A844] shrink-0" />
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/25 border border-white/20 text-[#FED7AA] text-[10px] sm:text-xs font-bold uppercase tracking-wider shadow-3xs">
+              <Crown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#F5A844] shrink-0" />
               <span>Community Leadership Board</span>
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className="text-[9px] sm:text-[10px] text-[#FFE8D1] font-extrabold uppercase tracking-widest bg-black/35 border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs">
+              <span className="text-[9px] sm:text-[10px] text-[#FFE8D1] font-extrabold uppercase tracking-widest bg-black/35 border border-white/10 px-2 sm:px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                 <span>Last updated: {lastUpdatedText}</span>
               </span>
@@ -424,44 +534,44 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
 
           {/* Quick Summary Strip */}
           {currentStats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-3.5 border-t border-white/15 text-[11px]">
-              <div className="bg-black/25 backdrop-blur-xs rounded-xl p-2.5 border border-white/10 flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-[#E08828]/20 text-[#F5A844]">
-                  <Footprints className="w-4 h-4" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3.5 sm:mt-4 pt-3 sm:pt-3.5 border-t border-white/15 text-[11px]">
+              <div className="bg-black/25 backdrop-blur-xs rounded-xl p-2 sm:p-2.5 border border-white/10 flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-[#E08828]/20 text-[#F5A844] shrink-0">
+                  <Footprints className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
-                <div>
-                  <span className="text-[10px] text-stone-300 block">Total Walkers</span>
-                  <strong className="text-sm font-black text-white">{currentStats.totalHikers?.toLocaleString() || '—'}</strong>
-                </div>
-              </div>
-
-              <div className="bg-black/25 backdrop-blur-xs rounded-xl p-2.5 border border-white/10 flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-[#7ABA42]/20 text-[#A8E063]">
-                  <Mountain className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] text-stone-300 block">Hikes Conducted</span>
-                  <strong className="text-sm font-black text-white">{currentStats.totalEvents?.toLocaleString() || '—'}</strong>
+                <div className="min-w-0">
+                  <span className="text-[9px] sm:text-[10px] text-stone-300 block truncate">Total Walkers</span>
+                  <strong className="text-xs sm:text-sm font-black text-white">{currentStats.totalHikers?.toLocaleString() || '—'}</strong>
                 </div>
               </div>
 
-              <div className="bg-black/25 backdrop-blur-xs rounded-xl p-2.5 border border-white/10 flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300">
-                  <Sparkles className="w-4 h-4" />
+              <div className="bg-black/25 backdrop-blur-xs rounded-xl p-2 sm:p-2.5 border border-white/10 flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-[#7ABA42]/20 text-[#A8E063] shrink-0">
+                  <Mountain className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
-                <div>
-                  <span className="text-[10px] text-stone-300 block">Community Distance</span>
-                  <strong className="text-sm font-black text-white">{currentStats.totalDistance ? `${currentStats.totalDistance.toLocaleString()} km` : '—'}</strong>
+                <div className="min-w-0">
+                  <span className="text-[9px] sm:text-[10px] text-stone-300 block truncate">Hikes Conducted</span>
+                  <strong className="text-xs sm:text-sm font-black text-white">{currentStats.totalEvents?.toLocaleString() || '—'}</strong>
                 </div>
               </div>
 
-              <div className="bg-black/25 backdrop-blur-xs rounded-xl p-2.5 border border-white/10 flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-300">
-                  <Calendar className="w-4 h-4" />
+              <div className="bg-black/25 backdrop-blur-xs rounded-xl p-2 sm:p-2.5 border border-white/10 flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 shrink-0">
+                  <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
-                <div>
-                  <span className="text-[10px] text-stone-300 block">Recent 30 Days</span>
-                  <strong className="text-sm font-black text-white">{currentStats.hikesLast30 || '0'} events</strong>
+                <div className="min-w-0">
+                  <span className="text-[9px] sm:text-[10px] text-stone-300 block truncate">Community Distance</span>
+                  <strong className="text-xs sm:text-sm font-black text-white">{currentStats.totalDistance ? `${currentStats.totalDistance.toLocaleString()} km` : '—'}</strong>
+                </div>
+              </div>
+
+              <div className="bg-black/25 backdrop-blur-xs rounded-xl p-2 sm:p-2.5 border border-white/10 flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-300 shrink-0">
+                  <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] sm:text-[10px] text-stone-300 block truncate">Recent 30 Days</span>
+                  <strong className="text-xs sm:text-sm font-black text-white">{recentEventsCount || currentStats.hikesLast30 || '0'} events</strong>
                 </div>
               </div>
             </div>
@@ -621,8 +731,63 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
         </div>
       )}
 
-      {/* Separate Boards for Overall, Hikers, and Trekkers (Side-by-side grid on desktop) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+      {/* Mobile Category Switcher (Tabs) */}
+      <div className="lg:hidden bg-stone-100 p-1.5 rounded-2xl border border-stone-300 shadow-inner flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setMobileCategory('all')}
+          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none active:scale-95 cursor-pointer ${
+            mobileCategory === 'all'
+              ? 'bg-[#1B361D] text-white shadow-md shadow-[#1B361D]/25 ring-1 ring-[#1B361D]/30'
+              : 'text-stone-700 hover:text-stone-900 bg-white/70 border border-stone-200 shadow-2xs'
+          }`}
+        >
+          <Trophy className="w-3.5 h-3.5 text-[#E08828]" />
+          <span>Overall</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMobileCategory('hikers')}
+          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none active:scale-95 cursor-pointer ${
+            mobileCategory === 'hikers'
+              ? 'bg-[#1B361D] text-white shadow-md shadow-[#1B361D]/25 ring-1 ring-[#1B361D]/30'
+              : 'text-stone-700 hover:text-stone-900 bg-white/70 border border-stone-200 shadow-2xs'
+          }`}
+        >
+          <Footprints className="w-3.5 h-3.5 text-[#E08828]" />
+          <span>Day Hikes</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMobileCategory('trekkers')}
+          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none active:scale-95 cursor-pointer ${
+            mobileCategory === 'trekkers'
+              ? 'bg-[#1B361D] text-white shadow-md shadow-[#1B361D]/25 ring-1 ring-[#1B361D]/30'
+              : 'text-stone-700 hover:text-stone-900 bg-white/70 border border-stone-200 shadow-2xs'
+          }`}
+        >
+          <Mountain className="w-3.5 h-3.5 text-[#A8E063]" />
+          <span>Treks</span>
+        </button>
+      </div>
+
+      {/* Mobile: Selected Board Only */}
+      <div className="lg:hidden">
+        <LeaderboardBoardSection
+          category={mobileCategory}
+          data={data}
+          loading={loading}
+          error={error}
+          setSelectedHiker={setSelectedHiker}
+          maskName={maskName}
+          getKeys={getKeys}
+        />
+      </div>
+
+      {/* Desktop: Side-by-side 3-column Grid */}
+      <div className="hidden lg:grid lg:grid-cols-3 gap-5 items-start">
         <LeaderboardBoardSection
           category="all"
           data={data}
@@ -658,34 +823,34 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
       <MapContributionBoard onNavigateToMapMiners={onNavigateToMapMiners} />
 
       {/* Clubs & Milestones Showcase */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-purple-200 text-center shadow-xs shadow-purple-900/5">
-          <div className="w-9 h-9 mx-auto mb-2 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700">
-            <Crown className="w-5 h-5" />
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="p-2.5 sm:p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-purple-200 text-center shadow-xs shadow-purple-900/5">
+          <div className="w-7 h-7 sm:w-9 sm:h-9 mx-auto mb-1.5 sm:mb-2 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700">
+            <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
           </div>
-          <h4 className="text-xs font-black text-purple-950 uppercase tracking-wider">500KM Ultra Club</h4>
-          <p className="text-[11px] text-purple-800 font-bold mt-1">
-            {data?.hikers ? data.hikers.filter((h) => h.d >= 500).length : 0} Legends Registered
+          <h4 className="text-[10px] sm:text-xs font-black text-purple-950 uppercase tracking-wider truncate">500KM Ultra</h4>
+          <p className="text-[9px] sm:text-[11px] text-purple-800 font-bold mt-0.5 sm:mt-1 truncate">
+            {data?.hikers ? data.hikers.filter((h) => h.d >= 500).length : 0} Legends
           </p>
         </div>
 
-        <div className="p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-blue-200 text-center shadow-xs shadow-blue-900/5">
-          <div className="w-9 h-9 mx-auto mb-2 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700">
-            <Gem className="w-5 h-5" />
+        <div className="p-2.5 sm:p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-blue-200 text-center shadow-xs shadow-blue-900/5">
+          <div className="w-7 h-7 sm:w-9 sm:h-9 mx-auto mb-1.5 sm:mb-2 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700">
+            <Gem className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
           </div>
-          <h4 className="text-xs font-black text-blue-950 uppercase tracking-wider">200KM Summit Club</h4>
-          <p className="text-[11px] text-blue-800 font-bold mt-1">
-            {data?.hikers ? data.hikers.filter((h) => h.d >= 200 && h.d < 500).length : 0} Elite Trekkers
+          <h4 className="text-[10px] sm:text-xs font-black text-blue-950 uppercase tracking-wider truncate">200KM Summit</h4>
+          <p className="text-[9px] sm:text-[11px] text-blue-800 font-bold mt-0.5 sm:mt-1 truncate">
+            {data?.hikers ? data.hikers.filter((h) => h.d >= 200 && h.d < 500).length : 0} Trekkers
           </p>
         </div>
 
-        <div className="p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-emerald-200 text-center shadow-xs shadow-emerald-900/5">
-          <div className="w-9 h-9 mx-auto mb-2 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
-            <Sparkles className="w-5 h-5" />
+        <div className="p-2.5 sm:p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-emerald-200 text-center shadow-xs shadow-emerald-900/5">
+          <div className="w-7 h-7 sm:w-9 sm:h-9 mx-auto mb-1.5 sm:mb-2 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+            <Sparkles className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
           </div>
-          <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wider">100KM Century Club</h4>
-          <p className="text-[11px] text-emerald-800 font-bold mt-1">
-            {data?.hikers ? data.hikers.filter((h) => h.d >= 100 && h.d < 200).length : 0} Century Walkers
+          <h4 className="text-[10px] sm:text-xs font-black text-emerald-950 uppercase tracking-wider truncate">100KM Century</h4>
+          <p className="text-[9px] sm:text-[11px] text-emerald-800 font-bold mt-0.5 sm:mt-1 truncate">
+            {data?.hikers ? data.hikers.filter((h) => h.d >= 100 && h.d < 200).length : 0} Walkers
           </p>
         </div>
       </div>
@@ -697,66 +862,67 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
 
       {/* Hiker Detail Modal */}
       {selectedHiker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-[#EFEAE4] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md max-h-[92vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-[#EFEAE4] overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-[#FAF6F0] via-white to-[#FAF6F0] p-5 border-b border-[#EFEAE4] flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-[#7ABA42]/15 border border-[#7ABA42]/30 flex items-center justify-center text-[#7ABA42] font-black text-lg">
+            <div className="bg-gradient-to-r from-[#FAF6F0] via-white to-[#FAF6F0] p-4 sm:p-5 border-b border-[#EFEAE4] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#7ABA42]/15 border border-[#7ABA42]/30 flex items-center justify-center text-[#7ABA42] font-black text-base sm:text-lg shrink-0">
                   {(selectedHiker.n || 'H')[0]?.toUpperCase()}
                 </div>
-                <div>
-                  <h3 className="text-base font-black text-[#1F1F1F]">
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-black text-[#1F1F1F] truncate">
                     {maskName(selectedHiker.n)}
                   </h3>
-                  <span className="text-[11px] text-[#8B8680]">Verified Community Hiker</span>
+                  <span className="text-[10px] sm:text-[11px] text-[#8B8680]">Verified Community Hiker</span>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setSelectedHiker(null)}
-                className="p-2 text-[#8B8680] hover:text-[#1F1F1F] rounded-full"
+                className="w-10 h-10 flex items-center justify-center text-[#8B8680] hover:text-[#1F1F1F] rounded-full active:bg-stone-100 transition-colors shrink-0"
+                aria-label="Close details"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Content */}
-            <div className="p-6 space-y-4">
-              <div className="text-center p-4 bg-[#F9F7F5] rounded-2xl border border-[#E5E1DB]">
-                <span className="text-[11px] font-bold text-[#8B8680] uppercase tracking-wider block">
+            {/* Content (Scrollable) */}
+            <div className="p-4 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto flex-1">
+              <div className="text-center p-3.5 sm:p-4 bg-[#F9F7F5] rounded-2xl border border-[#E5E1DB]">
+                <span className="text-[10px] sm:text-[11px] font-bold text-[#8B8680] uppercase tracking-wider block">
                   Lifetime Total Distance
                 </span>
-                <span className="text-2xl sm:text-3xl font-black text-[#1B5E20] mt-1 block">
+                <span className="text-xl sm:text-3xl font-black text-[#1B5E20] mt-1 block">
                   {selectedHiker.d.toLocaleString()} KM
                 </span>
-                <span className="text-xs text-[#6A645D] font-bold">
+                <span className="text-[11px] sm:text-xs text-[#6A645D] font-bold">
                   Completed across {selectedHiker.c} registered events
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-center">
-                  <span className="text-lg font-black text-[#2E7D32] flex items-center justify-center gap-1">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                <div className="p-3 sm:p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-center">
+                  <span className="text-base sm:text-lg font-black text-[#2E7D32] flex items-center justify-center gap-1">
                     <Compass className="w-4 h-4 text-emerald-700" /> {selectedHiker.hc || 0}
                   </span>
-                  <span className="text-[10px] font-bold uppercase text-emerald-800 tracking-wider">
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase text-emerald-800 tracking-wider">
                     Day Hikes
                   </span>
-                  <span className="text-xs font-bold text-[#2E7D32] block mt-1">
+                  <span className="text-xs font-bold text-[#2E7D32] block mt-0.5 sm:mt-1">
                     {(selectedHiker.hd || 0).toLocaleString()} km
                   </span>
                 </div>
 
-                <div className="p-3.5 bg-purple-50 rounded-2xl border border-purple-200 text-center">
-                  <span className="text-lg font-black text-[#4527A0] flex items-center justify-center gap-1">
+                <div className="p-3 sm:p-3.5 bg-purple-50 rounded-2xl border border-purple-200 text-center">
+                  <span className="text-base sm:text-lg font-black text-[#4527A0] flex items-center justify-center gap-1">
                     <Tent className="w-4 h-4 text-purple-700" /> {selectedHiker.tc || 0}
                   </span>
-                  <span className="text-[10px] font-bold uppercase text-purple-800 tracking-wider">
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase text-purple-800 tracking-wider">
                     Treks
                   </span>
-                  <span className="text-xs font-bold text-[#4527A0] block mt-1">
+                  <span className="text-xs font-bold text-[#4527A0] block mt-0.5 sm:mt-1">
                     {(selectedHiker.td || 0).toLocaleString()} km
                   </span>
                 </div>
@@ -785,11 +951,11 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
             </div>
 
             {/* Footer */}
-            <div className="p-4 bg-[#FAF6F0] border-t border-[#EFEAE4] text-center">
+            <div className="p-3.5 sm:p-4 bg-[#FAF6F0] border-t border-[#EFEAE4] text-center shrink-0">
               <button
                 type="button"
                 onClick={() => setSelectedHiker(null)}
-                className="w-full py-2.5 bg-[#1B361D] text-white font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all"
+                className="w-full py-2.5 bg-[#1B361D] text-white font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all min-h-[44px] flex items-center justify-center cursor-pointer"
               >
                 Close
               </button>

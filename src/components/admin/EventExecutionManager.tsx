@@ -14,6 +14,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { Trek } from '../../types';
+import { getGuidesSettings, DEFAULT_GUIDES } from '../../services/guidesService';
 
 interface EventExecutionManagerProps {
   treks: Trek[];
@@ -48,6 +49,20 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
   const [savingRowIds, setSavingRowIds] = useState<Record<string, boolean>>({});
   const [justSavedRowIds, setJustSavedRowIds] = useState<Record<string, boolean>>({});
   const [showAllEvents, setShowAllEvents] = useState(false);
+
+  // Fetch list of trek leaders from trek leaders page
+  const guideLeadersList = useMemo(() => {
+    try {
+      const settings = getGuidesSettings();
+      const names = (settings.custom_guides || [])
+        .filter((g) => g.is_visible !== false)
+        .map((g) => g.name);
+      const defaultNames = DEFAULT_GUIDES.map((g) => g.name);
+      return Array.from(new Set([...names, ...defaultNames]));
+    } catch {
+      return DEFAULT_GUIDES.map((g) => g.name);
+    }
+  }, []);
 
   // Helper to parse event date safely
   const parseEventDate = (dateStr?: string): Date | null => {
@@ -166,6 +181,24 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
     overrideCapacity?: number
   ): 'Active' | 'Registration Closed' | 'Completed' | 'Cancelled' => {
     const cap = overrideCapacity !== undefined ? Number(overrideCapacity) : Number(t.capacity || 25);
+
+    // 1. Check local admin execution overrides directly so admin UI never reverts
+    try {
+      const raw = localStorage.getItem('wnw_admin_event_executions');
+      if (raw) {
+        const overrides = JSON.parse(raw);
+        const numMatch = String(t.hike_number || t.id || '').match(/\d+/);
+        const numKey = numMatch ? numMatch[0] : '';
+        const ovr = overrides[t.id] || (t.hike_number && overrides[t.hike_number]) || (numKey && overrides[numKey]);
+        if (ovr) {
+          if (ovr.execution_status === 'Cancelled' || ovr.is_cancelled) return 'Cancelled';
+          if (ovr.execution_status === 'Completed') return 'Completed';
+          if (ovr.execution_status === 'Registration Closed') return 'Registration Closed';
+          if (ovr.execution_status === 'Active') return 'Active';
+        }
+      }
+    } catch {}
+
     const savedStatus = t.data?.execution_status;
     if (savedStatus === 'Cancelled' || t.data?.is_cancelled || t.is_cancelled) return 'Cancelled';
     if (savedStatus === 'Completed') return 'Completed';
@@ -203,20 +236,46 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
         : resolveTrekExecStatus(t, curCapacity);
 
     const curLeader = draft.leader !== undefined ? draft.leader : t.leader || 'Walk Nepal Walk Guide';
-    const curReason = draft.cancellation_reason !== undefined ? draft.cancellation_reason : t.data?.cancellation_reason || '';
+    const curReason = draft.cancellation_reason !== undefined ? draft.cancellation_reason : (t.data?.cancellation_reason || t.cancellation_reason || '');
 
     const isCancelling = curStatus === 'Cancelled';
+
+    // Synchronously write to local storage so admin UI never snaps back
+    try {
+      const raw = localStorage.getItem('wnw_admin_event_executions');
+      const overrides = raw ? JSON.parse(raw) : {};
+      const numMatch = String(t.hike_number || t.id || '').match(/\d+/);
+      const numKey = numMatch ? numMatch[0] : '';
+      const payload = {
+        execution_status: curStatus,
+        is_cancelled: isCancelling,
+        cancellation_reason: isCancelling ? curReason : '',
+        capacity: curCapacity,
+        maxCapacity: curCapacity,
+        leader: curLeader,
+        teamLeader: curLeader,
+        updatedAt: new Date().toISOString(),
+      };
+      if (t.id) overrides[String(t.id).trim()] = payload;
+      if (t.hike_number) overrides[String(t.hike_number).trim()] = payload;
+      if (numKey) overrides[numKey] = payload;
+      localStorage.setItem('wnw_admin_event_executions', JSON.stringify(overrides));
+    } catch (_) {}
 
     setSavingRowIds((prev) => ({ ...prev, [t.id]: true }));
     try {
       await onUpdateTrekExecution(t.id, {
         capacity: curCapacity,
         leader: curLeader,
+        is_cancelled: isCancelling,
+        cancellation_reason: isCancelling ? curReason : '',
         data: {
           ...t.data,
           is_cancelled: isCancelling,
           cancellation_reason: isCancelling ? curReason : '',
           execution_status: curStatus,
+          maxCapacity: curCapacity,
+          teamLeader: curLeader,
         },
       });
 
@@ -438,13 +497,20 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
 
                       {/* Assigned Lead Guide */}
                       <td className="py-3 px-3 align-middle">
-                        <input
-                          type="text"
+                        <select
                           value={curLeader}
                           onChange={(e) => handleRowChange(t.id, 'leader', e.target.value)}
-                          placeholder="Guide name & contact..."
-                          className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
-                        />
+                          className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors cursor-pointer"
+                        >
+                          {!guideLeadersList.includes(curLeader) && curLeader && (
+                            <option value={curLeader}>{curLeader}</option>
+                          )}
+                          {guideLeadersList.map((gName, gIdx) => (
+                            <option key={gIdx} value={gName}>
+                              {gName}
+                            </option>
+                          ))}
+                        </select>
                       </td>
 
                       {/* Cancellation Reason */}

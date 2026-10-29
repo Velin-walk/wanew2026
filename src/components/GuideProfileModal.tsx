@@ -22,7 +22,7 @@ import { fetchLeaderboardData, apiFetch } from '../services/api';
 import { HikerStats, HikerCompletedEvent } from '../types/leaderboard';
 import { Trek } from '../types';
 import { TrekFeedbackModal } from './TrekFeedbackModal';
-import { getGuidesSettings } from '../services/guidesService';
+import { getGuidesSettings, DEFAULT_GUIDES } from '../services/guidesService';
 
 interface GuideProfileModalProps {
   isOpen: boolean;
@@ -79,55 +79,16 @@ const KNOWN_GUIDES: Record<string, KnownGuideInfo> = {
 /**
  * Intelligent matching function that maps a guide name to their verified Leaderboard record
  */
-function findLeaderboardGuide(guideName: string, hikers: HikerStats[]): HikerStats | null {
-  if (!guideName || !hikers || hikers.length === 0) return null;
+function findLeaderboardGuide(guidePhone: string | undefined, hikers: HikerStats[]): HikerStats | null {
+  if (!hikers || hikers.length === 0) return null;
 
-  const clean = guideName.trim().toLowerCase();
-  const parts = clean.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return null;
-
-  // 1. Exact match
-  const exact = hikers.find((h) => (h.n || '').toLowerCase().trim() === clean);
-  if (exact) return exact;
-
-  // 2. Both first and last name match or phonetics (e.g. "biraj thing" <-> "biraj theeng")
-  if (parts.length >= 2) {
-    const first = parts[0];
-    const last = parts[parts.length - 1];
-
-    const match = hikers.find((h) => {
-      const hn = (h.n || '').toLowerCase().trim();
-      const hParts = hn.split(/\s+/).filter(Boolean);
-      if (hParts.length < 2) return false;
-      const hFirst = hParts[0];
-      const hLast = hParts[hParts.length - 1];
-
-      if (hFirst !== first) return false;
-      if (hLast === last) return true;
-      if (last.startsWith('th') && hLast.startsWith('th')) return true;
-      return hLast.includes(last) || last.includes(hLast);
-    });
-
-    if (match) return match;
+  // 1. Phone match
+  if (guidePhone) {
+    const phoneMatch = hikers.find((h) => (h.phone || h.p) === guidePhone);
+    if (phoneMatch) return phoneMatch;
   }
 
-  // 3. Single name match (e.g. "Salina")
-  if (parts.length === 1) {
-    const first = parts[0];
-    const candidates = hikers.filter((h) => (h.n || '').toLowerCase().startsWith(first + ' '));
-    if (candidates.length > 0) {
-      candidates.sort((a, b) => (b.d || 0) - (a.d || 0));
-      return candidates[0];
-    }
-  }
-
-  // 4. Substring fallback
-  const fallback = hikers.find((h) => {
-    const hn = (h.n || '').toLowerCase().trim();
-    return hn.includes(clean) || clean.includes(hn);
-  });
-
-  return fallback || null;
+  return null;
 }
 
 export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
@@ -149,6 +110,27 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
     date: new Date().toISOString().split('T')[0],
   } as Trek), [guideName]);
 
+  // Known & Custom metadata lookup
+  const cleanNameLower = useMemo(() => (guideName || '').trim().toLowerCase(), [guideName]);
+  
+  const customGuideSetting = useMemo(() => {
+    try {
+      const settings = getGuidesSettings();
+      const target = cleanNameLower;
+      return settings.custom_guides.find((g) => {
+        const gn = g.name.trim().toLowerCase();
+        return gn === target || target.includes(gn) || gn.includes(target);
+      });
+    } catch {
+      return null;
+    }
+  }, [cleanNameLower]);
+
+  const known = KNOWN_GUIDES[cleanNameLower] || KNOWN_GUIDES[guideStats?.n?.toLowerCase() || ''];
+  const gender: 'Male' | 'Female' = customGuideSetting?.gender || known?.gender || (cleanNameLower.includes('salina') || cleanNameLower.includes('saraswoti') ? 'Female' : 'Male');
+  const roleTitle = customGuideSetting?.role || known?.role || 'Lead Mountain Guide';
+  const bio = customGuideSetting?.bio || known?.bio;
+
   // Fetch leaderboard data on open (Primary Source of Truth)
   useEffect(() => {
     if (!isOpen || !guideName) return;
@@ -159,7 +141,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
         setLoading(true);
         const data = await fetchLeaderboardData(false);
         if (isMounted && data && Array.isArray(data.hikers)) {
-          const matched = findLeaderboardGuide(guideName, data.hikers);
+          const matched = findLeaderboardGuide(customGuideSetting?.phone, data.hikers);
           setGuideStats(matched);
         }
       } catch (err) {
@@ -174,94 +156,14 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, guideName]);
+  }, [isOpen, guideName, customGuideSetting]);
 
   const [reviewsTick, setReviewsTick] = useState(0);
+  const [visibleReviewsCount, setVisibleReviewsCount] = useState<number>(10);
 
-  // Sync reviews when feedback updated or on open
   useEffect(() => {
-    if (!isOpen) return;
-
-    const handleSync = () => setReviewsTick((v) => v + 1);
-    window.addEventListener('wnw-feedback-updated', handleSync);
-
-    apiFetch('/feedback', { forceFresh: true }).then(async (res) => {
-      if (res.ok) {
-        const json = await res.json();
-        if (json && Array.isArray(json.data) && json.data.length > 0) {
-          try {
-            const existing = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
-            const merged = [...existing];
-            for (const item of json.data) {
-              const itemDate = String(item.submitted_at || '').slice(0, 10);
-              const itemText = (item.team_feedback || item.overall_feedback || item.teamFeedback || item.overallFeedback || '').trim().toLowerCase();
-              const itemName = (item.full_name || item.name || '').trim().toLowerCase();
-              const itemTrek = (item.trek_name || item.recentWalk || '').trim().toLowerCase();
-
-              const exists = merged.some((m) => {
-                if (m.id === item.id) return true;
-                const mName = (m.full_name || m.name || '').trim().toLowerCase();
-                const mText = (m.team_feedback || m.overall_feedback || m.teamFeedback || m.overallFeedback || '').trim().toLowerCase();
-                const mDate = String(m.submitted_at || '').slice(0, 10);
-                const mTrek = (m.trek_name || m.recentWalk || '').trim().toLowerCase();
-                return mName === itemName && mText === itemText && mDate === itemDate && mTrek === itemTrek;
-              });
-
-              if (!exists) {
-                merged.unshift(item);
-              }
-            }
-            localStorage.setItem('wnw_user_feedbacks', JSON.stringify(merged));
-            setReviewsTick((v) => v + 1);
-          } catch {}
-        }
-      }
-    }).catch(() => {});
-
-    return () => {
-      window.removeEventListener('wnw-feedback-updated', handleSync);
-    };
-  }, [isOpen]);
-
-  // Handle ESC key to dismiss
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  // Lock body scroll while modal is active
-  useEffect(() => {
-    if (!isOpen) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
-
-  // Known & Custom metadata lookup
-  const cleanNameLower = (guideName || '').trim().toLowerCase();
-  const known = KNOWN_GUIDES[cleanNameLower] || KNOWN_GUIDES[guideStats?.n?.toLowerCase() || ''];
-
-  const customGuideSetting = useMemo(() => {
-    try {
-      const settings = getGuidesSettings();
-      const target = cleanNameLower;
-      return settings.custom_guides.find((g) => {
-        const gn = g.name.trim().toLowerCase();
-        return gn === target || target.includes(gn) || gn.includes(target);
-      });
-    } catch {
-      return null;
-    }
-  }, [cleanNameLower]);
-
-  const gender: 'Male' | 'Female' = customGuideSetting?.gender || known?.gender || (cleanNameLower.includes('salina') || cleanNameLower.includes('saraswoti') ? 'Female' : 'Male');
-  const roleTitle = customGuideSetting?.role || known?.role || 'Lead Mountain Guide';
-  const bio = customGuideSetting?.bio || known?.bio;
+    setVisibleReviewsCount(10);
+  }, [isOpen, guideName]);
 
   // Hikes led list from leaderboard (primary source)
   const completedHikes: HikerCompletedEvent[] = useMemo(() => {
@@ -287,10 +189,9 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
   // Upcoming treks led by this guide in current schedule
   const upcomingLedTreks = useMemo(() => {
     if (!allTreks || allTreks.length === 0) return [];
-    const firstWord = cleanNameLower.split(/\s+/)[0];
     return allTreks.filter((t) => {
       const l = (t.leader || t.team_leader || '').toLowerCase().trim();
-      return l && (l.includes(cleanNameLower) || cleanNameLower.includes(l) || l.includes(firstWord));
+      return l && (l === cleanNameLower || l.includes(cleanNameLower) || cleanNameLower.includes(l));
     });
   }, [allTreks, cleanNameLower]);
 
@@ -299,14 +200,60 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
     try {
       const allReviews = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
       const cleanGuideTarget = (guideName || '').trim().toLowerCase();
+      const guidePhone = (customGuideSetting?.phone || '').trim().toLowerCase();
+
+      const settings = getGuidesSettings();
+      const allGuideNames = Array.from(new Set([
+        ...(settings.custom_guides || []).map(g => g.name.toLowerCase()),
+        ...DEFAULT_GUIDES.map(g => g.name.toLowerCase())
+      ]));
+
+      // Collect hike numbers led by this guide from leaderboard stats and scheduled treks
+      const guideHikeNumbers = new Set<string>();
+      if (guideStats && Array.isArray(guideStats.hikes)) {
+        guideStats.hikes.forEach((h: any) => {
+          if (h.no) guideHikeNumbers.add(String(h.no).trim().toLowerCase());
+        });
+      }
+      if (allTreks) {
+        allTreks.forEach((t: any) => {
+          const tLeader = String(t.leader || t.team_leader || '').trim().toLowerCase();
+          if (tLeader && (tLeader === cleanGuideTarget || tLeader.includes(cleanGuideTarget) || cleanGuideTarget.includes(tLeader))) {
+            if (t.hike_number) guideHikeNumbers.add(String(t.hike_number).trim().toLowerCase());
+          }
+        });
+      }
+
       const rawGuideReviews = allReviews.filter((r: any) => {
-        if (!r.trek_name) return false;
-        const tn = String(r.trek_name).trim().toLowerCase();
-        return tn === `guide_review:${cleanGuideTarget}` || tn === `guide_review: ${cleanGuideTarget}`;
+        if (!r) return false;
+        const tn = String(r.trek_name || '').trim().toLowerCase();
+        const rLeader = String(r.leader || r.guide_name || '').trim().toLowerCase();
+        const rPhone = String(r.lead_guide_phone || r.guide_phone || '').trim().toLowerCase();
+        const rHikeNo = String(r.hike_number || r.hikeNumber || '').trim().toLowerCase();
+        const rText = (r.team_feedback || r.teamFeedback || r.overall_feedback || r.overallFeedback || '').trim().toLowerCase();
+
+        // 1. Explicitly exclude if review mentions other guides
+        const mentionsOther = allGuideNames.some(name => 
+            name !== cleanGuideTarget && 
+            !cleanGuideTarget.includes(name) && 
+            (rLeader.includes(name) || rText.includes(name))
+        );
+        if (mentionsOther) return false;
+
+        // 2. Match explicit guide review tag
+        if (tn === `guide_review:${cleanGuideTarget}` || tn === `guide_review: ${cleanGuideTarget}`) return true;
+        // 3. Match lead guide phone number
+        if (guidePhone && rPhone && rPhone === guidePhone) return true;
+        // 4. Match guide name / leader name
+        if (rLeader && (rLeader === cleanGuideTarget || rLeader.includes(cleanGuideTarget) || cleanGuideTarget.includes(rLeader))) return true;
+        // 5. Match hike number led by this guide
+        if (rHikeNo && guideHikeNumbers.has(rHikeNo)) return true;
+
+        return false;
       });
 
       // Deduplicate by author + text + YYYY-MM-DD
-      return rawGuideReviews.filter((rev: any, index: number, self: any[]) => {
+      const deduped = rawGuideReviews.filter((rev: any, index: number, self: any[]) => {
         const normName = (rev.full_name || rev.name || '').trim().toLowerCase();
         const normText = (rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '').trim().toLowerCase();
         const normDate = String(rev.submitted_at || '').slice(0, 10);
@@ -318,10 +265,19 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
           return oName === normName && oText === normText && oDate === normDate;
         });
       });
+
+      // Most recent review first (descending by submitted_at)
+      deduped.sort((a: any, b: any) => {
+        const da = a.submitted_at ? Date.parse(a.submitted_at) : 0;
+        const db = b.submitted_at ? Date.parse(b.submitted_at) : 0;
+        return db - da;
+      });
+
+      return deduped;
     } catch {
       return [];
     }
-  }, [guideName, reviewsTick]);
+  }, [guideName, reviewsTick, customGuideSetting, guideStats, allTreks]);
 
   // Average of stars and count of ratings
   const guideRatingStats = useMemo(() => {
@@ -382,10 +338,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                  <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider bg-black/30 border border-white/20 text-[#FED7AA] px-2 py-0.5 rounded-full shadow-3xs shrink-0">
-                    <ShieldCheck className="w-3 h-3 text-[#7ABA42]" />
-                    <span>Verified Lead Guide</span>
-                  </span>
+                  {/* Removed Verified Lead Guide title */}
                   <span
                     className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-3xs shrink-0 ${
                       isFemale
@@ -531,62 +484,43 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
               {guideReviews.length === 0 ? (
                 <p className="text-xs text-[#8B8680] italic">No reviews for this guide yet.</p>
               ) : (
-                guideReviews.map((rev: any, idx: number) => {
-                  const ratingVal = Math.min(5, Math.max(1, Number(rev.team_rating || rev.teamRating || rev.overall_rating || rev.overallRating || 5)));
-                  const feedbackText = rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '';
-                  const dateStr = String(rev.submitted_at || '').slice(0, 10);
+                <>
+                  {guideReviews.slice(0, visibleReviewsCount).map((rev: any, idx: number) => {
+                    const ratingVal = Math.min(5, Math.max(1, Number(rev.team_rating || rev.teamRating || rev.overall_rating || rev.overallRating || 5)));
+                    const feedbackText = rev.team_feedback || rev.teamFeedback || rev.overall_feedback || rev.overallFeedback || '';
+                    const dateStr = String(rev.submitted_at || '').slice(0, 10);
 
-                  return (
-                    <div key={rev.id || idx} className="p-3 rounded-xl bg-[#F9F7F5] border border-[#EFEAE4] space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-[#1F1F1F]">{rev.full_name || rev.name || 'Verified Hiker'}</span>
-                        <span className="text-[10px] text-[#8B8680]">{dateStr}</span>
+                    return (
+                      <div key={rev.id || idx} className="p-3 rounded-xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-[#1F1F1F]">{rev.full_name || rev.name || 'Verified Hiker'}</span>
+                          <span className="text-[10px] text-[#8B8680]">{dateStr}</span>
+                        </div>
+                        <div className="flex text-amber-500 text-[10px]">
+                          {[...Array(ratingVal)].map((_, i) => (
+                            <Star key={i} className="w-3 h-3 fill-current" />
+                          ))}
+                        </div>
+                        {feedbackText && <p className="text-xs text-[#5A5551]">{feedbackText}</p>}
                       </div>
-                      <div className="flex text-amber-500 text-[10px]">
-                        {[...Array(ratingVal)].map((_, i) => (
-                          <Star key={i} className="w-3 h-3 fill-current" />
-                        ))}
-                      </div>
-                      {feedbackText && <p className="text-xs text-[#5A5551]">{feedbackText}</p>}
-                    </div>
-                  );
-                })
+                    );
+                  })}
+
+                  {guideReviews.length > visibleReviewsCount && (
+                    <button
+                      type="button"
+                      onClick={() => setVisibleReviewsCount((prev) => prev + 10)}
+                      className="w-full py-2.5 bg-[#F4EFEA] hover:bg-[#EAE4DC] text-[#1F1F1F] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-3xs"
+                    >
+                      More Reviews ({guideReviews.length - visibleReviewsCount} remaining)
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
           
-          {/* Upcoming Assigned Treks on Schedule */}
-          {upcomingLedTreks.length > 0 && (
-            <div>
-              <h4 className="text-xs font-bold text-[#1F1F1F] mb-2 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-[#E08828]" />
-                <span>Currently Leading on the Schedule ({upcomingLedTreks.length})</span>
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {upcomingLedTreks.map((t, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-xl bg-[#FFF8F0] border border-[#E08828]/30 flex items-center justify-between gap-2"
-                  >
-                    <div className="min-w-0">
-                      <span className="text-[10px] font-bold text-[#E08828] block">
-                        Hike #{t.hike_number || 'Upcoming'}
-                      </span>
-                      <span className="text-xs font-bold text-[#1F1F1F] truncate block">
-                        {t.name || t.title}
-                      </span>
-                      <span className="text-[10px] text-[#8B8680]">
-                        {t.date || t.hike_date || 'Upcoming Date'}
-                      </span>
-                    </div>
-                    <span className="px-2 py-1 bg-[#7ABA42] text-white text-[10px] font-bold rounded-lg shrink-0">
-                      Lead Guide
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           {/* Completed Hikes & Treks History from Leaderboard */}
           <div>
@@ -651,10 +585,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
 
         {/* Footer */}
         <div className="p-3 sm:p-4 border-t border-[#F0EBE5] bg-[#FAF8F5] flex items-center justify-between shrink-0">
-          <span className="text-[11px] text-[#8B8680] flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-[#7ABA42]" />
-            <span>Community Verified Leader</span>
-          </span>
+          {/* Removed Community Verified Leader footer */}
           <button
             type="button"
             onClick={onClose}

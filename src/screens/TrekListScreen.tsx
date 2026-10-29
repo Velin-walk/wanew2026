@@ -5,7 +5,7 @@ import { PastEventListItem } from '../components/PastEventListItem';
 import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFlags';
 import { HomepageHeroBanner } from '../components/HomepageHeroBanner';
 import { OffersBanner } from '../components/OffersBanner';
-import { DesktopResourcesBar } from '../components/Navbar';
+
 import { SubPageType } from '../components/InfoPagesModal';
 import { trackFilterChange, trackSearchQuery } from '../services/behaviorTracker';
 import {

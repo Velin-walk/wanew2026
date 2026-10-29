@@ -18,6 +18,7 @@ interface ParticipantsModalProps {
   totalCount?: number;
   participantsCount?: ParticipantCount;
   recentParticipants?: ParticipantItem[];
+  guideName?: string;
 }
 
 /**
@@ -41,6 +42,18 @@ export function formatNameWithLastInitial(rawName: string): string {
   return `${firstName} ${cleanLast.charAt(0).toUpperCase()}.`;
 }
 
+const enrichWithGuide = (items: ParticipantItem[], guide?: string): ParticipantItem[] => {
+  const list = [...items];
+  if (guide && guide.trim()) {
+    const cleanGuide = guide.trim();
+    const alreadyExists = list.some(p => p.name.toLowerCase().includes(cleanGuide.toLowerCase()));
+    if (!alreadyExists) {
+      list.unshift({ name: `${cleanGuide} (Lead Guide)`, gender: 'm' });
+    }
+  }
+  return list;
+};
+
 export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
   isOpen,
   onClose,
@@ -50,16 +63,15 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
   totalCount,
   participantsCount = { total: 0, male: 0, female: 0 },
   recentParticipants = [],
+  guideName,
 }) => {
-  const [roster, setRoster] = useState<ParticipantItem[]>(recentParticipants);
+  const [roster, setRoster] = useState<ParticipantItem[]>(() => enrichWithGuide(recentParticipants, guideName));
   const [loading, setLoading] = useState(false);
 
-  // Sync initial list when recentParticipants changes
+  // Sync initial list when recentParticipants or guideName changes
   useEffect(() => {
-    if (recentParticipants && recentParticipants.length > 0) {
-      setRoster(recentParticipants);
-    }
-  }, [recentParticipants]);
+    setRoster(enrichWithGuide(recentParticipants || [], guideName));
+  }, [recentParticipants, guideName]);
 
   // Fetch full roster from server if modal is open and hike/trek ID exists
   useEffect(() => {
@@ -86,8 +98,8 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                 name: r.full_name || r.name || 'Hiker',
                 gender: (String(r.gender || '').toLowerCase().startsWith('f') ? 'f' : 'm') as 'm' | 'f',
               }));
-            if (mapped.length > 0) {
-              setRoster(mapped);
+            if (mapped.length > 0 || (guideName && guideName.trim())) {
+              setRoster(enrichWithGuide(mapped, guideName));
             }
           }
         }

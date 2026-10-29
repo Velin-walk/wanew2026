@@ -37,6 +37,30 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
   const [editingGuide, setEditingGuide] = useState<CustomGuideData | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [rowDrafts, setRowDrafts] = useState<Record<string, Partial<CustomGuideData>>>({});
+
+  const handleRowChange = (id: string, field: keyof CustomGuideData, value: any) => {
+    setRowDrafts(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value }
+    }));
+  };
+
+  const handleSaveRow = (id: string) => {
+    const draft = rowDrafts[id];
+    if (!draft) return;
+    const updatedGuides = settings.custom_guides.map(g => g.id === id ? { ...g, ...draft } : g);
+    const updated: GuidesSettings = { ...settings, custom_guides: deduplicateGuides(updatedGuides) };
+    setSettings(updated);
+    saveGuidesSettings(updated);
+    setRowDrafts(prev => {
+        const next = {...prev};
+        delete next[id];
+        return next;
+    });
+    triggerSuccessBanner();
+  };
+
 
   // New guide form state
   const [newGuide, setNewGuide] = useState<{
@@ -47,6 +71,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
     specialty: string;
     badge: string;
     experienceKm: string;
+    phone: string;
   }>({
     name: '',
     role: 'Trek Leader & Mountain Guide',
@@ -55,6 +80,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
     specialty: '',
     badge: 'Trek Leader',
     experienceKm: '',
+    phone: '',
   });
 
   useEffect(() => {
@@ -157,6 +183,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
       specialty: newGuide.specialty.trim(),
       badge: newGuide.badge.trim() || 'Trek Leader',
       experienceKm: newGuide.experienceKm.trim(),
+      phone: newGuide.phone.trim(),
       is_visible: true,
     };
 
@@ -175,6 +202,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
       specialty: '',
       badge: 'Trek Leader',
       experienceKm: '',
+      phone: '',
     });
     triggerSuccessBanner();
   };
@@ -206,6 +234,10 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
 
   const filteredGuides = useMemo(() => {
     const unique = deduplicateGuides(settings.custom_guides || []);
+    
+    // Sort so visible (true) comes before hidden (false)
+    unique.sort((a, b) => (a.is_visible === b.is_visible ? 0 : a.is_visible ? -1 : 1));
+
     return unique.filter((g) => {
       if (filterGender !== 'all' && g.gender !== filterGender) return false;
       if (searchQuery.trim()) {
@@ -351,107 +383,75 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
         </div>
       </div>
 
-      {/* Guides Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredGuides.map((guide, idx) => {
-          const isFemale = guide.gender === 'Female';
-          return (
-            <div
-              key={`${guide.id || guide.name || 'guide'}_${idx}`}
-              className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
-                guide.is_visible
-                  ? 'bg-white border-[#E5E1DB] shadow-2xs hover:border-[#E08828]/50'
-                  : 'bg-neutral-50/80 border-neutral-200 opacity-75 grayscale-30'
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black text-white shrink-0 shadow-xs ${
-                        isFemale
-                          ? 'bg-gradient-to-br from-rose-500 to-pink-600'
-                          : 'bg-gradient-to-br from-[#E08828] to-[#9E4700]'
-                      }`}
+      {/* Guides Table */}
+      <div className="bg-white rounded-2xl border border-[#E5E1DB] overflow-x-auto shadow-2xs">
+        <table className="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr className="bg-[#FAF8F5] border-b border-[#EFEAE4] text-[#8B8680] font-extrabold uppercase tracking-wider">
+              <th className="p-3 w-[10%]">Name</th>
+              <th className="p-3 w-[10%]">Phone Number</th>
+              <th className="p-3">Role</th>
+              <th className="p-3">Badge</th>
+              <th className="p-3 w-[40%]">Intro</th>
+              <th className="p-3 text-center">Visible</th>
+              <th className="p-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#EFEAE4]">
+            {filteredGuides.map((guide, idx) => {
+              const draft = rowDrafts[guide.id] || {};
+              const isDirty = Object.keys(draft).length > 0;
+
+              return (
+                <tr key={`${guide.id || guide.name}_${idx}`} className={!guide.is_visible ? "bg-neutral-50/50 text-neutral-500" : "text-[#1F1F1F]"}>
+                  <td className="p-3 w-[10%]">
+                    <input type="text" value={draft.name ?? guide.name} onChange={(e) => handleRowChange(guide.id, 'name', e.target.value)} className="w-full p-1 border rounded bg-transparent font-bold" />
+                  </td>
+                  <td className="p-3 w-[10%]">
+                    <input type="tel" value={draft.phone ?? (guide.phone || '')} onChange={(e) => handleRowChange(guide.id, 'phone', e.target.value)} className="w-full p-1 border rounded bg-transparent" />
+                  </td>
+                  <td className="p-3">
+                    <input type="text" value={draft.role ?? guide.role} onChange={(e) => handleRowChange(guide.id, 'role', e.target.value)} className="w-full p-1 border rounded bg-transparent" />
+                  </td>
+                  <td className="p-3">
+                    <input type="text" value={draft.badge ?? (guide.badge || '')} onChange={(e) => handleRowChange(guide.id, 'badge', e.target.value)} className="w-full p-1 border rounded bg-transparent" />
+                  </td>
+                  <td className="p-3 w-[40%]">
+                    <textarea value={draft.bio ?? guide.bio} onChange={(e) => handleRowChange(guide.id, 'bio', e.target.value)} className="w-full p-1 border rounded bg-transparent text-[10px]" rows={2} />
+                  </td>
+                  <td className="p-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGuideVisibility(guide.id, guide.name)}
+                      className="cursor-pointer"
+                      title={guide.is_visible ? 'Click to hide' : 'Click to show'}
                     >
-                      {guide.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className="text-base font-extrabold text-[#1F1F1F] leading-snug">
-                          {guide.name}
-                        </h3>
-                        {guide.badge && (
-                          <span className="text-[9px] font-bold text-[#E08828] bg-[#FFF4E8] border border-[#E08828]/20 px-2 py-0.5 rounded-full">
-                            {guide.badge}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs font-semibold text-[#8B8680] mt-0.5">
-                        {guide.role}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Visibility Toggle Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleGuideVisibility(guide.id, guide.name)}
-                    className={`p-2 rounded-xl transition-all cursor-pointer border ${
-                      guide.is_visible
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                        : 'bg-neutral-100 text-neutral-500 border-neutral-200 hover:bg-neutral-200'
-                    }`}
-                    title={guide.is_visible ? 'Visible on public site (Click to hide)' : 'Hidden from public site (Click to show)'}
-                  >
-                    {guide.is_visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  </button>
-                </div>
-
-                <p className="text-xs text-[#5A5551] mt-3 leading-relaxed">
-                  {guide.bio}
-                </p>
-
-                {guide.specialty && (
-                  <div className="mt-2.5 pt-2 border-t border-[#F0EBE5] text-[11px] text-[#8B8680]">
-                    <span className="font-bold text-[#1F1F1F]">Specialty:</span> {guide.specialty}
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="mt-4 pt-3 border-t border-[#F0EBE5] flex items-center justify-between gap-2">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                  guide.is_visible
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-neutral-200 text-neutral-600 border-neutral-300'
-                }`}>
-                  {guide.is_visible ? 'Publicly Displayed' : 'Hidden from Directory'}
-                </span>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setEditingGuide(guide)}
-                    className="px-3 py-1.5 bg-[#FAF8F5] hover:bg-[#1F1F1F] text-[#1F1F1F] hover:text-white border border-[#E5E1DB] rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>Edit Intro</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteGuide(guide.id, guide.name)}
-                    className="p-1.5 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                    title="Delete Guide"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+                      {guide.is_visible ? (
+                        <Eye className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <EyeOff className="w-4 h-4 text-neutral-400" />
+                      )}
+                    </button>
+                  </td>
+                  <td className="p-3 text-right flex items-center justify-end gap-2">
+                    {isDirty && (
+                      <button type="button" onClick={() => handleSaveRow(guide.id)} className="text-[#E08828] font-bold hover:underline cursor-pointer mr-2">
+                        Save
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteGuide(guide.id, guide.name)}
+                      className="text-rose-600 hover:underline cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {/* Edit Guide Intro Modal */}
@@ -510,6 +510,18 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
                   </select>
                 </div>
               </div>
+
+              <div>
+                <label className="block font-bold text-[#1F1F1F] mb-1">Phone Number</label>
+                <input
+                  type="tel"
+                  value={editingGuide.phone || ''}
+                  onChange={(e) => setEditingGuide({ ...editingGuide, phone: e.target.value })}
+                  placeholder="e.g. +977 98xxxxxxxx"
+                  className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                />
+              </div>
+
 
               <div>
                 <label className="block font-bold text-[#1F1F1F] mb-1">Bio / Introduction Story</label>
@@ -624,6 +636,17 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
                     <option value="Female">Female</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#1F1F1F] mb-1">Phone Number</label>
+                <input
+                  type="tel"
+                  value={newGuide.phone}
+                  onChange={(e) => setNewGuide({ ...newGuide, phone: e.target.value })}
+                  placeholder="e.g. +977 98xxxxxxxx"
+                  className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                />
               </div>
 
               <div>

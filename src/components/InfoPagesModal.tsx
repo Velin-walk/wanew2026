@@ -70,7 +70,7 @@ export const PaymentAndPricingSection: React.FC<{
     </div>
 
     <div className="flex justify-center bg-[#FAF8F5] p-3 rounded-2xl border border-[#E5E1DB]">
-      <img src="/paymentqr.png" alt="Payment QR Codes" className="max-w-sm w-full h-auto rounded-xl object-contain shadow-2xs" />
+      <img src="/paymentqr.png" alt="Payment QR Codes" className="max-w-xl w-full h-auto rounded-xl object-contain shadow-2xs" />
     </div>
 
     {/* Forward Voucher Button at the end of Payment & Pricing page */}
@@ -412,7 +412,7 @@ export const HikerReviewsSection: React.FC<{
               return (
                 <div
                   key={rev.id}
-                  className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E5E1DB] shadow-2xs hover:border-[#D5CFC9] transition-all space-y-3"
+                  className="p-4 sm:p-5 rounded-2xl bg-white border-2 border-orange-500/75 hover:border-orange-600 shadow-2xs transition-all space-y-3"
                 >
                   {/* Reviewer Header */}
                   <div className="flex items-start justify-between gap-3">
@@ -438,7 +438,7 @@ export const HikerReviewsSection: React.FC<{
                               </span>
                             )}
                             {rev.trek_name && (
-                              <span className="text-[#5A5551] font-medium truncate max-w-[200px] sm:max-w-xs">{rev.trek_name}</span>
+                              <span className="text-[#5A5551] font-medium truncate max-w-[300px] sm:max-w-md">{rev.trek_name}</span>
                             )}
                           </div>
                           {rev.submitted_at && (
@@ -676,7 +676,7 @@ export const NoticesSection: React.FC<{
           <div className="h-16 bg-neutral-200 rounded-xl w-full" />
         </div>
       ) : hasActiveNotice ? (
-        <div className="rounded-3xl border border-[#E5E1DB] bg-white overflow-hidden shadow-sm">
+        <div className="rounded-3xl border-2 border-orange-500/75 hover:border-orange-600 bg-white overflow-hidden shadow-sm transition-all">
           {/* Top header strip */}
           <div className={`px-5 py-4 border-b border-[#E5E1DB] ${config.headerBg} flex items-center justify-between flex-wrap gap-2`}>
             <div className="flex items-center gap-3">
@@ -771,7 +771,7 @@ export const NoticesSection: React.FC<{
               return (
                 <div
                   key={item.id || item.updatedAt || `past_notice_${idx}`}
-                  className="rounded-2xl border border-[#E5E1DB] bg-white p-4 sm:p-5 shadow-2xs space-y-2.5 transition-all hover:border-[#D5CFC9]"
+                  className="rounded-2xl border-2 border-orange-500/75 hover:border-orange-600 bg-white p-4 sm:p-5 shadow-2xs space-y-2.5 transition-all"
                 >
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
@@ -1152,7 +1152,7 @@ export const TrekLeadersSection: React.FC<{
           return (
             <div
               key={`${leader.name}_${idx}`}
-              className="p-4 rounded-2xl bg-[#FAF8F5] hover:bg-white border border-[#E5E1DB] hover:border-[#E08828]/50 shadow-3xs hover:shadow-md transition-all flex flex-col justify-between group"
+              className="p-4 rounded-2xl bg-[#FAF8F5] hover:bg-white border-2 border-orange-500/75 hover:border-orange-600 shadow-3xs hover:shadow-md transition-all flex flex-col justify-between group"
             >
               <div>
                 <div className="flex items-start gap-3">
@@ -1169,10 +1169,7 @@ export const TrekLeadersSection: React.FC<{
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                      <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider bg-white border border-[#7ABA42]/30 text-[#477322] px-2 py-0.5 rounded-full shadow-3xs">
-                        <ShieldCheck className="w-3 h-3 text-[#7ABA42]" />
-                        <span>Verified Guide</span>
-                      </span>
+                      {/* Removed Verified Guide title */}
                       {leader.badge && (
                         <span className="text-[9px] font-bold text-[#5A5551] bg-[#F4EFEA] border border-[#E5E1DB] px-2 py-0.5 rounded-full">
                           {leader.badge}
@@ -1537,7 +1534,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-3xl w-full max-w-5xl h-[88vh] md:h-full max-h-[88vh] overflow-hidden flex flex-col shadow-2xl border border-[#E5E1DB]"
+        className="bg-white rounded-3xl w-full max-w-screen-2xl h-[88vh] md:h-full max-h-[88vh] overflow-hidden flex flex-col shadow-2xl border border-[#E5E1DB]"
       >
         
         {/* Modal Top Bar */}
@@ -1565,7 +1562,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           
           {/* Navigation Drawer / Sub-Tabs with Scrollbar hiding and visual fade mask on mobile */}
-          <div className="relative w-full md:w-60 bg-[#F9F7F5] border-b md:border-b-0 md:border-r border-[#E5E1DB] shrink-0">
+          <div className="relative w-full md:w-[360px] bg-[#F9F7F5] border-b md:border-b-0 md:border-r border-[#E5E1DB] shrink-0">
             <style dangerouslySetInnerHTML={{__html: `
               .no-scrollbar-x {
                 -ms-overflow-style: none; /* IE/Edge */
@@ -1683,18 +1680,18 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                 <span>Request Private Trek</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('contact')}
-                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
-                  activeTab === 'contact'
-                    ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
-                    : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
-                }`}
-              >
-                <Mail className={`w-4 h-4 shrink-0 ${activeTab === 'contact' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
-                <span>Contact & Support</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('contact')}
+                  className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-left whitespace-nowrap cursor-pointer ${
+                    activeTab === 'contact'
+                      ? 'bg-white text-[#1F1F1F] shadow-xs border border-[#E5E1DB]'
+                      : 'text-[#5A5551] hover:bg-[#F0ECE7] hover:text-[#1F1F1F]'
+                  }`}
+                >
+                  <Mail className={`w-4 h-4 shrink-0 ${activeTab === 'contact' ? 'text-[#7ABA42]' : 'text-[#8B8680]'}`} />
+                  <span>Contact & Support</span>
+                </button>
             </nav>
 
             {/* Fading left & right swipe indicators for premium visual polish on mobile */}
@@ -1714,7 +1711,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                 </div>
 
                 <div className="flex justify-center bg-[#FAF8F5] p-3 rounded-2xl border border-[#E5E1DB]">
-                  <img src="/paymentqr.png" alt="Payment QR Codes" className="max-w-sm w-full h-auto rounded-xl object-contain shadow-2xs" />
+                  <img src="/paymentqr.png" alt="Payment QR Codes" className="max-w-xl w-full h-auto rounded-xl object-contain shadow-2xs" />
                 </div>
 
                 {/* Forward Voucher Button at the end of Payment & Pricing page */}
@@ -1759,7 +1756,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                 </div>
 
                 <div className="space-y-3 text-xs text-[#5A5551] leading-relaxed">
-                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200/80 space-y-2">
+                  <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-orange-500/75 hover:border-orange-600 space-y-2 transition-all">
                     <h4 className="font-bold text-sm text-[#1F1F1F] flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-[#7ABA42]" />
                       Fitness acknowledgement
@@ -1769,7 +1766,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2 transition-all">
                     <h4 className="font-bold text-sm text-[#1F1F1F]">Health, First Aid and Insurance policy</h4>
                     <p className="font-bold text-[#1F1F1F]">Safety first</p>
                     <p>Safety is our top priority. We provide information on any challenges that could possibly impact your health and safety before the event.</p>
@@ -1780,7 +1777,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     <p><strong className="text-[#1F1F1F]">Insurance:</strong> We do not provide any insurance. You shall facilitate your own insurance if any is needed.</p>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2 transition-all">
                     <h4 className="font-bold text-sm text-[#1F1F1F] flex items-center gap-2">
                       <FileText className="w-4 h-4 text-[#E08828]" />
                       Payment, cancellation and refund policy
@@ -1806,13 +1803,13 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     </ul>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2 transition-all">
                     <h4 className="font-bold text-sm text-[#1F1F1F]">Natural calamity, road blockage or unforeseen events</h4>
                     <p>We shall attempt to complete the event with optimum safety. However, continuing the event by compromising safety shall not happen.</p>
                     <p>All extra costs incurred for other than promised services shall be borne by the participant themselves.</p>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2 transition-all">
                     <h4 className="font-bold text-sm text-[#1F1F1F]">Alcohol, drugs, or sense-numbing substances</h4>
                     <p>Any sense-numbing substances are discouraged. You might slip and hurt yourself. You might behave unconsciously and regret later. We might lose the essence of hiking. Please drink at your own risk.</p>
                     <ul className="list-disc pl-4 space-y-1">
@@ -1821,13 +1818,13 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     </ul>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2 transition-all">
                     <h4 className="font-bold text-sm text-[#1F1F1F]">Slow vs fast pacer</h4>
                     <p>We appreciate your pace and fitness. However, we want to make sure no one is left behind or far ahead. Every 30 minutes or so we request everyone to wait for fellow hikers.</p>
                     <p>Pace of every person is different. We are happy to assist, but we expect you to be able to walk at least 1 km within 20 minutes. We provide information on level of difficulty, distance, elevation, and duration of the hike. It will help you estimate whether you can complete that specific hike or not.</p>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2 transition-all">
                     <h4 className="font-bold text-sm text-[#1F1F1F]">Event postpone or cancellation</h4>
                     <ul className="list-disc pl-4 space-y-1">
                       <li>The organizer can postpone and cancel the event at the convenience of the organizer.</li>
@@ -1836,7 +1833,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     </ul>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2">
+                  <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2 transition-all">
                     <h4 className="font-bold text-sm text-[#1F1F1F]">Mandatory rules for all hikes</h4>
                     <p>We know all our participants are rational beings who love nature. These are precautionary rules and are only intended for the well-being of participants. These rules are to establish average behaviour and are flexible to conscious actions.</p>
                     <ul className="list-disc pl-4 space-y-1.5">
@@ -1920,7 +1917,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                 `}</style>
 
                 {privateSubmitted ? (
-                  <div className="py-10 px-6 text-center space-y-4 max-w-lg mx-auto animate-in zoom-in-95 duration-200">
+                  <div className="py-10 px-6 text-center space-y-4 max-w-3xl mx-auto animate-in zoom-in-95 duration-200">
                     <div className="w-16 h-16 rounded-3xl bg-emerald-50 border border-emerald-200 text-[#7ABA42] flex items-center justify-center mx-auto shadow-sm">
                       <CheckCircle2 className="w-8 h-8" />
                     </div>
@@ -2237,7 +2234,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     href="https://wa.me/9779803568612?text=Hello%20Walk%20Nepal%20Walk!%20I%20have%20an%20inquiry%20regarding%20upcoming%20treks."
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-4 rounded-2xl bg-[#25D366]/10 border border-[#25D366]/30 hover:bg-[#25D366]/15 transition-all flex items-center justify-between group cursor-pointer"
+                    className="p-4 rounded-2xl bg-[#25D366]/10 border-2 border-orange-500/75 hover:border-orange-600 hover:bg-[#25D366]/15 transition-all flex items-center justify-between group cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-2xs">
@@ -2260,7 +2257,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                   {/* Email Direct */}
                   <a
                     href="mailto:walknepalwalk@gmail.com?subject=Trek%20Inquiry%20-%20Walk%20Nepal%20Walk"
-                    className="p-4 rounded-2xl bg-[#E08828]/10 border border-[#E08828]/30 hover:bg-[#E08828]/15 transition-all flex items-center justify-between group cursor-pointer"
+                    className="p-4 rounded-2xl bg-[#E08828]/10 border-2 border-orange-500/75 hover:border-orange-600 hover:bg-[#E08828]/15 transition-all flex items-center justify-between group cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-[#E08828] text-white flex items-center justify-center shrink-0 shadow-2xs">
@@ -2288,7 +2285,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     {/* Biraj Thing */}
-                    <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2.5">
+                    <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2.5 transition-all">
                       <div className="flex items-start justify-between">
                         <div>
                           <h4 className="font-bold text-sm text-[#1F1F1F]">Biraj Thing</h4>
@@ -2320,7 +2317,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     </div>
 
                     {/* Salina Tamang */}
-                    <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2.5">
+                    <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2.5 transition-all">
                       <div className="flex items-start justify-between">
                         <div>
                           <h4 className="font-bold text-sm text-[#1F1F1F]">Salina Tamang</h4>
@@ -2351,7 +2348,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     </div>
 
                     {/* Sundar Gurung */}
-                    <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2.5">
+                    <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2.5 transition-all">
                       <div className="flex items-start justify-between">
                         <div>
                           <h4 className="font-bold text-sm text-[#1F1F1F]">Sundar Gurung</h4>
@@ -2376,7 +2373,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                     </div>
 
                     {/* Velin Rai */}
-                    <div className="p-4 rounded-2xl bg-[#F9F7F5] border border-[#E5E1DB] space-y-2.5">
+                    <div className="p-4 rounded-2xl bg-[#F9F7F5] border-2 border-orange-500/75 hover:border-orange-600 space-y-2.5 transition-all">
                       <div className="flex items-start justify-between">
                         <div>
                           <h4 className="font-bold text-sm text-[#1F1F1F]">Velin Rai</h4>
@@ -2399,7 +2396,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
                 </div>
 
                 {/* Physical Hub & Working Hours */}
-                <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div className="p-4 rounded-2xl bg-[#FAF8F5] border-2 border-orange-500/75 hover:border-orange-600 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs transition-all">
                   <div className="flex items-center gap-2.5 text-[#1F1F1F]">
                     <MapPin className="w-4 h-4 text-[#E08828] shrink-0" />
                     <div>

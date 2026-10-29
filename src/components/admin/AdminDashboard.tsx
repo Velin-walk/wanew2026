@@ -680,13 +680,55 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const [selectedBookingsTrekFilter, setSelectedBookingsTrekFilter] = useState<string>('all');
 
+  const getAdminEventExecutions = (): Record<string, any> => {
+    try {
+      const raw = localStorage.getItem('wnw_admin_event_executions');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const saveAdminEventExecution = (trekId: string, hNum: string, override: any) => {
+    try {
+      const current = getAdminEventExecutions();
+      const updated = { ...current };
+      const nowIso = new Date().toISOString();
+      const payload = { ...override, updatedAt: nowIso };
+      if (trekId) updated[String(trekId).trim()] = { ...(updated[String(trekId).trim()] || {}), ...payload };
+      if (hNum) updated[String(hNum).trim()] = { ...(updated[String(hNum).trim()] || {}), ...payload };
+      localStorage.setItem('wnw_admin_event_executions', JSON.stringify(updated));
+    } catch (_) {}
+  };
+
   const handleUpdateTrekExecution = async (
     trekId: string,
     updates: Partial<Trek> & { is_cancelled?: boolean; cancellation_reason?: string }
   ) => {
     const cleanTrekId = String(trekId || '').trim();
-    // Only treat trekId as a numeric hike number if it is purely digits (not a composite ID like hike-draft-1759... or v-8a2b)
-    const targetHNum = /^\d{1,4}$/.test(cleanTrekId) ? cleanTrekId : '';
+    const numMatch = cleanTrekId.match(/\d+/);
+    const targetHNum = numMatch ? numMatch[0] : '';
+    const hNumFromUpdates = String(updates.hike_number || updates.data?.hikeNumber || '').trim();
+    const resolvedHNum = targetHNum || hNumFromUpdates;
+
+    const isCancelled = updates.data?.is_cancelled !== undefined
+      ? Boolean(updates.data.is_cancelled)
+      : (updates.is_cancelled !== undefined ? Boolean(updates.is_cancelled) : (updates.data?.execution_status === 'Cancelled'));
+    const cancelReason = updates.data?.cancellation_reason !== undefined
+      ? String(updates.data.cancellation_reason)
+      : (updates.cancellation_reason !== undefined ? String(updates.cancellation_reason) : '');
+    const updatedCap = updates.capacity !== undefined ? Number(updates.capacity) : undefined;
+    const updatedLeader = updates.leader !== undefined ? updates.leader : undefined;
+    const updatedExecStatus = updates.data?.execution_status ?? (isCancelled ? 'Cancelled' : 'Active');
+
+    // 1. Immediately persist to dedicated admin event execution storage map so admin UI never reverts
+    saveAdminEventExecution(cleanTrekId, resolvedHNum, {
+      is_cancelled: isCancelled,
+      cancellation_reason: cancelReason,
+      execution_status: updatedExecStatus,
+      ...(updatedCap !== undefined ? { capacity: updatedCap, maxCapacity: updatedCap } : {}),
+      ...(updatedLeader ? { leader: updatedLeader, teamLeader: updatedLeader } : {}),
+    });
 
     let found = false;
     let updatedRecordForSync: SavedHikeRecord | null = null;
@@ -695,20 +737,14 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const hNumClean = String(h.hikeNumber || h.data?.hikeNumber || '').trim();
       const isExactMatch =
         h.id === cleanTrekId ||
-        (targetHNum && hNumClean !== 'TBD' && hNumClean === targetHNum);
+        (resolvedHNum && hNumClean !== 'TBD' && hNumClean === resolvedHNum) ||
+        (hNumClean && cleanTrekId.includes(hNumClean));
 
       if (isExactMatch && !found) {
         found = true;
         const data = h.data || ({} as any);
-        const isCancelled = updates.data?.is_cancelled !== undefined
-          ? updates.data.is_cancelled
-          : (updates.is_cancelled !== undefined ? updates.is_cancelled : data.is_cancelled);
-        const cancelReason = updates.data?.cancellation_reason !== undefined
-          ? updates.data.cancellation_reason
-          : (updates.cancellation_reason !== undefined ? updates.cancellation_reason : data.cancellation_reason);
-        const updatedCap = updates.capacity !== undefined ? Number(updates.capacity) : Number(data.maxCapacity || 25);
-        const updatedLeader = updates.leader !== undefined ? updates.leader : (data.teamLeader || 'Walk Nepal Walk Guide');
-        const updatedExecStatus = updates.data?.execution_status ?? data.execution_status ?? (isCancelled ? 'Cancelled' : 'Active');
+        const curCap = updatedCap !== undefined ? updatedCap : Number(data.maxCapacity || 25);
+        const curLeader = updatedLeader !== undefined ? updatedLeader : (data.teamLeader || 'Walk Nepal Walk Guide');
 
         const nowIso = new Date().toISOString();
         const updatedItem: SavedHikeRecord = {
@@ -716,8 +752,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           updatedAt: nowIso,
           data: {
             ...data,
-            maxCapacity: updatedCap,
-            teamLeader: updatedLeader,
+            maxCapacity: curCap,
+            teamLeader: curLeader,
             is_cancelled: isCancelled,
             cancellation_reason: cancelReason,
             execution_status: updatedExecStatus,
@@ -732,26 +768,26 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
     if (!found) {
       const nowIso = new Date().toISOString();
-      const hist = targetHNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === targetHNum) : null;
+      const hist = resolvedHNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === resolvedHNum) : null;
       const newRecord: SavedHikeRecord = {
         id: cleanTrekId,
-        hikeNumber: targetHNum || 'TBD',
-        title: updates.name || hist?.title || (targetHNum ? `Hike #${targetHNum}` : 'Hike Event'),
+        hikeNumber: resolvedHNum || 'TBD',
+        title: updates.name || hist?.title || (resolvedHNum ? `Hike #${resolvedHNum}` : 'Hike Event'),
         category: 'Overnight Bus Hikes',
         status: 'published',
         createdAt: nowIso,
         updatedAt: nowIso,
         authorEmail: 'walknepalwalk@gmail.com',
         data: {
-          hikeNumber: targetHNum || 'TBD',
-          title: updates.name || hist?.title || (targetHNum ? `Hike #${targetHNum}` : 'Hike Event'),
+          hikeNumber: resolvedHNum || 'TBD',
+          title: updates.name || hist?.title || (resolvedHNum ? `Hike #${resolvedHNum}` : 'Hike Event'),
           category: 'Overnight Bus Hikes',
           status: 'published',
-          maxCapacity: updates.capacity !== undefined ? Number(updates.capacity) : 25,
-          teamLeader: updates.leader ?? 'Walk Nepal Walk Guide',
-          is_cancelled: !!updates.data?.is_cancelled,
-          cancellation_reason: updates.data?.cancellation_reason || '',
-          execution_status: updates.data?.execution_status || 'Active',
+          maxCapacity: updatedCap !== undefined ? updatedCap : 25,
+          teamLeader: updatedLeader ?? 'Walk Nepal Walk Guide',
+          is_cancelled: isCancelled,
+          cancellation_reason: cancelReason,
+          execution_status: updatedExecStatus,
           ...(updates.data || {}),
           updatedAt: nowIso,
         } as any,
@@ -882,6 +918,11 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             category: r.data.category,
             hikeDate: r.data.hikeDate,
             status: r.data.status,
+            is_cancelled: (r.data as any).is_cancelled,
+            cancellation_reason: (r.data as any).cancellation_reason,
+            execution_status: (r.data as any).execution_status,
+            teamLeader: r.data.teamLeader,
+            maxCapacity: r.data.maxCapacity,
           } : undefined,
         }));
         localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(compact));
@@ -1602,42 +1643,61 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     return true;
   }).length;
 
-  const convertedTreks: Trek[] = hikes.map((h) => {
-    const d = h.data || ({} as any);
-    const isCancelled = Boolean(d.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled'));
-    const cancelReason = d.cancellation_reason || '';
-    const execStatus = d.execution_status || (isCancelled ? 'Cancelled' : 'Active');
+  const convertedTreks: Trek[] = useMemo(() => {
+    const execOverrides = getAdminEventExecutions();
+    return hikes.map((h) => {
+      const d = h.data || ({} as any);
+      const hNumClean = String(h.hikeNumber || d.hikeNumber || '').trim();
+      const numMatch = (h.id || '').match(/\d+/) || hNumClean.match(/\d+/);
+      const numKey = numMatch ? numMatch[0] : '';
 
-    return {
-      id: h.id,
-      hike_number: h.hikeNumber || d.hikeNumber || '',
-      name: h.title || d.title || 'Himalayan Trek',
-      date: d.hikeDate || d.date || d.schedule?.eventDate || '',
-      days: d.overview?.expectedDuration || (d.itineraryDays?.length ? String(d.itineraryDays.length) : '1'),
-      days_label: d.overview?.days || '',
-      difficulty: (d.overview?.difficulty || d.difficulty || 'moderate').toLowerCase() as any,
-      leader: d.teamLeader || 'Walk Nepal Walk Guide',
-      capacity: Number(d.maxCapacity) || 25,
-      participants: Number((h as any).participants ?? (h as any).data?.participants ?? 0),
-      participants_by_gender: (h as any).participants_by_gender || (h as any).data?.participants_by_gender,
-      recent_participants: (h as any).recent_participants || (h as any).data?.recent_participants,
-      price: d.priceTiers?.length ? `NPR ${d.priceTiers[0].price}` : (d.costing?.totalEstimatedCost ? `NPR ${d.costing.totalEstimatedCost}` : 'NPR 1,500'),
-      featured_image: d.coverImageUrl || d.images?.[0] || '',
-      is_cancelled: isCancelled,
-      cancellation_reason: cancelReason,
-      status: (h.status || d.status || 'published') as any,
-      data: {
-        ...d,
+      // Check for admin execution override by ID, hike number, or numeric key
+      const override = execOverrides[h.id] || (hNumClean && execOverrides[hNumClean]) || (numKey && execOverrides[numKey]) || {};
+
+      const isCancelled = Boolean(
+        override.is_cancelled !== undefined
+          ? override.is_cancelled
+          : (d.is_cancelled || (d.execution_status && d.execution_status.toLowerCase() === 'cancelled') || (h as any).is_cancelled)
+      );
+      const cancelReason = override.cancellation_reason !== undefined
+        ? override.cancellation_reason
+        : (d.cancellation_reason || (h as any).cancellation_reason || '');
+      const execStatus = override.execution_status || d.execution_status || (isCancelled ? 'Cancelled' : 'Active');
+      const capacity = Number(override.capacity || override.maxCapacity || d.maxCapacity || 25);
+      const leader = override.leader || override.teamLeader || d.teamLeader || 'Walk Nepal Walk Guide';
+
+      return {
+        id: h.id,
+        hike_number: h.hikeNumber || d.hikeNumber || '',
+        name: h.title || d.title || 'Himalayan Trek',
+        date: d.hikeDate || d.date || d.schedule?.eventDate || '',
+        days: d.overview?.expectedDuration || (d.itineraryDays?.length ? String(d.itineraryDays.length) : '1'),
+        days_label: d.overview?.days || '',
+        difficulty: (d.overview?.difficulty || d.difficulty || 'moderate').toLowerCase() as any,
+        leader,
+        capacity,
+        participants: Number((h as any).participants ?? (h as any).data?.participants ?? 0),
+        participants_by_gender: (h as any).participants_by_gender || (h as any).data?.participants_by_gender,
+        recent_participants: (h as any).recent_participants || (h as any).data?.recent_participants,
+        price: d.priceTiers?.length ? `NPR ${d.priceTiers[0].price}` : (d.costing?.totalEstimatedCost ? `NPR ${d.costing.totalEstimatedCost}` : 'NPR 1,500'),
+        featured_image: d.coverImageUrl || d.images?.[0] || '',
         is_cancelled: isCancelled,
         cancellation_reason: cancelReason,
-        execution_status: execStatus,
-        teamLeader: d.teamLeader,
-        maxCapacity: d.maxCapacity,
-      },
-    };
-  });
+        status: (h.status || d.status || 'published') as any,
+        data: {
+          ...d,
+          is_cancelled: isCancelled,
+          cancellation_reason: cancelReason,
+          execution_status: execStatus,
+          teamLeader: leader,
+          maxCapacity: capacity,
+        },
+      };
+    });
+  }, [hikes]);
 
   const enrichedTreks = useMemo(() => {
+    const execOverrides = getAdminEventExecutions();
     const existingHikeNums = new Set<string>();
     const existingIds = new Set<string>();
 
@@ -1680,6 +1740,16 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           : (hist?.title || (hNum ? `Hike #${hNum}` : 'Himalayan Trek'));
         const trekDate = r.trek_date || hist?.hike_date || '';
 
+        const numMatch = (resolvedId || '').match(/\d+/) || (hNum || '').match(/\d+/);
+        const numKey = numMatch ? numMatch[0] : '';
+        const override = execOverrides[resolvedId] || (hNum && execOverrides[hNum]) || (numKey && execOverrides[numKey]) || {};
+
+        const isCancelled = Boolean(override.is_cancelled !== undefined ? override.is_cancelled : false);
+        const cancelReason = override.cancellation_reason || '';
+        const execStatus = override.execution_status || (isCancelled ? 'Cancelled' : 'Active');
+        const cap = Number(override.capacity || override.maxCapacity || 30);
+        const leader = override.leader || override.teamLeader || 'Walk Nepal Walk Guide';
+
         virtualTreks.push({
           id: resolvedId,
           hike_number: hNum || rawId || '',
@@ -1687,20 +1757,22 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           date: trekDate,
           days: '1',
           difficulty: 'moderate',
-          leader: 'Walk Nepal Walk Guide',
-          capacity: 30,
+          leader,
+          capacity: cap,
           participants: 0,
           price: 'NPR 1,500',
           featured_image: '',
           status: 'published',
+          is_cancelled: isCancelled,
+          cancellation_reason: cancelReason,
           data: {
             hikeNumber: hNum || rawId || '',
             title: trekTitle,
-            maxCapacity: 30,
-            teamLeader: 'Walk Nepal Walk Guide',
-            is_cancelled: false,
-            cancellation_reason: '',
-            execution_status: 'Active',
+            maxCapacity: cap,
+            teamLeader: leader,
+            is_cancelled: isCancelled,
+            cancellation_reason: cancelReason,
+            execution_status: execStatus,
           }
         });
       }
