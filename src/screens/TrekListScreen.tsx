@@ -5,6 +5,7 @@ import { PastEventListItem } from '../components/PastEventListItem';
 import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFlags';
 import { HomepageHeroBanner } from '../components/HomepageHeroBanner';
 import { OffersBanner } from '../components/OffersBanner';
+import { HomeGalleryReviewsSection } from '../components/HomeGalleryReviewsSection';
 
 import { SubPageType } from '../components/InfoPagesModal';
 import { trackFilterChange, trackSearchQuery } from '../services/behaviorTracker';
@@ -565,6 +566,15 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
               </div>
             );
           })()}
+
+          {/* 3. COMMUNITY GALLERY & REVIEWS PREVIEW (Desktop 2-Col, Mobile Stacked) */}
+          {!savedOnly && (
+            <HomeGalleryReviewsSection
+              treks={treks}
+              onViewGallery={onViewGallery}
+              onOpenInfoPage={onOpenInfoPage}
+            />
+          )}
         </div>
       )}
     </div>

@@ -16,7 +16,9 @@ import {
   Sparkles,
   Map,
   X,
-  CreditCard
+  CreditCard,
+  Laptop,
+  Smartphone
 } from 'lucide-react';
 
 interface ActivityLog {
@@ -26,6 +28,9 @@ interface ActivityLog {
   description: string;
   metadata_json: string;
   created_at: string;
+  device?: string;
+  device_id?: string;
+  user_agent?: string;
 }
 
 const ACTION_TYPES = [
@@ -177,6 +182,60 @@ export function AdminActivityLogs() {
     } catch (_) {
       return dateStr;
     }
+  };
+
+  const getStableHash = (str: string) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  };
+
+  const getDeviceInfo = (log: ActivityLog, meta: Record<string, any> | null) => {
+    // 1. Direct recorded device field in payload
+    if (log.device) return log.device;
+    if (meta?.device_name) return meta.device_name;
+    if (meta?.device) return meta.device;
+    if (meta?.deviceName) return meta.deviceName;
+
+    // 2. Parse actual User-Agent payload if explicitly recorded in payload
+    const ua = meta?.user_agent || meta?.userAgent || log.user_agent || '';
+    if (ua) {
+      let os = 'Desktop PC';
+      if (ua.includes('Android')) os = ua.includes('SM-S938') || ua.includes('S25') ? 'Samsung S25 Ultra (Android)' : ua.includes('SM-S928') || ua.includes('S24') ? 'Samsung S24 Ultra (Android)' : 'Android Mobile';
+      else if (ua.includes('Windows')) os = ua.includes('Nitro') ? 'Acer Nitro (Windows)' : 'Windows PC';
+      else if (ua.includes('iPhone')) os = 'iPhone (iOS)';
+      else if (ua.includes('iPad')) os = 'iPad (iPadOS)';
+      else if (ua.includes('Macintosh')) os = 'MacBook (macOS)';
+      else if (ua.includes('Linux')) os = 'Linux Workstation';
+
+      let browser = '';
+      if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome';
+      else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+      else if (ua.includes('Firefox')) browser = 'Firefox';
+      else if (ua.includes('Edg')) browser = 'Edge';
+
+      return browser ? `${browser} on ${os}` : os;
+    }
+
+    if (meta?.platform) return meta.platform;
+
+    // STRICT: Return null if no device metadata was recorded. No assumptions or fallbacks.
+    return null;
+  };
+
+  const getDeviceId = (log: ActivityLog, meta: Record<string, any> | null) => {
+    // Direct recorded device ID in payload
+    const rawId = log.device_id || meta?.device_id || meta?.deviceId || meta?.dev_id;
+    if (rawId) {
+      const str = String(rawId).trim();
+      return str.startsWith('#') ? str : `#${str}`;
+    }
+
+    // STRICT: Return null if no device ID was recorded. No assumptions or fallbacks.
+    return null;
   };
 
   const formatChangesTarget = (desc: string) => {
@@ -415,6 +474,12 @@ export function AdminActivityLogs() {
                             <Calendar className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                             <span>{formatLogDate(log.created_at)}</span>
                           </div>
+                          {getDeviceInfo(log, meta) ? (
+                            <div className="text-[10px] font-mono text-stone-500 font-bold mt-0.5 flex items-center gap-1">
+                              <Laptop className="w-3 h-3 text-stone-400 shrink-0" />
+                              <span>{getDeviceInfo(log, meta)}</span>
+                            </div>
+                          ) : null}
                         </td>
 
                         {/* 3. Operator */}
@@ -423,6 +488,12 @@ export function AdminActivityLogs() {
                             <User className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                             <span className="text-[#F38020]">{log.admin_email}</span>
                           </div>
+                          {getDeviceId(log, meta) ? (
+                            <div className="text-[10px] font-mono text-stone-500 font-bold mt-0.5 flex items-center gap-1">
+                              <Smartphone className="w-3 h-3 text-stone-400 shrink-0" />
+                              <span>{getDeviceId(log, meta)}</span>
+                            </div>
+                          ) : null}
                         </td>
 
                         {/* 4. Changes Made To */}

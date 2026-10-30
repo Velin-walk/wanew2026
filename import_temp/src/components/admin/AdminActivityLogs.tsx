@@ -415,6 +415,9 @@ export function AdminActivityLogs() {
                             <Calendar className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                             <span>{formatLogDate(log.created_at)}</span>
                           </div>
+                          {meta?.device_name && (
+                            <div className="text-[10px] font-sans text-stone-500 mt-0.5 pl-[18px]">{meta.device_name}</div>
+                          )}
                         </td>
 
                         {/* 3. Operator */}
@@ -423,6 +426,9 @@ export function AdminActivityLogs() {
                             <User className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                             <span className="text-[#F38020]">{log.admin_email}</span>
                           </div>
+                          {meta?.device_id && (
+                            <div className="text-[10px] font-mono text-stone-500 mt-0.5 pl-[18px]">{meta.device_id}</div>
+                          )}
                         </td>
 
                         {/* 4. Changes Made To */}

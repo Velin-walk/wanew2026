@@ -16,6 +16,7 @@ import { ItineraryPreview } from './ItineraryPreview';
 import { ShareHikeModal } from './ShareHikeModal';
 import { ImageCropperModal } from './ImageCropperModal';
 import { apiFetch, clearApiCache } from '../../services/api';
+import { getAdminDeviceMetadata } from '../../adminUtils';
 import { db } from '../../lib/firebase';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 import {
@@ -518,6 +519,8 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
       // Purge cached API responses before saving
       clearApiCache();
 
+      const activeDevice = getAdminDeviceMetadata();
+
       const syncPayload = {
         id: trekFinalId,
         hike_number: cleanHikeNum || 'TBD',
@@ -539,7 +542,15 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         elevation_range: updatedFormData.overview?.elevationRange || '',
         max_capacity: Number(updatedFormData.maxCapacity) || 25,
         team_leader: updatedFormData.teamLeader || 'Walk Nepal Walk Guide',
-        data: updatedFormData,
+        device_name: activeDevice.device_name,
+        device_id: activeDevice.device_id,
+        user_agent: activeDevice.user_agent,
+        data: {
+          ...updatedFormData,
+          device_name: activeDevice.device_name,
+          device_id: activeDevice.device_id,
+          user_agent: activeDevice.user_agent,
+        },
         author_email: 'walknepalwalk@gmail.com',
       };
 
@@ -556,6 +567,12 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         if (previousTempId && previousTempId !== trekFinalId) {
           await apiFetch(`admin/itineraries/${encodeURIComponent(previousTempId)}`, {
             method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              device_name: activeDevice.device_name,
+              device_id: activeDevice.device_id,
+              user_agent: activeDevice.user_agent,
+            }),
             forceFresh: true,
           }).catch(() => {});
         }
@@ -568,6 +585,9 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
             capacity: Number(updatedFormData.maxCapacity) || 25,
             leader: updatedFormData.teamLeader || 'Walk Nepal Walk Guide',
             status: statusToSave,
+            device_name: activeDevice.device_name,
+            device_id: activeDevice.device_id,
+            user_agent: activeDevice.user_agent,
           }),
           forceFresh: true,
         }).catch(() => {});

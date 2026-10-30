@@ -1,22 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Trophy,
-  Flame,
   Footprints,
   Mountain,
   Compass,
   Calendar,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
   Award,
   Crown,
-  RefreshCw,
-  Filter,
-  User,
-  ExternalLink,
-  ShieldCheck,
-  CheckCircle2,
   X,
   Medal,
   Gem,
@@ -59,14 +50,139 @@ const getKeys = (cat: BoardCategory, per: TimePeriod) => {
   return { d: `${per}d`, c: `${per}c` };
 };
 
+const RankBadge: React.FC<{ rank: number }> = ({ rank }) => {
+  if (rank === 1) {
+    return (
+      <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
+        <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
+      </span>
+    );
+  }
+  if (rank === 2) {
+    return (
+      <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
+        <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
+      </span>
+    );
+  }
+  if (rank === 3) {
+    return (
+      <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-900 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
+        <Award className="w-3.5 h-3.5 text-amber-700" /> 3
+      </span>
+    );
+  }
+  return <span className="text-xs font-black text-stone-500">#{rank}</span>;
+};
+
+export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
+  // Top 3 of all time get Trail Ambassador title by default
+  if (isTop3AllTime) {
+    return {
+      title: distance >= 2000 ? '2000KM Trail Ambassador' : 'Trail Ambassador',
+      style: 'bg-amber-100 text-amber-900 border-amber-300 shadow-3xs',
+      icon: 'crown'
+    };
+  }
+
+  if (distance >= 2000) {
+    return {
+      title: '2000KM Trail Ambassador',
+      style: 'bg-amber-100 text-amber-900 border-amber-300 shadow-3xs',
+      icon: 'crown'
+    };
+  }
+  if (distance >= 1500) {
+    return {
+      title: '1500KM Senior Trail Leader',
+      style: 'bg-indigo-50 text-indigo-900 border-indigo-300',
+      icon: 'award'
+    };
+  }
+  if (distance >= 1000) {
+    return {
+      title: '1000KM Trail Leader',
+      style: 'bg-purple-100 text-purple-900 border-purple-300',
+      icon: 'gem'
+    };
+  }
+  if (distance >= 500) {
+    return {
+      title: '500KM Trail Blazer',
+      style: 'bg-orange-50 text-orange-900 border-orange-300',
+      icon: 'sparkles'
+    };
+  }
+  if (distance >= 400) {
+    return {
+      title: '400KM Explorer',
+      style: 'bg-sky-50 text-sky-900 border-sky-300',
+      icon: 'compass'
+    };
+  }
+  if (distance >= 300) {
+    return {
+      title: '300KM Trekker',
+      style: 'bg-violet-50 text-violet-900 border-violet-300',
+      icon: 'mountain'
+    };
+  }
+  if (distance >= 200) {
+    return {
+      title: '200KM Hiker',
+      style: 'bg-blue-50 text-blue-900 border-blue-300',
+      icon: 'footprints'
+    };
+  }
+  if (distance >= 100) {
+    return {
+      title: '100KM Walker',
+      style: 'bg-emerald-50 text-emerald-900 border-emerald-300',
+      icon: 'sparkles'
+    };
+  }
+  return {
+    title: 'Trail Walker',
+    style: 'bg-stone-100 text-stone-600 border-stone-200',
+    icon: 'none'
+  };
+};
+
+const HikerTierBadge: React.FC<{
+  distance: number;
+  isTop3AllTime?: boolean;
+  isMobile?: boolean;
+}> = ({ distance, isTop3AllTime, isMobile }) => {
+  const { title, style, icon } = getHikerTitleInfo(distance, isTop3AllTime);
+  const iconSize = isMobile ? 'w-2.5 h-2.5' : 'w-3 h-3';
+
+  return (
+    <span
+      className={`px-1.5 py-0.5 rounded-md font-bold border inline-flex items-center gap-0.5 sm:gap-1 shrink-0 whitespace-nowrap ${style} ${
+        isMobile ? 'text-[8px]' : 'text-[9px]'
+      }`}
+    >
+      <span>{title}</span>
+      {icon === 'crown' && <Crown className={`${iconSize} text-amber-600`} />}
+      {icon === 'award' && <Award className={`${iconSize} text-indigo-600`} />}
+      {icon === 'gem' && <Gem className={`${iconSize} text-purple-600`} />}
+      {icon === 'sparkles' && (
+        <Sparkles className={`${iconSize} ${distance < 200 ? 'text-emerald-600' : 'text-orange-600'}`} />
+      )}
+      {icon === 'compass' && <Compass className={`${iconSize} text-sky-600`} />}
+      {icon === 'mountain' && <Mountain className={`${iconSize} text-violet-600`} />}
+      {icon === 'footprints' && <Footprints className={`${iconSize} text-blue-600`} />}
+    </span>
+  );
+};
+
 interface LeaderboardSectionProps {
   category: BoardCategory;
   data: LeaderboardResponse | null;
   loading: boolean;
   error: string | null;
   setSelectedHiker: (hiker: HikerStats) => void;
-  maskName: (name?: string) => string;
-  getKeys: (cat: BoardCategory, per: TimePeriod) => { d: string; c: string };
+  top3AllTimeNames: Set<string>;
 }
 
 const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
@@ -75,8 +191,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
   loading,
   error,
   setSelectedHiker,
-  maskName,
-  getKeys
+  top3AllTimeNames
 }) => {
   const [period, setPeriod] = useState<TimePeriod>('t30');
   const [metric, setMetric] = useState<SortMetric>('dist');
@@ -87,11 +202,10 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
     if (!data?.hikers) return [];
     const { d: distKey, c: countKey } = getKeys(category, period);
 
-    let list = data.hikers.filter((h: any) => {
+    const list = data.hikers.filter((h: any) => {
       const dist = (h[distKey] as number) || 0;
       const count = (h[countKey] as number) || 0;
-      const hasActivity = metric === 'dist' ? dist > 0 : count > 0;
-      return hasActivity;
+      return metric === 'dist' ? dist > 0 : count > 0;
     });
 
     list.sort((a: any, b: any) => {
@@ -101,7 +215,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
     });
 
     return list.slice(0, 100);
-  }, [data, category, period, metric, getKeys]);
+  }, [data, category, period, metric]);
 
   const visibleHikers = useMemo(() => {
     return filteredHikers.slice(0, limit);
@@ -252,6 +366,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
               const isTop1 = idx === 0;
               const isTop2 = idx === 1;
               const isTop3 = idx === 2;
+              const isTop3AllTime = top3AllTimeNames.has((hiker.n || '').trim().toLowerCase());
 
               return (
                 <div
@@ -271,40 +386,14 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   <div className="sm:hidden flex items-center justify-between px-3 py-2.5 gap-2">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <div className="w-7 shrink-0 flex items-center justify-center">
-                        {isTop1 ? (
-                          <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
-                            <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
-                          </span>
-                        ) : isTop2 ? (
-                          <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
-                            <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
-                          </span>
-                        ) : isTop3 ? (
-                          <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-900 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
-                            <Award className="w-3.5 h-3.5 text-amber-700" /> 3
-                          </span>
-                        ) : (
-                          <span className="text-xs font-black text-stone-500">#{idx + 1}</span>
-                        )}
+                        <RankBadge rank={idx + 1} />
                       </div>
 
                       <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-stone-900 group-hover:text-[#E08828] transition-colors truncate">
                           {maskName(hiker.n)}
                         </span>
-                        {hiker.d >= 500 ? (
-                          <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-800 text-[8px] font-bold border border-purple-300 inline-flex items-center gap-0.5 shrink-0 whitespace-nowrap">
-                            500KM <Gem className="w-2.5 h-2.5 text-purple-600" />
-                          </span>
-                        ) : hiker.d >= 100 ? (
-                          <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[8px] font-bold border border-emerald-300 inline-flex items-center gap-0.5 shrink-0 whitespace-nowrap">
-                            100KM <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[8px] font-medium border border-stone-200 inline-flex items-center shrink-0 whitespace-nowrap">
-                            Trail Walker
-                          </span>
-                        )}
+                        <HikerTierBadge distance={hiker.d} isTop3AllTime={isTop3AllTime} isMobile />
                       </div>
                     </div>
 
@@ -321,40 +410,14 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   {/* Tablet / Desktop Grid Row Layout */}
                   <div className="hidden sm:grid sm:grid-cols-12 items-center px-4 py-3">
                     <div className="col-span-1 flex items-center justify-center">
-                      {isTop1 ? (
-                        <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
-                          <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
-                        </span>
-                      ) : isTop2 ? (
-                        <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
-                          <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
-                        </span>
-                      ) : isTop3 ? (
-                        <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-900 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
-                          <Award className="w-3.5 h-3.5 text-amber-700" /> 3
-                        </span>
-                      ) : (
-                        <span className="text-xs font-black text-stone-500">#{idx + 1}</span>
-                      )}
+                      <RankBadge rank={idx + 1} />
                     </div>
 
                     <div className="col-span-6 flex items-center gap-2 pr-2 flex-wrap">
                       <span className="text-sm font-bold text-stone-900 group-hover:text-[#E08828] transition-colors truncate">
                         {maskName(hiker.n)}
                       </span>
-                      {hiker.d >= 500 ? (
-                        <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-800 text-[9px] font-bold border border-purple-300 inline-flex items-center gap-1 shrink-0 whitespace-nowrap">
-                          500KM Legend <Gem className="w-3 h-3 text-purple-600" />
-                        </span>
-                      ) : hiker.d >= 100 ? (
-                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[9px] font-bold border border-emerald-300 inline-flex items-center gap-1 shrink-0 whitespace-nowrap">
-                          100KM Century <Sparkles className="w-3 h-3 text-emerald-600" />
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[9px] font-medium border border-stone-200 inline-flex items-center shrink-0 whitespace-nowrap">
-                          Trail Walker
-                        </span>
-                      )}
+                      <HikerTierBadge distance={hiker.d} isTop3AllTime={isTop3AllTime} />
                     </div>
 
                     <div className="col-span-3 text-right">
@@ -450,44 +513,6 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
 
   const currentStats = data?.stats;
 
-  // Dynamic computation of recent 30 days events if not provided or 0 in server stats
-  const recentEventsCount = useMemo(() => {
-    if (typeof currentStats?.hikesLast30 === 'number' && currentStats.hikesLast30 > 0) {
-      return currentStats.hikesLast30;
-    }
-    const now = Date.now();
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    const buffer = 24 * 60 * 60 * 1000;
-
-    const curve = data?.growthCurve || data?.growth_curve;
-    if (Array.isArray(curve) && curve.length > 0) {
-      const count = curve.filter((pt) => {
-        const ptTime = pt.timestamp ? Number(pt.timestamp) : (pt.date ? new Date(pt.date).getTime() : 0);
-        return ptTime > 0 && ptTime >= now - thirtyDaysMs && ptTime <= now + buffer;
-      }).length;
-      if (count > 0) return count;
-    }
-
-    if (Array.isArray(data?.hikers)) {
-      const uniqueHikeKeys = new Set<string>();
-      for (const h of data.hikers) {
-        if (Array.isArray(h.hikes)) {
-          for (const hk of h.hikes) {
-            if (hk.date) {
-              const t = new Date(hk.date).getTime();
-              if (t > 0 && t >= now - thirtyDaysMs && t <= now + buffer) {
-                uniqueHikeKeys.add(String(hk.no || hk.name));
-              }
-            }
-          }
-        }
-      }
-      if (uniqueHikeKeys.size > 0) return uniqueHikeKeys.size;
-    }
-
-    return currentStats?.hikesLast30 || 0;
-  }, [currentStats?.hikesLast30, data?.growthCurve, data?.growth_curve, data?.hikers]);
-
   const filteredGrowthCurve = useMemo(() => {
     const curve = data?.growthCurve || data?.growth_curve;
     if (!curve || curve.length === 0) return [];
@@ -500,6 +525,27 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
       return new Date(pt.date) >= cutoff;
     });
   }, [data?.growthCurve, data?.growth_curve, journeyPeriod]);
+
+  // Top 3 hikers of all time sorted by total distance `d`
+  const top3AllTimeNames = useMemo(() => {
+    if (!data?.hikers || data.hikers.length === 0) return new Set<string>();
+    const sorted = [...data.hikers].sort((a, b) => (b.d || 0) - (a.d || 0));
+    return new Set(sorted.slice(0, 3).map((h) => (h.n || '').trim().toLowerCase()));
+  }, [data?.hikers]);
+
+  // Precomputed club counts for 500KM, 200KM, 100KM in a single fast pass
+  const clubCounts = useMemo(() => {
+    if (!data?.hikers) return { ultra: 0, summit: 0, century: 0 };
+    let ultra = 0;
+    let summit = 0;
+    let century = 0;
+    for (const h of data.hikers) {
+      if (h.d >= 500) ultra++;
+      else if (h.d >= 200) summit++;
+      else if (h.d >= 100) century++;
+    }
+    return { ultra, summit, century };
+  }, [data?.hikers]);
 
   return (
     <div className="space-y-4 sm:space-y-6 w-full pb-10 relative">
@@ -571,7 +617,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                 </div>
                 <div className="min-w-0">
                   <span className="text-[9px] sm:text-[10px] text-stone-300 block truncate">Recent 30 Days</span>
-                  <strong className="text-xs sm:text-sm font-black text-white">{recentEventsCount || currentStats.hikesLast30 || '0'} events</strong>
+                  <strong className="text-xs sm:text-sm font-black text-white">{currentStats.hikesLast30 || 0} events</strong>
                 </div>
               </div>
             </div>
@@ -653,17 +699,16 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
             </div>
           )}
 
-          {/* 3D Low-Poly Mountain Trail Chart Area (Scrollable Vertically Only) */}
+          {/* 3D Low-Poly Mountain Trail Chart Area */}
           <div className="w-full pt-1">
             <LowPolyMountainTrailChart
               points={filteredGrowthCurve}
               activePoint={activeJourneyPoint}
               onSelectPoint={(pt) => setActiveJourneyPoint(pt)}
-              milestones={data.milestones}
             />
           </div>
 
-          {/* Active Event Inspection Strip (Docked under chart so mobile chart view is never disrupted) */}
+          {/* Active Event Inspection Strip */}
           <div className="bg-stone-50 border border-stone-200 rounded-2xl p-3 sm:p-3.5 transition-all">
             {activeJourneyPoint ? (
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -781,8 +826,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           loading={loading}
           error={error}
           setSelectedHiker={setSelectedHiker}
-          maskName={maskName}
-          getKeys={getKeys}
+          top3AllTimeNames={top3AllTimeNames}
         />
       </div>
 
@@ -794,8 +838,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           loading={loading}
           error={error}
           setSelectedHiker={setSelectedHiker}
-          maskName={maskName}
-          getKeys={getKeys}
+          top3AllTimeNames={top3AllTimeNames}
         />
 
         <LeaderboardBoardSection
@@ -804,8 +847,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           loading={loading}
           error={error}
           setSelectedHiker={setSelectedHiker}
-          maskName={maskName}
-          getKeys={getKeys}
+          top3AllTimeNames={top3AllTimeNames}
         />
 
         <LeaderboardBoardSection
@@ -814,8 +856,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           loading={loading}
           error={error}
           setSelectedHiker={setSelectedHiker}
-          maskName={maskName}
-          getKeys={getKeys}
+          top3AllTimeNames={top3AllTimeNames}
         />
       </div>
 
@@ -830,7 +871,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           </div>
           <h4 className="text-[10px] sm:text-xs font-black text-purple-950 uppercase tracking-wider truncate">500KM Ultra</h4>
           <p className="text-[9px] sm:text-[11px] text-purple-800 font-bold mt-0.5 sm:mt-1 truncate">
-            {data?.hikers ? data.hikers.filter((h) => h.d >= 500).length : 0} Legends
+            {clubCounts.ultra} Legends
           </p>
         </div>
 
@@ -840,7 +881,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           </div>
           <h4 className="text-[10px] sm:text-xs font-black text-blue-950 uppercase tracking-wider truncate">200KM Summit</h4>
           <p className="text-[9px] sm:text-[11px] text-blue-800 font-bold mt-0.5 sm:mt-1 truncate">
-            {data?.hikers ? data.hikers.filter((h) => h.d >= 200 && h.d < 500).length : 0} Trekkers
+            {clubCounts.summit} Trekkers
           </p>
         </div>
 
@@ -850,7 +891,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           </div>
           <h4 className="text-[10px] sm:text-xs font-black text-emerald-950 uppercase tracking-wider truncate">100KM Century</h4>
           <p className="text-[9px] sm:text-[11px] text-emerald-800 font-bold mt-0.5 sm:mt-1 truncate">
-            {data?.hikers ? data.hikers.filter((h) => h.d >= 100 && h.d < 200).length : 0} Walkers
+            {clubCounts.century} Walkers
           </p>
         </div>
       </div>
@@ -936,15 +977,12 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                   </strong>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[#8B8680]">Hiker Club Tier:</span>
+                  <span className="text-[#8B8680]">Hiker Title:</span>
                   <strong className="text-[#E08828]">
-                    {selectedHiker.d >= 500
-                      ? 'Ultra Legend (500KM+)'
-                      : selectedHiker.d >= 200
-                      ? 'Summit Trekker (200KM+)'
-                      : selectedHiker.d >= 100
-                      ? 'Century Walker (100KM+)'
-                      : 'Trail Explorer'}
+                    {getHikerTitleInfo(
+                      selectedHiker.d,
+                      top3AllTimeNames.has((selectedHiker.n || '').trim().toLowerCase())
+                    ).title}
                   </strong>
                 </div>
               </div>

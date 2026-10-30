@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch, normalizeTrek, enrichTreksWithRegistrations, clearApiCache } from '../../services/api';
+import { getAdminDeviceMetadata } from '../../adminUtils';
 import {
   CheckCircle,
   XCircle,
@@ -490,7 +491,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       await apiFetch(`registrations/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify({ ...updates, ...getAdminDeviceMetadata() }),
       });
     } catch (err) {
       console.warn('API mark registration as Cancelled by User fallback:', err);
@@ -523,7 +524,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       await apiFetch(`registrations/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify({ ...updates, ...getAdminDeviceMetadata() }),
       });
     } catch (err) {
       console.warn('API update registration fallback:', err);
@@ -647,6 +648,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            ...getAdminDeviceMetadata(),
             id: rec.id,
             hike_number: rec.hikeNumber,
             title: rec.title,
@@ -664,6 +666,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...getAdminDeviceMetadata(),
           ...updates,
           capacity: rec?.data?.maxCapacity ?? updates.capacity,
           leader: rec?.data?.teamLeader ?? updates.leader,
@@ -1102,6 +1105,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            ...getAdminDeviceMetadata(),
             id: unsynced.id,
             data: unsynced.data,
             status: unsynced.status,
@@ -1317,6 +1321,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            ...getAdminDeviceMetadata(),
             id: cloned.id,
             hike_number: 'TBD',
             title: cloned.title,
@@ -1399,7 +1404,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const res = await apiFetch(`admin/itineraries/${encodeURIComponent(hikeId)}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ ...getAdminDeviceMetadata(), status: newStatus }),
         forceFresh: true,
       });
       // If hike wasn't in D1 yet (e.g. 404 on a template hike), upsert the full record
@@ -1409,6 +1414,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            ...getAdminDeviceMetadata(),
             id: rec.id,
             hike_number: rec.hikeNumber || 'TBD',
             title: rec.title,

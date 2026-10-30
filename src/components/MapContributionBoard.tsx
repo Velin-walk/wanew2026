@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Compass, Trophy, Award, MapPin, Footprints, ExternalLink, RefreshCw, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Compass, ExternalLink, ChevronRight } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { generateDemoRoutes } from './mapminers/demoData';
 

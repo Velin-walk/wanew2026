@@ -5,6 +5,7 @@
  */
 
 import { CLOUDFLARE_WORKER_URL } from './api';
+import { getAdminDeviceMetadata } from '../adminUtils';
 
 export interface BehaviorEvent {
   id?: string;
@@ -20,25 +21,49 @@ export interface BehaviorEvent {
 const STORAGE_SESSION_KEY = 'wnw_behavior_session_id';
 const FLUSH_INTERVAL_MS = 25000; // Flush queue every 25 seconds
 const MAX_QUEUE_SIZE = 8;        // Or immediately when 8 events accumulate
+const MAX_BACKLOG = 100;         // Cap for re-queued events after failed flushes
+const SESSION_IDLE_MS = 30 * 60 * 1000; // Rotate session after 30 minutes of inactivity
+const STORAGE_SESSION_ACTIVITY_KEY = 'wnw_behavior_session_last_activity';
 
 // In-memory queue
 let eventQueue: BehaviorEvent[] = [];
 let flushTimer: any = null;
 
 /**
- * Returns or creates an anonymous session identifier stored in browser localStorage.
+ * Returns or creates an anonymous session identifier (sessionStorage),
+ * rotated after 30 minutes of inactivity.
  */
 export function getBehaviorSessionId(): string {
   try {
-    let sid = localStorage.getItem(STORAGE_SESSION_KEY);
-    if (!sid) {
-      sid = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      localStorage.setItem(STORAGE_SESSION_KEY, sid);
+    const now = Date.now();
+    let sid = sessionStorage.getItem(STORAGE_SESSION_KEY);
+    const last = Number(sessionStorage.getItem(STORAGE_SESSION_ACTIVITY_KEY)) || 0;
+    if (!sid || now - last > SESSION_IDLE_MS) {
+      sid = `sess_${now}_${Math.random().toString(36).substring(2, 9)}`;
+      sessionStorage.setItem(STORAGE_SESSION_KEY, sid);
     }
+    sessionStorage.setItem(STORAGE_SESSION_ACTIVITY_KEY, String(now));
     return sid;
   } catch {
     return 'anonymous_session';
   }
+}
+
+/**
+ * Real device facts only (no guessing). Merged into every event's metadata.
+ */
+function getDeviceTelemetry(): Record<string, any> {
+  if (typeof navigator === 'undefined' || typeof window === 'undefined') return {};
+  const ua = navigator.userAgent || '';
+  const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  const isTablet = /iPad|Tablet|(Android(?!.*Mobile))/i.test(ua) || isIPadOS;
+  const isMobile = !isTablet && /Mobi|iPhone|Android/i.test(ua);
+  return {
+    deviceType: isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
+    screen: `${window.screen.width}x${window.screen.height}`,
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    ...getAdminDeviceMetadata(),
+  };
 }
 
 /**
@@ -76,18 +101,22 @@ export async function flushBehaviorEvents(): Promise<void> {
 
   try {
     if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-      const blob = new Blob([payload], { type: 'application/json' });
+      // text/plain avoids a CORS preflight; the Worker parses the body as JSON
+      const blob = new Blob([payload], { type: 'text/plain' });
       const ok = navigator.sendBeacon(endpoint, blob);
       if (ok) return;
     }
 
-    await fetch(endpoint, {
+    const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: payload,
       keepalive: true,
     });
+    if (res.status >= 500) throw new Error(`Server error ${res.status}`);
   } catch (err) {
+    // Re-queue the failed batch (oldest dropped first once the backlog cap is hit)
+    eventQueue = [...batch, ...eventQueue].slice(-MAX_BACKLOG);
     // Non-blocking: fail silently if network is offline; do not disrupt the user
     console.debug('[BehaviorTracker] Failed to flush events:', err);
   }
@@ -110,7 +139,7 @@ export function trackEvent(
       eventType,
       category,
       targetId: targetId || null,
-      metadata: metadata || {},
+      metadata: { ...getDeviceTelemetry(), ...(metadata || {}) },
       createdAt: new Date().toISOString(),
     };
 

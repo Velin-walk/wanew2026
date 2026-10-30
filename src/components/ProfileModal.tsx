@@ -87,6 +87,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const { nationalityPreference, setNationalityPreference, isNepaliCitizen, detectedCountry } = useCitizenPricing();
   const [activeProfileTab, setActiveProfileTab] = useState<'hikes' | 'bookings' | 'saved' | 'settings'>(initialTab);
 
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveProfileTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
+
   const [editName, setEditName] = useState(user?.displayName || '');
   const [editPhone, setEditPhone] = useState(() => userPhone || localStorage.getItem('wnw_user_phone') || '');
   const [editWhatsapp, setEditWhatsapp] = useState(() => localStorage.getItem('wnw_user_whatsapp') || '');

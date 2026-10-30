@@ -338,6 +338,18 @@ async function logAdminActivity(env, request, actionType, description, metadata 
     memLogsCount.clear();
     const rawEmail = request.headers.get('X-Admin-Email') || request.headers.get('x-admin-email');
     const adminEmail = (rawEmail || 'walknepalwalk@gmail.com').trim().toLowerCase();
+    
+    // Capture real physical device identification headers passed by admin client
+    const devName = request.headers.get('X-Admin-Device-Name') || request.headers.get('x-admin-device-name');
+    const devId = request.headers.get('X-Admin-Device-Id') || request.headers.get('x-admin-device-id');
+    const devUa = request.headers.get('User-Agent') || request.headers.get('user-agent');
+    const enrichedMetadata = {
+      ...(metadata || {}),
+      ...(devName && !metadata?.device_name ? { device_name: devName } : {}),
+      ...(devId && !metadata?.device_id ? { device_id: devId } : {}),
+      ...(devUa && !metadata?.user_agent ? { user_agent: devUa } : {}),
+    };
+
     await env.DB.prepare(`
       INSERT INTO admin_activity_logs (admin_email, action_type, description, metadata_json)
       VALUES (?, ?, ?, ?)
@@ -345,7 +357,7 @@ async function logAdminActivity(env, request, actionType, description, metadata 
       adminEmail,
       actionType,
       description,
-      JSON.stringify(metadata)
+      JSON.stringify(enrichedMetadata)
     ).run();
   } catch (err) {
     console.error('Failed to log admin activity:', err);

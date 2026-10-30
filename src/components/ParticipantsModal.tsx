@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Users, Sparkles, UserCheck } from 'lucide-react';
+import { X, Users, Sparkles, UserCheck, EyeOff, ArrowRight } from 'lucide-react';
 import { ParticipantCount } from '../types';
 import { apiFetch } from '../services/api';
 
@@ -138,6 +138,11 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleOpenSettings = () => {
+    onClose();
+    window.dispatchEvent(new CustomEvent('wnw-open-profile', { detail: { tab: 'settings' } }));
+  };
+
   const totalParticipants =
     roster.length > 0
       ? roster.length
@@ -218,6 +223,28 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
             <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md border border-rose-200/60 font-semibold">
               F: {femaleCount}
             </span>
+          </div>
+        </div>
+
+        {/* Anonymous Mode Privacy Notice */}
+        <div className="px-3 sm:px-4 py-2 bg-gradient-to-r from-purple-50/90 via-purple-50/70 to-purple-100/40 border-b border-purple-200/80">
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="w-6 h-6 rounded-md bg-purple-100/90 border border-purple-200/80 flex items-center justify-center text-purple-700 shrink-0">
+                <EyeOff className="w-3.5 h-3.5" />
+              </div>
+              <p className="text-[11px] sm:text-xs text-purple-950 leading-snug min-w-0">
+                <span className="font-bold text-purple-900">Prefer privacy?</span> Enable Anonymous Mode to appear as <span className="font-semibold text-purple-900">"Anonymous Hiker"</span>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenSettings}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold text-[10.5px] sm:text-[11px] rounded-lg shadow-2xs transition-all cursor-pointer shrink-0"
+            >
+              <span>Open Settings</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
           </div>
         </div>
 

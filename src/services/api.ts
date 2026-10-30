@@ -1,7 +1,7 @@
 import { Trek, PhotoComment } from "../types";
 import { auth, db } from "../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
-import { isAdminEmail, isFullAdminEmail } from "../adminUtils";
+import { isAdminEmail, isFullAdminEmail, getAdminDeviceMetadata } from "../adminUtils";
 
 export const CLOUDFLARE_WORKER_URL =
   ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
@@ -140,6 +140,17 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
           headers.set("X-Admin-Role", isFullAdminEmail(userEmail) ? "full" : "coordinator");
         }
       }
+
+      // Attach client physical device metadata for audit logging if available
+      try {
+        const devMeta = getAdminDeviceMetadata();
+        if (devMeta?.device_name && !headers.has("X-Admin-Device-Name")) {
+          headers.set("X-Admin-Device-Name", devMeta.device_name);
+        }
+        if (devMeta?.device_id && !headers.has("X-Admin-Device-Id")) {
+          headers.set("X-Admin-Device-Id", devMeta.device_id);
+        }
+      } catch (_) {}
 
       if (!headers.has("Authorization")) {
         if (!auth.currentUser && typeof (auth as any).authStateReady === 'function') {

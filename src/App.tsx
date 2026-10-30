@@ -1007,9 +1007,16 @@ function MainApp() {
         }
       }
     };
+    const handleOpenProfileEvent = (e: any) => {
+      const targetTab = e?.detail?.tab || 'hikes';
+      closeAllOverlays();
+      setProfileModalTab(targetTab);
+      setProfileModalOpen(true);
+    };
     window.addEventListener('wnw-treks-updated', handleTreksUpdated);
     window.addEventListener('wnw-data-source-changed', handleTreksUpdated);
     window.addEventListener('wnw-navigate-tab', handleNavigateTabEvent);
+    window.addEventListener('wnw-open-profile', handleOpenProfileEvent);
 
     return () => {
       window.removeEventListener('focus', handleFocusOrVisibility);
@@ -1017,8 +1024,9 @@ function MainApp() {
       window.removeEventListener('wnw-treks-updated', handleTreksUpdated);
       window.removeEventListener('wnw-data-source-changed', handleTreksUpdated);
       window.removeEventListener('wnw-navigate-tab', handleNavigateTabEvent);
+      window.removeEventListener('wnw-open-profile', handleOpenProfileEvent);
     };
-  }, []); // Empty dependency array prevents double-fetching on auth resolution
+  }, [closeAllOverlays, handleMainTabChange]); // Ensure clean reference lifecycle
 
   // Mobile pull-to-refresh touch event handlers
   const handleTouchStart = (e: React.TouchEvent) => {

@@ -80,7 +80,7 @@ import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { Trek } from '../../types';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { isFullAdminEmail, isCoordinatorEmail } from '../../adminUtils';
+import { isFullAdminEmail, isCoordinatorEmail, getAdminDeviceMetadata } from '../../adminUtils';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
 
 interface AdminDashboardProps {
@@ -584,8 +584,21 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const handleDeleteRegistration = async (id: string) => {
+    const activeDevice = getAdminDeviceMetadata();
     // Keep the registration record in D1 by updating status to 'Cancelled by User'
-    const updates: Partial<AdminRegistration> = { status: 'Cancelled by User' };
+    const updates: Partial<AdminRegistration> & any = {
+      status: 'Cancelled by User',
+      device_name: activeDevice.device_name,
+      device_id: activeDevice.device_id,
+      user_agent: activeDevice.user_agent,
+      metadata_json: JSON.stringify({
+        action: 'DELETE_REGISTRATION',
+        registration_id: id,
+        device_name: activeDevice.device_name,
+        device_id: activeDevice.device_id,
+        user_agent: activeDevice.user_agent,
+      }),
+    };
     try {
       await apiFetch(`registrations/${id}`, {
         method: 'PATCH',
@@ -618,6 +631,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   };
 
   const handleUpdateRegistration = async (id: string, updates: Partial<AdminRegistration>) => {
+    const activeDevice = getAdminDeviceMetadata();
     const normalizedUpdates: any = {
       ...updates,
       pax: updates.paxCount !== undefined ? updates.paxCount : (updates as any).pax,
@@ -633,6 +647,20 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       specify_medical: updates.specify_medical || updates.medical_condition,
       guide_preference: updates.guide_preference || (updates as any).guide_mode,
       transport_preference: updates.transport_preference || (updates as any).transport_mode,
+      device_name: activeDevice.device_name,
+      device_id: activeDevice.device_id,
+      user_agent: activeDevice.user_agent,
+      metadata_json: JSON.stringify({
+        device_name: activeDevice.device_name,
+        device_id: activeDevice.device_id,
+        user_agent: activeDevice.user_agent,
+        registration_id: id,
+        ...(updates.status ? { status: updates.status } : {}),
+        ...(updates.payment_status ? { payment_status: updates.payment_status } : {}),
+        ...(updates.paid_amount !== undefined ? { paid_amount: updates.paid_amount } : {}),
+        ...(updates.due_amount !== undefined ? { due_amount: updates.due_amount } : {}),
+        ...(updates.pickup_point ? { pickup_point: updates.pickup_point } : {}),
+      }),
     };
 
     // 1. Persist to local storage edits map immediately so local UI never reverts
@@ -805,6 +833,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     // Save to server: update both PUT (treks data_json + max_capacity + edge cache purge) and PATCH (event_executions)
     const rec = updatedRecordForSync as SavedHikeRecord | null;
     const serverTargetId = rec ? rec.id : cleanTrekId;
+    const activeDevice = getAdminDeviceMetadata();
     try {
       if (rec) {
         await apiFetch(`admin/itineraries/${encodeURIComponent(rec.id)}`, {
@@ -819,7 +848,15 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             hike_date: rec.data?.hikeDate,
             max_capacity: rec.data?.maxCapacity,
             team_leader: rec.data?.teamLeader,
-            data: rec.data,
+            device_name: activeDevice.device_name,
+            device_id: activeDevice.device_id,
+            user_agent: activeDevice.user_agent,
+            data: {
+              ...(rec.data || {}),
+              device_name: activeDevice.device_name,
+              device_id: activeDevice.device_id,
+              user_agent: activeDevice.user_agent,
+            },
           }),
           forceFresh: true,
         });
@@ -831,7 +868,15 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           ...updates,
           capacity: rec?.data?.maxCapacity ?? updates.capacity,
           leader: rec?.data?.teamLeader ?? updates.leader,
-          data: rec?.data ?? updates.data,
+          device_name: activeDevice.device_name,
+          device_id: activeDevice.device_id,
+          user_agent: activeDevice.user_agent,
+          data: {
+            ...(rec?.data ?? updates.data ?? {}),
+            device_name: activeDevice.device_name,
+            device_id: activeDevice.device_id,
+            user_agent: activeDevice.user_agent,
+          },
         }),
         forceFresh: true,
       });
@@ -1481,6 +1526,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         data: clonedData,
       };
 
+      const activeDevice = getAdminDeviceMetadata();
       try {
         const res = await apiFetch('admin/itineraries', {
           method: 'POST',
@@ -1491,7 +1537,15 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             title: cloned.title,
             category: cloned.category,
             status: 'draft',
-            data: cloned.data,
+            data: {
+              ...(cloned.data || {}),
+              device_name: activeDevice.device_name,
+              device_id: activeDevice.device_id,
+              user_agent: activeDevice.user_agent,
+            },
+            device_name: activeDevice.device_name,
+            device_id: activeDevice.device_id,
+            user_agent: activeDevice.user_agent,
             authorEmail: currentUserEmail || 'walknepalwalk@gmail.com',
           }),
         });
@@ -1514,6 +1568,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const handleDeleteHike = async (hikeId: string) => {
     clearApiCache();
     const targetHike = hikes.find((h) => h.id === hikeId);
+    const activeDevice = getAdminDeviceMetadata();
     try {
       const deletedSet = getDeletedHikeIds();
       deletedSet.add(String(hikeId));
@@ -1523,12 +1578,24 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     try {
       await apiFetch(`admin/itineraries/${encodeURIComponent(hikeId)}`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_name: activeDevice.device_name,
+          device_id: activeDevice.device_id,
+          user_agent: activeDevice.user_agent,
+        }),
         forceFresh: true,
       });
       const hNum = (targetHike?.hikeNumber || targetHike?.data?.hikeNumber || '').trim();
       if (hNum && hNum !== 'TBD' && hNum !== hikeId) {
         await apiFetch(`admin/itineraries/${encodeURIComponent(hNum)}`, {
           method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_name: activeDevice.device_name,
+            device_id: activeDevice.device_id,
+            user_agent: activeDevice.user_agent,
+          }),
           forceFresh: true,
         }).catch(() => {});
       }
@@ -1549,6 +1616,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   ) => {
     clearApiCache();
     let updatedTarget: SavedHikeRecord | null = null;
+    const activeDevice = getAdminDeviceMetadata();
     const next = hikes.map((h) => {
       const isTarget = h.id === hikeId || (h.hikeNumber && h.hikeNumber !== 'TBD' && h.hikeNumber === hikeId);
       if (!isTarget) return h;
@@ -1568,7 +1636,12 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const res = await apiFetch(`admin/itineraries/${encodeURIComponent(hikeId)}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({
+          status: newStatus,
+          device_name: activeDevice.device_name,
+          device_id: activeDevice.device_id,
+          user_agent: activeDevice.user_agent,
+        }),
         forceFresh: true,
       });
       // If hike wasn't in D1 yet (e.g. 404 on a template hike), upsert the full record
@@ -1586,6 +1659,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             hike_date: rec.data?.hikeDate,
             max_capacity: rec.data?.maxCapacity,
             team_leader: rec.data?.teamLeader,
+            device_name: activeDevice.device_name,
+            device_id: activeDevice.device_id,
+            user_agent: activeDevice.user_agent,
             data: rec.data,
           }),
           forceFresh: true,
