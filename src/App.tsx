@@ -15,6 +15,7 @@ import { VoucherModal } from './components/VoucherModal';
 import { NoticeBoardModal } from './components/NoticeBoardModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { SocialLinksFooter } from './components/SocialLinksFooter';
 import { FALLBACK_TREKS } from './data/fallbackTreks';
 import { CheckCircle2, AlertCircle, Mountain, Heart, RefreshCw, ShieldCheck } from 'lucide-react';
 import MapMinersDashboard from './components/mapminers/MapMinersDashboard';
@@ -1712,17 +1713,16 @@ function MainApp() {
             )}
 
           {/* Micro App Footer inside shell */}
-          {currentTab !== 'mapminers' && (
-            <div className="mt-8 pt-6 border-t border-[#EFEAE4] text-center text-[11px] text-[#8B8680] space-y-1">
-              <div className="flex items-center justify-center gap-1.5 font-bold text-[#1F1F1F]">
-                <img src="/logo.png" className="w-5 h-5 object-contain rounded-sm" alt="WNW Logo" referrerPolicy="no-referrer" />
-                <span>Walk Nepal Walk Mobile App</span>
-              </div>
-              <p className="text-[10px] text-[#8B8680] flex items-center justify-center gap-1">
-                Himalayan Community Roster Platform • Made for Nepal Hikers
-              </p>
+          <div className="mt-8 pt-6 border-t border-[#EFEAE4] text-center text-[11px] text-[#8B8680] space-y-3 pb-8">
+            <SocialLinksFooter />
+            <div className="flex items-center justify-center gap-1.5 font-bold text-[#1F1F1F]">
+              <img src="/logo.png" className="w-5 h-5 object-contain rounded-sm" alt="WNW Logo" referrerPolicy="no-referrer" />
+              <span>Walk Nepal Walk Mobile App</span>
             </div>
-          )}
+            <p className="text-[10px] text-[#8B8680] flex items-center justify-center gap-1">
+              Himalayan Community Roster Platform • Made for Nepal Hikers
+            </p>
+          </div>
         </main>
 
         {/* Mobile Bottom Tab Navigation (hidden in Admin desktop mode) */}
