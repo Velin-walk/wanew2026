@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
+  MessageCircle,
 } from 'lucide-react';
 
 interface TrekListScreenProps {
@@ -304,15 +305,26 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       {/* Filter and Search Controls - Clean Mobile Layout */}
       <div className="bg-white p-3 sm:p-4 rounded-xl border border-[#F0EBE5] shadow-xs space-y-3 w-full max-w-full">
         {/* Search Box */}
-        <div className="relative w-full">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#8B8680]" />
-          <input
-            type="text"
-            placeholder="Search by peak, hike #, location, or guide..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-[#E5E1DB] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] text-[#1F1F1F] placeholder:text-[#8B8680]"
-          />
+        <div className="flex items-center gap-2 w-full">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#8B8680]" />
+            <input
+              type="text"
+              placeholder="Search by peak, hike #, location, or guide..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-[#E5E1DB] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] text-[#1F1F1F] placeholder:text-[#8B8680]"
+            />
+          </div>
+          <a
+            href="https://wa.me/9779803568612"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg text-white bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 transition-all shadow-xs"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span className="whitespace-nowrap">Talk to Sales</span>
+          </a>
         </div>
 
         {/* Trip Type Pills - Fully Optimized for Mobile Views */}
@@ -491,9 +503,9 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
             const isArchiveOpen = isCategoryActive || showPastEvents || upcomingTreks.length === 0;
             return (
               <div className="pt-3 border-t border-[#F0EBE5] space-y-3">
-                {/* Subtle miniature Himalayan prayer flag strip divider */}
-                <div className="mb-2 max-w-sm sm:max-w-md opacity-85">
-                  <MiniPrayerFlags variant="card" count={7} withMountain={true} />
+                {/* Full-width Himalayan prayer flag strip banner */}
+                <div className="mb-3 w-full opacity-90 rounded-2xl overflow-hidden border border-[#E5E1DB]/70 bg-gradient-to-r from-amber-50/30 via-white/50 to-emerald-50/30 shadow-3xs">
+                  <MiniPrayerFlags variant="card" count={16} withMountain={true} />
                 </div>
 
                 <div className="flex items-center justify-between">

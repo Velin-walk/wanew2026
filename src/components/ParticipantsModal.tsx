@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Users, Sparkles, UserCheck, EyeOff, ArrowRight } from 'lucide-react';
 import { ParticipantCount } from '../types';
 import { apiFetch } from '../services/api';
+import { isHikerAnonymous, useAnonymity } from '../utils/anonymity';
 
 export interface ParticipantItem {
   name: string;
@@ -31,6 +32,7 @@ interface ParticipantsModalProps {
 export function formatNameWithLastInitial(rawName: string): string {
   if (!rawName) return 'Hiker';
   const clean = rawName.trim();
+  if (isHikerAnonymous({ name: clean })) return 'Anonymous Hiker';
   const parts = clean.split(/\s+/).filter(Boolean);
   if (parts.length <= 1) {
     return parts[0] || 'Hiker';
@@ -65,6 +67,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
   recentParticipants = [],
   guideName,
 }) => {
+  useAnonymity();
   const [roster, setRoster] = useState<ParticipantItem[]>(() => enrichWithGuide(recentParticipants, guideName));
   const [loading, setLoading] = useState(false);
 

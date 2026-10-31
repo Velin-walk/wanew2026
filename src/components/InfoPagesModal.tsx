@@ -46,6 +46,7 @@ import { fetchSiteNotice, SiteNotice } from '../services/noticeService';
 import { GuideProfileModal } from './GuideProfileModal';
 import { Trek } from '../types';
 import { getGuidesSettings } from '../services/guidesService';
+import { getPublicDisplayName, useAnonymity } from '../utils/anonymity';
 
 export type SubPageType = 'payment' | 'trek_tips' | 'creator_guide' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about' | 'notices' | 'trek_leaders';
 
@@ -102,6 +103,7 @@ export const HikerReviewsSection: React.FC<{
   onNavigateToBookings?: () => void;
   onLeaveFeedback?: () => void;
 }> = ({ onNavigateToBookings, onLeaveFeedback }) => {
+  useAnonymity();
   const [liveReviews, setLiveReviews] = useState<any[]>(() => {
     try {
       const local = localStorage.getItem('wnw_user_feedbacks');
@@ -402,7 +404,8 @@ export const HikerReviewsSection: React.FC<{
         ) : (
           <>
             {displayReviews.slice(0, visibleReviewsCount).map((rev) => {
-              const initials = (rev.full_name || 'Hiker')
+              const publicName = getPublicDisplayName(rev.full_name);
+              const initials = (publicName || 'Hiker')
                 .split(' ')
                 .map((n: string) => n[0])
                 .slice(0, 2)
@@ -423,7 +426,7 @@ export const HikerReviewsSection: React.FC<{
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-sm font-bold text-[#1F1F1F] leading-tight">
-                            {rev.full_name}
+                            {publicName}
                           </h4>
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                             <CheckCircle2 className="w-3 h-3" />

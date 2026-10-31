@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { fetchPhotoComments, postPhotoComment, deletePhotoComment } from '../services/api';
 import { logUserActivity } from '../services/userActivityNotifier';
 import { PhotoComment } from '../types';
+import { getPublicDisplayName, useAnonymity } from '../utils/anonymity';
 
 interface PhotoCommentsSectionProps {
   photoId: string;
@@ -17,7 +18,8 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
   isDarkTheme = true,
   onCommentCountChange,
 }) => {
-  const { user, isAdmin, openAuthModal } = useAuth();
+  useAnonymity();
+  const { user, isAdmin, openAuthModal, userPhone } = useAuth();
   const [comments, setComments] = useState<PhotoComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState('');
@@ -82,7 +84,8 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
 
     setSubmitting(true);
     try {
-      const authorName = user.displayName || user.email?.split('@')[0] || 'Verified Hiker';
+      const rawName = user.displayName || user.email?.split('@')[0] || 'Verified Hiker';
+      const authorName = getPublicDisplayName(rawName, { email: user.email, uid: user.uid, phone: userPhone });
       const authorAvatar = user.photoURL || '';
       
       const newComment = await postPhotoComment(
@@ -228,7 +231,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline justify-between gap-2">
                         <span className={`text-xs font-black truncate ${isDarkTheme ? 'text-[#7ABA42]' : 'text-[#629b35]'}`}>
-                          {comment.userName}
+                          {getPublicDisplayName(comment.userName, { uid: comment.userUid })}
                         </span>
                         <span className={`text-[9px] font-medium flex-shrink-0 ${textSecondary}`}>
                           {formatRelativeTime(comment.createdAt)}

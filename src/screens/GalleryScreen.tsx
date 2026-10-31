@@ -534,6 +534,9 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       // Update local state
       setPhotos((prev) => [...newPhotosToAppend, ...prev]);
       localStorage.setItem(uploadCountKey, String(currentCount + uploadedThisBatch));
+      try {
+        window.dispatchEvent(new CustomEvent('wnw-photos-updated'));
+      } catch (e) {}
 
       if (newPhotosToAppend.length > 0) {
         const uploaderName = user.displayName || user.email?.split('@')[0] || 'Verified Hiker';

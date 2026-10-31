@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Footprints, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Footprints, Mountain, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { triggerHaptic } from '../../utils/haptics';
 
 export interface JourneyPoint {
@@ -9,10 +9,14 @@ export interface JourneyPoint {
   hike_km: number;
   trek_km: number;
   total_km: number;
+  cum_hike_km?: number;
+  cum_trek_km?: number;
+  cum_total_km?: number;
 }
 
 interface LowPolyMountainTrailChartProps {
   points: JourneyPoint[];
+  mode?: 'hike' | 'trek' | 'total';
   activePoint: JourneyPoint | null;
   onSelectPoint: (pt: JourneyPoint) => void;
   milestones?: Array<{ km: number; trek: string }>;
@@ -20,6 +24,7 @@ interface LowPolyMountainTrailChartProps {
 
 export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps> = ({
   points,
+  mode = 'total',
   activePoint,
   onSelectPoint,
 }) => {
@@ -31,14 +36,79 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
 
   const sortedPoints = useMemo(() => {
     return [...points].sort((a, b) => {
+      if (a.date && b.date) {
+        const da = new Date(a.date).getTime();
+        const db = new Date(b.date).getTime();
+        if (!isNaN(da) && !isNaN(db) && da !== db) {
+          return da - db;
+        }
+      }
+      const numA = Number(String(a.event_no || '').replace(/\D/g, '')) || 0;
+      const numB = Number(String(b.event_no || '').replace(/\D/g, '')) || 0;
+      if (numA && numB && numA !== numB) {
+        return numA - numB;
+      }
       return (a.total_km || 0) - (b.total_km || 0);
     });
   }, [points]);
 
   const chartData = useMemo(() => {
-    if (sortedPoints.length === 0) return { coords: [], dLine: '', dArea: '', maxKm: 1 };
+    if (sortedPoints.length === 0) {
+      return {
+        coords: [],
+        dLine: '',
+        dArea: '',
+        maxKm: 1,
+        floorY: 260,
+        paddingLeft: 60,
+      };
+    }
 
-    const maxKm = Math.max(...sortedPoints.map(p => p.total_km), 1);
+    let runningHike = 0;
+    let runningTrek = 0;
+
+    // Check if hike_km / trek_km are per-event distances or pre-accumulated
+    let isAlreadyCumulative = false;
+    if (sortedPoints.length > 1) {
+      let nonDecreasingHike = true;
+      for (let i = 1; i < sortedPoints.length; i++) {
+        if ((Number(sortedPoints[i].hike_km) || 0) < (Number(sortedPoints[i - 1].hike_km) || 0)) {
+          nonDecreasingHike = false;
+          break;
+        }
+      }
+      if (nonDecreasingHike) {
+        isAlreadyCumulative = true;
+      }
+    }
+
+    const pointsWithCum = sortedPoints.map((pt, idx) => {
+      const h = Number(pt.hike_km) || 0;
+      const t = Number(pt.trek_km) || 0;
+      const tot = Number(pt.total_km) || (h + t);
+
+      if (isAlreadyCumulative) {
+        runningHike = Math.max(runningHike, h);
+        runningTrek = Math.max(runningTrek, t);
+      } else {
+        runningHike += h;
+        runningTrek += t;
+      }
+
+      const cum_hike = runningHike;
+      const cum_trek = runningTrek;
+      const cum_total = Math.max(cum_hike + cum_trek, tot, idx > 0 ? runningHike + runningTrek : 0);
+
+      return {
+        ...pt,
+        cum_hike_km: cum_hike,
+        cum_trek_km: cum_trek,
+        cum_total_km: cum_total,
+      };
+    });
+
+    const valKey = mode === 'hike' ? 'cum_hike_km' : mode === 'trek' ? 'cum_trek_km' : 'cum_total_km';
+    const maxKm = Math.max(...pointsWithCum.map((p) => p[valKey]), 1);
 
     const width = 1000;
     const height = 300;
@@ -49,34 +119,55 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
 
     const chartWidth = width - paddingLeft - paddingRight;
     const chartHeight = height - paddingTop - paddingBottom;
+    const floorY = height - paddingBottom;
 
-    const coords = sortedPoints.map((pt, idx) => {
-      const xRatio = sortedPoints.length > 1 ? idx / (sortedPoints.length - 1) : 0;
-      const yRatio = pt.total_km / maxKm;
-
+    const coords = pointsWithCum.map((pt, idx) => {
+      const xRatio = pointsWithCum.length > 1 ? idx / (pointsWithCum.length - 1) : 0;
       const x = paddingLeft + xRatio * chartWidth;
-      const y = height - paddingBottom - yRatio * chartHeight;
+      const y = floorY - (pt[valKey] / maxKm) * chartHeight;
 
-      return { x, y, pt };
+      return { x, y, pt, val: pt[valKey] };
     });
 
-    // Create SVG path string for the line
-    const dLine = coords.reduce((acc, coord, idx) => {
-      return acc + `${idx === 0 ? 'M' : 'L'} ${coord.x.toFixed(1)} ${coord.y.toFixed(1)}`;
-    }, '');
+    const dLine = coords.reduce(
+      (acc, c, idx) => `${acc}${idx === 0 ? 'M' : 'L'} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`,
+      ''
+    );
 
-    // Create SVG path string for the filled area underneath
     const firstCoord = coords[0];
     const lastCoord = coords[coords.length - 1];
-    const floorY = height - paddingBottom;
+
     const dArea = dLine
       ? `${dLine} L ${lastCoord.x.toFixed(1)} ${floorY} L ${firstCoord.x.toFixed(1)} ${floorY} Z`
       : '';
 
-    return { coords, dLine, dArea, maxKm, chartHeight, paddingLeft, chartWidth, floorY };
-  }, [sortedPoints]);
+    return {
+      coords,
+      dLine,
+      dArea,
+      maxKm,
+      chartHeight,
+      paddingLeft,
+      chartWidth,
+      floorY,
+    };
+  }, [sortedPoints, mode]);
 
   const { coords, dLine, dArea, maxKm, floorY, paddingLeft } = chartData;
+
+  const strokeColor = mode === 'hike' ? '#16A34A' : mode === 'trek' ? '#9333EA' : '#7ABA42';
+  const fillColor = mode === 'hike' ? '#16A34A' : mode === 'trek' ? '#9333EA' : '#7ABA42';
+  const titleText = mode === 'hike'
+    ? 'Day Hike Cumulative Distance Progress Curve'
+    : mode === 'trek'
+    ? 'Multi-day Trek Cumulative Distance Progress Curve'
+    : 'Cumulative Distance Progress Curve';
+  const iconComponent = mode === 'trek'
+    ? <Mountain className="w-4 h-4 text-[#9333EA] shrink-0" />
+    : mode === 'hike'
+    ? <Footprints className="w-4 h-4 text-[#16A34A] shrink-0" />
+    : <Mountain className="w-4 h-4 text-[#7ABA42] shrink-0" />;
+  const peakLabel = mode === 'hike' ? 'Peak Hike' : mode === 'trek' ? 'Peak Trek' : 'Peak';
 
   // Center on active point when zoomed in
   useEffect(() => {
@@ -167,9 +258,9 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
       {/* Chart Title / Caption with Mobile Zoom Controls */}
       <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-stone-600 font-semibold px-0.5">
         <span className="flex items-center gap-1.5 min-w-0">
-          <Footprints className="w-4 h-4 text-[#7ABA42] shrink-0" />
+          {iconComponent}
           <span className="text-[11px] sm:text-xs font-bold text-[#1F1F1F] truncate">
-            Cumulative Distance Progress Curve
+            {titleText}
           </span>
         </span>
 
@@ -223,7 +314,7 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
 
           {/* Peak Total Badge */}
           <span className="font-bold text-stone-900 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-md text-[10px] sm:text-xs">
-            Peak: {maxKm.toLocaleString()} km
+            {peakLabel}: {maxKm.toLocaleString()} km
           </span>
         </div>
       </div>
@@ -271,9 +362,9 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
             className="w-full h-auto select-none overflow-visible"
           >
             <defs>
-              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#7ABA42" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#7ABA42" stopOpacity="0.0" />
+              <linearGradient id={`chartGradient-${mode}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={fillColor} stopOpacity="0.25" />
+                <stop offset="100%" stopColor={fillColor} stopOpacity="0.0" />
               </linearGradient>
             </defs>
 
@@ -307,7 +398,7 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
             {dArea && (
               <path
                 d={dArea}
-                fill="url(#chartGradient)"
+                fill={`url(#chartGradient-${mode})`}
               />
             )}
 
@@ -316,7 +407,7 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
               <path
                 d={dLine}
                 fill="none"
-                stroke="#7ABA42"
+                stroke={strokeColor}
                 strokeWidth={zoomLevel > 1.8 ? '4' : '3.5'}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -359,7 +450,7 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
                       cx={coord.x}
                       cy={coord.y}
                       r={zoomLevel > 1.5 ? '9' : '7'}
-                      fill="#7ABA42"
+                      fill={strokeColor}
                       opacity="0.35"
                       className="animate-ping"
                     />
@@ -370,7 +461,7 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
                     cx={coord.x}
                     cy={coord.y}
                     r={nodeRadius}
-                    fill={isActive ? '#E08828' : '#7ABA42'}
+                    fill={isActive ? '#E08828' : fillColor}
                     stroke="white"
                     strokeWidth={isActive ? '1.5' : '0.75'}
                     className="transition-all duration-150 group-hover:scale-125"
@@ -435,3 +526,5 @@ export const LowPolyMountainTrailChart: React.FC<LowPolyMountainTrailChartProps>
     </div>
   );
 };
+
+

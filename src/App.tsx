@@ -295,9 +295,41 @@ function MainApp() {
     mapminers: { hasUnread: false, count: 0 },
   });
 
+  // Per-tab scroll position memory
+  const tabScrollPositionsRef = useRef<Record<string, number>>({});
+
+  // Continuously record scroll position for active tab
+  useEffect(() => {
+    const handleScroll = () => {
+      tabScrollPositionsRef.current[currentTab] = window.scrollY || document.documentElement.scrollTop || 0;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [currentTab]);
+
+  // Restore scroll position when active tab changes
+  useEffect(() => {
+    const targetY = tabScrollPositionsRef.current[currentTab] ?? 0;
+    const timer = requestAnimationFrame(() => {
+      window.scrollTo({ top: targetY, behavior: 'instant' as ScrollBehavior });
+    });
+    return () => cancelAnimationFrame(timer);
+  }, [currentTab]);
+
   const handleMainTabChange = useCallback(
     (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin', targetId?: string) => {
       closeAllOverlays();
+
+      // Store current tab scroll position before switching
+      const currentScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      tabScrollPositionsRef.current[currentTab] = currentScrollY;
+
+      // If user clicks currently active tab (e.g. clicking Leaderboard navbar while on Leaderboard), reset scroll to top
+      if (tab === currentTab) {
+        tabScrollPositionsRef.current[tab] = 0;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
 
       // Clear notification for this tab
       if (tab === 'treks' || tab === 'gallery' || tab === 'leaderboard' || tab === 'mapminers') {
@@ -310,7 +342,7 @@ function MainApp() {
 
       setCurrentTab(tab);
     },
-    [closeAllOverlays]
+    [closeAllOverlays, currentTab]
   );
 
   // Sync contextual notification status across tabs

@@ -19,6 +19,7 @@ import { Himalayan3DBackground } from '../components/3d/Himalayan3DBackground';
 import { LowPolyMountainTrailChart } from '../components/3d/LowPolyMountainTrailChart';
 import { HikerReviewsSection } from '../components/InfoPagesModal';
 import { MapContributionBoard } from '../components/MapContributionBoard';
+import { isHikerAnonymous, useAnonymity } from '../utils/anonymity';
 
 type TimePeriod = 't30' | 't60' | 't90' | 't365' | 'overall';
 type SortMetric = 'dist' | 'count';
@@ -27,6 +28,7 @@ type BoardCategory = 'all' | 'hikers' | 'trekkers';
 // Safe privacy masking
 const maskName = (name?: string) => {
   if (!name || !name.trim()) return 'Anonymous Hiker';
+  if (isHikerAnonymous({ name: name.trim() })) return 'Anonymous Hiker';
   const parts = name.trim().split(/\s+/);
   const first = parts[0].slice(0, 3);
   const last = parts.slice(1).join(' ');
@@ -461,6 +463,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
 };
 
 export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }> = ({ onNavigateToMapMiners }) => {
+  useAnonymity();
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -703,6 +706,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           <div className="w-full pt-1">
             <LowPolyMountainTrailChart
               points={filteredGrowthCurve}
+              mode="total"
               activePoint={activeJourneyPoint}
               onSelectPoint={(pt) => setActiveJourneyPoint(pt)}
             />
@@ -728,7 +732,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                       )}
                     </div>
                     <p className="text-[11px] text-stone-600 font-medium mt-0.5">
-                      Day Hike: <strong className="text-emerald-800">{activeJourneyPoint.hike_km?.toLocaleString() || 0} km</strong> • Multi-day Trek: <strong className="text-purple-800">{activeJourneyPoint.trek_km?.toLocaleString() || 0} km</strong>
+                      Day Hike: <strong className="text-emerald-800">{activeJourneyPoint.hike_km?.toLocaleString() || 0} km</strong> (Cum: <strong className="text-emerald-800">{activeJourneyPoint.cum_hike_km?.toLocaleString() || activeJourneyPoint.hike_km?.toLocaleString() || 0} km</strong>) • Multi-day Trek: <strong className="text-purple-800">{activeJourneyPoint.trek_km?.toLocaleString() || 0} km</strong> (Cum: <strong className="text-purple-800">{activeJourneyPoint.cum_trek_km?.toLocaleString() || activeJourneyPoint.trek_km?.toLocaleString() || 0} km</strong>)
                     </p>
                   </div>
                 </div>

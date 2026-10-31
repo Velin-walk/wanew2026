@@ -641,7 +641,7 @@ export const MiniPrayerFlags: React.FC<MiniPrayerFlagsProps> = ({
       sagY: number;
       naturalTilt: number;
     })[] = [];
-    const n = Math.max(3, Math.min(count, 12));
+    const n = Math.max(3, Math.min(count, 24));
 
     for (let i = 0; i < n; i++) {
       const base = MIXED_VIBRANT_FLAGS[i % MIXED_VIBRANT_FLAGS.length];

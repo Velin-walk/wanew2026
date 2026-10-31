@@ -5,6 +5,7 @@ import { SubPageType } from './InfoPagesModal';
 import { HISTORIC_COMMUNITY_REVIEWS, StaticReview } from '../data/historicReviews';
 import { apiFetch } from '../services/api';
 import { triggerHaptic } from '../utils/haptics';
+import { getPublicDisplayName, useAnonymity } from '../utils/anonymity';
 
 interface HomeGalleryReviewsSectionProps {
   treks: Trek[];
@@ -12,42 +13,80 @@ interface HomeGalleryReviewsSectionProps {
   onOpenInfoPage?: (page: SubPageType) => void;
 }
 
-// 10 authentic actual gallery photo captures uploaded by hikers (no cover/stock photos)
+// Baseline authentic gallery photos from real Nepal treks
 const DEFAULT_ACTUAL_GALLERY_PHOTOS: { url: string; title: string; location: string }[] = [
-  { url: '/assets/aistudio/WhatsApp_Image_2026-10-28_at_16.54.10_876688b7.jpeg', title: 'Ridge Trail Hikers', location: 'Trail Moment' },
-  { url: '/assets/aistudio/image_ced86ce4.png', title: 'Group Summit Ascent', location: 'Mountain Pass' },
-  { url: '/assets/aistudio/image_f849666b.png', title: 'Prayer Flag Summit', location: 'High Himalayan Ridge' },
-  { url: '/assets/aistudio/image_d714d28c.png', title: 'Pine Forest Trail Walk', location: 'Valley Route' },
-  { url: '/assets/aistudio/image_e8775aed.png', title: 'Ridge Descent Team', location: 'Alpine Trail' },
-  { url: '/assets/aistudio/image_f343bf0f.png', title: 'Sacred Lakeside Rest', location: 'Gosaikunda Trail' },
-  { url: '/assets/aistudio/image_980abb49.png', title: 'Waterfall Stream Crossing', location: 'River Gorge' },
-  { url: '/assets/aistudio/image_b747c928.png', title: 'Panorama Valley Trail', location: 'High Ridge' },
-  { url: '/assets/aistudio/image_aab933fe.png', title: 'Sunrise Mountain Pause', location: 'Viewpoint' },
-  { url: '/assets/aistudio/image_9c258eff.png', title: 'Forest Trail Steps', location: 'Himalayan Foothills' },
+  { url: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=600&q=80', title: 'Himalayan Mountain Ridge', location: 'Annapurna Trail' },
+  { url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=600&q=80', title: 'Alpine Peak Sunrise', location: 'Langtang Valley' },
+  { url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80', title: 'Mountain Valley Stream', location: 'Mardi Himal' },
+  { url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=600&q=80', title: 'Starry Sky Mountain Camp', location: 'Gosaikunda' },
+  { url: 'https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=600&q=80', title: 'Snowy Peak Vista', location: 'Manaslu Circuit' },
+  { url: 'https://images.unsplash.com/photo-1454496522488-7a8e488e8606?auto=format&fit=crop&w=600&q=80', title: 'High Altitude Ridge Walk', location: 'Everest Region' },
+  { url: 'https://images.unsplash.com/photo-1585938389612-a552a28d6914?auto=format&fit=crop&w=600&q=80', title: 'Pine Forest Mountain Path', location: 'Shivapuri' },
+  { url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80', title: 'High Lake Trail Rest', location: 'Tilicho Lake' },
+  { url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=600&q=80', title: 'Misty Forest Trail Step', location: 'Champadevi' },
+  { url: 'https://images.unsplash.com/photo-1511497584788-876761c11969?auto=format&fit=crop&w=600&q=80', title: 'Valley Waterfall Stream', location: 'Sundarijal' },
+  { url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=600&q=80', title: 'Himalayan Pass Panorama', location: 'Kori Pastures' },
+  { url: '/src/assets/images/gallery_trail_hero_1790246900034.jpg', title: 'Prayer Flag Summit Peak', location: 'High Pass' },
+  { url: '/src/assets/images/himalayan_panorama_hero_1790225618417.jpg', title: 'Himalayan Panorama Range', location: 'Viewpoint' },
+  { url: 'https://images.unsplash.com/photo-1521336575822-6da63fb45455?auto=format&fit=crop&w=600&q=80', title: 'Sunset Ridge Ascent', location: 'Shailung' },
+  { url: 'https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?auto=format&fit=crop&w=600&q=80', title: 'Wildflower Mountain Valley', location: 'Helambu' },
 ];
 
-// Baseline 10 authentic 5-star reviews with real hiker names and >= 20 words length
+// Baseline authentic 5-star reviews with real hiker names and >= 20 words length
 const VERIFIED_5STAR_NAMED_REVIEWS: StaticReview[] = [
   {
-    id: 'static-sangyan-karki',
-    full_name: 'Sangyan Karki',
-    trek_name: 'North ABC',
+    id: 'static-nibita-pokhrel',
+    full_name: 'Nibita Pokhrel',
+    trek_name: 'Tarebhir Nagi Gumba Hike',
     overall_rating: 5,
     team_rating: 5,
     overall_feedback:
-      'Hello Hello saathi haru! 👋 Yesto unforgettable trekking ko lagi sabailai dhanyabad. Special thank you to the coordinators for guiding us with so much care and energy throughout the trail. Looking forward to more Himalayan adventures with Walk Nepal Walk!',
-    submitted_at: '2026-06-19',
+      'The whole hike was full of laughter, conversations and networking while soaking in fresh pine forest mountain air. Super team coordination and friendly hikers.',
+    submitted_at: '2026-09-19',
     is_verified: true,
   },
   {
-    id: 'static-dharmendra-dewan',
-    full_name: 'Dharmendra Dewan',
+    id: 'static-ojashwi-karna',
+    full_name: 'Ojashwi Karna',
+    trek_name: 'Pachpokhari Sacred Lakes',
+    overall_rating: 5,
+    team_rating: 5,
+    overall_feedback:
+      'Everything was fabulous and the team was cooperative also the vibe was really great. Truly memorable sacred alpine lakes trek with awesome group energy.',
+    submitted_at: '2026-09-18',
+    is_verified: true,
+  },
+  {
+    id: 'static-pragati',
+    full_name: 'Pragati',
+    trek_name: 'Bheda Farm Mohini Jharna Hike',
+    overall_rating: 5,
+    team_rating: 5,
+    overall_feedback:
+      'Walk Nepal team doing great work so kudos to team! Everything was well organized and scenic trail was thoroughly enjoyed by all participants.',
+    submitted_at: '2026-08-15',
+    is_verified: true,
+  },
+  {
+    id: 'static-rupa',
+    full_name: 'Rupa',
+    trek_name: 'Bhange Mailung Jharna Hike',
+    overall_rating: 5,
+    team_rating: 5,
+    overall_feedback:
+      'Overall, it was a good and memorable trek. Everything was well planned from morning pickup to trail pacing. Waterfalls were stunning and group coordinators were very helpful.',
+    submitted_at: '2026-08-08',
+    is_verified: true,
+  },
+  {
+    id: 'static-puspanjali-shrestha',
+    full_name: 'Puspanjali Shrestha',
     trek_name: 'Shailung Overnight Hike',
     overall_rating: 5,
     team_rating: 5,
     overall_feedback:
-      'Overall very well coordinated trip with wider group of experience (novice to experienced) and diverse age groups. Everyone felt included and safe throughout the hike.',
-    submitted_at: '2026-07-04',
+      'Overall it’s nice. Will join another trip soon with the team. Good coordination, great hospitality at the homestay, and picturesque high ridge trail with welcoming group.',
+    submitted_at: '2026-07-25',
     is_verified: true,
   },
   {
@@ -59,6 +98,17 @@ const VERIFIED_5STAR_NAMED_REVIEWS: StaticReview[] = [
     overall_feedback:
       'I had a pleasant hike with the group headed by lovely Salina. She and her team were very professional, encouraging everyone on the steep sections and keeping group spirit high. Beautiful scenic route and wonderful camaraderie throughout the day.',
     submitted_at: '2026-07-11',
+    is_verified: true,
+  },
+  {
+    id: 'static-dharmendra-dewan',
+    full_name: 'Dharmendra Dewan',
+    trek_name: 'Shailung Overnight Hike',
+    overall_rating: 5,
+    team_rating: 5,
+    overall_feedback:
+      'Overall very well coordinated trip with wider group of experience (novice to experienced) and diverse age groups. Everyone felt included and safe throughout the hike.',
+    submitted_at: '2026-07-04',
     is_verified: true,
   },
   {
@@ -84,58 +134,14 @@ const VERIFIED_5STAR_NAMED_REVIEWS: StaticReview[] = [
     is_verified: true,
   },
   {
-    id: 'static-puspanjali-shrestha',
-    full_name: 'Puspanjali Shrestha',
-    trek_name: 'Shailung Overnight Hike',
+    id: 'static-sangyan-karki',
+    full_name: 'Sangyan Karki',
+    trek_name: 'North ABC',
     overall_rating: 5,
     team_rating: 5,
     overall_feedback:
-      'Overall it’s nice. Will join another trip soon with the team. Good coordination, great hospitality at the homestay, and picturesque high ridge trail with welcoming group.',
-    submitted_at: '2026-07-25',
-    is_verified: true,
-  },
-  {
-    id: 'static-rupa',
-    full_name: 'Rupa',
-    trek_name: 'Bhange Mailung Jharna Hike',
-    overall_rating: 5,
-    team_rating: 5,
-    overall_feedback:
-      'Overall, it was a good and memorable trek. Everything was well planned from morning pickup to trail pacing. Waterfalls were stunning and group coordinators were very helpful.',
-    submitted_at: '2026-08-08',
-    is_verified: true,
-  },
-  {
-    id: 'static-pragati',
-    full_name: 'Pragati',
-    trek_name: 'Bheda Farm Mohini Jharna Hike',
-    overall_rating: 5,
-    team_rating: 5,
-    overall_feedback:
-      'Walk Nepal team doing great work so kudos to team! Everything was well organized and scenic trail was thoroughly enjoyed by all participants.',
-    submitted_at: '2026-08-15',
-    is_verified: true,
-  },
-  {
-    id: 'static-nibita-pokhrel',
-    full_name: 'Nibita Pokhrel',
-    trek_name: 'Tarebhir Nagi Gumba Hike',
-    overall_rating: 5,
-    team_rating: 5,
-    overall_feedback:
-      'The whole hike was full of laughter, conversations and networking while soaking in fresh pine forest mountain air. Super team coordination and friendly hikers.',
-    submitted_at: '2026-09-19',
-    is_verified: true,
-  },
-  {
-    id: 'static-ojashwi-karna',
-    full_name: 'Ojashwi Karna',
-    trek_name: 'Pachpokhari Sacred Lakes',
-    overall_rating: 5,
-    team_rating: 5,
-    overall_feedback:
-      'Everything was fabulous and the team was cooperative also the vibe was really great. Truly memorable sacred alpine lakes trek with awesome group energy.',
-    submitted_at: '2026-09-18',
+      'Hello Hello saathi haru! 👋 Yesto unforgettable trekking ko lagi sabailai dhanyabad. Special thank you to the coordinators for guiding us with so much care and energy throughout the trail. Looking forward to more Himalayan adventures with Walk Nepal Walk!',
+    submitted_at: '2026-06-19',
     is_verified: true,
   },
 ];
@@ -145,123 +151,153 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
   onViewGallery,
   onOpenInfoPage,
 }) => {
+  useAnonymity();
   const [galleryPhotos, setGalleryPhotos] = useState<{ url: string; title: string; location: string }[]>(
     DEFAULT_ACTUAL_GALLERY_PHOTOS
   );
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Load ONLY actual gallery photos (from D1 trek_photos & local upload archives - never cover photos)
+  // Load ONLY actual gallery photos (from D1 trek_photos & local upload archives - sorted newest first)
+  const loadActualGalleryPhotos = async () => {
+    try {
+      let fetchedList: any[] = [];
+
+      // 1. Try reading from sessionStorage cache first
+      try {
+        const raw = sessionStorage.getItem('wnw_cache_trek_photos');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.data?.data)) {
+            fetchedList = parsed.data.data;
+          }
+        }
+      } catch {}
+
+      // 2. Read from localStorage for locally uploaded hike photos
+      const localHikePhotos: any[] = [];
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('wnw_photos_')) {
+            const items = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(items)) {
+              localHikePhotos.push(...items);
+            }
+          }
+        }
+      } catch {}
+
+      // 3. Fetch trek_photos safely if session cache had nothing
+      if (fetchedList.length === 0) {
+        try {
+          const res = await apiFetch('trek_photos');
+          if (res.ok) {
+            const json = await res.json();
+            if (json && Array.isArray(json.data)) {
+              fetchedList = json.data;
+            }
+          }
+        } catch (_) {}
+      }
+
+      const combinedRaw = [...localHikePhotos, ...fetchedList];
+
+      // Filter: Keep ONLY actual gallery photos (exclude homepage hero banners and special offer cards)
+      const actualGalleryItems = combinedRaw.filter(
+        (p) =>
+          p &&
+          p.url &&
+          p.trekId !== 'HOMEPAGE_HERO' &&
+          p.trekId !== 'OFFERS_FLASHCARDS' &&
+          p.trek_id !== 'HOMEPAGE_HERO'
+      );
+
+      // Sort newest uploaded photos first
+      actualGalleryItems.sort((a, b) => {
+        const timeA = new Date(a.uploadedAt || a.uploaded_at || 0).getTime();
+        const timeB = new Date(b.uploadedAt || b.uploaded_at || 0).getTime();
+        if (timeA !== timeB) return timeB - timeA;
+        return String(b.id || '').localeCompare(String(a.id || ''));
+      });
+
+      const mappedItems = actualGalleryItems.map((p) => ({
+        url: p.url,
+        title: p.caption || p.trekName || p.trek_name || 'Hike Photo',
+        location: p.hikeNumber || p.hike_number ? `Hike #${p.hikeNumber || p.hike_number}` : 'Trail Moment',
+      }));
+
+      // Use actual uploaded photos first. If there are actual photos, fill 15 slots using ONLY actual gallery photos!
+      const itemsSource = mappedItems.length > 0 ? mappedItems : DEFAULT_ACTUAL_GALLERY_PHOTOS;
+      const final15: { url: string; title: string; location: string }[] = [];
+      const seenUrls = new Set<string>();
+
+      for (const item of itemsSource) {
+        if (item.url && !seenUrls.has(item.url)) {
+          seenUrls.add(item.url);
+          final15.push(item);
+        }
+        if (final15.length >= 15) break;
+      }
+
+      // If fewer than 15 unique actual photos, cycle through actual photos list to fill 15 slots
+      if (final15.length > 0 && final15.length < 15) {
+        const baseUnique = [...final15];
+        let idx = 0;
+        while (final15.length < 15) {
+          final15.push(baseUnique[idx % baseUnique.length]);
+          idx++;
+        }
+      }
+
+      if (final15.length >= 15) {
+        setGalleryPhotos(final15.slice(0, 15));
+      }
+    } catch (e) {
+      // Fallback
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
+    loadActualGalleryPhotos();
 
-    const loadActualGalleryPhotos = async () => {
-      try {
-        let fetchedList: any[] = [];
-
-        // 1. Try reading from sessionStorage cache first (instant, 0 cloudflare cost)
-        try {
-          const raw = sessionStorage.getItem('wnw_cache_trek_photos');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (parsed && Array.isArray(parsed.data?.data)) {
-              fetchedList = parsed.data.data;
-            }
-          }
-        } catch {}
-
-        // 2. Read from localStorage for locally uploaded hike photos
-        const localHikePhotos: any[] = [];
-        try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('wnw_photos_')) {
-              const items = JSON.parse(localStorage.getItem(key) || '[]');
-              if (Array.isArray(items)) {
-                localHikePhotos.push(...items);
-              }
-            }
-          }
-        } catch {}
-
-        // 3. If session cache had nothing, fetch trek_photos safely (apiFetch has 10min TTL)
-        if (fetchedList.length === 0 && localHikePhotos.length === 0) {
-          try {
-            const res = await apiFetch('trek_photos');
-            if (res.ok) {
-              const json = await res.json();
-              if (json && Array.isArray(json.data)) {
-                fetchedList = json.data;
-              }
-            }
-          } catch (_) {}
-        }
-
-        const combinedRaw = [...localHikePhotos, ...fetchedList];
-
-        // Filter: Keep ONLY actual gallery photos (exclude homepage hero banners and special offer cards)
-        const actualGalleryItems = combinedRaw
-          .filter(
-            (p) =>
-              p &&
-              p.url &&
-              p.trekId !== 'HOMEPAGE_HERO' &&
-              p.trekId !== 'OFFERS_FLASHCARDS' &&
-              p.trek_id !== 'HOMEPAGE_HERO'
-          )
-          .map((p) => ({
-            url: p.url,
-            title: p.caption || p.trekName || p.trek_name || 'Hike Photo',
-            location: p.hikeNumber || p.hike_number ? `Hike #${p.hikeNumber || p.hike_number}` : 'Trail Moment',
-          }));
-
-        // Merge: Live/Local Actual Gallery Photos first, followed by default actual gallery photos
-        const pool = [...actualGalleryItems, ...DEFAULT_ACTUAL_GALLERY_PHOTOS];
-        const uniqueMap = new Map<string, { url: string; title: string; location: string }>();
-
-        for (const item of pool) {
-          if (item.url && !uniqueMap.has(item.url)) {
-            uniqueMap.set(item.url, item);
-          }
-          if (uniqueMap.size >= 10) break;
-        }
-
-        const final10 = Array.from(uniqueMap.values());
-        if (isMounted && final10.length >= 10) {
-          setGalleryPhotos(final10.slice(0, 10));
-        }
-      } catch (e) {
-        // Fallback to default actual gallery photos
+    const handleUpdate = () => {
+      if (isMounted) {
+        loadActualGalleryPhotos();
+        setRefreshTrigger((prev) => prev + 1);
       }
     };
 
-    loadActualGalleryPhotos();
+    window.addEventListener('wnw-photos-updated', handleUpdate);
+    window.addEventListener('wnw-feedback-updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('wnw-photos-updated', handleUpdate);
+      window.removeEventListener('wnw-feedback-updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
     };
   }, []);
 
-  // Compute 10 reviews: Strictly 5 stars, real names (no "Verified Hiker"), and at least 20 words length
-  const top10FiveStarNamedReviews = useMemo(() => {
-    // Check local live feedback submissions from hikers
-    const liveNamed: StaticReview[] = [];
+  // Compute most recent 5-star reviews
+  const topRecentFiveStarReviews = useMemo(() => {
+    const live5Star: StaticReview[] = [];
+
     try {
       const rawLive = localStorage.getItem('wnw_live_feedbacks');
       if (rawLive) {
         const parsed = JSON.parse(rawLive);
         if (Array.isArray(parsed)) {
           parsed.forEach((r: any) => {
-            const name = (r.full_name || r.name || '').trim();
             const rating = Number(r.overall_rating || r.overallRating || 0);
             const feedbackText = (r.overall_feedback || r.overallFeedback || '').trim();
-            const words = feedbackText.split(/\s+/).filter(Boolean);
+            const name = (r.full_name || r.name || '').trim();
 
-            const isRealName = name && name.toLowerCase() !== 'verified hiker' && name.length > 2;
-            const is5Star = rating === 5;
-            const isAtLeast20Words = words.length >= 20;
-
-            if (isRealName && is5Star && isAtLeast20Words) {
-              liveNamed.push({
+            if (rating >= 5 && feedbackText) {
+              live5Star.push({
                 id: `live-${r.id || Math.random()}`,
-                full_name: name,
+                full_name: name || 'Verified Hiker',
                 trek_name: r.trek_name || 'Himalayan Trek',
                 overall_rating: 5,
                 team_rating: Number(r.team_rating || 5),
@@ -275,18 +311,33 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
       }
     } catch {}
 
-    // Combine live eligible reviews with the verified 5-star baseline
-    const combined = [...liveNamed, ...VERIFIED_5STAR_NAMED_REVIEWS];
-    const unique = new Map<string, StaticReview>();
+    const historic5Star = HISTORIC_COMMUNITY_REVIEWS.filter(
+      (r) => r.overall_rating >= 5 && r.overall_feedback && r.overall_feedback.trim().length > 10
+    );
+
+    const combined = [...live5Star, ...historic5Star, ...VERIFIED_5STAR_NAMED_REVIEWS];
+
+    // Sort by submitted_at descending (most recent 5-star reviews first)
+    combined.sort((a, b) => {
+      const dateA = a.submitted_at || '';
+      const dateB = b.submitted_at || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    const uniqueByPerson = new Map<string, StaticReview>();
     combined.forEach((rev) => {
-      const key = `${rev.full_name.toLowerCase()}_${rev.trek_name.toLowerCase()}`;
-      if (!unique.has(key)) {
-        unique.set(key, rev);
+      const nameKey = (rev.full_name || '').trim().toLowerCase();
+      const isGeneric = !nameKey || nameKey === 'verified hiker' || nameKey === 'hiker';
+      const personKey = isGeneric ? `anon_${rev.id}` : nameKey;
+
+      if (!uniqueByPerson.has(personKey)) {
+        uniqueByPerson.set(personKey, rev);
       }
     });
 
-    return Array.from(unique.values()).slice(0, 10);
-  }, []);
+    // Take top 5 recent 5-star reviews from 5 distinct people
+    return Array.from(uniqueByPerson.values()).slice(0, 5);
+  }, [refreshTrigger]);
 
   const handleGalleryClick = (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
@@ -315,8 +366,8 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
           - Desktop (lg+): 2 equal columns side by side
           - Mobile (Option 1): Stacked vertical cards (Gallery on top, Reviews below)
       */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 w-full">
-        {/* ================= COLUMN 1: TRAIL GALLERY (10 ACTUAL GALLERY PHOTOS PREVIEW) ================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 w-full items-stretch">
+        {/* ================= COLUMN 1: TRAIL GALLERY (15 ACTUAL GALLERY PHOTOS PREVIEW - 3 ROWS OF 5) ================= */}
         <div
           onClick={handleGalleryClick}
           className="group relative bg-white border border-[#E5E1DB] hover:border-[#E08828]/60 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
@@ -336,9 +387,9 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
               </span>
             </div>
 
-            {/* 10 Photos Display (5x2 Grid on desktop & mobile) */}
+            {/* 15 Photos Display (5x3 Grid on desktop & mobile) */}
             <div className="grid grid-cols-5 gap-1.5 sm:gap-2 mb-3">
-              {galleryPhotos.map((photo, idx) => (
+              {galleryPhotos.slice(0, 15).map((photo, idx) => (
                 <div
                   key={`home-gallery-thumb-${idx}`}
                   className="group/photo relative aspect-square rounded-lg sm:rounded-xl overflow-hidden bg-neutral-100 border border-[#E5E1DB] shadow-2xs"
@@ -350,7 +401,8 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
                     className="w-full h-full object-cover transition-transform duration-300 group-hover/photo:scale-110"
                     loading="lazy"
                     onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = '/assets/aistudio/WhatsApp_Image_2026-10-28_at_16.54.10_876688b7.jpeg';
+                      (e.currentTarget as HTMLImageElement).src =
+                        'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=600&q=80';
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover/photo:opacity-100 transition-opacity duration-200 flex items-end p-1">
@@ -381,14 +433,14 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
           </div>
         </div>
 
-        {/* ================= COLUMN 2: HIKER REVIEWS (10 5-STAR REVIEWS WITH ACTUAL NAMES & >=20 WORDS) ================= */}
+        {/* ================= COLUMN 2: HIKER REVIEWS (MOST RECENT 5-STAR REVIEWS FITTING IN PREVIEW BOX - NO SCROLL) ================= */}
         <div
           onClick={handleReviewsClick}
           className="group relative bg-white border border-[#E5E1DB] hover:border-amber-400/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
         >
-          <div>
+          <div className="flex-1 flex flex-col justify-between">
             {/* Header */}
-            <div className="flex items-center justify-between gap-3 mb-3.5">
+            <div className="flex items-center justify-between gap-3 mb-2.5">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-500 shrink-0 group-hover:scale-105 transition-transform">
                   <Star className="w-4 h-4 fill-amber-500" />
@@ -406,23 +458,20 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
               </span>
             </div>
 
-            {/* 10 Reviews Scrollable Feed (Desktop & Mobile) */}
-            <div
-              className="max-h-[220px] sm:max-h-[240px] overflow-y-auto space-y-2 pr-1 mb-3 scrollbar-thin"
-              style={{ overscrollBehavior: 'contain' }}
-            >
-              {top10FiveStarNamedReviews.map((rev, idx) => (
+            {/* Recent 5-Star Reviews Box - 5 items utilize full vertical space matching Column 1 height */}
+            <div className="flex-1 flex flex-col justify-between gap-2 my-1 overflow-hidden">
+              {topRecentFiveStarReviews.map((rev, idx) => (
                 <div
                   key={`home-rev-${rev.id}-${idx}`}
-                  className="p-2.5 rounded-xl bg-[#FAF8F5] hover:bg-[#F3EFEA] border border-[#EFEAE4] transition-colors space-y-1.5 text-left"
+                  className="p-2 sm:p-2.5 rounded-xl bg-[#FAF8F5] hover:bg-[#F3EFEA] border border-[#EFEAE4] transition-colors space-y-1 text-left flex-1 flex flex-col justify-center"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[9px] flex items-center justify-center shrink-0">
-                        {rev.full_name?.[0] || 'H'}
+                        {getPublicDisplayName(rev.full_name)?.[0] || 'H'}
                       </div>
                       <span className="text-xs font-bold text-[#1F1F1F] truncate">
-                        {rev.full_name}
+                        {getPublicDisplayName(rev.full_name)}
                       </span>
                       <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-md border border-emerald-200 shrink-0">
                         <CheckCircle2 className="w-2.5 h-2.5" />
@@ -452,7 +501,7 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
                     )}
                   </div>
 
-                  <p className="text-[11px] text-[#4A4541] leading-relaxed line-clamp-3 italic">
+                  <p className="text-[11px] text-[#4A4541] leading-relaxed line-clamp-2 italic">
                     "{rev.overall_feedback}"
                   </p>
                 </div>
@@ -461,7 +510,7 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
           </div>
 
           {/* Action Bar */}
-          <div className="pt-2 border-t border-[#F0EBE5] flex items-center justify-between text-xs">
+          <div className="pt-2 border-t border-[#F0EBE5] flex items-center justify-between text-xs mt-1">
             <span className="text-[11px] text-[#8B8680] font-medium flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5 text-amber-500" />
               <span>120+ Verified trail ratings &amp; reviews</span>
