@@ -106,6 +106,56 @@ Embrace the mist, listen to the cicadas, and enjoy having the tranquil trails al
     likes_count: 18,
     views_count: 98,
     created_at: new Date(Date.now() - 7 * 86400000).toISOString()
+  },
+  {
+    id: -3,
+    is_sample: true,
+    slug: 'rhododendrons-and-sacred-chortens-helambu',
+    title: 'Rhododendrons & Sacred Chortens: Cultural Magic of the Helambu Ridge',
+    summary: 'Discovering ancient Hyolmo culture, prayer flags fluttering over misty pine forests, and seasonal wildflowers on the Kathmandu valley rim.',
+    content: `The Helambu circuit is an enchanting sanctuary of alpine forests, ancient Buddhist monasteries, and vibrant Hyolmo heritage.
+
+### 1. Sacred Stone Mani Walls & Chortens
+Along the ridgelines, you will encounter carved stone Mani walls inscribed with the sacred mantra *Om Mani Padme Hum*. Always pass these sacred monuments keeping them on your right (clockwise direction).
+
+### 2. Spring Blooming Seasons
+In March and April, the hillsides explode in shades of crimson, pink, and white as Nepal's national flower—the Lali Gurans (Rhododendron)—blooms in magnificent glory.
+
+### 3. Local Hospitality in Teahouses
+Stopping at traditional stone teahouses for warm butter tea (*Suja*) and fresh corn bread is one of the fondest memories you will carry home.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop',
+    author_name: 'Saraswoti Tamang',
+    category: 'Culture & Flora',
+    tags: 'Helambu, Rhododendrons, Culture',
+    reading_time_mins: 4,
+    likes_count: 32,
+    views_count: 185,
+    created_at: new Date(Date.now() - 12 * 86400000).toISOString()
+  },
+  {
+    id: -4,
+    is_sample: true,
+    slug: 'trail-safety-high-altitude-pacing-guide',
+    title: 'How Walk Nepal Walk Trail Leaders Ensure High-Altitude Safety',
+    summary: 'A behind-the-scenes look at route planning, pulse-oximetry checks, group safety protocols, and zero-trace wilderness ethics.',
+    content: `Safety in the mountains is built on preparation, communication, and discipline. Here is how our team coordinates every single trek:
+
+### 1. Pre-Trek Roster & Emergency Contacts
+Before stepping onto the trail, every hiker is briefed on meeting points, pacing, and emergency backup options.
+
+### 2. Group Pacing & Tail Guides
+We deploy primary leaders upfront and experienced sweep guides at the tail to ensure no hiker gets left behind or feels rushed.
+
+### 3. Weather Monitoring & Flexible Rerouting
+Mountain weather can shift within minutes. Our coordinators maintain live satellite & radio communications for real-time trail updates.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1000&auto=format&fit=crop',
+    author_name: 'Biraj Thing',
+    category: 'Guides',
+    tags: 'Safety, Trail Leaders, Pacing',
+    reading_time_mins: 5,
+    likes_count: 41,
+    views_count: 210,
+    created_at: new Date(Date.now() - 15 * 86400000).toISOString()
   }
 ];
 
@@ -179,7 +229,7 @@ const renderInlineMarkdown = (text: string): React.ReactNode => {
   return parts.length > 0 ? parts : text;
 };
 
-const MarkdownRendererBase: React.FC<{ content: string }> = ({ content }) => {
+const MarkdownRendererBase: React.FC<{ content: string; coverImageUrl?: string }> = ({ content, coverImageUrl }) => {
   if (!content) return null;
   const lines = content.split('\n');
   const elements: React.ReactNode[] = [];
@@ -244,6 +294,12 @@ const MarkdownRendererBase: React.FC<{ content: string }> = ({ content }) => {
     if (imgMatch) {
       const alt = imgMatch[1];
       const url = imgMatch[2];
+
+      // Skip duplicate image if it matches the hero cover photo banner already displayed at top
+      if (coverImageUrl && safeImageUrl(url) && safeImageUrl(url) === safeImageUrl(coverImageUrl)) {
+        continue;
+      }
+
       elements.push(
         <figure key={idx} className="my-4 rounded-2xl overflow-hidden border border-[#E5E1DB] bg-[#FAF8F5]">
           <img
@@ -671,8 +727,7 @@ export const CommunityBlogsSection: React.FC = () => {
         const nextContent = currentText.substring(0, validStart) + imageMarkdown + currentText.substring(validEnd);
         return {
           ...prev,
-          content: nextContent,
-          cover_image_url: prev.cover_image_url || url
+          content: nextContent
         };
       });
 
@@ -854,18 +909,14 @@ export const CommunityBlogsSection: React.FC = () => {
       if (latestCategoryReqRef.current !== targetCat) return;
 
       if (Array.isArray(fetched)) {
-        // Correctly sets real blogs from D1 database (including 0 entries for clean empty state)
         setBlogs(fetched);
       } else {
         setBlogs([]);
       }
-    } catch {
+    } catch (err) {
+      console.warn('Failed to load blogs from Cloudflare D1:', err);
       if (latestCategoryReqRef.current !== targetCat) return;
-      // In offline / network disconnect mode, show sample template posts filtered by active category
-      const samples = targetCat === 'All'
-        ? SAMPLE_FALLBACK_BLOGS
-        : SAMPLE_FALLBACK_BLOGS.filter((s) => s.category.toLowerCase() === targetCat.toLowerCase());
-      setBlogs(samples);
+      setBlogs([]);
     } finally {
       if (latestCategoryReqRef.current === targetCat) {
         setLoading(false);
@@ -1679,7 +1730,7 @@ export const CommunityBlogsSection: React.FC = () => {
 
                 <div className="border-t border-[#F0EBE5] pt-5">
                   {formData.content.trim() ? (
-                    <MarkdownRenderer content={formData.content} />
+                    <MarkdownRenderer content={formData.content} coverImageUrl={formData.cover_image_url} />
                   ) : (
                     <div className="py-16 text-center text-xs text-[#8B8680] italic">
                       Nothing written yet. Switch back to Write mode to compose your trail story.
@@ -1751,7 +1802,7 @@ export const CommunityBlogsSection: React.FC = () => {
 
                   <div className="border-t border-[#F0EBE5] pt-4">
                     {formData.content.trim() ? (
-                      <MarkdownRenderer content={formData.content} />
+                      <MarkdownRenderer content={formData.content} coverImageUrl={formData.cover_image_url} />
                     ) : (
                       <div className="py-12 text-center text-xs text-[#8B8680] italic">
                         Type story content in the left editor to preview it here live.
@@ -1933,7 +1984,7 @@ export const CommunityBlogsSection: React.FC = () => {
           </div>
         ) : (
           <div className="border-t border-[#F0EBE5] pt-4">
-            <MarkdownRenderer content={activeBlog.content || activeBlog.summary || ''} />
+            <MarkdownRenderer content={activeBlog.content || activeBlog.summary || ''} coverImageUrl={activeBlog.cover_image_url} />
           </div>
         )}
 

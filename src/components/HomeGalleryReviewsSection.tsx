@@ -280,63 +280,74 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
     };
   }, []);
 
-  // Compute most recent 5-star reviews
-  const topRecentFiveStarReviews = useMemo(() => {
-    const live5Star: StaticReview[] = [];
+  // Helper to format review text preview ending with .......... when review continues
+  const formatReviewPreview = (text: string, maxChars: number = 70): string => {
+    if (!text) return '';
+    const clean = text.trim().replace(/\s+/g, ' ');
+    if (clean.length <= maxChars) {
+      return clean;
+    }
+    const truncated = clean.slice(0, maxChars);
+    const lastSpace = truncated.lastIndexOf(' ');
+    const base = lastSpace > 35 ? truncated.slice(0, lastSpace) : truncated;
+    return `${base.replace(/[.,!?;:\s]+$/, '')}..........`;
+  };
 
+  // Fetch reviews using the exact original order of review display from reviews page
+  const { previewReviews, totalReviewsCount } = useMemo(() => {
+    let liveReviews: any[] = [];
     try {
-      const rawLive = localStorage.getItem('wnw_live_feedbacks');
+      const rawLive = localStorage.getItem('wnw_user_feedbacks');
       if (rawLive) {
         const parsed = JSON.parse(rawLive);
         if (Array.isArray(parsed)) {
-          parsed.forEach((r: any) => {
-            const rating = Number(r.overall_rating || r.overallRating || 0);
-            const feedbackText = (r.overall_feedback || r.overallFeedback || '').trim();
-            const name = (r.full_name || r.name || '').trim();
-
-            if (rating >= 5 && feedbackText) {
-              live5Star.push({
-                id: `live-${r.id || Math.random()}`,
-                full_name: name || 'Verified Hiker',
-                trek_name: r.trek_name || 'Himalayan Trek',
-                overall_rating: 5,
-                team_rating: Number(r.team_rating || 5),
-                overall_feedback: feedbackText,
-                submitted_at: r.submitted_at ? String(r.submitted_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
-                is_verified: true,
-              });
-            }
-          });
+          liveReviews = parsed;
         }
       }
     } catch {}
 
-    const historic5Star = HISTORIC_COMMUNITY_REVIEWS.filter(
-      (r) => r.overall_rating >= 5 && r.overall_feedback && r.overall_feedback.trim().length > 10
-    );
+    const normalizedLive = (liveReviews || []).map((r: any) => ({
+      id: r.id ? `live-${r.id}` : `live-${r.uid || Math.random()}`,
+      full_name: (() => {
+        const raw = (r.full_name || r.name || '').trim();
+        return raw || 'Verified Hiker';
+      })(),
+      hike_number: String(r.hike_number || r.hikeNumber || '').replace(/^#/, ''),
+      trek_name: r.trek_name || r.recentWalk || 'Himalayan Trek',
+      overall_rating: Math.min(5, Math.max(1, Number(r.overall_rating || r.overallRating) || 5)),
+      team_rating: Math.min(5, Math.max(1, Number(r.team_rating || r.teamRating) || 5)),
+      overall_feedback: (r.overall_feedback || r.overallFeedback || '').trim(),
+      team_feedback: (r.team_feedback || r.teamFeedback || '').trim(),
+      submitted_at: r.submitted_at ? String(r.submitted_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      is_verified: true,
+    }));
 
-    const combined = [...live5Star, ...historic5Star, ...VERIFIED_5STAR_NAMED_REVIEWS];
+    const combined = [...normalizedLive, ...HISTORIC_COMMUNITY_REVIEWS];
 
-    // Sort by submitted_at descending (most recent 5-star reviews first)
+    // Original sort comparator from reviews page (InfoPagesModal allReviewsCombined)
     combined.sort((a, b) => {
       const dateA = a.submitted_at || '';
       const dateB = b.submitted_at || '';
-      return dateB.localeCompare(dateA);
+      const cmp = dateB.localeCompare(dateA);
+      if (cmp !== 0) return cmp;
+      if (a.id.startsWith('live') && !b.id.startsWith('live')) return -1;
+      if (!a.id.startsWith('live') && b.id.startsWith('live')) return 1;
+      return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
     });
 
-    const uniqueByPerson = new Map<string, StaticReview>();
-    combined.forEach((rev) => {
-      const nameKey = (rev.full_name || '').trim().toLowerCase();
-      const isGeneric = !nameKey || nameKey === 'verified hiker' || nameKey === 'hiker';
-      const personKey = isGeneric ? `anon_${rev.id}` : nameKey;
-
-      if (!uniqueByPerson.has(personKey)) {
-        uniqueByPerson.set(personKey, rev);
+    // Original filter from reviews page: exclude GUIDE_REVIEW: and require feedback text
+    const displayReviews = combined.filter((item) => {
+      if (item.trek_name && String(item.trek_name).toUpperCase().startsWith('GUIDE_REVIEW:')) {
+        return false;
       }
+      return Boolean(item.overall_feedback || item.team_feedback);
     });
 
-    // Take top 5 recent 5-star reviews from 5 distinct people
-    return Array.from(uniqueByPerson.values()).slice(0, 5);
+    return {
+      // 4 reviews fit cleanly in the allocated space without cutting lines in half
+      previewReviews: displayReviews.slice(0, 4),
+      totalReviewsCount: displayReviews.length,
+    };
   }, [refreshTrigger]);
 
   const handleGalleryClick = (e?: React.MouseEvent) => {
@@ -458,54 +469,74 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
               </span>
             </div>
 
-            {/* Recent 5-Star Reviews Box - 5 items utilize full vertical space matching Column 1 height */}
-            <div className="flex-1 flex flex-col justify-between gap-2 my-1 overflow-hidden">
-              {topRecentFiveStarReviews.map((rev, idx) => (
-                <div
-                  key={`home-rev-${rev.id}-${idx}`}
-                  className="p-2 sm:p-2.5 rounded-xl bg-[#FAF8F5] hover:bg-[#F3EFEA] border border-[#EFEAE4] transition-colors space-y-1 text-left flex-1 flex flex-col justify-center"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[9px] flex items-center justify-center shrink-0">
-                        {getPublicDisplayName(rev.full_name)?.[0] || 'H'}
+            {/* Recent Hiker Reviews fitting allocated space */}
+            <div className="flex-1 flex flex-col justify-between gap-1.5 my-1">
+              {previewReviews.length > 0 ? (
+                previewReviews.map((rev, idx) => {
+                  const ratingVal = Math.min(5, Math.max(1, Number(rev.overall_rating || rev.team_rating || 5)));
+                  const feedbackText = (rev.overall_feedback || rev.team_feedback || '').trim();
+                  const displayText = formatReviewPreview(feedbackText, 70);
+
+                  return (
+                    <div
+                      key={`home-rev-${rev.id}-${idx}`}
+                      className="p-1.5 sm:p-2 rounded-xl bg-[#FAF8F5] hover:bg-[#F3EFEA] border border-[#EFEAE4] transition-colors space-y-0.5 text-left flex flex-col justify-between"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[9px] flex items-center justify-center shrink-0">
+                            {getPublicDisplayName(rev.full_name)?.[0] || 'H'}
+                          </div>
+                          <span className="text-xs font-bold text-[#1F1F1F] truncate">
+                            {getPublicDisplayName(rev.full_name)}
+                          </span>
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-md border border-emerald-200 shrink-0">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            <span>Verified Hiker</span>
+                          </span>
+                        </div>
+
+                        {/* Exact Star Rating as rated */}
+                        <div className="flex items-center gap-0.5 shrink-0 text-amber-500">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={`w-2.5 h-2.5 ${
+                                s <= ratingVal
+                                  ? 'fill-amber-500 text-amber-500'
+                                  : 'text-neutral-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
                       </div>
-                      <span className="text-xs font-bold text-[#1F1F1F] truncate">
-                        {getPublicDisplayName(rev.full_name)}
-                      </span>
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-md border border-emerald-200 shrink-0">
-                        <CheckCircle2 className="w-2.5 h-2.5" />
-                        <span>Verified Hiker</span>
-                      </span>
+
+                      {/* Trek & Date */}
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        {rev.trek_name && (
+                          <span className="font-semibold text-[#E08828] bg-orange-50 px-1.5 py-0.2 rounded border border-orange-100 truncate max-w-[200px]">
+                            {rev.trek_name}
+                          </span>
+                        )}
+                        {rev.submitted_at && (
+                          <span className="text-[9px] text-[#A09890] shrink-0">
+                            {String(rev.submitted_at).slice(0, 10)}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Text formatted with .......... when review continues */}
+                      <p className="text-[11px] text-[#4A4541] leading-snug italic break-words">
+                        "{displayText}"
+                      </p>
                     </div>
-
-                    {/* Star Rating: 5 Filled Stars */}
-                    <div className="flex items-center gap-0.5 shrink-0 text-amber-500">
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <Star key={s} className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Trek & Date */}
-                  <div className="flex items-center gap-1.5 text-[10px]">
-                    {rev.trek_name && (
-                      <span className="font-semibold text-[#E08828] bg-orange-50 px-1 py-0.2 rounded border border-orange-100 truncate max-w-[170px]">
-                        {rev.trek_name}
-                      </span>
-                    )}
-                    {rev.submitted_at && (
-                      <span className="text-[9px] text-[#A09890] shrink-0">
-                        {rev.submitted_at}
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-[11px] text-[#4A4541] leading-relaxed line-clamp-2 italic">
-                    "{rev.overall_feedback}"
-                  </p>
+                  );
+                })
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-xs text-[#8B8680] italic">
+                  No hiker reviews available yet.
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
@@ -513,7 +544,7 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
           <div className="pt-2 border-t border-[#F0EBE5] flex items-center justify-between text-xs mt-1">
             <span className="text-[11px] text-[#8B8680] font-medium flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5 text-amber-500" />
-              <span>120+ Verified trail ratings &amp; reviews</span>
+              <span>{totalReviewsCount > 0 ? `${totalReviewsCount}+` : '120+'} Verified trail ratings &amp; reviews</span>
             </span>
 
             <button

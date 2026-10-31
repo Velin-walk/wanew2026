@@ -902,7 +902,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
 
       {/* Attached Hiker Reviews Extension */}
       <div className="relative z-10 bg-white rounded-3xl border border-[#E5E1DB] p-4 sm:p-6 shadow-md mt-6">
-        <HikerReviewsSection />
+        <HikerReviewsSection initialVisibleCount={5} />
       </div>
 
       {/* Hiker Detail Modal */}

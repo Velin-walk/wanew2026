@@ -102,7 +102,8 @@ export const PaymentAndPricingSection: React.FC<{
 export const HikerReviewsSection: React.FC<{
   onNavigateToBookings?: () => void;
   onLeaveFeedback?: () => void;
-}> = ({ onNavigateToBookings, onLeaveFeedback }) => {
+  initialVisibleCount?: number;
+}> = ({ onNavigateToBookings, onLeaveFeedback, initialVisibleCount = 20 }) => {
   useAnonymity();
   const [liveReviews, setLiveReviews] = useState<any[]>(() => {
     try {
@@ -117,7 +118,7 @@ export const HikerReviewsSection: React.FC<{
   const [reviewSearch, setReviewSearch] = useState<string>('');
   const [selectedTrekPill, setSelectedTrekPill] = useState<string>('');
   const [starRatingFilter, setStarRatingFilter] = useState<number | 'all'>('all');
-  const [visibleReviewsCount, setVisibleReviewsCount] = useState<number>(20);
+  const [visibleReviewsCount, setVisibleReviewsCount] = useState<number>(initialVisibleCount);
 
   // Sync local feedbacks when a new review is submitted
   useEffect(() => {
@@ -133,10 +134,10 @@ export const HikerReviewsSection: React.FC<{
     return () => window.removeEventListener('wnw-feedback-updated', syncLocalFeedbacks);
   }, []);
 
-  // Reset visible count to 20 when filters or search change
+  // Reset visible count when filters or search change
   useEffect(() => {
-    setVisibleReviewsCount(20);
-  }, [reviewFilter, reviewSearch, selectedTrekPill, starRatingFilter]);
+    setVisibleReviewsCount(initialVisibleCount);
+  }, [reviewFilter, reviewSearch, selectedTrekPill, starRatingFilter, initialVisibleCount]);
 
   // Auto-fetch latest community reviews on mount
   useEffect(() => {

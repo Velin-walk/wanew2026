@@ -186,14 +186,40 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
     });
   }, [completedHikes, searchHikeQuery]);
 
+  // Effective treks list: prioritize allTreks prop, augment with currentTrek and cached treks
+  const effectiveTreks = useMemo(() => {
+    let list: Trek[] = Array.isArray(allTreks) && allTreks.length > 0 ? [...allTreks] : [];
+    if (list.length === 0) {
+      try {
+        const cached = localStorage.getItem('wnw_cached_cloudflare_treks');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            list = [...parsed];
+          }
+        }
+      } catch {}
+    }
+    if (currentTrek) {
+      const alreadyInList = list.some(
+        (t) => (t.id && currentTrek.id && t.id === currentTrek.id) ||
+               (t.hike_number && currentTrek.hike_number && String(t.hike_number) === String(currentTrek.hike_number))
+      );
+      if (!alreadyInList) {
+        list.push(currentTrek);
+      }
+    }
+    return list;
+  }, [allTreks, currentTrek]);
+
   // Upcoming treks led by this guide in current schedule
   const upcomingLedTreks = useMemo(() => {
-    if (!allTreks || allTreks.length === 0) return [];
-    return allTreks.filter((t) => {
+    if (!effectiveTreks || effectiveTreks.length === 0) return [];
+    return effectiveTreks.filter((t) => {
       const l = (t.leader || t.team_leader || '').toLowerCase().trim();
       return l && (l === cleanNameLower || l.includes(cleanNameLower) || cleanNameLower.includes(l));
     });
-  }, [allTreks, cleanNameLower]);
+  }, [effectiveTreks, cleanNameLower]);
 
   // Reviews for this guide (synced with localStorage and /feedback API)
   const guideReviews = useMemo(() => {
@@ -215,8 +241,8 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
           if (h.no) guideHikeNumbers.add(String(h.no).trim().toLowerCase());
         });
       }
-      if (allTreks) {
-        allTreks.forEach((t: any) => {
+      if (effectiveTreks) {
+        effectiveTreks.forEach((t: any) => {
           const tLeader = String(t.leader || t.team_leader || '').trim().toLowerCase();
           if (tLeader && (tLeader === cleanGuideTarget || tLeader.includes(cleanGuideTarget) || cleanGuideTarget.includes(tLeader))) {
             if (t.hike_number) guideHikeNumbers.add(String(t.hike_number).trim().toLowerCase());
@@ -277,7 +303,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
     } catch {
       return [];
     }
-  }, [guideName, reviewsTick, customGuideSetting, guideStats, allTreks]);
+  }, [guideName, reviewsTick, customGuideSetting, guideStats, effectiveTreks]);
 
   // Average of stars and count of ratings
   const guideRatingStats = useMemo(() => {
@@ -399,70 +425,6 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
           )}
         </div>
 
-        {/* Primary Stats Grid (From Leaderboard Master) */}
-        <div className="bg-[#FAF8F5] p-3 sm:p-4 border-b border-[#EFEAE4] shrink-0">
-          {loading ? (
-            <div className="py-6 flex items-center justify-center gap-2 text-xs text-[#8B8680]">
-              <Loader2 className="w-4 h-4 animate-spin text-[#E08828]" />
-              <span>Connecting to Walk Nepal Walk Leaderboard...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-              {/* Total Distance */}
-              <div className="p-2.5 rounded-2xl bg-white border border-[#E5E1DB] shadow-3xs">
-                <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">
-                  Total Distance
-                </span>
-                <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
-                  {totalDistance.toLocaleString()} <span className="text-xs font-bold text-[#E08828]">km</span>
-                </span>
-                <span className="text-[9px] text-[#7ABA42] font-semibold block mt-0.5">
-                  Across Nepal
-                </span>
-              </div>
-
-              {/* Total Events */}
-              <div className="p-2.5 rounded-2xl bg-white border border-[#E5E1DB] shadow-3xs">
-                <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">
-                  Events Completed
-                </span>
-                <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
-                  {totalEvents}
-                </span>
-                <span className="text-[9px] text-[#8B8680] font-medium block mt-0.5">
-                  Treks & Hikes
-                </span>
-              </div>
-
-              {/* Day Hikes */}
-              <div className="p-2.5 rounded-2xl bg-white border border-[#E5E1DB] shadow-3xs">
-                <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">
-                  1-Day Hikes
-                </span>
-                <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
-                  {hikeDist} <span className="text-[10px] font-semibold text-[#8B8680]">km</span>
-                </span>
-                <span className="text-[9px] text-[#8B8680] font-medium block mt-0.5">
-                  {hikeCount} Day Events
-                </span>
-              </div>
-
-              {/* Multi-Day Treks */}
-              <div className="p-2.5 rounded-2xl bg-white border border-[#E5E1DB] shadow-3xs">
-                <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">
-                  Multi-Day Treks
-                </span>
-                <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
-                  {trekDist} <span className="text-[10px] font-semibold text-[#8B8680]">km</span>
-                </span>
-                <span className="text-[9px] text-[#8B8680] font-medium block mt-0.5">
-                  {trekCount} Expeditions
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-        
         {/* Feedback Modal for Guide */}
         <TrekFeedbackModal
           isOpen={feedbackOpen}
@@ -472,9 +434,74 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
         />
 
         {/* Scrollable Content Body */}
-        <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-6">
-          {/* Guide Reviews */}
-          <div>
+        <div className="overflow-y-auto flex-1 min-h-0 flex flex-col">
+          {/* Primary Stats Grid (From Leaderboard Master) */}
+          <div className="bg-[#FAF8F5] p-3 sm:p-4 border-b border-[#EFEAE4]">
+            {loading ? (
+              <div className="py-6 flex items-center justify-center gap-2 text-xs text-[#8B8680]">
+                <Loader2 className="w-4 h-4 animate-spin text-[#E08828]" />
+                <span>Connecting to Walk Nepal Walk Leaderboard...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                {/* Total Distance */}
+                <div className="p-2.5 rounded-2xl bg-white border border-[#E5E1DB] shadow-3xs">
+                  <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                    Total Distance
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
+                    {totalDistance.toLocaleString()} <span className="text-xs font-bold text-[#E08828]">km</span>
+                  </span>
+                  <span className="text-[9px] text-[#7ABA42] font-semibold block mt-0.5">
+                    Across Nepal
+                  </span>
+                </div>
+
+                {/* Total Events */}
+                <div className="p-2.5 rounded-2xl bg-white border border-[#E5E1DB] shadow-3xs">
+                  <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                    Events Completed
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
+                    {totalEvents}
+                  </span>
+                  <span className="text-[9px] text-[#8B8680] font-medium block mt-0.5">
+                    Treks & Hikes
+                  </span>
+                </div>
+
+                {/* Day Hikes */}
+                <div className="p-2.5 rounded-2xl bg-white border border-[#E5E1DB] shadow-3xs">
+                  <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                    1-Day Hikes
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
+                    {hikeDist} <span className="text-[10px] font-semibold text-[#8B8680]">km</span>
+                  </span>
+                  <span className="text-[9px] text-[#8B8680] font-medium block mt-0.5">
+                    {hikeCount} Day Events
+                  </span>
+                </div>
+
+                {/* Multi-Day Treks */}
+                <div className="p-2.5 rounded-2xl bg-white border border-[#E5E1DB] shadow-3xs">
+                  <span className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                    Multi-Day Treks
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-[#1F1F1F] block mt-0.5">
+                    {trekDist} <span className="text-[10px] font-semibold text-[#8B8680]">km</span>
+                  </span>
+                  <span className="text-[9px] text-[#8B8680] font-medium block mt-0.5">
+                    {trekCount} Expeditions
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-3.5 sm:p-5 space-y-6">
+            {/* Guide Reviews */}
+            <div>
             <h4 className="text-xs font-bold text-[#1F1F1F] mb-3 flex items-center gap-1.5">
               <Award className="w-3.5 h-3.5 text-[#E08828]" />
               <span>Guide Reviews</span>
@@ -582,6 +609,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
             )}
           </div>
         </div>
+      </div>
 
         {/* Footer */}
         <div className="p-3 sm:p-4 border-t border-[#F0EBE5] bg-[#FAF8F5] flex items-center justify-between shrink-0">

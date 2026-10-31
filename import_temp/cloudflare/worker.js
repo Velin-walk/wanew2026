@@ -3370,9 +3370,9 @@ export default {
         try {
           const category = url.searchParams.get('category');
           let query = `
-            SELECT id, slug, title, summary, cover_image_url, author_name, author_email, category, tags, reading_time_mins, likes_count, views_count, created_at
+            SELECT id, slug, title, summary, cover_image_url, author_name, author_email, category, tags, reading_time_mins, likes_count, views_count, status, created_at
             FROM blogs
-            WHERE status = 'published'
+            WHERE (status IS NULL OR status = '' OR status = 'published')
           `;
           const params = [];
           if (category && category !== 'All') {
