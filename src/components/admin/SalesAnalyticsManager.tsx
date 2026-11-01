@@ -144,15 +144,23 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
 
   const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // Map of trek ID to revenue and pax counts
+  // Map of trek ID to revenue, pax counts, and application ratio metrics
   const trekSalesMap: Record<
     string,
-    { projectedRev: number; collectedRev: number; confirmedPax: number; totalRegs: number }
+    {
+      projectedRev: number;
+      collectedRev: number;
+      confirmedPax: number;
+      totalRegs: number;
+      totalAppsPax: number;
+      duplicatePax: number;
+      waitlistPax: number;
+      cancelledByUserPax: number;
+    }
   > = {};
 
   registrations.forEach((reg) => {
-    const status = (reg.status || 'Confirmed').toLowerCase();
-    if (status.includes('cancelled')) return;
+    const regStatus = (reg.status || 'Confirmed').toLowerCase().trim();
 
     const regDateNorm = normStr(reg.trek_date);
     const regNameNorm = normStr(reg.trek_name);
@@ -176,33 +184,71 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
 
     const key = matchingTrek?.id || (regHikeNum && regHikeNum !== 'TBD' ? regHikeNum : regTrekId || reg.trek_name || 'unknown');
     if (!trekSalesMap[key]) {
-      trekSalesMap[key] = { projectedRev: 0, collectedRev: 0, confirmedPax: 0, totalRegs: 0 };
+      trekSalesMap[key] = {
+        projectedRev: 0,
+        collectedRev: 0,
+        confirmedPax: 0,
+        totalRegs: 0,
+        totalAppsPax: 0,
+        duplicatePax: 0,
+        waitlistPax: 0,
+        cancelledByUserPax: 0,
+      };
     }
 
     const companionCount = Array.isArray(reg.team_members) ? reg.team_members.length : 0;
     const pax = Math.max(Number(reg.paxCount) || 1, 1 + companionCount);
-    const unitPrice = parsePrice(typeof matchingTrek?.price === 'string' ? matchingTrek.price : String(matchingTrek?.price || '1500'));
 
-    const regProjected = unitPrice * pax;
-    let regCollected = Number(reg.paid_amount) || 0;
+    trekSalesMap[key].totalAppsPax += pax;
 
-    if (regCollected <= 0) {
-      const payStatus = (reg.payment_status || '').toLowerCase();
-      if (payStatus === 'fully paid' || payStatus === 'paid') {
-        regCollected = regProjected;
-      } else if (payStatus === 'deposit paid' || payStatus === 'partial') {
-        regCollected = Math.round(regProjected * 0.4);
-      }
+    const isDuplicate =
+      regStatus === 'duplicate' ||
+      regStatus === 'double registration' ||
+      regStatus === 'pending' ||
+      regStatus.includes('duplicate') ||
+      regStatus.includes('double');
+    const isWaitlisted =
+      regStatus === 'waitlisted' ||
+      regStatus === 'waitlist' ||
+      regStatus.includes('waitlist');
+    const isCancelledByUser =
+      regStatus.includes('cancelled by user') ||
+      regStatus.includes('user cancel') ||
+      regStatus.includes('cancelled_by_user');
+    const isCancelledGeneral = regStatus.includes('cancel');
+
+    if (isDuplicate) {
+      trekSalesMap[key].duplicatePax += pax;
+    } else if (isWaitlisted) {
+      trekSalesMap[key].waitlistPax += pax;
+    } else if (isCancelledByUser || (isCancelledGeneral && regStatus.includes('user'))) {
+      trekSalesMap[key].cancelledByUserPax += pax;
     }
 
-    trekSalesMap[key].projectedRev += regProjected;
-    trekSalesMap[key].collectedRev += regCollected;
-    trekSalesMap[key].confirmedPax += pax;
-    trekSalesMap[key].totalRegs += 1;
+    if (!isCancelledGeneral && !isWaitlisted && !isDuplicate) {
+      const unitPrice = parsePrice(typeof matchingTrek?.price === 'string' ? matchingTrek.price : String(matchingTrek?.price || '1500'));
 
-    totalProjectedRevenue += regProjected;
-    totalCollectedRevenue += regCollected;
-    totalConfirmedPax += pax;
+      const regProjected = unitPrice * pax;
+      let regCollected = Number(reg.paid_amount) || 0;
+
+      if (regCollected <= 0) {
+        const payStatus = (reg.payment_status || '').toLowerCase();
+        if (payStatus === 'fully paid' || payStatus === 'paid') {
+          regCollected = regProjected;
+        } else if (payStatus === 'deposit paid' || payStatus === 'partial') {
+          regCollected = Math.round(regProjected * 0.4);
+        }
+      }
+
+      trekSalesMap[key].projectedRev += regProjected;
+      trekSalesMap[key].collectedRev += regCollected;
+      trekSalesMap[key].confirmedPax += pax;
+      trekSalesMap[key].totalRegs += 1;
+
+      totalProjectedRevenue += regProjected;
+      totalCollectedRevenue += regCollected;
+      totalConfirmedPax += pax;
+    }
   });
 
   const conversionRate =
@@ -286,7 +332,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
               Trek Sales & Occupancy Breakdown
             </h3>
             <p className="text-xs text-[#8B8680] mt-0.5">
-              Financial performance, capacity fill rate, and seat revenues per event
+              Financial performance, capacity fill rate, application ratio breakdown, and seat revenues per event
             </p>
           </div>
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#E08828] bg-[#FFF9F2] px-3 py-1.5 rounded-xl border border-[#FFE7CC]">
@@ -303,6 +349,9 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
                 <th className="p-4">Ticket Price</th>
                 <th className="p-4">Occupancy</th>
                 <th className="p-4">Projected Revenue</th>
+                <th className="p-4">Duplicate Ratio</th>
+                <th className="p-4">Waitlist Ratio</th>
+                <th className="p-4">Cancelled (User) Ratio</th>
                 <th className="p-4">Execution Status</th>
                 <th className="p-4 text-right">Action</th>
               </tr>
@@ -315,12 +364,29 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
                   collectedRev: 0,
                   confirmedPax: t.participants || 0,
                   totalRegs: t.participants || 0,
+                  totalAppsPax: t.participants || 0,
+                  duplicatePax: 0,
+                  waitlistPax: 0,
+                  cancelledByUserPax: 0,
                 };
 
                 const cap = t.capacity || 25;
                 const pax = t.participants || metrics.confirmedPax;
                 const pct = Math.min(Math.round((pax / cap) * 100), 100);
                 const isCancelled = !!t.data?.is_cancelled || !!t.is_cancelled;
+
+                // Application ratio calculations
+                const totalApps = metrics.totalAppsPax;
+                const dupCount = metrics.duplicatePax;
+                const dupRatioPct = totalApps > 0 ? ((dupCount / totalApps) * 100).toFixed(1) : '0.0';
+
+                const validApps = Math.max(0, totalApps - dupCount);
+
+                const waitCount = metrics.waitlistPax;
+                const waitRatioPct = validApps > 0 ? ((waitCount / validApps) * 100).toFixed(1) : '0.0';
+
+                const cancelUserCount = metrics.cancelledByUserPax;
+                const cancelUserRatioPct = validApps > 0 ? ((cancelUserCount / validApps) * 100).toFixed(1) : '0.0';
 
                 return (
                   <tr key={t.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
@@ -357,6 +423,21 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
 
                     <td className="p-4 font-extrabold text-[#1F1F1F]">
                       NPR {metrics.projectedRev.toLocaleString()}
+                    </td>
+
+                    <td className="p-4 font-bold">
+                      <div className="text-xs font-black text-amber-700">{dupRatioPct}%</div>
+                      <div className="text-[10px] text-[#8B8680] font-medium">{dupCount} / {totalApps} apps</div>
+                    </td>
+
+                    <td className="p-4 font-bold">
+                      <div className="text-xs font-black text-blue-700">{waitRatioPct}%</div>
+                      <div className="text-[10px] text-[#8B8680] font-medium">{waitCount} / {validApps} valid</div>
+                    </td>
+
+                    <td className="p-4 font-bold">
+                      <div className="text-xs font-black text-rose-700">{cancelUserRatioPct}%</div>
+                      <div className="text-[10px] text-[#8B8680] font-medium">{cancelUserCount} / {validApps} valid</div>
                     </td>
 
                     <td className="p-4">

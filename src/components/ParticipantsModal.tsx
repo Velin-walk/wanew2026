@@ -8,6 +8,7 @@ import { isHikerAnonymous, useAnonymity } from '../utils/anonymity';
 export interface ParticipantItem {
   name: string;
   gender: 'm' | 'f';
+  pax?: number;
 }
 
 interface ParticipantsModalProps {
@@ -148,18 +149,18 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
 
   const totalParticipants =
     roster.length > 0
-      ? roster.length
+      ? roster.reduce((sum, p: any) => sum + Number(p.pax || 1), 0)
       : (totalCount !== undefined && totalCount > 0
         ? totalCount
         : (participantsCount?.total || 0));
 
   const maleCount =
     roster.length > 0
-      ? roster.filter((p) => p.gender === 'm').length
+      ? roster.filter((p: any) => p.gender === 'm').reduce((sum, p: any) => sum + Number(p.pax || 1), 0)
       : (participantsCount?.male || 0);
   const femaleCount =
     roster.length > 0
-      ? roster.filter((p) => p.gender === 'f').length
+      ? roster.filter((p: any) => p.gender === 'f').reduce((sum, p: any) => sum + Number(p.pax || 1), 0)
       : (participantsCount?.female || 0);
 
   return createPortal(

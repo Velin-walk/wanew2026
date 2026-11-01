@@ -651,9 +651,11 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
             b.id, b.registration_id, b.hike_number, b.full_name,
             COALESCE(b.gender, '') as gender,
             COALESCE(b.age_group, '') as age_group,
+            COALESCE(r.pax, 1) as pax,
             b.registration_status,
             COALESCE(b.created_at, b.updated_at, '') as timestamp
           FROM bookings_roster b
+          LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
           WHERE (b.hike_number = ? OR b.hike_number = ?)
             AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
             AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
@@ -668,6 +670,7 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
               b.id, b.registration_id, b.hike_number, b.full_name,
               COALESCE(r.gender, '') as gender,
               COALESCE(r.age_group, '') as age_group,
+              COALESCE(r.pax, 1) as pax,
               b.registration_status,
               COALESCE(b.created_at, b.updated_at, '') as timestamp
             FROM bookings_roster b
@@ -707,14 +710,14 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
         if (!regIdKey && seenNames.has(lowerName)) continue;
         seenNames.add(lowerName);
 
-        // Each confirmed attendee counts as 1
-        totalPax += 1;
+        const regPax = Number(reg.pax || 1);
+        totalPax += regPax;
 
         const g = String(reg.gender || '').trim().toLowerCase();
         if (g.startsWith('f')) {
-          femalePax += 1;
+          femalePax += regPax;
         } else {
-          malePax += 1;
+          malePax += regPax;
         }
 
         const parts = rawName.split(/\s+/).filter(Boolean);
@@ -755,10 +758,11 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
         const { results } = await env.DB.prepare(`
           SELECT 
             REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
-            COUNT(*) AS total_pax,
-            SUM(CASE WHEN LOWER(TRIM(COALESCE(b.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
-            SUM(CASE WHEN LOWER(TRIM(COALESCE(b.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+            SUM(COALESCE(r.pax, 1)) AS total_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN COALESCE(r.pax, 1) ELSE 0 END) AS female_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN 0 ELSE COALESCE(r.pax, 1) END) AS male_pax
           FROM bookings_roster b
+          LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
           WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
             AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
             AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
@@ -771,9 +775,9 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
         const { results } = await env.DB.prepare(`
           SELECT 
             REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
-            COUNT(*) AS total_pax,
-            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
-            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+            SUM(COALESCE(r.pax, 1)) AS total_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN COALESCE(r.pax, 1) ELSE 0 END) AS female_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN 0 ELSE COALESCE(r.pax, 1) END) AS male_pax
           FROM bookings_roster b
           LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
           WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
@@ -830,10 +834,11 @@ async function rebuildTreksSnapshot(env) {
       WITH roster_summary AS MATERIALIZED (
         SELECT
           REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
-          COUNT(*) AS total_pax,
-          SUM(CASE WHEN LOWER(TRIM(COALESCE(b.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
-          SUM(CASE WHEN LOWER(TRIM(COALESCE(b.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+          SUM(COALESCE(r.pax, 1)) AS total_pax,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN COALESCE(r.pax, 1) ELSE 0 END) AS female_pax,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN 0 ELSE COALESCE(r.pax, 1) END) AS male_pax
         FROM bookings_roster b
+        LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
         WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
           AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
           AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
@@ -874,9 +879,9 @@ async function rebuildTreksSnapshot(env) {
         WITH roster_summary AS MATERIALIZED (
           SELECT
             REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
-            COUNT(*) AS total_pax,
-            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 1 ELSE 0 END) AS female_pax,
-            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, ''))) LIKE 'f%' THEN 0 ELSE 1 END) AS male_pax
+            SUM(COALESCE(r.pax, 1)) AS total_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN COALESCE(r.pax, 1) ELSE 0 END) AS female_pax,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN 0 ELSE COALESCE(r.pax, 1) END) AS male_pax
           FROM bookings_roster b
           LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
           WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
@@ -1516,8 +1521,10 @@ export default {
           regs = await env.DB.prepare(`
             SELECT 
               b.id, b.registration_id, b.hike_number, b.full_name, b.gender, b.age_group, b.registration_status,
+              COALESCE(r.pax, 1) as pax,
               COALESCE(b.created_at, b.updated_at, '') as timestamp
             FROM bookings_roster b
+            LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
             WHERE (b.hike_number = ? OR b.hike_number = ?)
               AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
               AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
@@ -1529,8 +1536,9 @@ export default {
             regs = await env.DB.prepare(`
               SELECT 
                 b.id, b.registration_id, b.hike_number, b.full_name,
-                COALESCE(r.gender, '') as gender,
-                COALESCE(r.age_group, '') as age_group,
+                COALESCE(r.gender, b.gender, '') as gender,
+                COALESCE(r.age_group, b.age_group, '') as age_group,
+                COALESCE(r.pax, 1) as pax,
                 b.registration_status,
                 COALESCE(b.created_at, b.updated_at, '') as timestamp
               FROM bookings_roster b
@@ -1568,9 +1576,10 @@ export default {
           if (!regIdKey && seenNames.has(lowerName)) continue;
           seenNames.add(lowerName);
 
+          const regPax = Number(r.pax || 1);
           const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
-          if (isFemale) female_count += 1;
-          else male_count += 1;
+          if (isFemale) female_count += regPax;
+          else male_count += regPax;
 
           const parts = rawName.split(/\s+/).filter(Boolean);
           const anonymized = parts.length > 1
@@ -1580,19 +1589,20 @@ export default {
           recent_participants.push({
             name: anonymized,
             gender: isFemale ? 'f' : 'm',
+            pax: regPax,
           });
 
           sanitizedRoster.push({
             full_name: anonymized,
             gender: r.gender,
             age_group: r.age_group,
-            pax: 1,
+            pax: regPax,
             hike_number: r.hike_number,
             timestamp: r.timestamp,
           });
         }
 
-        const total_pax = sanitizedRoster.length;
+        const total_pax = sanitizedRoster.reduce((sum, item) => sum + Number(item.pax || 1), 0);
 
         let parsedData = {};
         try {
