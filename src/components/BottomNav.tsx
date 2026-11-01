@@ -16,6 +16,7 @@ import {
   BookOpen,
   Bell,
   UserCheck,
+  Settings,
 } from 'lucide-react';
 import { SubPageType } from './InfoPagesModal';
 import { useAuth } from '../context/AuthContext';
@@ -30,7 +31,7 @@ interface BottomNavProps {
   bookingCount: number;
   savedCount: number;
   onOpenInfoPage?: (page: SubPageType) => void;
-  onOpenProfile?: () => void;
+  onOpenProfile?: (tab?: 'hikes' | 'bookings' | 'saved' | 'settings') => void;
   notifications?: NavigationNotifications;
 }
 
@@ -86,10 +87,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     };
   }, [dropdownOpen]);
 
-  const handleSubPageClick = (page: SubPageType) => {
+  const handleSubPageClick = (page: SubPageType | 'settings') => {
     setDropdownOpen(false);
+    if (page === 'settings' && onOpenProfile) {
+      onOpenProfile('settings');
+      return;
+    }
     if (onOpenInfoPage) {
-      onOpenInfoPage(page);
+      onOpenInfoPage(page as SubPageType);
     }
   };
   return (
@@ -140,9 +145,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             }`}
           >
             <BookmarkCheck className="w-5 h-5" />
-            {bookingCount > 0 && (
-              <span className="absolute -top-1 -right-1.5 px-1 min-w-[16px] h-4 bg-[#E08828] text-white text-[9px] font-extrabold rounded-full flex items-center justify-center shadow-xs">
-                {bookingCount}
+            {notifications?.bookings?.hasUnread && (
+              <span className="absolute -top-1 -right-1.5 px-1 min-w-[16px] h-4 bg-[#E08828] text-white text-[9px] font-extrabold rounded-full flex items-center justify-center shadow-xs animate-pulse">
+                {notifications.bookings.count > 0 ? notifications.bookings.count : 1}
               </span>
             )}
           </div>
@@ -341,17 +346,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleSubPageClick('payment')}
-                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-[#E08828]" />
-                  <span>Payment & Pricing</span>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
-              </button>
+
 
               <button
                 type="button"
@@ -387,6 +382,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 <div className="flex items-center gap-2">
                   <Mail className="w-4 h-4 text-[#7ABA42]" />
                   <span>Contact Support</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
+              </button>
+
+              <div className="my-1 border-t border-[#F9F7F5]" />
+
+              <button
+                type="button"
+                onClick={() => handleSubPageClick('settings')}
+                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[#1F1F1F] active:bg-[#F9F7F5] transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-[#5A5551]" />
+                  <div>
+                    <div className="leading-tight font-bold text-[#1F1F1F]">Account Settings</div>
+                    <div className="text-[9px] font-normal text-[#8B8680]">Profile &amp; Preferences</div>
+                  </div>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4]" />
               </button>

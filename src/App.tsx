@@ -46,6 +46,7 @@ import {
 import {
   NavigationNotifications,
   checkTreksNotification,
+  checkBookingsNotification,
   checkGalleryNotification,
   checkLeaderboardNotification,
   checkMapMinersNotification,
@@ -291,6 +292,7 @@ function MainApp() {
   // In-app contextual navigation notifications
   const [notifications, setNotifications] = useState<NavigationNotifications>({
     treks: { hasUnread: false, count: 0 },
+    bookings: { hasUnread: false, count: 0 },
     gallery: { hasUnread: false, count: 0 },
     leaderboard: { hasUnread: false, count: 0 },
     mapminers: { hasUnread: false, count: 0 },
@@ -321,6 +323,15 @@ function MainApp() {
     (tab: 'treks' | 'bookings' | 'saved' | 'mapminers' | 'gallery' | 'leaderboard' | 'admin', targetId?: string) => {
       closeAllOverlays();
 
+      // Clear notification for this tab FIRST (even if user clicks current active tab to view)
+      if (tab === 'treks' || tab === 'bookings' || tab === 'gallery' || tab === 'leaderboard' || tab === 'mapminers') {
+        markNotificationAsRead(tab, targetId);
+        setNotifications((prev) => ({
+          ...prev,
+          [tab]: { hasUnread: false, count: 0 },
+        }));
+      }
+
       // Store current tab scroll position before switching
       const currentScrollY = window.scrollY || document.documentElement.scrollTop || 0;
       tabScrollPositionsRef.current[currentTab] = currentScrollY;
@@ -330,15 +341,6 @@ function MainApp() {
         tabScrollPositionsRef.current[tab] = 0;
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
-      }
-
-      // Clear notification for this tab
-      if (tab === 'treks' || tab === 'gallery' || tab === 'leaderboard' || tab === 'mapminers') {
-        markNotificationAsRead(tab, targetId);
-        setNotifications((prev) => ({
-          ...prev,
-          [tab]: { hasUnread: false, count: 0 },
-        }));
       }
 
       setCurrentTab(tab);
@@ -351,12 +353,14 @@ function MainApp() {
     let isMounted = true;
     const fetchNotifications = async () => {
       const treksNotif = checkTreksNotification(treks);
+      const bookingsNotif = checkBookingsNotification(bookings);
       const galleryNotif = await checkGalleryNotification();
       const mapNotif = await checkMapMinersNotification();
       const leadNotif = checkLeaderboardNotification();
       if (isMounted) {
         setNotifications({
           treks: treksNotif,
+          bookings: bookingsNotif,
           gallery: galleryNotif,
           leaderboard: leadNotif,
           mapminers: mapNotif,
@@ -375,7 +379,41 @@ function MainApp() {
       isMounted = false;
       window.removeEventListener('wnw_notifications_changed', handleNotifEvent);
     };
-  }, [treks]);
+  }, [treks, bookings]);
+
+  // Automatically mark notification as read once user is viewing the active screen
+  useEffect(() => {
+    if (currentTab === 'bookings' && notifications.bookings?.hasUnread) {
+      markNotificationAsRead('bookings');
+      setNotifications((prev) => ({ ...prev, bookings: { hasUnread: false, count: 0 } }));
+    }
+    if (currentTab === 'treks' && notifications.treks?.hasUnread) {
+      const timer = setTimeout(() => {
+        markNotificationAsRead('treks');
+        setNotifications((prev) => ({ ...prev, treks: { hasUnread: false, count: 0 } }));
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+    if (currentTab === 'gallery' && notifications.gallery?.hasUnread) {
+      markNotificationAsRead('gallery');
+      setNotifications((prev) => ({ ...prev, gallery: { hasUnread: false, count: 0 } }));
+    }
+    if (currentTab === 'mapminers' && notifications.mapminers?.hasUnread) {
+      markNotificationAsRead('mapminers');
+      setNotifications((prev) => ({ ...prev, mapminers: { hasUnread: false, count: 0 } }));
+    }
+    if (currentTab === 'leaderboard' && notifications.leaderboard?.hasUnread) {
+      markNotificationAsRead('leaderboard');
+      setNotifications((prev) => ({ ...prev, leaderboard: { hasUnread: false, count: 0 } }));
+    }
+  }, [
+    currentTab,
+    notifications.bookings?.hasUnread,
+    notifications.treks?.hasUnread,
+    notifications.gallery?.hasUnread,
+    notifications.mapminers?.hasUnread,
+    notifications.leaderboard?.hasUnread,
+  ]);
 
   const handleOpenInfoPage = useCallback((page: SubPageType) => {
     setItineraryModalTrek(null);
@@ -1543,6 +1581,8 @@ function MainApp() {
               favorites={favorites}
               onToggleFavorite={toggleFavorite}
               onRegister={(trek) => {
+                markNotificationAsRead('treks', trek.hike_number || trek.id);
+                setNotifications((prev) => ({ ...prev, treks: { hasUnread: false, count: 0 } }));
                 trackRegistrationStart(trek.hike_number || trek.id, trek.name);
                 setSelectedTrekForRegister(trek);
               }}
@@ -1551,6 +1591,8 @@ function MainApp() {
                 setShowInviteModal(true);
               }}
               onViewItinerary={(trek) => {
+                markNotificationAsRead('treks', trek.hike_number || trek.id);
+                setNotifications((prev) => ({ ...prev, treks: { hasUnread: false, count: 0 } }));
                 trackItineraryView(trek.hike_number || trek.id, trek.name);
                 setItineraryModalTrek(trek);
                 setItineraryModalType('itinerary');
@@ -1734,8 +1776,9 @@ function MainApp() {
             bookingCount={bookings.length}
             savedCount={favorites.length}
             onOpenInfoPage={handleOpenInfoPage}
-            onOpenProfile={() => {
+            onOpenProfile={(tab?: 'hikes' | 'bookings' | 'saved' | 'settings') => {
               closeAllOverlays();
+              setProfileModalTab(tab || 'hikes');
               setProfileModalOpen(true);
             }}
             notifications={notifications}

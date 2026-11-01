@@ -32,6 +32,7 @@ import { Trek } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, fetchPhotoComments, uploadImageToR2WithProgress } from '../services/api';
 import { logUserActivity } from '../services/userActivityNotifier';
+import { markNotificationAsRead } from '../services/notificationService';
 import { PhotoCommentsSection } from '../components/PhotoCommentsSection';
 import { TrekFeedbackModal } from '../components/TrekFeedbackModal';
 import {
@@ -315,6 +316,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   }, []);
 
   useEffect(() => {
+    markNotificationAsRead('gallery');
     fetchAllPhotos();
     fetchFlashcards();
     const handleOffersSync = () => fetchFlashcards();

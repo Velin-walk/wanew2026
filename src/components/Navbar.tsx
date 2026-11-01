@@ -216,11 +216,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <BookmarkCheck className="w-4 h-4 shrink-0" />
             <span>My Bookings</span>
-            {bookingCount > 0 && (
-              <span className="px-1.5 py-0.2 bg-[#E08828] text-white text-[10px] font-extrabold rounded-full">
+            {notifications?.bookings?.hasUnread ? (
+              <span className="px-1.5 py-0.2 bg-[#E08828] text-white text-[10px] font-extrabold rounded-full animate-pulse shadow-xs" title="New booking update">
+                {notifications.bookings.count > 0 ? notifications.bookings.count : 1}
+              </span>
+            ) : bookingCount > 0 ? (
+              <span className="px-1.5 py-0.2 bg-[#F3EFEA] text-[#78716C] text-[10px] font-semibold rounded-full" title={`${bookingCount} active booking${bookingCount > 1 ? 's' : ''}`}>
                 {bookingCount}
               </span>
-            )}
+            ) : null}
           </button>
 
           <button
@@ -412,20 +416,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleSubPageClick('payment')}
-                  className="w-full flex items-center justify-between px-3.5 py-2 text-left text-xs font-semibold text-[#1F1F1F] hover:bg-[#F9F7F5] transition-colors group cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <CreditCard className="w-4 h-4 text-[#E08828] shrink-0 group-hover:scale-110 transition-transform" />
-                    <div>
-                      <div className="leading-tight">Payment &amp; Pricing</div>
-                      <div className="text-[10px] font-normal text-[#8B8680]">QR &amp; Voucher Upload</div>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#C2BCB4] group-hover:translate-x-0.5 transition-transform" />
-                </button>
+
 
                 <button
                   type="button"

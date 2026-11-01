@@ -45,6 +45,7 @@ import { fetchLeaderboardData } from '../services/api';
 import { HikerStats } from '../types/leaderboard';
 import { MyBookingsScreen } from '../screens/MyBookingsScreen';
 import { isHikerAnonymous, setHikerAnonymity } from '../utils/anonymity';
+import { markNotificationAsRead } from '../services/notificationService';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -90,6 +91,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   useEffect(() => {
     if (isOpen && initialTab) {
       setActiveProfileTab(initialTab);
+      if (initialTab === 'bookings') {
+        markNotificationAsRead('bookings');
+      }
     }
   }, [isOpen, initialTab]);
 
@@ -581,7 +585,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveProfileTab('bookings')}
+            onClick={() => {
+              setActiveProfileTab('bookings');
+              markNotificationAsRead('bookings');
+            }}
             className={`flex-1 min-w-[80px] sm:min-w-[105px] flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeProfileTab === 'bookings'
                 ? 'bg-white text-[#E08828] shadow-xs ring-1 ring-black/5 font-black'

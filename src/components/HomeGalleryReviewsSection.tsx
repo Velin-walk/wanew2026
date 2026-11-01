@@ -280,8 +280,8 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
     };
   }, []);
 
-  // Helper to format review text preview ending with .......... when review continues
-  const formatReviewPreview = (text: string, maxChars: number = 70): string => {
+  // Helper to format review text preview ending with .......... when review continues (allowing up to 4 lines)
+  const formatReviewPreview = (text: string, maxChars: number = 300): string => {
     if (!text) return '';
     const clean = text.trim().replace(/\s+/g, ' ');
     if (clean.length <= maxChars) {
@@ -289,7 +289,7 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
     }
     const truncated = clean.slice(0, maxChars);
     const lastSpace = truncated.lastIndexOf(' ');
-    const base = lastSpace > 35 ? truncated.slice(0, lastSpace) : truncated;
+    const base = lastSpace > 150 ? truncated.slice(0, lastSpace) : truncated;
     return `${base.replace(/[.,!?;:\s]+$/, '')}..........`;
   };
 
@@ -344,8 +344,8 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
     });
 
     return {
-      // 4 reviews fit cleanly in the allocated space without cutting lines in half
-      previewReviews: displayReviews.slice(0, 4),
+      // 6 reviews fit cleanly in desktop mode to fill empty space
+      previewReviews: displayReviews.slice(0, 6),
       totalReviewsCount: displayReviews.length,
     };
   }, [refreshTrigger]);
@@ -475,7 +475,7 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
                 previewReviews.map((rev, idx) => {
                   const ratingVal = Math.min(5, Math.max(1, Number(rev.overall_rating || rev.team_rating || 5)));
                   const feedbackText = (rev.overall_feedback || rev.team_feedback || '').trim();
-                  const displayText = formatReviewPreview(feedbackText, 70);
+                  const displayText = formatReviewPreview(feedbackText, 220);
 
                   return (
                     <div
@@ -525,8 +525,8 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
                         )}
                       </div>
 
-                      {/* Text formatted with .......... when review continues */}
-                      <p className="text-[11px] text-[#4A4541] leading-snug italic break-words">
+                      {/* Text formatted with .......... when review continues (allowing up to 4 lines) */}
+                      <p className="text-[11px] text-[#4A4541] leading-snug italic break-words line-clamp-4">
                         "{displayText}"
                       </p>
                     </div>

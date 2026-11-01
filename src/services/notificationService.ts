@@ -5,7 +5,7 @@
  */
 
 import { apiFetch } from './api';
-import { Trek } from '../types';
+import { Trek, Booking } from '../types';
 
 export interface NotificationStatus {
   hasUnread: boolean;
@@ -16,6 +16,7 @@ export interface NotificationStatus {
 
 export interface NavigationNotifications {
   treks: NotificationStatus;
+  bookings: NotificationStatus;
   gallery: NotificationStatus;
   leaderboard: NotificationStatus;
   mapminers: NotificationStatus;
@@ -23,20 +24,33 @@ export interface NavigationNotifications {
 
 const STORAGE_KEYS = {
   treks: 'wnw_last_seen_trek_id',
+  bookings: 'wnw_last_seen_booking_fingerprint',
   gallery: 'wnw_last_seen_photo_id',
   leaderboard: 'wnw_last_seen_leaderboard_time',
   mapminers: 'wnw_last_seen_route_id',
 };
 
 let latestTrekIdCache = '';
+let latestBookingFingerprintCache = '';
 let latestPhotoIdCache = '';
 let latestRouteIdCache = '';
+
+/**
+ * Calculates a unique fingerprint of user's bookings to detect additions or status updates.
+ */
+export function getBookingsFingerprint(bookings: Booking[]): string {
+  if (!bookings || bookings.length === 0) return '';
+  return bookings
+    .map((b) => `${b.id}:${b.status || ''}:${b.payment_status || ''}:${b.payment_voucher_url ? '1' : '0'}`)
+    .sort()
+    .join('|');
+}
 
 /**
  * Marks a specific section as read, removing its notification badge.
  */
 export function markNotificationAsRead(
-  category: 'treks' | 'gallery' | 'leaderboard' | 'mapminers',
+  category: 'treks' | 'bookings' | 'gallery' | 'leaderboard' | 'mapminers',
   currentLatestId?: string
 ): void {
   try {
@@ -46,13 +60,24 @@ export function markNotificationAsRead(
     } else if (category === 'treks') {
       const idToStore = currentLatestId || latestTrekIdCache;
       if (idToStore) localStorage.setItem(key, idToStore);
+    } else if (category === 'bookings') {
+      const fingerprintToStore = currentLatestId || latestBookingFingerprintCache;
+      if (fingerprintToStore) {
+        localStorage.setItem(key, fingerprintToStore);
+      } else {
+        localStorage.setItem(key, 'all_seen');
+      }
     } else if (category === 'gallery') {
-      const idToStore = currentLatestId || latestPhotoIdCache;
+      // Store the newest photo ID to ensure persistent read state
+      const idToStore = latestPhotoIdCache || currentLatestId;
       if (idToStore) localStorage.setItem(key, idToStore);
     } else if (category === 'mapminers') {
       const idToStore = currentLatestId || latestRouteIdCache;
       if (idToStore) localStorage.setItem(key, idToStore);
     }
+
+    // Broadcast change so UI across tabs and components syncs immediately
+    window.dispatchEvent(new CustomEvent('wnw_notifications_changed', { detail: { category } }));
   } catch (_) {}
 }
 
@@ -95,6 +120,39 @@ export function checkTreksNotification(treks: Trek[]): NotificationStatus {
 }
 
 /**
+ * Checks for unread bookings or recent booking status updates.
+ */
+export function checkBookingsNotification(bookings: Booking[]): NotificationStatus {
+  if (!bookings || bookings.length === 0) return { hasUnread: false, count: 0 };
+  try {
+    const currentFingerprint = getBookingsFingerprint(bookings);
+    latestBookingFingerprintCache = currentFingerprint;
+
+    const lastSeenFingerprint = localStorage.getItem(STORAGE_KEYS.bookings);
+
+    if (!lastSeenFingerprint) {
+      // First visit with bookings: mark as seen silently so existing user bookings aren't treated as unread alerts
+      localStorage.setItem(STORAGE_KEYS.bookings, currentFingerprint);
+      return { hasUnread: false, count: 0 };
+    }
+
+    if (lastSeenFingerprint !== currentFingerprint && lastSeenFingerprint !== 'all_seen') {
+      // Compare items to determine how many are new or updated
+      const lastSeenParts = new Set(lastSeenFingerprint.split('|').filter(Boolean));
+      const currentParts = currentFingerprint.split('|').filter(Boolean);
+      const diffCount = currentParts.filter((p) => !lastSeenParts.has(p)).length || 1;
+
+      return {
+        hasUnread: true,
+        count: diffCount,
+        title: 'Booking Update',
+      };
+    }
+  } catch (_) {}
+  return { hasUnread: false, count: 0 };
+}
+
+/**
  * Checks for unread community photos in the gallery.
  */
 export async function checkGalleryNotification(): Promise<NotificationStatus> {
@@ -119,7 +177,7 @@ export async function checkGalleryNotification(): Promise<NotificationStatus> {
       return {
         hasUnread: true,
         count: 1,
-        targetId: newestPhoto.trekId || newestId,
+        targetId: newestId,
         title: newestPhoto.trekName || 'New Photos',
       };
     }

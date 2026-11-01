@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Booking } from '../types';
 import { HISTORICAL_TREKS } from '../data/historicalTreks';
 import { PaymentAndPricingSection } from '../components/InfoPagesModal';
 import { MyHikesView } from '../components/MyHikesView';
+import { markNotificationAsRead } from '../services/notificationService';
 import {
   Calendar,
   Phone,
@@ -59,6 +60,11 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   const [cancelingId, setCancelingId] = useState<number | string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<number | string | null>(null);
   const [viewingVoucherUrl, setViewingVoucherUrl] = useState<string | null>(null);
+
+  // Automatically mark bookings notification as read once user views this screen
+  useEffect(() => {
+    markNotificationAsRead('bookings');
+  }, []);
 
   // Set of completed hike numbers from historical sheet database
   const completedHikeNumbers = useMemo(() => {
