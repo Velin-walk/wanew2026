@@ -22,7 +22,6 @@ import {
   ChevronUp,
   Users,
   MessageCircle,
-  Calendar,
 } from 'lucide-react';
 
 interface TrekListScreenProps {
@@ -250,19 +249,6 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
     return { upcomingTreks: upcoming, pastTreks: past };
   }, [filteredTreks]);
 
-  // Group upcoming treks by date (calendar style, e.g. all treks for Nov 6 in a single box)
-  const groupedUpcoming = useMemo(() => {
-    const map = new Map<string, Trek[]>();
-    for (const trek of upcomingTreks) {
-      const dateStr = trek.date || trek.data?.hikeDate || trek.hike_date || 'TBD';
-      if (!map.has(dateStr)) {
-        map.set(dateStr, []);
-      }
-      map.get(dateStr)!.push(trek);
-    }
-    return Array.from(map.entries());
-  }, [upcomingTreks]);
-
   // Debounced search query telemetry
   React.useEffect(() => {
     if (!searchQuery.trim() || searchQuery.trim().length < 2) return;
@@ -468,48 +454,40 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Calendar-Style Date Box Summary List */}
-          {groupedUpcoming.length > 0 && (
-            <div className="bg-white rounded-xl border border-[#F0EBE5] p-3 shadow-xs space-y-2">
+          {/* Ultra-Minimalist Single-Line Trek & Date Summary List */}
+          {upcomingTreks.length > 0 && (
+            <div className="bg-white rounded-xl border border-[#F0EBE5] p-3 shadow-xs space-y-1.5">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[11px] sm:text-xs font-bold text-[#1F1F1F] uppercase tracking-wide flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-[#7ABA42]" /> Trek Calendar Schedule (Grouped by Date)
+                  <Mountain className="w-3.5 h-3.5 text-[#7ABA42]" /> Upcoming Treks & Dates Summary
                 </span>
-                <span className="text-[10px] text-[#8B8680]">{groupedUpcoming.length} Dates</span>
+                <span className="text-[10px] text-[#8B8680]">At-a-Glance</span>
               </div>
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {groupedUpcoming.map(([dateStr, dateTreks], groupIdx) => (
-                  <div key={`date-group-${groupIdx}`} className="border border-[#E5E1DB] rounded-lg p-2 bg-[#FAF8F5]/60">
-                    <div className="flex items-center justify-between pb-1 border-b border-[#E5E1DB]/60 mb-1.5">
-                      <span className="font-bold text-xs text-[#7ABA42] bg-[#7ABA42]/10 px-2 py-0.5 rounded">
-                        {dateStr}
-                      </span>
-                      <span className="text-[10px] text-[#8B8680] font-medium">
-                        {dateTreks.length} {dateTreks.length === 1 ? 'trek' : 'treks'}
+              <div className="divide-y divide-[#F0EBE5] max-h-44 overflow-y-auto pr-1">
+                {upcomingTreks.map((trek, idx) => {
+                  const trekDateStr = trek.date || trek.data?.hikeDate || trek.hike_date || 'TBD';
+                  const trekName = trek.name || trek.title || 'Untitled Trek';
+                  const hikeNum = trek.hike_number || trek.data?.hikeNumber || `#${idx + 1}`;
+                  return (
+                    <div
+                      key={trek.id ? `summary-${trek.id}-${idx}` : `summary-${idx}`}
+                      onClick={() => onRegister(trek)}
+                      className="flex items-center justify-between py-1.5 px-1 hover:bg-[#FAF8F5] transition-colors rounded cursor-pointer text-xs group"
+                    >
+                      <div className="flex items-center gap-2 truncate pr-2">
+                        <span className="shrink-0 font-bold text-[10px] sm:text-[11px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
+                          {trekDateStr}
+                        </span>
+                        <span className="font-medium text-[#1F1F1F] truncate group-hover:text-[#7ABA42] transition-colors">
+                          {hikeNum}: {trekName}
+                        </span>
+                      </div>
+                      <span className="shrink-0 text-[10px] font-bold text-[#8B8680] group-hover:text-[#1F1F1F] transition-colors">
+                        Book &rarr;
                       </span>
                     </div>
-                    <div className="space-y-1">
-                      {dateTreks.map((trek, idx) => {
-                        const trekName = trek.name || trek.title || 'Untitled Trek';
-                        const hikeNum = trek.hike_number || trek.data?.hikeNumber || `#${idx + 1}`;
-                        return (
-                          <div
-                            key={trek.id ? `summary-${trek.id}-${idx}` : `summary-${idx}`}
-                            onClick={() => onRegister(trek)}
-                            className="flex items-center justify-between py-1 px-1.5 hover:bg-white transition-colors rounded cursor-pointer text-xs group border border-transparent hover:border-[#E5E1DB]"
-                          >
-                            <span className="font-medium text-[#1F1F1F] truncate pr-2 group-hover:text-[#7ABA42] transition-colors">
-                              {hikeNum}: {trekName}
-                            </span>
-                            <span className="shrink-0 text-[10px] font-bold text-[#8B8680] group-hover:text-[#1F1F1F] transition-colors">
-                              Book &rarr;
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
