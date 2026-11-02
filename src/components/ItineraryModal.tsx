@@ -693,19 +693,20 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                               setIsDayExpanded(true);
                             }
                           }}
-                          className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black font-mono tabular-nums tracking-tight transition-all cursor-pointer shrink-0 select-none shadow-2xs border ${
+                          className={`px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black font-mono tabular-nums tracking-tighter sm:tracking-tight transition-all cursor-pointer shrink-0 select-none shadow-2xs border ${
                             isSelected
-                              ? 'bg-[#E08828] text-white border-[#E08828] ring-1.5 ring-[#E08828]/30'
+                              ? 'bg-[#E08828] text-white border-[#E08828] ring-1 sm:ring-1.5 ring-[#E08828]/30'
                               : 'bg-[#FFF8F0] text-[#E08828] border-[#E08828]/35 hover:bg-[#FFEEDD] hover:border-[#E08828]/60'
                           }`}
                           title={`Day ${day.dayNumber}: ${day.title}`}
                         >
-                          {label}
+                          <span className="hidden sm:inline">{label}</span>
+                          <span className="sm:hidden">{dayDate ? `D${day.dayNumber}:${dayDate}` : `D${day.dayNumber}`}</span>
                         </button>
 
                         {/* Connector line between days */}
                         {idx < dbData.itineraryDays.length - 1 && (
-                          <div className="w-2 sm:w-3.5 h-[1.5px] sm:h-0.5 bg-[#E08828]/40 shrink-0" />
+                          <div className="w-1.5 sm:w-3.5 h-[1.5px] sm:h-0.5 bg-[#E08828]/40 shrink-0" />
                         )}
                       </React.Fragment>
                     );

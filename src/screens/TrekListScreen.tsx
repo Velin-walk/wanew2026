@@ -20,6 +20,7 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Users,
   MessageCircle,
 } from 'lucide-react';
@@ -62,6 +63,21 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [pastLimit, setPastLimit] = useState(25);
   const [showPastEvents, setShowPastEvents] = useState(false);
+  const [highlightedTrekId, setHighlightedTrekId] = useState<string | null>(null);
+
+  const handleSummaryClick = (trek: Trek, idx: number) => {
+    const targetId = String(trek.id || idx);
+    setHighlightedTrekId(targetId);
+
+    const cardElement = document.getElementById(`trek-card-${targetId}`);
+    if (cardElement) {
+      cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    setTimeout(() => {
+      setHighlightedTrekId((curr) => (curr === targetId ? null : curr));
+    }, 2500);
+  };
 
   // Helper to accurately parse trek date
   const parseTrekDate = (dateStr?: string): Date | null => {
@@ -257,6 +273,30 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
     }, 900);
     return () => clearTimeout(timer);
   }, [searchQuery, filteredTreks.length]);
+
+  // Helpers for ultra-compact, structured upcoming trek summary
+  const formatCompactDate = (dateStr?: string): string => {
+    if (!dateStr) return 'TBD';
+    const parsed = parseTrekDate(dateStr);
+    if (parsed && !isNaN(parsed.getTime())) {
+      const day = parsed.getDate();
+      const month = parsed.toLocaleDateString('en-US', { month: 'short' });
+      return `${day} ${month}`;
+    }
+    const clean = dateStr.replace(/\(.*?\)/g, '').trim().split(/[–—\-]/)[0].trim();
+    return clean.length > 7 ? clean.slice(0, 7) : clean;
+  };
+
+  const getDaysBadge = (t: Trek): string => {
+    const d = String(t.days || t.days_label || t.data?.days || t.data?.overview?.days || '').trim();
+    if (!d) return '';
+    if (/overnight|1n/i.test(d)) return 'Overnight';
+    const m = d.match(/(\d+)\s*day/i) || d.match(/^(\d+)$/);
+    if (m) return m[1] === '1' ? '1 Day' : `${m[1]}D`;
+    if (/subs|sat/i.test(d)) return '1 Day';
+    if (d.length <= 7) return d;
+    return '';
+  };
 
   return (
     <div className="space-y-4 w-full">
@@ -454,37 +494,54 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Ultra-Minimalist Single-Line Trek & Date Summary List */}
+          {/* Ultra-Compact Structured Upcoming Treks Summary */}
           {upcomingTreks.length > 0 && (
-            <div className="bg-white rounded-xl border border-[#F0EBE5] p-3 shadow-xs space-y-1.5">
+            <div className="bg-white rounded-xl border border-[#F0EBE5] p-2 sm:p-2.5 shadow-xs space-y-1.5">
               <div className="flex items-center justify-between px-1">
-                <span className="text-[11px] sm:text-xs font-bold text-[#1F1F1F] uppercase tracking-wide flex items-center gap-1.5">
-                  <Mountain className="w-3.5 h-3.5 text-[#7ABA42]" /> Upcoming Treks & Dates Summary
+                <div className="flex items-center gap-1.5">
+                  <Mountain className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
+                  <span className="text-[11px] sm:text-xs font-bold text-[#1F1F1F] uppercase tracking-wide">
+                    Upcoming Treks Summary
+                  </span>
+                  <span className="text-[10px] font-bold text-[#7ABA42] bg-[#7ABA42]/10 border border-[#7ABA42]/20 px-1.5 py-0.2 rounded-full leading-none">
+                    {upcomingTreks.length}
+                  </span>
+                </div>
+                <span className="text-[10px] text-[#8B8680] font-medium hidden sm:inline">
+                  Click to view card
                 </span>
-                <span className="text-[10px] text-[#8B8680]">At-a-Glance</span>
               </div>
-              <div className="divide-y divide-[#F0EBE5] max-h-44 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1 sm:gap-1.5 max-h-56 overflow-y-auto pr-0.5">
                 {upcomingTreks.map((trek, idx) => {
-                  const trekDateStr = trek.date || trek.data?.hikeDate || trek.hike_date || 'TBD';
+                  const trekDateStr = trek.date || trek.data?.hikeDate || trek.hike_date || '';
+                  const compactDate = formatCompactDate(trekDateStr);
                   const trekName = trek.name || trek.title || 'Untitled Trek';
-                  const hikeNum = trek.hike_number || trek.data?.hikeNumber || `#${idx + 1}`;
+                  const rawHikeNum = String(trek.hike_number || trek.data?.hikeNumber || '').replace(/[^\d]/g, '');
+                  const hikeBadge = rawHikeNum ? `#${rawHikeNum}` : `#${idx + 1}`;
+                  const daysBadge = getDaysBadge(trek);
+
                   return (
                     <div
                       key={trek.id ? `summary-${trek.id}-${idx}` : `summary-${idx}`}
-                      onClick={() => onRegister(trek)}
-                      className="flex items-center justify-between py-1.5 px-1 hover:bg-[#FAF8F5] transition-colors rounded cursor-pointer text-xs group"
+                      onClick={() => handleSummaryClick(trek, idx)}
+                      title={`${hikeBadge}: ${trekName} (${trekDateStr || compactDate}) - Click to view card`}
+                      className="flex items-center gap-1.5 px-2 py-1 bg-[#FAF8F5] hover:bg-white border border-[#EBE6DF] hover:border-[#7ABA42] rounded-lg transition-all cursor-pointer group shadow-3xs select-none"
                     >
-                      <div className="flex items-center gap-2 truncate pr-2">
-                        <span className="shrink-0 font-bold text-[10px] sm:text-[11px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
-                          {trekDateStr}
-                        </span>
-                        <span className="font-medium text-[#1F1F1F] truncate group-hover:text-[#7ABA42] transition-colors">
-                          {hikeNum}: {trekName}
-                        </span>
-                      </div>
-                      <span className="shrink-0 text-[10px] font-bold text-[#8B8680] group-hover:text-[#1F1F1F] transition-colors">
-                        Book &rarr;
+                      <span className="shrink-0 text-[10px] font-mono font-bold text-[#5A5551] bg-[#EDE9E3] px-1.5 py-0.5 rounded text-center min-w-[34px] sm:min-w-[36px]">
+                        {hikeBadge}
                       </span>
+                      <span className="shrink-0 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/70 px-1.5 py-0.5 rounded text-center whitespace-nowrap min-w-[54px] sm:min-w-[58px]">
+                        {compactDate}
+                      </span>
+                      <span className="text-[11px] sm:text-xs font-semibold text-[#1F1F1F] truncate flex-1 group-hover:text-[#7ABA42] transition-colors">
+                        {trekName}
+                      </span>
+                      {daysBadge && (
+                        <span className="shrink-0 text-[9px] font-medium text-[#7D7771] bg-white border border-[#E5E1DB] px-1 py-0.5 rounded whitespace-nowrap hidden xs:inline-block">
+                          {daysBadge}
+                        </span>
+                      )}
+                      <ChevronRight className="w-3 h-3 text-[#B8B1A8] group-hover:text-[#7ABA42] group-hover:translate-x-0.5 transition-all shrink-0" />
                     </div>
                   );
                 })}
@@ -506,19 +563,33 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4 lg:gap-5 w-full">
-                {upcomingTreks.map((trek, idx) => (
-                  <TrekCard
-                    key={trek.id ? `${trek.id}-${idx}` : `trek-${idx}`}
-                    trek={trek}
-                    isFavorited={favorites.includes(trek.id)}
-                    onToggleFavorite={onToggleFavorite}
-                    onRegister={onRegister}
-                    onShare={onShare}
-                    onViewItinerary={onViewItinerary}
-                    onViewFaq={onViewFaq}
-                    onViewGallery={onViewGallery}
-                  />
-                ))}
+                {upcomingTreks.map((trek, idx) => {
+                  const targetId = String(trek.id || idx);
+                  const isHighlighted = highlightedTrekId === targetId;
+
+                  return (
+                    <div
+                      key={trek.id ? `${trek.id}-${idx}` : `trek-${idx}`}
+                      id={`trek-card-${targetId}`}
+                      className={`transition-all duration-500 rounded-2xl ${
+                        isHighlighted
+                          ? 'ring-4 ring-[#7ABA42] ring-offset-4 ring-offset-[#FAF8F5] shadow-[0_0_35px_rgba(122,186,66,0.6)] scale-[1.02] -translate-y-1'
+                          : ''
+                      }`}
+                    >
+                      <TrekCard
+                        trek={trek}
+                        isFavorited={favorites.includes(trek.id)}
+                        onToggleFavorite={onToggleFavorite}
+                        onRegister={onRegister}
+                        onShare={onShare}
+                        onViewItinerary={onViewItinerary}
+                        onViewFaq={onViewFaq}
+                        onViewGallery={onViewGallery}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
