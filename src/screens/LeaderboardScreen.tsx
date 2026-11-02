@@ -55,26 +55,26 @@ const getKeys = (cat: BoardCategory, per: TimePeriod) => {
 const RankBadge: React.FC<{ rank: number }> = ({ rank }) => {
   if (rank === 1) {
     return (
-      <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
-        <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500/30" /> 1
+      <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg bg-amber-100 text-amber-800 font-black text-[10px] sm:text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300 shrink-0">
+        <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600 fill-amber-500/30" /> 1
       </span>
     );
   }
   if (rank === 2) {
     return (
-      <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300">
-        <Medal className="w-3.5 h-3.5 text-slate-500" /> 2
+      <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg bg-slate-100 text-slate-800 font-black text-[10px] sm:text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-slate-300 shrink-0">
+        <Medal className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-500" /> 2
       </span>
     );
   }
   if (rank === 3) {
     return (
-      <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-900 font-black text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300">
-        <Award className="w-3.5 h-3.5 text-amber-700" /> 3
+      <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg bg-amber-50 text-amber-900 font-black text-[10px] sm:text-xs flex items-center justify-center gap-0.5 shadow-3xs border border-amber-300 shrink-0">
+        <Award className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-700" /> 3
       </span>
     );
   }
-  return <span className="text-xs font-black text-stone-500">#{rank}</span>;
+  return <span className="text-[11px] sm:text-xs font-black text-stone-500 shrink-0">#{rank}</span>;
 };
 
 export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
@@ -82,6 +82,7 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (isTop3AllTime) {
     return {
       title: distance >= 2000 ? '2000KM Trail Ambassador' : 'Trail Ambassador',
+      shortTitle: 'Ambassador',
       style: 'bg-amber-100 text-amber-900 border-amber-300 shadow-3xs',
       icon: 'crown'
     };
@@ -90,6 +91,7 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (distance >= 2000) {
     return {
       title: '2000KM Trail Ambassador',
+      shortTitle: 'Ambassador',
       style: 'bg-amber-100 text-amber-900 border-amber-300 shadow-3xs',
       icon: 'crown'
     };
@@ -97,6 +99,7 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (distance >= 1500) {
     return {
       title: '1500KM Senior Trail Leader',
+      shortTitle: '1.5K Leader',
       style: 'bg-indigo-50 text-indigo-900 border-indigo-300',
       icon: 'award'
     };
@@ -104,6 +107,7 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (distance >= 1000) {
     return {
       title: '1000KM Trail Leader',
+      shortTitle: '1K Leader',
       style: 'bg-purple-100 text-purple-900 border-purple-300',
       icon: 'gem'
     };
@@ -111,6 +115,7 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (distance >= 500) {
     return {
       title: '500KM Trail Blazer',
+      shortTitle: '500KM',
       style: 'bg-orange-50 text-orange-900 border-orange-300',
       icon: 'sparkles'
     };
@@ -118,6 +123,7 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (distance >= 400) {
     return {
       title: '400KM Explorer',
+      shortTitle: '400KM',
       style: 'bg-sky-50 text-sky-900 border-sky-300',
       icon: 'compass'
     };
@@ -125,6 +131,7 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (distance >= 300) {
     return {
       title: '300KM Trekker',
+      shortTitle: '300KM',
       style: 'bg-violet-50 text-violet-900 border-violet-300',
       icon: 'mountain'
     };
@@ -132,6 +139,7 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (distance >= 200) {
     return {
       title: '200KM Hiker',
+      shortTitle: '200KM',
       style: 'bg-blue-50 text-blue-900 border-blue-300',
       icon: 'footprints'
     };
@@ -139,12 +147,14 @@ export const getHikerTitleInfo = (distance: number, isTop3AllTime = false) => {
   if (distance >= 100) {
     return {
       title: '100KM Walker',
+      shortTitle: '100KM',
       style: 'bg-emerald-50 text-emerald-900 border-emerald-300',
       icon: 'sparkles'
     };
   }
   return {
     title: 'Trail Walker',
+    shortTitle: 'Walker',
     style: 'bg-stone-100 text-stone-600 border-stone-200',
     icon: 'none'
   };
@@ -155,16 +165,17 @@ const HikerTierBadge: React.FC<{
   isTop3AllTime?: boolean;
   isMobile?: boolean;
 }> = ({ distance, isTop3AllTime, isMobile }) => {
-  const { title, style, icon } = getHikerTitleInfo(distance, isTop3AllTime);
+  const { title, shortTitle, style, icon } = getHikerTitleInfo(distance, isTop3AllTime);
   const iconSize = isMobile ? 'w-2.5 h-2.5' : 'w-3 h-3';
 
   return (
     <span
-      className={`px-1.5 py-0.5 rounded-md font-bold border inline-flex items-center gap-0.5 sm:gap-1 shrink-0 whitespace-nowrap ${style} ${
+      className={`px-1 sm:px-1.5 py-0.5 rounded-md font-bold border inline-flex items-center gap-0.5 sm:gap-1 shrink-0 whitespace-nowrap ${style} ${
         isMobile ? 'text-[8px]' : 'text-[9px]'
       }`}
+      title={title}
     >
-      <span>{title}</span>
+      <span>{isMobile ? shortTitle : title}</span>
       {icon === 'crown' && <Crown className={`${iconSize} text-amber-600`} />}
       {icon === 'award' && <Award className={`${iconSize} text-indigo-600`} />}
       {icon === 'gem' && <Gem className={`${iconSize} text-purple-600`} />}
@@ -343,20 +354,20 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
       ) : (
         <div>
           {/* Desktop Table Header */}
-          <div className="hidden sm:grid sm:grid-cols-12 px-4 py-3 bg-stone-100 border-b border-stone-200 text-[11px] font-black uppercase tracking-wider text-stone-700">
-            <div className="col-span-1 text-center">Rank</div>
+          <div className="hidden sm:grid sm:grid-cols-12 px-3 sm:px-4 py-2 bg-stone-100 border-b border-stone-200 text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-stone-700">
+            <div className="col-span-1 text-center">#</div>
             <div className="col-span-6">Hiker</div>
             <div className="col-span-3 text-right">Distance</div>
             <div className="col-span-2 text-right">Trips</div>
           </div>
           {/* Mobile Table Header */}
-          <div className="sm:hidden flex items-center justify-between px-3.5 py-2.5 bg-stone-100 border-b border-stone-200 text-[10px] font-black uppercase tracking-wider text-stone-700">
-            <div className="flex items-center gap-2">
-              <span className="w-7 text-center">#</span>
+          <div className="sm:hidden flex items-center justify-between px-2.5 py-1.5 bg-stone-100 border-b border-stone-200 text-[10px] font-black uppercase tracking-wider text-stone-700">
+            <div className="flex items-center gap-1.5">
+              <span className="w-5.5 text-center">#</span>
               <span>Hiker</span>
             </div>
             <div className="text-right">
-              <span>Distance & Trips</span>
+              <span>Distance · Trips</span>
             </div>
           </div>
 
@@ -384,58 +395,58 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                       : 'bg-transparent hover:bg-stone-100/60'
                   }`}
                 >
-                  {/* Mobile Row Layout */}
-                  <div className="sm:hidden flex items-center justify-between px-3 py-2.5 gap-2">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="w-7 shrink-0 flex items-center justify-center">
+                  {/* Mobile Row Layout - Compact Single Line */}
+                  <div className="sm:hidden flex items-center justify-between px-2.5 py-1.5 gap-1.5 min-h-[32px]">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+                      <div className="w-5.5 shrink-0 flex items-center justify-center">
                         <RankBadge rank={idx + 1} />
                       </div>
 
-                      <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-bold text-stone-900 group-hover:text-[#E08828] transition-colors truncate">
-                          {maskName(hiker.n)}
-                        </span>
-                        <HikerTierBadge distance={hiker.d} isTop3AllTime={isTop3AllTime} isMobile />
-                      </div>
+                      <span className="text-xs font-bold text-stone-900 group-hover:text-[#E08828] transition-colors truncate shrink-1">
+                        {maskName(hiker.n)}
+                      </span>
+
+                      <HikerTierBadge distance={hiker.d} isTop3AllTime={isTop3AllTime} isMobile />
                     </div>
 
-                    <div className="text-right shrink-0 pl-1">
-                      <span className="text-xs font-black text-blue-700 block whitespace-nowrap">
-                        {distanceVal.toLocaleString()} km
+                    <div className="flex items-center gap-1 shrink-0 text-right whitespace-nowrap pl-1 font-mono tabular-nums">
+                      <span className="text-xs font-black text-blue-700">
+                        {distanceVal.toLocaleString()}<span className="text-[10px] font-sans font-bold text-stone-500 ml-0.5">km</span>
                       </span>
-                      <span className="text-[10px] text-stone-500 font-medium block whitespace-nowrap">
-                        {countVal} {category === 'hikers' ? 'hikes' : category === 'trekkers' ? 'treks' : 'trips'}
+                      <span className="text-stone-300 text-[10px] font-sans">·</span>
+                      <span className="text-[11px] font-bold text-stone-600">
+                        {countVal}<span className="text-[9px] font-sans text-stone-400">{category === 'hikers' ? 'h' : category === 'trekkers' ? 't' : 'e'}</span>
                       </span>
                     </div>
                   </div>
 
-                  {/* Tablet / Desktop Grid Row Layout */}
-                  <div className="hidden sm:grid sm:grid-cols-12 items-center px-4 py-3">
+                  {/* Tablet / Desktop Grid Row Layout - Compact Single Line */}
+                  <div className="hidden sm:grid sm:grid-cols-12 items-center px-3 sm:px-4 py-2">
                     <div className="col-span-1 flex items-center justify-center">
                       <RankBadge rank={idx + 1} />
                     </div>
 
-                    <div className="col-span-6 flex items-center gap-2 pr-2 flex-wrap">
-                      <span className="text-sm font-bold text-stone-900 group-hover:text-[#E08828] transition-colors truncate">
+                    <div className="col-span-6 flex items-center gap-1.5 pr-2 min-w-0 overflow-hidden">
+                      <span className="text-xs sm:text-sm font-bold text-stone-900 group-hover:text-[#E08828] transition-colors truncate">
                         {maskName(hiker.n)}
                       </span>
                       <HikerTierBadge distance={hiker.d} isTop3AllTime={isTop3AllTime} />
                     </div>
 
                     <div className="col-span-3 text-right">
-                      <span className="text-sm font-black text-blue-700 block">
+                      <span className="text-xs sm:text-sm font-black text-blue-700">
                         {distanceVal.toLocaleString()} km
                       </span>
-                      <span className="text-[10px] text-stone-500 font-medium">
-                        {period === 'overall' ? 'lifetime' : period}
+                      <span className="text-[9px] sm:text-[10px] text-stone-500 font-medium ml-1">
+                        ({period === 'overall' ? 'lifetime' : period})
                       </span>
                     </div>
 
                     <div className="col-span-2 text-right">
-                      <span className="text-sm font-black text-emerald-700 block">
+                      <span className="text-xs sm:text-sm font-black text-emerald-700">
                         {countVal}
                       </span>
-                      <span className="text-[10px] text-stone-500 font-medium">
+                      <span className="text-[9px] sm:text-[10px] text-stone-500 font-medium ml-1">
                         {category === 'hikers' ? 'hikes' : category === 'trekkers' ? 'treks' : 'trips'}
                       </span>
                     </div>
@@ -467,8 +478,6 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  const [mobileCategory, setMobileCategory] = useState<BoardCategory>('all');
   const [journeyPeriod, setJourneyPeriod] = useState<TimePeriod>('overall');
   const [selectedHiker, setSelectedHiker] = useState<HikerStats | null>(null);
   const [activeJourneyPoint, setActiveJourneyPoint] = useState<any | null>(null);
@@ -780,16 +789,15 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
         </div>
       )}
 
-      {/* Mobile Category Switcher (Tabs) */}
-      <div className="lg:hidden bg-stone-100 p-1.5 rounded-2xl border border-stone-300 shadow-inner flex items-center gap-1">
+      {/* Mobile Quick Jump Anchors */}
+      <div className="lg:hidden sticky top-14 z-20 bg-stone-100/95 backdrop-blur-md p-1.5 rounded-2xl border border-stone-300 shadow-xs flex items-center gap-1">
         <button
           type="button"
-          onClick={() => setMobileCategory('all')}
-          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none active:scale-95 cursor-pointer ${
-            mobileCategory === 'all'
-              ? 'bg-[#1B361D] text-white shadow-md shadow-[#1B361D]/25 ring-1 ring-[#1B361D]/30'
-              : 'text-stone-700 hover:text-stone-900 bg-white/70 border border-stone-200 shadow-2xs'
-          }`}
+          onClick={() => {
+            const el = document.getElementById('board-overall');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          className="flex-1 py-1.5 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all select-none bg-white text-stone-800 border border-stone-200 shadow-2xs hover:bg-stone-50 active:scale-95 cursor-pointer"
         >
           <Trophy className="w-3.5 h-3.5 text-[#E08828]" />
           <span>Overall</span>
@@ -797,12 +805,11 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
 
         <button
           type="button"
-          onClick={() => setMobileCategory('hikers')}
-          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none active:scale-95 cursor-pointer ${
-            mobileCategory === 'hikers'
-              ? 'bg-[#1B361D] text-white shadow-md shadow-[#1B361D]/25 ring-1 ring-[#1B361D]/30'
-              : 'text-stone-700 hover:text-stone-900 bg-white/70 border border-stone-200 shadow-2xs'
-          }`}
+          onClick={() => {
+            const el = document.getElementById('board-hikers');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          className="flex-1 py-1.5 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all select-none bg-white text-stone-800 border border-stone-200 shadow-2xs hover:bg-stone-50 active:scale-95 cursor-pointer"
         >
           <Footprints className="w-3.5 h-3.5 text-[#E08828]" />
           <span>Day Hikes</span>
@@ -810,58 +817,51 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
 
         <button
           type="button"
-          onClick={() => setMobileCategory('trekkers')}
-          className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none active:scale-95 cursor-pointer ${
-            mobileCategory === 'trekkers'
-              ? 'bg-[#1B361D] text-white shadow-md shadow-[#1B361D]/25 ring-1 ring-[#1B361D]/30'
-              : 'text-stone-700 hover:text-stone-900 bg-white/70 border border-stone-200 shadow-2xs'
-          }`}
+          onClick={() => {
+            const el = document.getElementById('board-trekkers');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          className="flex-1 py-1.5 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all select-none bg-white text-stone-800 border border-stone-200 shadow-2xs hover:bg-stone-50 active:scale-95 cursor-pointer"
         >
           <Mountain className="w-3.5 h-3.5 text-[#A8E063]" />
           <span>Treks</span>
         </button>
       </div>
 
-      {/* Mobile: Selected Board Only */}
-      <div className="lg:hidden">
-        <LeaderboardBoardSection
-          category={mobileCategory}
-          data={data}
-          loading={loading}
-          error={error}
-          setSelectedHiker={setSelectedHiker}
-          top3AllTimeNames={top3AllTimeNames}
-        />
-      </div>
+      {/* Leaderboard Boards Grid (All 3 boards visible on mobile and desktop) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        <div id="board-overall" className="scroll-mt-28">
+          <LeaderboardBoardSection
+            category="all"
+            data={data}
+            loading={loading}
+            error={error}
+            setSelectedHiker={setSelectedHiker}
+            top3AllTimeNames={top3AllTimeNames}
+          />
+        </div>
 
-      {/* Desktop: Side-by-side 3-column Grid */}
-      <div className="hidden lg:grid lg:grid-cols-3 gap-5 items-start">
-        <LeaderboardBoardSection
-          category="all"
-          data={data}
-          loading={loading}
-          error={error}
-          setSelectedHiker={setSelectedHiker}
-          top3AllTimeNames={top3AllTimeNames}
-        />
+        <div id="board-hikers" className="scroll-mt-28">
+          <LeaderboardBoardSection
+            category="hikers"
+            data={data}
+            loading={loading}
+            error={error}
+            setSelectedHiker={setSelectedHiker}
+            top3AllTimeNames={top3AllTimeNames}
+          />
+        </div>
 
-        <LeaderboardBoardSection
-          category="hikers"
-          data={data}
-          loading={loading}
-          error={error}
-          setSelectedHiker={setSelectedHiker}
-          top3AllTimeNames={top3AllTimeNames}
-        />
-
-        <LeaderboardBoardSection
-          category="trekkers"
-          data={data}
-          loading={loading}
-          error={error}
-          setSelectedHiker={setSelectedHiker}
-          top3AllTimeNames={top3AllTimeNames}
-        />
+        <div id="board-trekkers" className="scroll-mt-28">
+          <LeaderboardBoardSection
+            category="trekkers"
+            data={data}
+            loading={loading}
+            error={error}
+            setSelectedHiker={setSelectedHiker}
+            top3AllTimeNames={top3AllTimeNames}
+          />
+        </div>
       </div>
 
       {/* Map Miners Community Contribution Board */}

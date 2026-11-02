@@ -341,7 +341,7 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
               <img
                 src={data.coverImageUrl}
                 alt={data.title}
-                className="w-full h-auto max-h-[75vh] object-contain block"
+                className="w-full h-auto object-contain block"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src =

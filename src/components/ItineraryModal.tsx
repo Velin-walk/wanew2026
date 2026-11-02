@@ -493,14 +493,18 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
           
           {/* Cover Hero Banner */}
           <div className="relative w-full rounded-2xl overflow-hidden bg-neutral-900 shadow-sm border border-[#E5E1DB] group">
-            <div className="relative aspect-video max-h-[380px] w-full overflow-hidden bg-neutral-900">
+            <div className="relative w-full overflow-hidden bg-neutral-900 flex items-center justify-center">
               <img
                 src={dbData?.coverImageUrl || trek.featured_image || 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80'}
                 alt={trek.name}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-102"
+                className="w-full h-auto object-contain block transition-transform duration-700 group-hover:scale-101"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80';
+                }}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/10" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
 
               {/* Auspicious miniature prayer flag garland draped over cover */}
               <div className="absolute top-0 left-3 sm:left-6 w-36 sm:w-48 z-20 pointer-events-none drop-shadow-md">
