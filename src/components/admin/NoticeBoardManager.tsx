@@ -28,9 +28,16 @@ import {
   deleteArchivedNotice,
   DEFAULT_NOTICE,
 } from '../../services/noticeService';
+import { recordAdminAuditLog } from '../../services/api';
 import { NoticeBoardModal } from '../NoticeBoardModal';
 
-export const NoticeBoardManager: React.FC = () => {
+interface NoticeBoardManagerProps {
+  currentUserEmail?: string;
+}
+
+export const NoticeBoardManager: React.FC<NoticeBoardManagerProps> = ({
+  currentUserEmail = 'walknepalwalk@gmail.com',
+}) => {
   const [notice, setNotice] = useState<SiteNotice>(DEFAULT_NOTICE);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,6 +86,22 @@ export const NoticeBoardManager: React.FC = () => {
       const result = await saveSiteNotice(payload);
       setNotice(result);
 
+      // Record in Admin Audit Trail
+      recordAdminAuditLog({
+        actionType: 'UPDATE_NOTICE_BOARD',
+        description: `Updated notice board: "${result.title || 'Notice'}" (${result.enabled ? 'Active & Popping' : 'Inactive'})`,
+        metadata: {
+          title: result.title,
+          type: result.type,
+          enabled: result.enabled,
+          cta_text: result.ctaText || '',
+          cta_link: result.ctaLink || '',
+          expires_at: result.expiresAt || '',
+          force_pop: forcePop,
+        },
+        adminEmail: currentUserEmail,
+      });
+
       if (forcePop || result.enabled) {
         setSaveSuccessMsg('Notice updated! The pop-up is now live and will appear for visitors.');
       } else {
@@ -102,6 +125,19 @@ export const NoticeBoardManager: React.FC = () => {
     try {
       const result = await saveSiteNotice(updated);
       setNotice(result);
+
+      // Record in Admin Audit Trail
+      recordAdminAuditLog({
+        actionType: 'UPDATE_NOTICE_BOARD',
+        description: `${nextState ? 'Activated' : 'Deactivated'} notice board pop-up (${result.title || 'Notice'})`,
+        metadata: {
+          title: result.title,
+          enabled: nextState,
+          type: result.type,
+        },
+        adminEmail: currentUserEmail,
+      });
+
       setSaveSuccessMsg(
         nextState
           ? 'Notice Board activated! It will pop up for all hikers.'
@@ -151,6 +187,17 @@ export const NoticeBoardManager: React.FC = () => {
       const res = await deleteArchivedNotice(idOrTime);
       if (res) {
         setNotice(res);
+
+        // Record in Admin Audit Trail
+        recordAdminAuditLog({
+          actionType: 'UPDATE_NOTICE_BOARD',
+          description: `Deleted archived notice from history (#${idOrTime})`,
+          metadata: {
+            archived_id: idOrTime,
+          },
+          adminEmail: currentUserEmail,
+        });
+
         setSaveSuccessMsg('Archived notice removed.');
         setTimeout(() => setSaveSuccessMsg(null), 4000);
       }

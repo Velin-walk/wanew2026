@@ -429,10 +429,6 @@ export const HikerReviewsSection: React.FC<{
                           <h4 className="text-sm font-bold text-[#1F1F1F] leading-tight">
                             {publicName}
                           </h4>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>Verified Hiker</span>
-                          </span>
                         </div>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1 mt-0.5">
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px]">

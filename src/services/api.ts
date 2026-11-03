@@ -1142,4 +1142,92 @@ export function uploadImageToR2WithProgress(
   });
 }
 
+export interface AdminAuditLogPayload {
+  actionType: string;
+  description: string;
+  metadata?: Record<string, any>;
+  adminEmail?: string;
+}
+
+export const LOCAL_AUDIT_LOGS_KEY = 'wnw_local_audit_logs';
+
+export function getLocalAuditLogs(): any[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_AUDIT_LOGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (_) {}
+  return [];
+}
+
+export function saveLocalAuditLog(log: any) {
+  try {
+    const current = getLocalAuditLogs();
+    const updated = [log, ...current.filter((l) => l.id !== log.id)].slice(0, 100);
+    localStorage.setItem(LOCAL_AUDIT_LOGS_KEY, JSON.stringify(updated));
+  } catch (_) {}
+}
+
+export async function recordAdminAuditLog(payload: AdminAuditLogPayload): Promise<boolean> {
+  const { actionType, description, metadata = {}, adminEmail } = payload;
+  let devMeta: any = {};
+  try {
+    devMeta = getAdminDeviceMetadata();
+  } catch (_) {}
+
+  const email = (
+    adminEmail ||
+    auth.currentUser?.email ||
+    'walknepalwalk@gmail.com'
+  ).toLowerCase().trim();
+
+  const timestamp = new Date().toISOString();
+  const enrichedMetadata: Record<string, any> = {
+    ...metadata,
+    ...(devMeta?.device_name ? { device_name: devMeta.device_name } : {}),
+    ...(devMeta?.device_id ? { device_id: devMeta.device_id } : {}),
+    ...(devMeta?.user_agent ? { user_agent: devMeta.user_agent } : {}),
+  };
+
+  const localLogRecord = {
+    id: Date.now(),
+    admin_email: email,
+    action_type: actionType,
+    description,
+    metadata_json: JSON.stringify(enrichedMetadata),
+    created_at: timestamp,
+    device: devMeta?.device_name,
+    device_id: devMeta?.device_id,
+  };
+
+  // 1. Immediately cache locally so the admin sees it in the audit trail without delay
+  saveLocalAuditLog(localLogRecord);
+
+  // 2. Dispatch event so any open AdminActivityLogs component updates in real time
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('wnw-admin-log-recorded', { detail: localLogRecord }));
+  }
+
+  // 3. Send to Cloudflare Worker to persist in D1 admin_activity_logs table
+  try {
+    const res = await apiFetch('admin/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionType,
+        description,
+        metadata: enrichedMetadata,
+        adminEmail: email,
+      }),
+      forceFresh: true,
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[AuditTrail] Failed to send log to Cloudflare worker (saved in local buffer):', err);
+    return false;
+  }
+}
+
 

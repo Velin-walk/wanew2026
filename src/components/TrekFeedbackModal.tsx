@@ -320,9 +320,6 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
                       />
                     </div>
                   </div>
-                  <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold border border-emerald-200 shrink-0">
-                    Verified Hiker
-                  </span>
                 </div>
 
                 <div className="bg-[#FAF8F5] border border-[#EAE4DC] p-3.5 rounded-xl flex items-center gap-3">

@@ -27,7 +27,7 @@ import {
   fetchSiteVisibilitySettings,
   saveSiteVisibilitySettings,
 } from '../../services/siteVisibilityService';
-import { apiFetch } from '../../services/api';
+import { apiFetch, recordAdminAuditLog } from '../../services/api';
 
 interface SiteVisibilityManagerProps {
   currentUserEmail?: string;
@@ -57,6 +57,12 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
       });
       if (res.ok) {
         setSuccessMsg('All old Cloudinary photo links were successfully removed from the database.');
+        recordAdminAuditLog({
+          actionType: 'UPDATE_PAGE_VISIBILITY',
+          description: 'Cleared legacy Cloudinary photo links from database',
+          metadata: { action: 'clear_cloudinary_photos' },
+          adminEmail: currentUserEmail,
+        });
         setTimeout(() => setSuccessMsg(null), 6000);
       } else {
         throw new Error('Failed to clear photos from server.');
@@ -98,6 +104,34 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
     try {
       const saved = await saveSiteVisibilitySettings(settings, currentUserEmail);
       setSettings(saved);
+
+      // Summarize hidden vs visible sections for audit log description & metadata
+      const hiddenSections: string[] = [];
+      const sectionKeys: (keyof SiteVisibilitySettings)[] = [
+        'gallery', 'vouchers', 'mapminers', 'leaderboard', 'saved',
+        'heroBanner', 'upcomingHikes', 'pastEvents', 'prayerFlags',
+        'paymentInfo', 'reviews', 'blogs', 'trekTips', 'safetyPolicy', 'privateTrek'
+      ];
+      sectionKeys.forEach((key) => {
+        if (saved[key] === false) hiddenSections.push(String(key));
+      });
+
+      const summaryText = hiddenSections.length > 0
+        ? `Updated site visibility: ${hiddenSections.length} section(s) hidden (${hiddenSections.join(', ')})`
+        : 'Updated site visibility: All sections publicly visible';
+
+      recordAdminAuditLog({
+        actionType: 'UPDATE_PAGE_VISIBILITY',
+        description: summaryText,
+        metadata: {
+          hidden_sections: hiddenSections,
+          hidden_count: hiddenSections.length,
+          maintenance_title: saved.maintenanceNoticeTitle,
+          maintenance_message: saved.maintenanceNoticeMessage,
+        },
+        adminEmail: currentUserEmail,
+      });
+
       setSuccessMsg('Visibility settings updated successfully! Public display will reflect instantly.');
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {

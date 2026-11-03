@@ -47,6 +47,8 @@ export interface AdminRegistration {
   trek_date?: string;
   full_name: string;
   phone: string;
+  phone_call?: boolean | string;
+  whatsapp_group?: boolean | string;
   whatsapp?: string;
   whatsapp_number?: string;
   email: string;
@@ -221,11 +223,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
   const [bookingTypeFilter, setBookingTypeFilter] = useState<'all' | 'public' | 'private'>('all');
-  const [sortField, setSortField] = useState<'participant' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | null>(null);
+  const [sortField, setSortField] = useState<'participant' | 'phone_call' | 'whatsapp_group' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showZeroParticipants, setShowZeroParticipants] = useState(false);
 
-  const handleSort = (field: 'participant' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point') => {
+  const handleSort = (field: 'participant' | 'phone_call' | 'whatsapp_group' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point') => {
     if (sortField === field) {
       if (sortOrder === 'asc') {
         setSortOrder('desc');
@@ -662,6 +664,16 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       if (sortField === 'participant') {
         valA = (a.full_name || '').toLowerCase();
         valB = (b.full_name || '').toLowerCase();
+      } else if (sortField === 'phone_call') {
+        const boolA = draftA.phone_call !== undefined ? Boolean(draftA.phone_call) : Boolean(a.phone_call);
+        const boolB = draftB.phone_call !== undefined ? Boolean(draftB.phone_call) : Boolean(b.phone_call);
+        valA = boolA ? 1 : 0;
+        valB = boolB ? 1 : 0;
+      } else if (sortField === 'whatsapp_group') {
+        const boolA = draftA.whatsapp_group !== undefined ? Boolean(draftA.whatsapp_group) : Boolean(a.whatsapp_group);
+        const boolB = draftB.whatsapp_group !== undefined ? Boolean(draftB.whatsapp_group) : Boolean(b.whatsapp_group);
+        valA = boolA ? 1 : 0;
+        valB = boolB ? 1 : 0;
       } else if (sortField === 'pax') {
         valA = draftA.paxCount !== undefined ? draftA.paxCount : (a.paxCount ?? (a as any).pax ?? 1);
         valB = draftB.paxCount !== undefined ? draftB.paxCount : (b.paxCount ?? (b as any).pax ?? 1);
@@ -846,6 +858,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     const resolvedPax = rawPax; // Allow both number and string
     const updates: Partial<AdminRegistration> = {
       paxCount: resolvedPax,
+      phone_call: draft?.phone_call !== undefined ? Boolean(draft.phone_call) : Boolean(reg.phone_call),
+      whatsapp_group: draft?.whatsapp_group !== undefined ? Boolean(draft.whatsapp_group) : Boolean(reg.whatsapp_group),
       status: draft?.status !== undefined ? draft.status : reg.status || 'Confirmed',
       payment_status: draft?.payment_status !== undefined ? draft.payment_status : reg.payment_status || 'Unpaid',
       paid_amount: draft?.paid_amount !== undefined ? Number(draft.paid_amount || 0) : Number(reg.paid_amount || 0),
@@ -888,6 +902,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           const rawPax = draft?.paxCount !== undefined ? draft.paxCount : (reg?.paxCount ?? (reg as any)?.pax ?? 1);
           const updates: Partial<AdminRegistration> = {
             paxCount: rawPax,
+            phone_call: draft?.phone_call !== undefined ? Boolean(draft.phone_call) : Boolean(reg?.phone_call),
+            whatsapp_group: draft?.whatsapp_group !== undefined ? Boolean(draft.whatsapp_group) : Boolean(reg?.whatsapp_group),
             status: draft?.status !== undefined ? draft.status : reg?.status || 'Confirmed',
             payment_status: draft?.payment_status !== undefined ? draft.payment_status : reg?.payment_status || 'Unpaid',
             paid_amount: draft?.paid_amount !== undefined ? Number(draft.paid_amount || 0) : Number(reg?.paid_amount || 0),
@@ -1522,6 +1538,42 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                     </div>
                   </th>
                   <th
+                    onClick={() => handleSort('phone_call')}
+                    className="py-1.5 px-1.5 w-[85px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group text-center"
+                    title="Click to sort by Phone Call"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Phone Call</span>
+                      {sortField === 'phone_call' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('whatsapp_group')}
+                    className="py-1.5 px-1.5 w-[115px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group text-center"
+                    title="Click to sort by WhatsApp Group"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>WhatsApp Group</span>
+                      {sortField === 'whatsapp_group' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0 font-bold" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-stone-400 group-hover:text-stone-600 transition-colors opacity-50 group-hover:opacity-100 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+                  <th
                     onClick={() => handleSort('pax')}
                     className="py-1.5 px-1.5 w-[65px] cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group text-center"
                     title="Click to sort by Pax"
@@ -1636,6 +1688,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               <tbody className="divide-y divide-[#F0EBE5]">
                 {sortedRegistrations.map((reg) => {
                   const draft = rowDrafts[reg.id] || {};
+                  const curPhoneCall = draft.phone_call !== undefined ? Boolean(draft.phone_call) : Boolean(reg.phone_call);
+                  const curWhatsAppGroup = draft.whatsapp_group !== undefined ? Boolean(draft.whatsapp_group) : Boolean(reg.whatsapp_group);
                   const curPax = draft.paxCount !== undefined ? draft.paxCount : (reg.paxCount !== undefined ? reg.paxCount : (reg as any).pax ?? 1);
                   const curStatus = draft.status !== undefined ? draft.status : (reg.status === 'Pending' || reg.status === 'Double Registration' ? 'Duplicate' : reg.status || 'Confirmed');
                   const curPayment = draft.payment_status !== undefined ? draft.payment_status : reg.payment_status || 'Unpaid';
@@ -1701,13 +1755,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                                 </span>
                               )}
 
-                              {reg.gender && (
-                                <span className="text-[9px] font-normal px-1.5 py-0.2 rounded bg-[#EFEAE4] text-[#5A5551]">
-                                  {reg.gender} {reg.age_group ? `(${reg.age_group})` : ''}
-                                </span>
-                              )}
-
-                              {/* View Payment Voucher for Admins - pops right by side of gender */}
+                              {/* View Payment Voucher for Admins */}
                               {reg.payment_voucher_url && (
                                 <button
                                   type="button"
@@ -1741,7 +1789,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                               )}
                             </div>
 
-                            {/* Trek Name & Date */}
+                            {/* Trek Name */}
                             <div className="flex flex-wrap items-center gap-x-1.5 text-[10px]">
                               {isPrivate ? (
                                 <span className="font-medium text-purple-900 flex items-center gap-1">
@@ -1754,14 +1802,40 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                                   {reg.trek_name || 'Himalayan Trek'}
                                 </span>
                               )}
-                              {reg.trek_date && (
-                                <span className="text-[#8B8680] flex items-center gap-1">
-                                  <Calendar className="w-2.5 h-2.5 text-[#8B8680]" />
-                                  <span>{reg.trek_date}</span>
-                                </span>
-                              )}
                             </div>
                           </div>
+                        </td>
+
+                        {/* 1 - Phone call */}
+                        <td className="py-1.5 px-1.5 align-middle text-center w-[75px]">
+                          <label className="inline-flex items-center justify-center cursor-pointer p-1 rounded hover:bg-stone-100 transition-colors" title={`Phone call: ${curPhoneCall ? 'Yes' : 'No'}`}>
+                            <input
+                              type="checkbox"
+                              checked={curPhoneCall}
+                              onChange={(e) => {
+                                const nextVal = e.target.checked;
+                                handleRowChange(reg.id, 'phone_call', nextVal);
+                                onUpdateRegistration(reg.id, { phone_call: nextVal }).catch(() => {});
+                              }}
+                              className="w-4 h-4 rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer"
+                            />
+                          </label>
+                        </td>
+
+                        {/* 2 - WhatsApp Group */}
+                        <td className="py-1.5 px-1.5 align-middle text-center w-[95px]">
+                          <label className="inline-flex items-center justify-center cursor-pointer p-1 rounded hover:bg-stone-100 transition-colors" title={`WhatsApp Group: ${curWhatsAppGroup ? 'Yes' : 'No'}`}>
+                            <input
+                              type="checkbox"
+                              checked={curWhatsAppGroup}
+                              onChange={(e) => {
+                                const nextVal = e.target.checked;
+                                handleRowChange(reg.id, 'whatsapp_group', nextVal);
+                                onUpdateRegistration(reg.id, { whatsapp_group: nextVal }).catch(() => {});
+                              }}
+                              className="w-4 h-4 rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer"
+                            />
+                          </label>
                         </td>
 
                         {/* Pax Count (Directly editable like admin notes) */}
@@ -1919,7 +1993,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                       {/* Expandable Specifications and Notes Drawer */}
                       {isExpanded && (
                         <tr className="bg-purple-50/50 border-b border-purple-200">
-                          <td colSpan={10} className="p-4">
+                          <td colSpan={12} className="p-4">
                             <div className="bg-white rounded-xl border border-purple-200 p-4 shadow-xs space-y-3">
                               <div className="flex items-center justify-between border-b border-purple-100 pb-2">
                                 <div className="flex items-center gap-2">

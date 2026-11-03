@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Camera, Star, ArrowRight, CheckCircle2, Sparkles, MessageSquare, Image as ImageIcon } from 'lucide-react';
+import { Camera, Star, ArrowRight, Sparkles, MessageSquare, Image as ImageIcon } from 'lucide-react';
 import { Trek } from '../types';
 import { SubPageType } from './InfoPagesModal';
 import { HISTORIC_COMMUNITY_REVIEWS, StaticReview } from '../data/historicReviews';
@@ -489,10 +489,6 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
                           </div>
                           <span className="text-xs font-bold text-[#1F1F1F] truncate">
                             {getPublicDisplayName(rev.full_name)}
-                          </span>
-                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-md border border-emerald-200 shrink-0">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
-                            <span>Verified Hiker</span>
                           </span>
                         </div>
 

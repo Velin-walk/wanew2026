@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiFetch } from '../../services/api';
+import { apiFetch, getLocalAuditLogs } from '../../services/api';
 import {
   Clock,
   Search,
@@ -18,7 +18,11 @@ import {
   X,
   CreditCard,
   Laptop,
-  Smartphone
+  Smartphone,
+  Bell,
+  Eye,
+  Tag,
+  UserCheck,
 } from 'lucide-react';
 
 interface ActivityLog {
@@ -39,6 +43,10 @@ const ACTION_TYPES = [
   { value: 'UPDATE_TREK_STATUS', label: 'Status Update' },
   { value: 'UPDATE_EVENT_EXECUTION', label: 'Event Execution' },
   { value: 'UPDATE_BOOKING', label: 'Booking / Roster' },
+  { value: 'UPDATE_NOTICE_BOARD', label: 'Notice Board' },
+  { value: 'UPDATE_PAGE_VISIBILITY', label: 'Page Visibility' },
+  { value: 'UPDATE_OFFERS', label: 'Offers / Flashcards' },
+  { value: 'UPDATE_GUIDES', label: 'Guide Intros' },
   { value: 'CLONE_TREK', label: 'Clone Trek' },
   { value: 'DELETE_TREK', label: 'Delete Trek' },
   { value: 'DELETE_REGISTRATION', label: 'Delete Registration' },
@@ -78,14 +86,37 @@ export function AdminActivityLogs() {
       const data = await res.json();
       if (data.success) {
         const rawLogs: ActivityLog[] = data.data || [];
-        const sortedLogs = [...rawLogs].sort((a, b) => {
+        const localLogs: ActivityLog[] = getLocalAuditLogs();
+
+        // Apply filters to local logs
+        const filteredLocal = localLogs.filter((item) => {
+          if (selectedAction && item.action_type !== selectedAction) return false;
+          if (searchEmail.trim() && !item.admin_email?.toLowerCase().includes(searchEmail.trim().toLowerCase())) return false;
+          return true;
+        });
+
+        // Combine and deduplicate
+        const combined = [...filteredLocal, ...rawLogs];
+        const seen = new Set<string>();
+        const uniqueLogs: ActivityLog[] = [];
+
+        for (const log of combined) {
+          const key = `${log.action_type || ''}_${log.description || ''}_${(log.created_at || '').slice(0, 16)}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueLogs.push(log);
+          }
+        }
+
+        const sortedLogs = uniqueLogs.sort((a, b) => {
           const timeA = new Date(a.created_at ? a.created_at.replace(' ', 'T') : 0).getTime();
           const timeB = new Date(b.created_at ? b.created_at.replace(' ', 'T') : 0).getTime();
           if (timeB !== timeA) return timeB - timeA;
           return (Number(b.id) || 0) - (Number(a.id) || 0);
         });
+
         setLogs(sortedLogs);
-        setTotal(data.total || 0);
+        setTotal(Math.max(data.total || 0, sortedLogs.length));
       } else {
         throw new Error(data.error || 'Failed to retrieve logs');
       }
@@ -100,6 +131,23 @@ export function AdminActivityLogs() {
   useEffect(() => {
     fetchLogs();
   }, [offset, selectedAction]);
+
+  useEffect(() => {
+    const handleLogRecorded = (e: any) => {
+      if (e?.detail) {
+        setLogs((prev) => {
+          const exists = prev.some(
+            (l) => l.id === e.detail.id || (l.action_type === e.detail.action_type && l.description === e.detail.description)
+          );
+          if (exists) return prev;
+          return [e.detail, ...prev];
+        });
+        setTotal((prev) => prev + 1);
+      }
+    };
+    window.addEventListener('wnw-admin-log-recorded', handleLogRecorded);
+    return () => window.removeEventListener('wnw-admin-log-recorded', handleLogRecorded);
+  }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,6 +171,14 @@ export function AdminActivityLogs() {
         return 'bg-blue-50 text-blue-800 border border-blue-200';
       case 'UPDATE_BOOKING':
         return 'bg-indigo-50 text-indigo-800 border border-indigo-200';
+      case 'UPDATE_NOTICE_BOARD':
+        return 'bg-amber-50 text-amber-800 border border-amber-200';
+      case 'UPDATE_PAGE_VISIBILITY':
+        return 'bg-teal-50 text-teal-800 border border-teal-200';
+      case 'UPDATE_OFFERS':
+        return 'bg-orange-50 text-orange-800 border border-orange-200';
+      case 'UPDATE_GUIDES':
+        return 'bg-sky-50 text-sky-800 border border-sky-200';
       case 'DELETE_TREK':
       case 'DELETE_REGISTRATION':
         return 'bg-red-50 text-red-800 border border-red-200';
@@ -147,6 +203,14 @@ export function AdminActivityLogs() {
         return <Sparkles className="w-3.5 h-3.5 text-sky-600" />;
       case 'UPDATE_BOOKING':
         return <CreditCard className="w-3.5 h-3.5 text-indigo-600" />;
+      case 'UPDATE_NOTICE_BOARD':
+        return <Bell className="w-3.5 h-3.5 text-amber-600" />;
+      case 'UPDATE_PAGE_VISIBILITY':
+        return <Eye className="w-3.5 h-3.5 text-teal-600" />;
+      case 'UPDATE_OFFERS':
+        return <Tag className="w-3.5 h-3.5 text-[#F38020]" />;
+      case 'UPDATE_GUIDES':
+        return <UserCheck className="w-3.5 h-3.5 text-sky-600" />;
       case 'DELETE_TREK':
       case 'DELETE_REGISTRATION':
         return <ShieldAlert className="w-3.5 h-3.5 text-red-600" />;
@@ -252,6 +316,20 @@ export function AdminActivityLogs() {
       .replace(/^deleted\s+trek\s+/i, 'Trek ')
       .replace(/^cloned\s+trek\s+/i, '')
       .replace(/^batch\s+migrated\s+/i, '')
+      .replace(/^updated\s+notice\s+board:\s*/i, 'Notice: ')
+      .replace(/^(?:activated|deactivated)\s+notice\s+board\s+pop-up\s*/i, 'Notice Board: ')
+      .replace(/^deleted\s+archived\s+notice\s+from\s+history\s*/i, 'Archived Notice: ')
+      .replace(/^updated\s+site\s+(?:section\s+)?visibility(?:\s+settings)?:\s*/i, 'Visibility: ')
+      .replace(/^cleared\s+legacy\s+cloudinary\s+photo\s+links\s+from\s+database/i, 'Photos: Cleared Old Links')
+      .replace(/^published\s+(?:special\s+)?offer\s+flashcard:\s*/i, 'Offer: ')
+      .replace(/^(?:archived|restored|deleted)\s+offer\s+flashcard:\s*/i, 'Offer: ')
+      .replace(/^cleared\s+all\s+archived\s+past\s+offers/i, 'Archived Offers: Cleared All')
+      .replace(/^updated\s+guide\s+(?:profile(?:\s+details)?\s+for|intro\s+profile:)\s*/i, 'Guide: ')
+      .replace(/^added\s+new\s+guide\s+profile:\s*/i, 'New Guide: ')
+      .replace(/^set\s+guide\s+["']?([^"']+)["']?\s+visibility\s+to\s+([^)]+)/i, 'Guide Visibility: $1 → $2')
+      .replace(/^(?:enabled|disabled)\s+public\s+trek\s+leaders\s+tab/i, 'Guide Tab Visibility')
+      .replace(/^removed\s+guide\s+profile:\s*/i, 'Guide Removed: ')
+      .replace(/^reset\s+all\s+guide\s+profiles\s+and\s+settings\s+to\s+defaults/i, 'Guides: Reset to Defaults')
       .trim();
   };
 
@@ -522,6 +600,31 @@ export function AdminActivityLogs() {
                                   {meta.payment_status}
                                 </span>
                               )}
+                              {meta.enabled !== undefined && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${meta.enabled ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-stone-100 text-stone-600'}`}>
+                                  {meta.enabled ? 'Active' : 'Inactive'}
+                                </span>
+                              )}
+                              {meta.type && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 uppercase">
+                                  {meta.type}
+                                </span>
+                              )}
+                              {meta.color && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-800 border border-orange-200">
+                                  Color: {meta.color}
+                                </span>
+                              )}
+                              {meta.hidden_count !== undefined && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                                  Hidden: {meta.hidden_count}
+                                </span>
+                              )}
+                              {meta.guide_id && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200 font-mono">
+                                  Guide: {meta.name || meta.guide_id}
+                                </span>
+                              )}
                               {meta.paid_amount !== undefined && meta.paid_amount !== null && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">
                                   Paid: Rs. {Number(meta.paid_amount).toLocaleString()}
@@ -537,7 +640,7 @@ export function AdminActivityLogs() {
                                   {meta.pickup_point}
                                 </span>
                               ) : null}
-                              {!meta.registration_id && !meta.status && !meta.payment_status && (
+                              {!meta.registration_id && !meta.status && !meta.payment_status && meta.enabled === undefined && !meta.type && !meta.color && meta.hidden_count === undefined && !meta.guide_id && (
                                 <div className="flex flex-wrap gap-1">
                                   {Object.entries(meta).slice(0, 3).map(([k, v]) => (
                                     <span key={k} className="px-1.5 py-0.5 rounded text-[10px] bg-stone-100 text-stone-700 font-mono">

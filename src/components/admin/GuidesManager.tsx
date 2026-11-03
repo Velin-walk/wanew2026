@@ -24,13 +24,17 @@ import {
   saveGuidesSettings,
   deduplicateGuides,
 } from '../../services/guidesService';
+import { recordAdminAuditLog } from '../../services/api';
 
 interface GuidesManagerProps {
   currentUserEmail?: string;
   treks?: any[];
 }
 
-export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
+export const GuidesManager: React.FC<GuidesManagerProps> = ({
+  currentUserEmail = 'walknepalwalk@gmail.com',
+  treks = [],
+}) => {
   const [settings, setSettings] = useState<GuidesSettings>(getGuidesSettings);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterGender, setFilterGender] = useState<'all' | 'Male' | 'Female'>('all');
@@ -49,10 +53,24 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
   const handleSaveRow = (id: string) => {
     const draft = rowDrafts[id];
     if (!draft) return;
+    const targetGuide = settings.custom_guides.find((g) => g.id === id);
     const updatedGuides = settings.custom_guides.map(g => g.id === id ? { ...g, ...draft } : g);
     const updated: GuidesSettings = { ...settings, custom_guides: deduplicateGuides(updatedGuides) };
     setSettings(updated);
     saveGuidesSettings(updated);
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_GUIDES',
+      description: `Updated guide profile details for "${targetGuide?.name || id}"`,
+      metadata: {
+        guide_id: id,
+        name: targetGuide?.name,
+        changed_fields: draft,
+      },
+      adminEmail: currentUserEmail,
+    });
+
     setRowDrafts(prev => {
         const next = {...prev};
         delete next[id];
@@ -128,23 +146,37 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
   }, [treks]);
 
   const handleToggleMasterTab = () => {
+    const nextState = !settings.show_trek_leaders_tab;
     const updated: GuidesSettings = {
       ...settings,
-      show_trek_leaders_tab: !settings.show_trek_leaders_tab,
+      show_trek_leaders_tab: nextState,
     };
     setSettings(updated);
     saveGuidesSettings(updated);
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_GUIDES',
+      description: `${nextState ? 'Enabled' : 'Disabled'} public Trek Leaders tab`,
+      metadata: {
+        show_trek_leaders_tab: nextState,
+      },
+      adminEmail: currentUserEmail,
+    });
+
     triggerSuccessBanner();
   };
 
   const handleToggleGuideVisibility = (id: string, name?: string) => {
     const targetId = (id || '').trim().toLowerCase();
     const targetName = (name || '').trim().toLowerCase();
+    let nextVis = true;
 
     const updatedGuides = settings.custom_guides.map((g) => {
       const gId = (g.id || '').trim().toLowerCase();
       const gName = (g.name || '').trim().toLowerCase();
       if ((targetId && gId === targetId) || (targetName && gName === targetName)) {
+        nextVis = !g.is_visible;
         return { ...g, is_visible: !g.is_visible };
       }
       return g;
@@ -153,6 +185,19 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
     const updated: GuidesSettings = { ...settings, custom_guides: deduplicateGuides(updatedGuides) };
     setSettings(updated);
     saveGuidesSettings(updated);
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_GUIDES',
+      description: `Set guide "${name || id}" visibility to ${nextVis ? 'Visible' : 'Hidden'}`,
+      metadata: {
+        guide_id: id,
+        name,
+        is_visible: nextVis,
+      },
+      adminEmail: currentUserEmail,
+    });
+
     triggerSuccessBanner();
   };
 
@@ -166,6 +211,23 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
     const updated: GuidesSettings = { ...settings, custom_guides: updatedGuides };
     setSettings(updated);
     saveGuidesSettings(updated);
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_GUIDES',
+      description: `Updated guide intro profile: "${editingGuide.name}" (${editingGuide.role})`,
+      metadata: {
+        guide_id: editingGuide.id,
+        name: editingGuide.name,
+        role: editingGuide.role,
+        gender: editingGuide.gender,
+        specialty: editingGuide.specialty,
+        badge: editingGuide.badge,
+        is_visible: editingGuide.is_visible,
+      },
+      adminEmail: currentUserEmail,
+    });
+
     setEditingGuide(null);
     triggerSuccessBanner();
   };
@@ -193,6 +255,22 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
     };
     setSettings(updated);
     saveGuidesSettings(updated);
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_GUIDES',
+      description: `Added new guide profile: "${created.name}" (${created.role})`,
+      metadata: {
+        guide_id: created.id,
+        name: created.name,
+        role: created.role,
+        gender: created.gender,
+        experience_km: created.experienceKm,
+        specialty: created.specialty,
+      },
+      adminEmail: currentUserEmail,
+    });
+
     setShowAddModal(false);
     setNewGuide({
       name: '',
@@ -213,6 +291,19 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
     const updated: GuidesSettings = { ...settings, custom_guides: updatedGuides };
     setSettings(updated);
     saveGuidesSettings(updated);
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_GUIDES',
+      description: `Removed guide profile: "${name}" (#${id})`,
+      metadata: {
+        guide_id: id,
+        name,
+        action: 'delete',
+      },
+      adminEmail: currentUserEmail,
+    });
+
     triggerSuccessBanner();
   };
 
@@ -224,6 +315,17 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({ treks = [] }) => {
     };
     setSettings(defaultSettings);
     saveGuidesSettings(defaultSettings);
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_GUIDES',
+      description: 'Reset all guide profiles and settings to system defaults',
+      metadata: {
+        action: 'reset_defaults',
+      },
+      adminEmail: currentUserEmail,
+    });
+
     triggerSuccessBanner();
   };
 

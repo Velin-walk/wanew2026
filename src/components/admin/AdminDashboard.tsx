@@ -463,6 +463,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               suggestions: r.suggestions || '',
               person_remarks: r.person_remarks || r.list_name || '',
               status: r.status || r.registration_status || 'Confirmed',
+              phone_call: r.phone_call !== undefined ? Boolean(r.phone_call) : false,
+              whatsapp_group: r.whatsapp_group !== undefined ? Boolean(r.whatsapp_group) : false,
               payment_status: r.payment_status || r.paymentStatus || r.roster_payment_status || 'Unpaid',
               paid_amount: Number(r.paid_amount ?? r.paidAmount ?? r.paid ?? 0),
               due_amount: Number(r.due_amount ?? r.dueAmount ?? r.due ?? 0),
@@ -660,6 +662,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         ...(updates.paid_amount !== undefined ? { paid_amount: updates.paid_amount } : {}),
         ...(updates.due_amount !== undefined ? { due_amount: updates.due_amount } : {}),
         ...(updates.pickup_point ? { pickup_point: updates.pickup_point } : {}),
+        ...(updates.phone_call !== undefined ? { phone_call: updates.phone_call } : {}),
+        ...(updates.whatsapp_group !== undefined ? { whatsapp_group: updates.whatsapp_group } : {}),
       }),
     };
 
@@ -2639,7 +2643,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               )}
 
               {systemSubTab === 'notice' && (
-                <NoticeBoardManager />
+                <NoticeBoardManager currentUserEmail={currentUserEmail} />
               )}
 
               {systemSubTab === 'visibility' && (

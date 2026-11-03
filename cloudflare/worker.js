@@ -3220,6 +3220,26 @@ export default {
         }
       }
 
+      // POST /admin/logs - Record admin activity log in Cloudflare D1
+      if (method === 'POST' && path === '/admin/logs') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+
+        try {
+          const body = await request.json();
+          const actionType = body.actionType || body.action_type || 'SYSTEM_UPDATE';
+          const description = body.description || '';
+          const metadata = body.metadata || body.metadata_json || {};
+
+          await logAdminActivity(env, request, actionType, description, metadata);
+          return jsonResponse({
+            success: true,
+            message: 'Admin activity logged successfully'
+          });
+        } catch (err) {
+          return errorResponse('Failed to record activity log: ' + err.message, 500);
+        }
+      }
+
       // ===== FEEDBACK ENDPOINTS =====
 
       // GET /feedback

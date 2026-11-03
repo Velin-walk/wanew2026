@@ -40,6 +40,8 @@ const D1_COLUMNS: ColumnDef[] = [
   { key: 'hike_number', label: 'hike_number', type: 'TEXT', width: 'w-28' },
   { key: 'trek_name', label: 'trek_name', type: 'TEXT', width: 'w-48' },
   { key: 'full_name', label: 'full_name', type: 'TEXT', width: 'w-44' },
+  { key: 'phone_call', label: 'phone_call', type: 'TEXT', width: 'w-24' },
+  { key: 'whatsapp_group', label: 'whatsapp_group', type: 'TEXT', width: 'w-28' },
   { key: 'pax', label: 'pax', type: 'INTEGER', width: 'w-16' },
   { key: 'phone', label: 'phone / whatsapp', type: 'TEXT', width: 'w-36' },
   { key: 'emergency_backup_contact', label: 'emergency_backup_contact', type: 'TEXT', width: 'w-44' },
@@ -199,6 +201,10 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
         return r.trek_name || '';
       case 'full_name':
         return r.full_name || r.name || '';
+      case 'phone_call':
+        return r.phone_call ? 'Yes' : 'No';
+      case 'whatsapp_group':
+        return r.whatsapp_group ? 'Yes' : 'No';
       case 'pax':
         return r.pax ?? r.paxCount ?? 1;
       case 'phone':

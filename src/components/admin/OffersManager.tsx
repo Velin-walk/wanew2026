@@ -14,11 +14,17 @@ import {
   Megaphone,
   Calendar,
   Palette,
+  Archive,
+  RotateCcw,
+  Copy,
+  X,
+  Layers,
 } from 'lucide-react';
-import { apiFetch, uploadImageToR2WithProgress } from '../../services/api';
+import { apiFetch, uploadImageToR2WithProgress, recordAdminAuditLog } from '../../services/api';
 
 export const OFFER_TREK_ID = 'OFFER_FLASHCARD';
 export const OFFERS_STORAGE_KEY = 'wnw_offers_cache';
+export const ARCHIVED_OFFERS_STORAGE_KEY = 'wnw_archived_offers_list';
 
 export interface OfferItem {
   id: string;
@@ -164,6 +170,27 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
   currentUserEmail,
 }) => {
   const [offers, setOffers] = useState<OfferItem[]>([]);
+  const [archivedOffers, setArchivedOffers] = useState<OfferItem[]>(() => {
+    try {
+      const cached = localStorage.getItem(ARCHIVED_OFFERS_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+      const rawGallery = localStorage.getItem('wnw_flashcards_gallery_archive');
+      if (rawGallery) {
+        const parsed = JSON.parse(rawGallery);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return [];
+  });
+  const [offersViewTab, setOffersViewTab] = useState<'active' | 'archived' | 'all'>('active');
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [offerText, setOfferText] = useState('');
@@ -215,6 +242,21 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
           try {
             localStorage.setItem(OFFERS_STORAGE_KEY, JSON.stringify(sorted));
           } catch {}
+
+          // Auto-sync any expired items into archivedOffers so they are permanently preserved
+          const expiredItems = sorted.filter((item) => !isNotExpired(item));
+          if (expiredItems.length > 0) {
+            setArchivedOffers((prev) => {
+              const merged = [...expiredItems, ...prev].filter(
+                (item, index, self) => index === self.findIndex((t) => t.id === item.id)
+              );
+              try {
+                localStorage.setItem(ARCHIVED_OFFERS_STORAGE_KEY, JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+
           setLoading(false);
           return;
         }
@@ -327,6 +369,59 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
         throw new Error(`Cloudflare D1 save returned status ${saveRes.status}`);
       }
 
+      // Record in Admin Audit Trail
+      const offerTitle = cleanCaption || 'Special Offer';
+      recordAdminAuditLog({
+        actionType: 'UPDATE_OFFERS',
+        description: `Published offer flashcard: "${offerTitle.slice(0, 45)}"`,
+        metadata: {
+          offer_id: newRecord.id,
+          title: offerTitle,
+          color: cardColor,
+          expires_at: expiresAtIso || 'None',
+          url: finalImageUrl,
+        },
+        adminEmail: currentUserEmail,
+      });
+
+      // Auto-save existing past offers to the archived list so they are never lost
+      if (offers.length > 0) {
+        const pastOffersList: OfferItem[] = offers.map((item) => {
+          const meta = parseOfferMetadata(item);
+          return {
+            ...item,
+            color: meta.color || item.color,
+            expiresAt: meta.expiresAt || item.expiresAt,
+          };
+        });
+
+        setArchivedOffers((prev) => {
+          const merged = [...pastOffersList, ...prev].filter(
+            (item, index, self) => index === self.findIndex((t) => t.id === item.id)
+          );
+          try {
+            localStorage.setItem(ARCHIVED_OFFERS_STORAGE_KEY, JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+
+        // Background backup to D1 OFFER_ARCHIVE for multi-device persistence
+        pastOffersList.forEach(async (pastItem) => {
+          try {
+            await apiFetch('trek_photos', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...pastItem,
+                id: pastItem.id.startsWith('archived_') ? pastItem.id : `archived_${pastItem.id}`,
+                trekId: 'OFFER_ARCHIVE',
+                trekName: 'Archived Offer',
+              }),
+            });
+          } catch {}
+        });
+      }
+
       const updatedList = [newRecord, ...offers];
       setOffers(updatedList);
       try {
@@ -348,7 +443,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
       setOfferText('');
       setDeadline('');
       setStatusMsg({
-        text: 'Offer / Flashcard published successfully! Color & metadata saved to Cloudflare.',
+        text: 'Offer / Flashcard published successfully! Past offers auto-saved to archive.',
         type: 'success',
       });
     } catch (err: any) {
@@ -362,7 +457,204 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
     }
   };
 
+  const handleArchiveOffer = async (item: OfferItem) => {
+    setStatusMsg(null);
+    try {
+      const meta = parseOfferMetadata(item);
+      const archivedItem: OfferItem = {
+        ...item,
+        color: meta.color || item.color,
+        expiresAt: meta.expiresAt || item.expiresAt,
+      };
+
+      const updatedArchived = [archivedItem, ...archivedOffers.filter((a) => a.id !== item.id)];
+      setArchivedOffers(updatedArchived);
+      try {
+        localStorage.setItem(ARCHIVED_OFFERS_STORAGE_KEY, JSON.stringify(updatedArchived));
+      } catch {}
+
+      // Delete from active list
+      await apiFetch(`trek_photos/${encodeURIComponent(item.id)}`, {
+        method: 'DELETE',
+      });
+      const updatedActive = offers.filter((o) => o.id !== item.id);
+      setOffers(updatedActive);
+      try {
+        localStorage.setItem(OFFERS_STORAGE_KEY, JSON.stringify(updatedActive));
+      } catch {}
+
+      // Record in Admin Audit Trail
+      const offerTitle = cleanOfferCaption(item.caption) || item.id;
+      recordAdminAuditLog({
+        actionType: 'UPDATE_OFFERS',
+        description: `Archived offer flashcard: "${offerTitle.slice(0, 45)}"`,
+        metadata: {
+          offer_id: item.id,
+          title: offerTitle,
+          action: 'archive',
+        },
+        adminEmail: currentUserEmail,
+      });
+
+      window.dispatchEvent(new CustomEvent('wnw-offers-updated'));
+
+      setStatusMsg({
+        text: 'Offer successfully archived to past offers list.',
+        type: 'success',
+      });
+    } catch (err: any) {
+      setStatusMsg({
+        text: err.message || 'Failed to archive offer.',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleRestoreArchivedOffer = async (item: OfferItem) => {
+    setStatusMsg(null);
+    try {
+      const meta = parseOfferMetadata(item);
+      const restoredRecord: OfferItem = {
+        ...item,
+        id: `offer_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        trekId: OFFER_TREK_ID,
+        uploadedAt: new Date().toISOString(),
+        color: meta.color || item.color || 'orange',
+      };
+
+      const saveRes = await apiFetch('trek_photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(restoredRecord),
+      });
+
+      if (!saveRes.ok) {
+        throw new Error('Could not restore offer to active list.');
+      }
+
+      const updatedActive = [restoredRecord, ...offers];
+      setOffers(updatedActive);
+      try {
+        localStorage.setItem(OFFERS_STORAGE_KEY, JSON.stringify(updatedActive));
+      } catch {}
+
+      // Record in Admin Audit Trail
+      const offerTitle = cleanOfferCaption(item.caption) || item.id;
+      recordAdminAuditLog({
+        actionType: 'UPDATE_OFFERS',
+        description: `Restored offer flashcard from archive: "${offerTitle.slice(0, 45)}"`,
+        metadata: {
+          offer_id: restoredRecord.id,
+          title: offerTitle,
+          action: 'restore',
+        },
+        adminEmail: currentUserEmail,
+      });
+
+      window.dispatchEvent(new CustomEvent('wnw-offers-updated'));
+      setOffersViewTab('active');
+
+      setStatusMsg({
+        text: 'Archived offer restored to active homepage offers!',
+        type: 'success',
+      });
+    } catch (err: any) {
+      setStatusMsg({
+        text: err.message || 'Failed to restore offer.',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleReuseArchivedOffer = (item: OfferItem) => {
+    const meta = parseOfferMetadata(item);
+    if (item.url) {
+      setDirectUrl(item.url);
+      setSelectedImage(null);
+    }
+    setOfferText(cleanOfferCaption(item.caption));
+    setCardColor(meta.color || item.color || 'orange');
+    if (meta.expiresAt) {
+      try {
+        // If deadline hasn't passed, keep it; otherwise blank out so admin can pick new date
+        const dt = new Date(meta.expiresAt);
+        if (dt.getTime() > Date.now()) {
+          setDeadline(dt.toISOString().slice(0, 16));
+        } else {
+          setDeadline('');
+        }
+      } catch {
+        setDeadline('');
+      }
+    } else {
+      setDeadline('');
+    }
+
+    setStatusMsg({
+      text: 'Archived offer details loaded into the creation form above. Edit and publish anytime!',
+      type: 'success',
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDeleteArchivedOffer = (id: string) => {
+    const deletedItem = archivedOffers.find((item) => item.id === id);
+    const offerTitle = deletedItem ? (cleanOfferCaption(deletedItem.caption) || id) : id;
+    const updated = archivedOffers.filter((item) => item.id !== id);
+    setArchivedOffers(updated);
+    try {
+      localStorage.setItem(ARCHIVED_OFFERS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {}
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_OFFERS',
+      description: `Removed offer flashcard from archive: "${offerTitle.slice(0, 45)}"`,
+      metadata: {
+        offer_id: id,
+        title: offerTitle,
+        action: 'delete_archived',
+      },
+      adminEmail: currentUserEmail,
+    });
+
+    setStatusMsg({
+      text: 'Offer removed from archive.',
+      type: 'success',
+    });
+  };
+
+  const handleClearAllArchived = () => {
+    if (!window.confirm('Are you sure you want to clear all archived past offers? This cannot be undone.')) {
+      return;
+    }
+    const count = archivedOffers.length;
+    setArchivedOffers([]);
+    try {
+      localStorage.removeItem(ARCHIVED_OFFERS_STORAGE_KEY);
+    } catch {}
+
+    // Record in Admin Audit Trail
+    recordAdminAuditLog({
+      actionType: 'UPDATE_OFFERS',
+      description: `Cleared all archived past offer flashcards (${count} items removed)`,
+      metadata: {
+        cleared_count: count,
+        action: 'clear_all_archived',
+      },
+      adminEmail: currentUserEmail,
+    });
+
+    setStatusMsg({
+      text: 'All archived past offers have been cleared.',
+      type: 'success',
+    });
+  };
+
   const handleDeleteOffer = async (id: string) => {
+    const deletedItem = offers.find((item) => item.id !== id);
+    const offerTitle = deletedItem ? (cleanOfferCaption(deletedItem.caption) || id) : id;
     setDeletingId(id);
     setStatusMsg(null);
     try {
@@ -374,6 +666,18 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
       try {
         localStorage.setItem(OFFERS_STORAGE_KEY, JSON.stringify(updatedList));
       } catch {}
+
+      // Record in Admin Audit Trail
+      recordAdminAuditLog({
+        actionType: 'UPDATE_OFFERS',
+        description: `Deleted offer flashcard: "${offerTitle.slice(0, 45)}"`,
+        metadata: {
+          offer_id: id,
+          title: offerTitle,
+          action: 'delete',
+        },
+        adminEmail: currentUserEmail,
+      });
 
       window.dispatchEvent(new CustomEvent('wnw-offers-updated'));
 
@@ -412,10 +716,14 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-center">
+          <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">
               <Tag className="w-3.5 h-3.5 text-[#E08828]" />
               <span>{offers.filter(isNotExpired).length} Active Offers</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 border border-stone-200 text-stone-700 text-xs font-bold">
+              <Archive className="w-3.5 h-3.5 text-stone-600" />
+              <span>{archivedOffers.length} Archived Past</span>
             </span>
             <button
               type="button"
@@ -634,100 +942,334 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
           )}
         </div>
 
-        {/* Published Offers List */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-black text-[#1F1F1F] uppercase tracking-wider">
-            All Published Offers ({offers.length})
-          </h3>
+        {/* Navigation Tabs between Active Offers and Archived Past Offers */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#EFEAE4] pb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setOffersViewTab('active')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                offersViewTab === 'active'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'bg-stone-100 text-[#5A5551] hover:bg-stone-200'
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span>Active Offers ({offers.filter(isNotExpired).length})</span>
+            </button>
 
-          {loading ? (
-            <div className="space-y-3">
-              {[1, 2].map((n) => (
-                <div key={n} className="h-28 rounded-2xl bg-stone-100 animate-pulse border border-[#EFEAE4]" />
-              ))}
-            </div>
-          ) : offers.length === 0 ? (
-            <div className="p-8 rounded-2xl border border-dashed border-[#D5D1CB] text-center space-y-1.5 bg-[#FAF8F5]/50">
-              <Megaphone className="w-8 h-8 text-[#8B8680] mx-auto" />
-              <p className="text-xs font-bold text-[#1F1F1F]">No active offers posted</p>
-              <p className="text-[11px] text-[#8B8680]">
-                Upload an image and offer text above to display your first offer on the homepage!
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {offers.map((item) => {
-                const active = isNotExpired(item);
-                const meta = parseOfferMetadata(item);
-                const itemColor = meta.color || item.color || 'orange';
-                const itemExpires = meta.expiresAt || item.expiresAt;
-                const displayCaption = cleanOfferCaption(item.caption);
+            <button
+              type="button"
+              onClick={() => setOffersViewTab('archived')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                offersViewTab === 'archived'
+                  ? 'bg-stone-800 text-white shadow-xs'
+                  : 'bg-stone-100 text-[#5A5551] hover:bg-stone-200'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              <span>Archived Past Offers ({archivedOffers.length})</span>
+              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-emerald-500 text-white">Auto-Saved</span>
+            </button>
 
-                return (
-                  <div
-                    key={item.id}
-                    className={`rounded-2xl p-4 border shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 ${
-                      active ? 'bg-white border-[#E5E1DB]' : 'bg-stone-50 border-stone-200 opacity-70'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4 w-full sm:w-auto">
-                      {item.url && (
-                        <img
-                          src={item.url}
-                          alt="Offer thumbnail"
-                          className="w-24 h-auto max-h-24 rounded-xl object-contain border border-[#EFEAE4] bg-stone-100 shrink-0"
-                        />
-                      )}
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {active ? (
-                            <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
-                              Active Offer
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-black uppercase">
-                              Expired (Auto-Removed)
-                            </span>
-                          )}
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-stone-100 border text-stone-800">
-                            Theme: {itemColor}
-                          </span>
-                          <span className="text-[11px] text-[#8B8680]">
-                            Published {new Date(item.uploadedAt).toLocaleDateString()} by {item.uploadedBy}
-                          </span>
-                          {itemExpires && (
-                            <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              Deadline: {new Date(itemExpires).toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs font-bold text-[#1F1F1F] leading-relaxed whitespace-pre-line">
-                          {displayCaption || 'No description text'}
-                        </p>
-                      </div>
-                    </div>
+            <button
+              type="button"
+              onClick={() => setOffersViewTab('all')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                offersViewTab === 'all'
+                  ? 'bg-stone-700 text-white shadow-xs'
+                  : 'text-[#8B8680] hover:bg-stone-100'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>View Both</span>
+            </button>
+          </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteOffer(item.id)}
-                      disabled={deletingId === item.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 self-end sm:self-center"
-                    >
-                      {deletingId === item.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-3.5 h-3.5" />
-                      )}
-                      <span>Delete Offer</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+          {offersViewTab === 'archived' && archivedOffers.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAllArchived}
+              className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Clear Archive</span>
+            </button>
           )}
         </div>
+
+        {/* Active Offers Section */}
+        {(offersViewTab === 'active' || offersViewTab === 'all') && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black text-[#1F1F1F] uppercase tracking-wider flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-amber-500" />
+                <span>Current / Active Offers ({offers.length})</span>
+              </h3>
+            </div>
+
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2].map((n) => (
+                  <div key={n} className="h-28 rounded-2xl bg-stone-100 animate-pulse border border-[#EFEAE4]" />
+                ))}
+              </div>
+            ) : offers.length === 0 ? (
+              <div className="p-8 rounded-2xl border border-dashed border-[#D5D1CB] text-center space-y-1.5 bg-[#FAF8F5]/50">
+                <Megaphone className="w-8 h-8 text-[#8B8680] mx-auto" />
+                <p className="text-xs font-bold text-[#1F1F1F]">No active offers posted</p>
+                <p className="text-[11px] text-[#8B8680]">
+                  Upload an image and offer text above to display your first offer on the homepage!
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {offers.map((item) => {
+                  const active = isNotExpired(item);
+                  const meta = parseOfferMetadata(item);
+                  const itemColor = meta.color || item.color || 'orange';
+                  const itemExpires = meta.expiresAt || item.expiresAt;
+                  const displayCaption = cleanOfferCaption(item.caption);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`rounded-2xl p-4 border shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 ${
+                        active ? 'bg-white border-[#E5E1DB]' : 'bg-stone-50 border-stone-200 opacity-70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4 w-full sm:w-auto">
+                        {item.url && (
+                          <div
+                            onClick={() => setZoomImageUrl(item.url)}
+                            className="relative cursor-pointer group shrink-0"
+                            title="Click to zoom image"
+                          >
+                            <img
+                              src={item.url}
+                              alt="Offer thumbnail"
+                              className="w-24 h-auto max-h-24 rounded-xl object-contain border border-[#EFEAE4] bg-stone-100 group-hover:scale-105 transition-transform"
+                            />
+                            <div className="absolute inset-0 bg-black/20 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                              <Eye className="w-4 h-4" />
+                            </div>
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {active ? (
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
+                                Active Offer
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-black uppercase">
+                                Expired (Auto-Removed)
+                              </span>
+                            )}
+                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-stone-100 border text-stone-800">
+                              Theme: {itemColor}
+                            </span>
+                            <span className="text-[11px] text-[#8B8680]">
+                              Published {new Date(item.uploadedAt).toLocaleDateString()} by {item.uploadedBy}
+                            </span>
+                            {itemExpires && (
+                              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Deadline: {new Date(itemExpires).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-bold text-[#1F1F1F] leading-relaxed whitespace-pre-line">
+                            {displayCaption || 'No description text'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleArchiveOffer(item)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                          title="Move to archived past offers"
+                        >
+                          <Archive className="w-3.5 h-3.5 text-stone-500" />
+                          <span>Archive</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteOffer(item.id)}
+                          disabled={deletingId === item.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          {deletingId === item.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {offersViewTab === 'active' && archivedOffers.length > 0 && (
+              <div
+                onClick={() => setOffersViewTab('archived')}
+                className="p-3 bg-stone-50 hover:bg-stone-100 border border-[#EFEAE4] rounded-2xl flex items-center justify-between cursor-pointer text-xs font-bold text-[#5A5551] transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Archive className="w-4 h-4 text-emerald-600" />
+                  <span>Looking for past announcements? You have <strong>{archivedOffers.length} auto-saved archived offers</strong>.</span>
+                </div>
+                <span className="text-amber-600 hover:underline">View Archived List →</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Archived Past Offers Section */}
+        {(offersViewTab === 'archived' || offersViewTab === 'all') && (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-black text-[#1F1F1F] uppercase tracking-wider flex items-center gap-1.5">
+                  <Archive className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Archived Past Offers ({archivedOffers.length})</span>
+                </h3>
+                <p className="text-[11px] text-[#8B8680] mt-0.5">
+                  Whenever you add new offers, past offers are automatically saved here so they are never lost. You can restore or re-use any past offer anytime.
+                </p>
+              </div>
+            </div>
+
+            {archivedOffers.length === 0 ? (
+              <div className="p-8 rounded-2xl border border-dashed border-[#D5D1CB] text-center space-y-1.5 bg-[#FAF8F5]/50">
+                <Archive className="w-8 h-8 text-[#8B8680] mx-auto opacity-60" />
+                <p className="text-xs font-bold text-[#1F1F1F]">No archived past offers yet</p>
+                <p className="text-[11px] text-[#8B8680]">
+                  When you publish new offers, your previous offers will automatically be archived and safely kept here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {archivedOffers.map((item) => {
+                  const meta = parseOfferMetadata(item);
+                  const itemColor = meta.color || item.color || 'orange';
+                  const itemExpires = meta.expiresAt || item.expiresAt;
+                  const displayCaption = cleanOfferCaption(item.caption);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-2xl p-4 border border-[#E5E1DB] bg-white hover:bg-stone-50/60 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors"
+                    >
+                      <div className="flex items-center gap-4 w-full sm:w-auto">
+                        {item.url && (
+                          <div
+                            onClick={() => setZoomImageUrl(item.url)}
+                            className="relative cursor-pointer group shrink-0"
+                            title="Click to zoom image"
+                          >
+                            <img
+                              src={item.url}
+                              alt="Archived Offer thumbnail"
+                              className="w-24 h-auto max-h-24 rounded-xl object-contain border border-[#EFEAE4] bg-stone-100 group-hover:scale-105 transition-transform"
+                            />
+                            <div className="absolute inset-0 bg-black/20 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                              <Eye className="w-4 h-4" />
+                            </div>
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2 py-0.5 rounded bg-stone-800 text-white text-[10px] font-black uppercase flex items-center gap-1">
+                              <Archive className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>Archived (Auto-Saved)</span>
+                            </span>
+                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-stone-100 border text-stone-800">
+                              Theme: {itemColor}
+                            </span>
+                            <span className="text-[11px] text-[#8B8680]">
+                              Originally published {item.uploadedAt ? new Date(item.uploadedAt).toLocaleDateString() : 'Earlier'} {item.uploadedBy ? `by ${item.uploadedBy}` : ''}
+                            </span>
+                            {itemExpires && (
+                              <span className="text-[10px] font-bold text-stone-600 bg-stone-100 px-2 py-0.5 rounded border border-stone-200 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-stone-500" />
+                                Deadline was: {new Date(itemExpires).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-bold text-[#1F1F1F] leading-relaxed whitespace-pre-line">
+                            {displayCaption || 'No description text'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreArchivedOffer(item)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                          title="Restore this offer back to the active homepage banner"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Restore as Active</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleReuseArchivedOffer(item)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                          title="Copy details into creation form above"
+                        >
+                          <Copy className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Re-use in Form</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteArchivedOffer(item.id)}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                          title="Delete from archive"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Lightbox Modal for Full Image Zoom */}
+      {zoomImageUrl && (
+        <div
+          className="fixed inset-0 z-[3000] bg-black/90 flex items-center justify-center p-4 cursor-pointer animate-in fade-in duration-200"
+          onClick={() => setZoomImageUrl(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <img
+              src={zoomImageUrl}
+              alt="Offer full preview"
+              className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={() => setZoomImageUrl(null)}
+              className="absolute -top-3 -right-3 p-2 bg-rose-600 text-white rounded-full shadow-lg hover:bg-rose-700 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
