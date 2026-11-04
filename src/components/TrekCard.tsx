@@ -6,6 +6,7 @@ import { useCitizenPricing } from '../hooks/useCitizenPricing';
 import { TrekPhotosModal } from './TrekPhotosModal';
 import { GuideProfileModal } from './GuideProfileModal';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
+import { getEventPhotos } from '../data/defaultItineraryTemplate';
 import {
   Calendar,
   Clock,
@@ -261,12 +262,38 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 
   const calendarDaysLabel = getCalendarDaysLabel();
 
+  const resolveCardImageUrl = (): string => {
+    const rawCandidates = [
+      dbData?.coverImageUrl,
+      (trek.data as any)?.coverImageUrl,
+      trek.featured_image,
+      (trek as any).cover_image_url,
+      dbData?.cardImageUrl,
+      (trek.data as any)?.cardImageUrl,
+    ];
+
+    for (const raw of rawCandidates) {
+      if (!raw || typeof raw !== 'string' || !raw.trim()) continue;
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('[')) {
+        const photos = getEventPhotos(trimmed);
+        if (photos.length > 0 && photos[0].url) {
+          return photos[0].url;
+        }
+      } else if (!trimmed.startsWith('{') && (trimmed.startsWith('http') || trimmed.startsWith('/') || trimmed.startsWith('data:'))) {
+        return trimmed;
+      }
+    }
+
+    return "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop";
+  };
+
   return (
     <div className={`bg-white rounded-2xl border-2 ${borderClass} shadow-[0_6px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.11)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between w-full max-w-full overflow-hidden`}>
       {/* Card Image */}
       <div className="relative h-40 sm:h-48 w-full overflow-hidden group">
         <img
-          src={dbData?.cardImageUrl || trek.featured_image || (trek as any).cover_image_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop"}
+          src={resolveCardImageUrl()}
           alt={trek.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           referrerPolicy="no-referrer"

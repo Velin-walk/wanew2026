@@ -546,7 +546,38 @@ export function normalizeTrek(row: any): Trek {
     faqs: resolvedFaqs,
     whatsapp_link: row.whatsapp_link || rawJsonData.whatsappLink || cleanD.whatsappLink || "",
     price: displayPrice,
-    featured_image: rawJsonData.cardImageUrl || rawJsonData.coverImageUrl || cleanD.cardImageUrl || cleanD.coverImageUrl || d.cardImageUrl || d.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",
+    featured_image: (() => {
+      const candidates = [
+        rawJsonData.coverImageUrl,
+        cleanD.coverImageUrl,
+        d.coverImageUrl,
+        row.cover_image_url,
+        rawJsonData.cardImageUrl,
+        cleanD.cardImageUrl,
+        d.cardImageUrl,
+        row.featured_image,
+        row.thumbnail_url,
+      ];
+      for (const cand of candidates) {
+        if (!cand || typeof cand !== 'string') continue;
+        const trimmed = cand.trim();
+        if (trimmed.startsWith('[')) {
+          try {
+            const arr = JSON.parse(trimmed);
+            if (Array.isArray(arr) && arr.length > 0) {
+              const first = arr[0];
+              const u = typeof first === 'string' ? first : first?.url;
+              if (u && typeof u === 'string' && (u.startsWith('http') || u.startsWith('/') || u.startsWith('data:'))) {
+                return u;
+              }
+            }
+          } catch (_) {}
+        } else if (!trimmed.startsWith('{') && (trimmed.startsWith('http') || trimmed.startsWith('/') || trimmed.startsWith('data:'))) {
+          return trimmed;
+        }
+      }
+      return "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop";
+    })(),
     fitness_level: resolvedOverview.difficulty || rawJsonData.overview?.difficulty || row.fitness_level || "All fitness levels",
     season: row.season || "Autumn / Year-round",
     type_of_trail: row.type_of_trail || category || "",
@@ -557,7 +588,10 @@ export function normalizeTrek(row: any): Trek {
     is_cancelled: resolvedIsCancelled,
     cancellation_reason: resolvedCancelReason,
     status: (row.status || d.status || rawJsonData.status || 'published').toString().toLowerCase(),
-    data: mergedData,
+    data: {
+      ...mergedData,
+      coverImageUrl: rawJsonData.coverImageUrl || cleanD.coverImageUrl || d.coverImageUrl || row.cover_image_url || mergedData.coverImageUrl,
+    },
   };
 }
 

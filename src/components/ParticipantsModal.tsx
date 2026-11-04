@@ -9,6 +9,7 @@ export interface ParticipantItem {
   name: string;
   gender: 'm' | 'f';
   pax?: number;
+  isGuide?: boolean;
 }
 
 interface ParticipantsModalProps {
@@ -48,10 +49,16 @@ export function formatNameWithLastInitial(rawName: string): string {
 const enrichWithGuide = (items: ParticipantItem[], guide?: string): ParticipantItem[] => {
   const list = [...items];
   if (guide && guide.trim()) {
-    const cleanGuide = guide.trim();
-    const alreadyExists = list.some(p => p.name.toLowerCase().includes(cleanGuide.toLowerCase()));
-    if (!alreadyExists) {
-      list.unshift({ name: `${cleanGuide} (Lead Guide)`, gender: 'm' });
+    const cleanGuide = guide.replace(/\s*\((?:lead\s+)?(?:guide|leader)\)/i, '').trim();
+    if (!cleanGuide) return list;
+    const existingIndex = list.findIndex(p => {
+      const pClean = p.name.replace(/\s*\((?:lead\s+)?(?:guide|leader)\)/i, '').trim().toLowerCase();
+      return pClean === cleanGuide.toLowerCase() || p.isGuide;
+    });
+    if (existingIndex >= 0) {
+      list[existingIndex] = { ...list[existingIndex], name: cleanGuide, isGuide: true };
+    } else {
+      list.unshift({ name: cleanGuide, gender: 'm', isGuide: true });
     }
   }
   return list;
@@ -263,34 +270,53 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-2.5">
               {roster.map((p, idx) => {
-                const formatted = formatNameWithLastInitial(p.name);
-                const firstInitial = (p.name || 'H').trim().charAt(0).toUpperCase();
+                const isGuide = Boolean(
+                  p.isGuide ||
+                  (guideName && p.name.toLowerCase().includes(guideName.toLowerCase().trim())) ||
+                  /\((?:lead\s+)?(?:guide|leader)\)/i.test(p.name)
+                );
+                const rawCleanName = p.name.replace(/\s*\((?:lead\s+)?(?:guide|leader)\)/i, '').trim();
+                const formatted = isGuide ? rawCleanName : formatNameWithLastInitial(p.name);
+                const firstInitial = (rawCleanName || 'H').charAt(0).toUpperCase();
                 const isFemale = p.gender === 'f';
 
                 return (
                   <div
                     key={idx}
-                    className="flex items-center gap-2 p-2 rounded-xl bg-[#F9F7F5] border border-[#EFEAE4] hover:border-[#E08828]/40 hover:bg-white transition-all shadow-3xs min-w-0"
+                    className={`flex items-center gap-2 p-2 rounded-xl transition-all shadow-3xs min-w-0 ${
+                      isGuide
+                        ? 'bg-amber-50/60 border border-amber-200 hover:border-[#E08828]/50 hover:bg-amber-50'
+                        : 'bg-[#F9F7F5] border border-[#EFEAE4] hover:border-[#E08828]/40 hover:bg-white'
+                    }`}
                   >
                     {/* Initial Circle Badge */}
                     <div
                       className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 shadow-2xs ${
-                        isFemale
+                        isGuide
+                          ? 'bg-amber-100 text-[#E08828] ring-1 ring-amber-300'
+                          : isFemale
                           ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-200'
                           : 'bg-sky-100 text-sky-800 ring-1 ring-sky-200'
                       }`}
-                      title={isFemale ? 'Female' : 'Male'}
+                      title={isGuide ? 'Leader' : isFemale ? 'Female' : 'Male'}
                     >
                       {firstInitial}
                     </div>
 
-                    {/* Participant Name with Last Name Initial */}
-                    <span
-                      className="text-xs font-semibold text-[#1F1F1F] truncate"
-                      title={formatted}
-                    >
-                      {formatted}
-                    </span>
+                    {/* Participant Name with Last Name Initial, or full name + badge for Leader */}
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <span
+                        className="text-xs font-semibold text-[#1F1F1F] truncate"
+                        title={formatted}
+                      >
+                        {formatted}
+                      </span>
+                      {isGuide && (
+                        <span className="text-[9px] font-bold text-[#E08828] bg-amber-100/90 px-1.5 py-0.5 rounded border border-amber-300/70 shrink-0 leading-none">
+                          Leader
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
