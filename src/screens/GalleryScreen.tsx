@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Camera,
   Image as ImageIcon,
@@ -41,6 +41,11 @@ import {
   parseOfferMetadata,
   cleanOfferCaption,
 } from '../components/admin/OffersManager';
+import {
+  HERO_TREK_ID,
+  HERO_STORAGE_KEY,
+  HeroBannerItem,
+} from '../components/HomepageHeroBanner';
 import galleryHeroImg from '../assets/images/gallery_trail_hero_1790246900034.jpg';
 
 interface GalleryPhoto {
@@ -90,6 +95,108 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTrekFilter, setSelectedTrekFilter] = useState<string>('ALL');
+
+  // Homepage hero images rotation routine for Gallery Cover (15 min interval)
+  const ROTATION_INTERVAL_MS = 15 * 60 * 1000;
+
+  const [heroImages, setHeroImages] = useState<HeroBannerItem[]>(() => {
+    try {
+      const cached = localStorage.getItem(HERO_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return [];
+  });
+
+  const [heroSlotIndex, setHeroSlotIndex] = useState<number>(() =>
+    Math.floor(Date.now() / (15 * 60 * 1000))
+  );
+  const [currentHeroIndex, setCurrentHeroIndex] = useState<number>(0);
+
+  const loadHeroImages = useCallback(async (forceFresh = false) => {
+    try {
+      const res = await apiFetch(
+        `trek_photos?trekId=${encodeURIComponent(HERO_TREK_ID)}`,
+        { forceFresh }
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.data)) {
+          const valid = (json.data as HeroBannerItem[])
+            .filter((item) => item && item.id && item.url)
+            .sort((a, b) => {
+              const tA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+              const tB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+              return tA - tB;
+            });
+          setHeroImages(valid);
+          try {
+            localStorage.setItem(HERO_STORAGE_KEY, JSON.stringify(valid));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch homepage hero images for gallery cover:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHeroImages(false);
+
+    const handleUpdated = () => {
+      try {
+        const cached = localStorage.getItem(HERO_STORAGE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setHeroImages(parsed);
+          }
+        }
+      } catch {}
+      loadHeroImages(true);
+    };
+
+    window.addEventListener('wnw-hero-images-updated', handleUpdated);
+    return () => window.removeEventListener('wnw-hero-images-updated', handleUpdated);
+  }, [loadHeroImages]);
+
+  // Check every 15s if the clock crossed into a new 15-minute slot
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const nextSlot = Math.floor(Date.now() / ROTATION_INTERVAL_MS);
+      setHeroSlotIndex((prev) => (prev !== nextSlot ? nextSlot : prev));
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [ROTATION_INTERVAL_MS]);
+
+  const displayHeroImages: HeroBannerItem[] = useMemo(() => {
+    return heroImages.length > 0
+      ? heroImages
+      : [
+          {
+            id: 'default-hero',
+            trekId: HERO_TREK_ID,
+            url: galleryHeroImg,
+            uploadedAt: '',
+          },
+        ];
+  }, [heroImages]);
+
+  useEffect(() => {
+    const idx = displayHeroImages.length > 0 ? heroSlotIndex % displayHeroImages.length : 0;
+    setCurrentHeroIndex(idx);
+  }, [heroSlotIndex, displayHeroImages.length]);
+
+  const activeHeroCover: HeroBannerItem = displayHeroImages[currentHeroIndex] || displayHeroImages[0];
+
+  const handleHeroCoverClick = () => {
+    if (displayHeroImages.length <= 1) return;
+    setCurrentHeroIndex((prev) => (prev + 1) % displayHeroImages.length);
+  };
 
   // View mode & Sort order state
   const [viewMode, setViewMode] = useState<'boxed' | 'grid'>('boxed');
@@ -780,13 +887,26 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   return (
     <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Hero Header & Controls nested inside Mountain Trail Art Image Container */}
-      <div className="relative rounded-3xl overflow-hidden shadow-xl border border-stone-300 w-full p-4 sm:p-7 space-y-5">
+      <div
+        onClick={handleHeroCoverClick}
+        className={`relative rounded-3xl overflow-hidden shadow-xl border border-stone-300 w-full p-4 sm:p-7 space-y-5 ${
+          displayHeroImages.length > 1 ? 'cursor-pointer' : ''
+        }`}
+        title={displayHeroImages.length > 1 ? 'Click to cycle cover photo' : undefined}
+      >
         {/* Background Image with Gradient Scrim for crisp readability */}
         <img
-          src={galleryHeroImg}
-          alt="Community Trail Gallery"
+          key={activeHeroCover.id || activeHeroCover.url}
+          src={activeHeroCover.url || galleryHeroImg}
+          alt={activeHeroCover.caption || 'Community Trail Gallery'}
           referrerPolicy="no-referrer"
-          className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none"
+          className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none transition-opacity duration-700"
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (target.src !== galleryHeroImg) {
+              target.src = galleryHeroImg;
+            }
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/35 to-black/70 pointer-events-none" />
 
@@ -795,9 +915,16 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           {/* Header & Upload Action */}
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-white">
             <div className="space-y-1.5 max-w-2xl text-left">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/25 text-[#FFF3E0] text-[9px] sm:text-[11px] font-extrabold uppercase tracking-wider shadow-3xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Walk Nepal Walk Community Wall</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/25 text-[#FFF3E0] text-[9px] sm:text-[11px] font-extrabold uppercase tracking-wider shadow-3xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Walk Nepal Walk Community Wall</span>
+                </div>
+                {activeHeroCover.caption && (
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white text-[9px] sm:text-[11px] font-bold tracking-wide truncate max-w-xs shadow-3xs">
+                    {activeHeroCover.caption}
+                  </span>
+                )}
               </div>
               <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight drop-shadow-md">
                 Community Trail Gallery
@@ -807,7 +934,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               </p>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
                 onClick={handleOpenUploadModal}
@@ -827,7 +954,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
 
           {/* Filter, Sort, and View Mode Bar inside Hero Image */}
-          <div className="bg-white/50 backdrop-blur-md border border-white/50 rounded-2xl p-2.5 sm:p-3 shadow-xl flex flex-col items-start justify-start gap-2 max-w-full md:max-w-[25%] mr-auto">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white/50 backdrop-blur-md border border-white/50 rounded-2xl p-2.5 sm:p-3 shadow-xl flex flex-col items-start justify-start gap-2 max-w-full md:max-w-[25%] mr-auto"
+          >
             {/* Search */}
             <div className="relative w-full">
               <Search className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -1622,20 +1752,20 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
           {/* DESKTOP VIEW (md:flex) - Side-by-side spacious modal */}
           <div
-            className="hidden md:flex relative max-w-5xl w-full bg-[#121214] border border-stone-800 rounded-2xl overflow-hidden shadow-2xl flex-row max-h-[90vh]"
+            className="hidden md:flex relative max-w-[95vw] lg:max-w-[92vw] 2xl:max-w-[1800px] w-full bg-[#121214] border border-stone-800 rounded-2xl overflow-hidden shadow-2xl flex-row max-h-[92vh] lg:max-h-[95vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Left side: High-Res Image Panel */}
-            <div className="flex-1 bg-black/70 flex flex-col items-center justify-center p-4 relative min-h-[350px]">
+            <div className="flex-1 bg-black/85 flex flex-col items-center justify-center p-2 sm:p-4 lg:p-6 relative min-h-[350px]">
               <img
                 src={activePhoto.url}
                 alt="Community memory"
-                className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl"
+                className="max-w-full max-h-[85vh] lg:max-h-[90vh] object-contain rounded-xl shadow-2xl"
               />
             </div>
 
             {/* Right side: Sidebar with details & Comments */}
-            <div className="w-[340px] lg:w-[380px] bg-[#0c0c0e] border-l border-stone-800 flex flex-col p-4 overflow-y-auto animate-fade-in">
+            <div className="w-[340px] lg:w-[380px] shrink-0 bg-[#0c0c0e] border-l border-stone-800 flex flex-col p-4 overflow-y-auto animate-fade-in">
               <div className="flex items-center justify-between mb-3 text-white text-xs gap-2">
                 <div className="flex flex-col min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">

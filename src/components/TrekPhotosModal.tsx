@@ -921,20 +921,20 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
 
           {/* DESKTOP VIEW (md:flex) - Side-by-side spacious modal */}
           <div
-            className="hidden md:flex relative max-w-5xl w-full bg-[#121214] border border-stone-800 rounded-2xl overflow-hidden shadow-2xl flex-row max-h-[90vh]"
+            className="hidden md:flex relative max-w-[95vw] lg:max-w-[92vw] 2xl:max-w-[1800px] w-full bg-[#121214] border border-stone-800 rounded-2xl overflow-hidden shadow-2xl flex-row max-h-[92vh] lg:max-h-[95vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Left side: High-Res Image Panel */}
-            <div className="flex-1 bg-black/70 flex flex-col items-center justify-center p-4 relative min-h-[350px]">
+            <div className="flex-1 bg-black/85 flex flex-col items-center justify-center p-2 sm:p-4 lg:p-6 relative min-h-[350px]">
               <img
                 src={activePhoto.url}
                 alt="Full view memory"
-                className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl"
+                className="max-w-full max-h-[85vh] lg:max-h-[90vh] object-contain rounded-xl shadow-2xl"
               />
             </div>
 
             {/* Right side: Sidebar with details & Comments */}
-            <div className="w-[340px] lg:w-[380px] bg-[#0c0c0e] border-l border-stone-800 flex flex-col p-4 overflow-y-auto">
+            <div className="w-[340px] lg:w-[380px] shrink-0 bg-[#0c0c0e] border-l border-stone-800 flex flex-col p-4 overflow-y-auto">
               <div className="flex items-center justify-between mb-3 text-white text-xs gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-bold text-[#7ABA42] text-sm truncate">{activePhoto.uploadedBy}</span>
