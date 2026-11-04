@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { jsPDF } from 'jspdf';
 import {
   TrekItineraryData,
-  normalizeItineraryData
+  normalizeItineraryData,
+  getEventPhotos
 } from '../../data/defaultItineraryTemplate';
 import {
   Calendar,
@@ -21,7 +22,8 @@ import {
   Layers,
   Sparkles,
   HelpCircle,
-  Printer
+  Printer,
+  ExternalLink,
 } from 'lucide-react';
 
 interface ItineraryPreviewProps {
@@ -38,6 +40,7 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
   onShare,
 }) => {
   const data = normalizeItineraryData(rawData);
+  const [selectedLightboxImage, setSelectedLightboxImage] = useState<string | null>(null);
   const handleDownloadPDF = () => {
     try {
       const doc = new jsPDF('p', 'mm', 'a4');
@@ -336,20 +339,72 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Section 1 & 2: Hero & Basic Info */}
         <div className="bg-white rounded-3xl border border-[#EFEAE4] shadow-xs relative overflow-hidden">
-          {data.coverImageUrl && (
-            <div className="relative w-full overflow-hidden bg-neutral-900 flex items-center justify-center">
-              <img
-                src={data.coverImageUrl}
-                alt={data.title}
-                className="w-full h-auto object-contain block"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80';
-                }}
-              />
-            </div>
-          )}
+          {(() => {
+            const photos = getEventPhotos(data.coverImageUrl);
+            const mainPhoto = photos[0];
+            return (
+              <>
+                {mainPhoto && (
+                  <div
+                    className="relative w-full overflow-hidden bg-neutral-900 flex items-center justify-center cursor-pointer group"
+                    onClick={() => setSelectedLightboxImage(mainPhoto.url)}
+                    title="Click to view full image"
+                  >
+                    <img
+                      src={mainPhoto.url}
+                      alt={data.title}
+                      className="w-full h-auto object-contain block transition-transform duration-500 group-hover:scale-101"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80';
+                      }}
+                    />
+                    <div className="absolute bottom-3 right-3 bg-black/60 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                      Click to expand
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview Photos Strip underneath main cover photo: 4 per row */}
+                {photos.length > 1 && (
+                  <div className="px-6 py-5 bg-[#FAF8F5] border-t border-[#EFEAE4]">
+                    <p className="text-xs font-bold text-[#5A5551] uppercase tracking-wider mb-3">
+                      Event Photo Gallery ({photos.length} Photos) — Click any picture to expand full size
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      {photos.map((photo, idx) => (
+                        <div key={idx} className="bg-white p-2.5 rounded-2xl border border-[#E5E1DB] shadow-2xs space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLightboxImage(photo.url)}
+                            className="relative w-full h-36 sm:h-40 rounded-xl overflow-hidden bg-neutral-900 block cursor-pointer group"
+                          >
+                            <img
+                              src={photo.url}
+                              alt={`Photo ${idx + 1}`}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              referrerPolicy="no-referrer"
+                            />
+                            {idx === 0 && (
+                              <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#E08828] text-white text-[9px] font-bold rounded-md uppercase">
+                                Cover
+                              </span>
+                            )}
+                          </button>
+                          {photo.caption && (
+                            <p className="text-xs text-[#5A5551] font-medium px-1 line-clamp-2">
+                              {photo.caption}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           <div className="p-6 sm:p-8">
             <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -426,7 +481,20 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
               <span className="text-[11px] text-[#8B8680] font-semibold flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5 text-[#E08828]" /> Meeting Point
               </span>
-              <p className="text-sm font-bold text-[#1F1F1F] mt-1">{data.overview.meetingPoint || '---'}</p>
+              {data.overview.meetingPointLink ? (
+                <a
+                  href={data.overview.meetingPointLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-bold text-[#E08828] hover:text-[#C86B1A] hover:underline mt-1 truncate flex items-center gap-1 group"
+                  title={`Open map/link for ${data.overview.meetingPoint || 'Meeting Point'}`}
+                >
+                  <span className="truncate">{data.overview.meetingPoint || '---'}</span>
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100" />
+                </a>
+              ) : (
+                <p className="text-sm font-bold text-[#1F1F1F] mt-1">{data.overview.meetingPoint || '---'}</p>
+              )}
             </div>
 
             <div className="p-3.5 bg-[#FAF8F5] rounded-2xl border border-[#EFEAE4]">
@@ -471,7 +539,20 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
               <span className="text-[11px] text-[#8B8680] font-semibold flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Ending Point
               </span>
-              <p className="text-sm font-bold text-[#1F1F1F] mt-1">{data.overview.endingPoint || '---'}</p>
+              {data.overview.endingPointLink ? (
+                <a
+                  href={data.overview.endingPointLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-bold text-emerald-600 hover:text-emerald-700 hover:underline mt-1 truncate flex items-center gap-1 group"
+                  title={`Open map/link for ${data.overview.endingPoint || 'Ending Point'}`}
+                >
+                  <span className="truncate">{data.overview.endingPoint || '---'}</span>
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100" />
+                </a>
+              ) : (
+                <p className="text-sm font-bold text-[#1F1F1F] mt-1">{data.overview.endingPoint || '---'}</p>
+              )}
             </div>
 
             <div className="p-3.5 bg-amber-50/40 rounded-2xl border border-amber-100">
@@ -729,6 +810,30 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Lightbox Modal */}
+      {selectedLightboxImage && (
+        <div
+          className="fixed inset-0 z-[999999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedLightboxImage(null)}
+        >
+          <div className="relative max-w-5xl max-h-[90vh] w-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={selectedLightboxImage}
+              alt="Full size view"
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+              referrerPolicy="no-referrer"
+            />
+            <button
+              type="button"
+              onClick={() => setSelectedLightboxImage(null)}
+              className="absolute -top-12 right-0 sm:-right-4 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              ✕ Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

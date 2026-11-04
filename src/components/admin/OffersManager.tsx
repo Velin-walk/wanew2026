@@ -370,7 +370,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
       }
 
       // Record in Admin Audit Trail
-      const offerTitle = cleanCaption || 'Special Offer';
+      const offerTitle = offerText || 'Special Offer';
       recordAdminAuditLog({
         actionType: 'UPDATE_OFFERS',
         description: `Published offer flashcard: "${offerTitle.slice(0, 45)}"`,

@@ -44,7 +44,6 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   onViewFaq,
   onViewGallery,
 }) => {
-  const [showItinerary, setShowItinerary] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
   const [guideModalOpen, setGuideModalOpen] = useState(false);
   const { isAdmin } = useAuth();
@@ -482,31 +481,6 @@ export const TrekCard: React.FC<TrekCardProps> = ({
           </div>
         )}
 
-        {/* In-card text itinerary if available */}
-        {trek.itinerary && (
-          <div className="mt-1.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setShowItinerary(!showItinerary)}
-              className="text-[#E08828] hover:text-[#C86B1A] font-semibold flex items-center gap-1 py-1 text-[11px]"
-            >
-              {showItinerary ? (
-                <>
-                  Hide Overview <ChevronUp className="w-3 h-3" />
-                </>
-              ) : (
-                <>
-                  Quick Summary <ChevronDown className="w-3 h-3" />
-                </>
-              )}
-            </button>
-            {showItinerary && (
-              <div className="mt-1.5 p-2.5 bg-[#F9F7F5] rounded-xl border border-[#F0EBE5] text-[#5A5551] whitespace-pre-line leading-relaxed text-[11px]">
-                {trek.itinerary}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       <TrekPhotosModal

@@ -61,6 +61,7 @@ export interface TrekItineraryData {
   overview: {
     meetingTime: string;
     meetingPoint: string;
+    meetingPointLink?: string;
     expectedDuration: string;
     days?: string;
     difficulty: string;
@@ -68,6 +69,7 @@ export interface TrekItineraryData {
     elevationRange: string;
     elevationGross: string;
     endingPoint: string;
+    endingPointLink?: string;
   };
 
   // Section 4: Cost Includes
@@ -115,6 +117,7 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
   overview: {
     meetingTime: '8:00 AM',
     meetingPoint: '',
+    meetingPointLink: '',
     expectedDuration: '',
     days: '',
     difficulty: 'Moderate',
@@ -122,6 +125,7 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
     elevationRange: '',
     elevationGross: '',
     endingPoint: '',
+    endingPointLink: '',
   },
   costIncludes: [
     'Kathmandu to Kathmandu round trip Bus/EV transportation',
@@ -235,42 +239,68 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
 };
 
 export const normalizeItineraryData = (raw?: Partial<TrekItineraryData> | null): TrekItineraryData => {
-  const d = raw || {};
+  const d: any = raw || {};
+  const hasRawData = Boolean(raw && Object.keys(raw).length > 0);
+
+  const rawTitle = d.title || d.name || '';
+  const rawHikeNum = d.hikeNumber !== undefined && d.hikeNumber !== null ? String(d.hikeNumber).trim() : (d.hike_number ? String(d.hike_number).trim() : '');
+
+  const resolvedDays: ItineraryDay[] = (() => {
+    if (Array.isArray(d.itineraryDays) && d.itineraryDays.length > 0) {
+      return d.itineraryDays;
+    }
+    const rawItin = d.itinerary || d.overview?.itinerary;
+    if (typeof rawItin === 'string' && rawItin.trim()) {
+      const stops = rawItin.split(/->|--|•|\n/).map((s: string) => s.trim()).filter(Boolean);
+      return [{
+        id: 'day-1',
+        dayNumber: 1,
+        title: rawTitle ? `${rawTitle} Route` : 'Trek Route & Schedule',
+        items: stops.map((stop: string, idx: number) => ({
+          id: `item-${idx + 1}`,
+          time: '',
+          activity: stop,
+        })),
+      }];
+    }
+    return hasRawData ? [] : [...INITIAL_ITINERARY_TEMPLATE.itineraryDays];
+  })();
+
   return {
-    hikeNumber: d.hikeNumber !== undefined && d.hikeNumber !== null ? String(d.hikeNumber).trim() : '',
-    title: d.title !== undefined && d.title !== null ? String(d.title) : '',
+    hikeNumber: rawHikeNum,
+    title: rawTitle,
     category: d.category || 'Overnight Bus Hikes',
-    coverImageUrl: d.coverImageUrl ?? '',
+    coverImageUrl: d.coverImageUrl ?? d.cover_image_url ?? '',
     cardImageUrl: d.cardImageUrl ?? '',
     currency: d.currency || 'NPR',
-    pricingNotes: d.pricingNotes ?? '',
-    teamLeader: d.teamLeader !== undefined && d.teamLeader !== null ? String(d.teamLeader) : 'Walk Nepal Walk Guide',
-    maxCapacity: Number(d.maxCapacity) > 0 ? Number(d.maxCapacity) : 25,
-    whatsappLink: d.whatsappLink ?? '',
-    itineraryLink: d.itineraryLink ?? '',
-    faqLink: d.faqLink ?? '',
+    pricingNotes: d.pricingNotes ?? (hasRawData ? '' : INITIAL_ITINERARY_TEMPLATE.pricingNotes),
+    teamLeader: d.teamLeader !== undefined && d.teamLeader !== null ? String(d.teamLeader) : (d.leader || 'Walk Nepal Walk Guide'),
+    maxCapacity: Number(d.maxCapacity || d.capacity) > 0 ? Number(d.maxCapacity || d.capacity) : 25,
+    whatsappLink: d.whatsappLink || d.whatsapp_link || '',
+    itineraryLink: d.itineraryLink || d.itinerary_link || '',
+    faqLink: d.faqLink || d.faq_link || '',
     priceTiers: Array.isArray(d.priceTiers) && d.priceTiers.length > 0 
       ? d.priceTiers 
-      : [...INITIAL_ITINERARY_TEMPLATE.priceTiers],
-    hikeDate: d.hikeDate !== undefined && d.hikeDate !== null ? String(d.hikeDate) : '',
+      : (hasRawData ? [] : [...INITIAL_ITINERARY_TEMPLATE.priceTiers]),
+    hikeDate: d.hikeDate !== undefined && d.hikeDate !== null ? String(d.hikeDate) : (d.date || ''),
     overview: {
-      meetingTime: d.overview?.meetingTime ?? '',
-      meetingPoint: d.overview?.meetingPoint ?? '',
-      expectedDuration: d.overview?.expectedDuration ?? '',
-      days: d.overview?.days ?? '',
-      difficulty: d.overview?.difficulty ?? 'Moderate',
-      approxDistance: d.overview?.approxDistance ?? '',
-      elevationRange: d.overview?.elevationRange ?? '',
+      meetingTime: d.overview?.meetingTime ?? d.meeting_time ?? '',
+      meetingPoint: d.overview?.meetingPoint ?? d.meeting_point ?? d.start_location ?? '',
+      meetingPointLink: d.overview?.meetingPointLink ?? d.meeting_point_link ?? '',
+      expectedDuration: d.overview?.expectedDuration ?? d.expected_duration ?? d.days ?? '',
+      days: d.overview?.days ?? d.days_label ?? '',
+      difficulty: d.overview?.difficulty ?? d.difficulty ?? 'Moderate',
+      approxDistance: d.overview?.approxDistance ?? d.approx_distance ?? d.distance ?? '',
+      elevationRange: d.overview?.elevationRange ?? d.elevation_range ?? d.elevation ?? '',
       elevationGross: d.overview?.elevationGross ?? '',
       endingPoint: d.overview?.endingPoint ?? '',
+      endingPointLink: d.overview?.endingPointLink ?? d.ending_point_link ?? '',
     },
-    costIncludes: Array.isArray(d.costIncludes) ? d.costIncludes : [...INITIAL_ITINERARY_TEMPLATE.costIncludes],
-    costExcludes: Array.isArray(d.costExcludes) ? d.costExcludes : [...INITIAL_ITINERARY_TEMPLATE.costExcludes],
+    costIncludes: Array.isArray(d.costIncludes) ? d.costIncludes : (hasRawData ? [] : [...INITIAL_ITINERARY_TEMPLATE.costIncludes]),
+    costExcludes: Array.isArray(d.costExcludes) ? d.costExcludes : (hasRawData ? [] : [...INITIAL_ITINERARY_TEMPLATE.costExcludes]),
     addOns: Array.isArray(d.addOns) ? d.addOns : [],
     addOnsNotice: d.addOnsNotice ?? '',
-    itineraryDays: Array.isArray(d.itineraryDays) && d.itineraryDays.length > 0
-      ? d.itineraryDays
-      : [...INITIAL_ITINERARY_TEMPLATE.itineraryDays],
+    itineraryDays: resolvedDays,
     bookingProcessSteps: Array.isArray(d.bookingProcessSteps) ? d.bookingProcessSteps : [...INITIAL_ITINERARY_TEMPLATE.bookingProcessSteps],
     bookingNotes: Array.isArray(d.bookingNotes)
       ? d.bookingNotes.map((note: string) =>
@@ -644,5 +674,33 @@ ${links || '  (Links provided in coordinator group)'}
 
 📞 *Helpline:* ${data.helpContacts.join(' | ')}
 🌐 *Walk Nepal Walk Community*`;
+}
+
+export interface EventPhoto {
+  url: string;
+  caption?: string;
+}
+
+export function getEventPhotos(coverImageUrl?: string): EventPhoto[] {
+  if (!coverImageUrl) {
+    return [{ url: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80', caption: '' }];
+  }
+  try {
+    const parsed = JSON.parse(coverImageUrl);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.map((item) => {
+        if (typeof item === 'string') {
+          return { url: item, caption: '' };
+        }
+        return {
+          url: item.url || '',
+          caption: item.caption || '',
+        };
+      }).filter((p) => Boolean(p.url));
+    }
+  } catch (e) {
+    // not json
+  }
+  return [{ url: coverImageUrl, caption: '' }];
 }
 

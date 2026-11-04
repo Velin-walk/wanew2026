@@ -652,10 +652,29 @@ function MainApp() {
               } else {
                 const localTime = Date.parse(item?.updatedAt || item?.data?.updatedAt || '') || 0;
                 const serverTime = Date.parse(existing.data?.updatedAt || '') || 0;
-                if (localTime >= serverTime) {
+
+                const mergedItineraryDays = (norm.data?.itineraryDays && norm.data.itineraryDays.length > 0)
+                  ? norm.data.itineraryDays
+                  : (existing.data?.itineraryDays || []);
+                const mergedFaqs = (norm.data?.faqs && norm.data.faqs.length > 0)
+                  ? norm.data.faqs
+                  : (existing.data?.faqs || []);
+
+                if (localTime >= serverTime && localTime > 0) {
                   trekMap.set(key, {
                     ...existing,
                     ...norm,
+                    itinerary: norm.itinerary || existing.itinerary,
+                    data: {
+                      ...(existing.data || {}),
+                      ...(norm.data || {}),
+                      itineraryDays: mergedItineraryDays,
+                      faqs: mergedFaqs,
+                      overview: {
+                        ...(existing.data?.overview || {}),
+                        ...(norm.data?.overview || {}),
+                      },
+                    },
                     // Preserve server authoritative confirmed participants and gender breakdown
                     participants: existing.participants !== undefined ? existing.participants : (norm.participants || 0),
                     participants_by_gender:
@@ -664,6 +683,19 @@ function MainApp() {
                       (Array.isArray(existing.recent_participants) && existing.recent_participants.length > 0)
                         ? existing.recent_participants
                         : norm.recent_participants,
+                  });
+                } else {
+                  // Keep server record, filling in any missing fields from norm
+                  trekMap.set(key, {
+                    ...norm,
+                    ...existing,
+                    itinerary: existing.itinerary || norm.itinerary,
+                    data: {
+                      ...(norm.data || {}),
+                      ...(existing.data || {}),
+                      itineraryDays: mergedItineraryDays,
+                      faqs: mergedFaqs,
+                    },
                   });
                 }
               }

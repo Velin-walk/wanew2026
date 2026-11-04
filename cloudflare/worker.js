@@ -28,6 +28,8 @@ function errorResponse(errorMsg, status = 500) {
   return jsonResponse({ success: false, error: errorMsg }, status);
 }
 
+const bg = (ctx, p) => (ctx && ctx.waitUntil ? ctx.waitUntil(p) : p.catch(() => {}));
+
 const ADMIN_EMAILS = [
   'velinrai.vr@gmail.com',
   'thingbiraj77@gmail.com',
@@ -185,20 +187,6 @@ async function getAuthUser(request) {
   return null;
 }
 
-function formatDisplayName(fullName, rankTitle) {
-  const rawName = String(fullName || 'Hiker').trim();
-  const parts = rawName.split(/\s+/).filter(Boolean);
-  let displayName = rawName;
-  if (parts.length >= 2) {
-    const first = parts[0].length > 3 ? parts[0].slice(0, 3) + '.' : parts[0];
-    displayName = `${first} ${parts.slice(1).join(' ')}`;
-  }
-  if (rankTitle && (rankTitle.includes('Veteran') || rankTitle.includes('Summit') || rankTitle.includes('Leader'))) {
-    displayName += ' 👑';
-  }
-  return displayName;
-}
-
 function cleanLightweightData(parsedObj, isListView = true, depth = 0) {
   if (!parsedObj || typeof parsedObj !== 'object' || depth > 8) return parsedObj;
   
@@ -280,11 +268,6 @@ async function processBase64Images(obj, env, urlOrigin, prefix = 'img', depth = 
   return obj;
 }
 
-// Performance & Rate-Limit Optimization: In-memory cache for aggregate trek counts
-let cachedTrekAggMap = null;
-let lastTrekAggTime = 0;
-const TREK_AGG_TTL = 15 * 60 * 1000; // 15 minutes in ms
-
 // Native Cloudflare Edge Cache API Helpers (Zero-Cost RAM Caching at the Edge)
 async function matchEdgeCache(request) {
   try {
@@ -361,86 +344,6 @@ async function logAdminActivity(env, request, actionType, description, metadata 
     ).run();
   } catch (err) {
     console.error('Failed to log admin activity:', err);
-  }
-}
-
-let lastAutoMigrateTime = 0;
-
-/**
- * Background auto-migrator: seamlessly downloads external images into R2 with zero user intervention
- */
-async function autoMigrateTrekImagesToR2(env, urlOrigin, ctx) {
-  if (!env || !env.DB || !env.BUCKET) return;
-  const now = Date.now();
-  if (now - lastAutoMigrateTime < 5 * 60 * 1000) return; // check every 5 minutes max
-  lastAutoMigrateTime = now;
-
-  try {
-    const { results: rows } = await env.DB.prepare(
-      "SELECT id, hike_number, name, featured_image, data_json FROM treks WHERE (featured_image LIKE 'http%' AND featured_image NOT LIKE '%/images/%' AND featured_image NOT LIKE '%.r2.dev%') LIMIT 5"
-    ).all();
-
-    if (!rows || rows.length === 0) return;
-
-    for (const row of rows) {
-      let rowModified = false;
-      let currentFeatured = row.featured_image || '';
-      let dataObj = {};
-      try {
-        dataObj = JSON.parse(row.data_json || '{}');
-      } catch (_) {}
-
-      const hikeNum = String(row.hike_number || 'hike').trim();
-
-      const downloadAndPut = async (url) => {
-        if (!url || typeof url !== 'string') return url;
-        const trimmed = url.trim();
-        if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return trimmed;
-        if (trimmed.includes('/images/') || trimmed.includes('.r2.dev') || trimmed.includes(urlOrigin)) return trimmed;
-
-        try {
-          const res = await fetch(trimmed, {
-            headers: { 'User-Agent': 'WalkNepalWalk-AutoMigrator/1.0' }
-          });
-          if (!res.ok) return trimmed;
-          const mimeType = res.headers.get('content-type') || 'image/jpeg';
-          let ext = 'jpg';
-          if (mimeType.includes('png')) ext = 'png';
-          else if (mimeType.includes('webp')) ext = 'webp';
-          const r2FileName = `covers_${hikeNum}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${ext}`;
-          const buffer = await res.arrayBuffer();
-          await env.BUCKET.put(r2FileName, buffer, { httpMetadata: { contentType: mimeType } });
-          return `${urlOrigin}/images/${r2FileName}`;
-        } catch (_) {
-          return trimmed;
-        }
-      };
-
-      if (currentFeatured && !currentFeatured.includes('/images/')) {
-        const newFeat = await downloadAndPut(currentFeatured);
-        if (newFeat !== currentFeatured) {
-          currentFeatured = newFeat;
-          rowModified = true;
-        }
-      }
-
-      if (dataObj.cardImageUrl && typeof dataObj.cardImageUrl === 'string' && !dataObj.cardImageUrl.includes('/images/')) {
-        const newCard = await downloadAndPut(dataObj.cardImageUrl);
-        if (newCard !== dataObj.cardImageUrl) {
-          dataObj.cardImageUrl = newCard;
-          rowModified = true;
-        }
-      }
-
-      if (rowModified) {
-        await env.DB.prepare('UPDATE treks SET featured_image = ?, data_json = ? WHERE id = ?')
-          .bind(currentFeatured, JSON.stringify(dataObj), row.id)
-          .run();
-        console.log(`[AutoMigrate] Background migrated Trek #${hikeNum} to R2: ${currentFeatured}`);
-      }
-    }
-  } catch (err) {
-    console.warn('[AutoMigrate] Background notice:', err.message);
   }
 }
 
@@ -649,7 +552,7 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
         const { results } = await env.DB.prepare(`
           SELECT 
             b.id, b.registration_id, b.hike_number, b.full_name,
-            COALESCE(b.gender, '') as gender,
+            COALESCE(NULLIF(TRIM(b.gender), ''), NULLIF(TRIM(r.gender), ''), '') as gender,
             COALESCE(b.age_group, '') as age_group,
             COALESCE(r.pax, 1) as pax,
             b.registration_status,
@@ -727,6 +630,7 @@ async function updateTrekParticipantSummary(env, hikeNumber) {
         recentParticipants.push({
           name: anonymized,
           gender: g.startsWith('f') ? 'f' : 'm',
+          pax: regPax,
           timestamp: reg.timestamp || ''
         });
       }
@@ -831,21 +735,6 @@ async function rebuildTreksSnapshot(env) {
   let results = [];
   try {
     const { results: joined } = await env.DB.prepare(`
-      WITH roster_summary AS MATERIALIZED (
-        SELECT
-          REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
-          SUM(COALESCE(r.pax, 1)) AS total_pax,
-          SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN COALESCE(r.pax, 1) ELSE 0 END) AS female_pax,
-          SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN 0 ELSE COALESCE(r.pax, 1) END) AS male_pax
-        FROM bookings_roster b
-        LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
-        WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
-          AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
-          AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
-          AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
-          AND b.hike_number IS NOT NULL AND TRIM(b.hike_number) != ''
-        GROUP BY clean_hike
-      )
       SELECT 
         t.hike_number, t.id, t.title, t.category, t.status, t.cover_image_url,
         t.hike_date, t.min_price, t.max_price, t.currency, t.meeting_point,
@@ -858,75 +747,27 @@ async function rebuildTreksSnapshot(env) {
         e.cancellation_reason as exec_cancellation_reason,
         e.capacity as exec_capacity,
         e.assigned_leader as exec_assigned_leader,
-        COALESCE(rs.total_pax, s.total_pax, 0) as agg_total_pax,
-        COALESCE(rs.male_pax, s.male_pax, 0) as agg_male_pax,
-        COALESCE(rs.female_pax, s.female_pax, 0) as agg_female_pax,
+        COALESCE(s.total_pax, 0) as agg_total_pax,
+        COALESCE(s.male_pax, 0) as agg_male_pax,
+        COALESCE(s.female_pax, 0) as agg_female_pax,
         s.recent_participants as agg_recent_json
       FROM treks t
       LEFT JOIN event_executions e ON (
         t.hike_number = e.hike_number
       )
-      LEFT JOIN roster_summary rs
-        ON REPLACE(TRIM(t.hike_number), '#', '') = rs.clean_hike
       LEFT JOIN trek_participant_summary s
-        ON s.hike_number = REPLACE(TRIM(t.hike_number), '#', '')
+        ON s.hike_number = t.hike_number
       ORDER BY t.created_at DESC
     `).all();
     results = joined || [];
   } catch (joinErr) {
     try {
-      const { results: fallbackJoined } = await env.DB.prepare(`
-        WITH roster_summary AS MATERIALIZED (
-          SELECT
-            REPLACE(TRIM(b.hike_number), '#', '') AS clean_hike,
-            SUM(COALESCE(r.pax, 1)) AS total_pax,
-            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN COALESCE(r.pax, 1) ELSE 0 END) AS female_pax,
-            SUM(CASE WHEN LOWER(TRIM(COALESCE(r.gender, b.gender, ''))) LIKE 'f%' THEN 0 ELSE COALESCE(r.pax, 1) END) AS male_pax
-          FROM bookings_roster b
-          LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
-          WHERE LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
-            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
-            AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
-            AND b.full_name IS NOT NULL AND TRIM(b.full_name) != ''
-            AND b.hike_number IS NOT NULL AND TRIM(b.hike_number) != ''
-          GROUP BY clean_hike
-        )
-        SELECT 
-          t.hike_number, t.id, t.title, t.category, t.status, t.cover_image_url,
-          t.hike_date, t.min_price, t.max_price, t.currency, t.meeting_point,
-          t.meeting_time, t.expected_duration, t.difficulty, t.approx_distance,
-          t.elevation_range, t.elevation_gross, t.ending_point, t.team_leader,
-          t.whatsapp_link, t.itinerary_link, t.faq_link, t.max_capacity,
-          t.author_email, t.created_at, t.updated_at, t.data_json,
-          e.execution_status,
-          e.is_cancelled as exec_is_cancelled,
-          e.cancellation_reason as exec_cancellation_reason,
-          e.capacity as exec_capacity,
-          e.assigned_leader as exec_assigned_leader,
-          COALESCE(rs.total_pax, s.total_pax, 0) as agg_total_pax,
-          COALESCE(rs.male_pax, s.male_pax, 0) as agg_male_pax,
-          COALESCE(rs.female_pax, s.female_pax, 0) as agg_female_pax,
-          s.recent_participants as agg_recent_json
-        FROM treks t
-        LEFT JOIN event_executions e ON (
-          t.hike_number = e.hike_number
-        )
-        LEFT JOIN roster_summary rs
-          ON REPLACE(TRIM(t.hike_number), '#', '') = rs.clean_hike
-        LEFT JOIN trek_participant_summary s
-          ON s.hike_number = REPLACE(TRIM(t.hike_number), '#', '')
-        ORDER BY t.created_at DESC
-      `).all();
-      results = fallbackJoined || [];
-    } catch (_) {
-      try {
-        const { results: rawTreks } = await env.DB.prepare(
-          'SELECT * FROM treks ORDER BY created_at DESC'
-        ).all();
-        results = rawTreks || [];
-      } catch (rawErr) {
-        results = [];
-      }
+      const { results: rawTreks } = await env.DB.prepare(
+        'SELECT * FROM treks ORDER BY created_at DESC'
+      ).all();
+      results = rawTreks || [];
+    } catch (rawErr) {
+      results = [];
     }
   }
 
@@ -1060,61 +901,6 @@ function ensureDbIndexes(env, ctx) {
   }
 }
 
-let migrationsEnsured = false;
-function ensureDbMigrations(env, ctx) {
-  if (migrationsEnsured || !env || !env.DB) return;
-  migrationsEnsured = true;
-  const p = (async () => {
-    try {
-      // Ensure original_registrations_backup table exists
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS original_registrations_backup (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          original_registration_id INTEGER,
-          timestamp TEXT,
-          trek_name TEXT,
-          full_name TEXT,
-          pax INTEGER,
-          whatsapp_number TEXT,
-          emergency_backup_contact TEXT,
-          email_address TEXT,
-          profession TEXT,
-          part_of_group TEXT,
-          list_name TEXT,
-          age_group TEXT,
-          gender TEXT,
-          fitness TEXT,
-          medical_condition TEXT,
-          recent_hikes TEXT,
-          agreement TEXT,
-          suggestions TEXT,
-          guide_mode TEXT,
-          transport_mode TEXT,
-          hike_number TEXT,
-          payment_voucher_url TEXT,
-          payment_voucher_submitted_at TEXT,
-          backed_up_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run().catch(() => {});
-
-      // 1. Add gender and age_group columns to bookings_roster if not present
-      await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN gender TEXT').run().catch(() => {});
-      await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN age_group TEXT').run().catch(() => {});
-
-      // 2. (one-time backfill already completed; removed to avoid full-table scans on every cold start)
-
-      // 3. One-time normalization of hike_numbers (remove leading #)
-      await env.DB.prepare(`UPDATE bookings_roster SET hike_number = REPLACE(TRIM(hike_number), '#', '') WHERE hike_number LIKE '#%'`).run().catch(() => {});
-      await env.DB.prepare(`UPDATE treks SET hike_number = REPLACE(TRIM(hike_number), '#', '') WHERE hike_number LIKE '#%'`).run().catch(() => {});
-      await env.DB.prepare(`UPDATE event_executions SET hike_number = REPLACE(TRIM(hike_number), '#', '') WHERE hike_number LIKE '#%'`).run().catch(() => {});
-      await env.DB.prepare(`UPDATE registrations SET hike_number = REPLACE(TRIM(hike_number), '#', '') WHERE hike_number LIKE '#%'`).run().catch(() => {});
-    } catch (_) {}
-  })();
-  if (ctx && ctx.waitUntil) {
-    ctx.waitUntil(p);
-  }
-}
-
 let blogsTableEnsured = false;
 async function ensureBlogsTable(env) {
   if (blogsTableEnsured || !env || !env.DB) return;
@@ -1149,8 +935,28 @@ async function ensureBlogsTable(env) {
   }
 }
 
-export default {
+const edgeTtl = (p) => {
+  if (p === '/blogs' || p === '/api/blogs') return 120;
+  if (p === '/notice' || p === '/trek-leaders') return 120;
+  if (p === '/feedback' || p === '/photo_comments') return 120;
+  return 0;
+};
+
+const worker = {
   async fetch(request, env, ctx) {
+    if (request.method !== 'GET') return worker.handle(request, env, ctx);
+    const u = new URL(request.url);
+    const ttl = edgeTtl(u.pathname.replace(/\/+$/, ''));
+    if (!ttl || u.searchParams.has('fresh')) return worker.handle(request, env, ctx);
+
+    const hit = await matchEdgeCache(request);
+    if (hit) return hit;
+    const resp = await worker.handle(request, env, ctx);
+    await putEdgeCache(request, resp, ctx, ttl); // only caches 2xx
+    return resp;
+  },
+
+  async handle(request, env, ctx) {
     ensureDbIndexes(env, ctx);
 
     // Handle CORS preflight
@@ -1172,7 +978,6 @@ export default {
     const ADMIN_ONLY = [
       '/admin/sync-all', '/admin/recompute-leaderboard',
       '/admin/recompute-participant-summary', '/admin/recompute-summaries',
-      '/admin/migrate-images-to-r2', '/admin/migrate_images_to_r2',
       '/admin/clear-trek-photos', '/admin/clear_trek_photos',
       '/admin/sync-leaderboard-sheet', '/leaderboard/sync',
       '/admin/logs', '/admin/behavior_events/summary',
@@ -1306,138 +1111,6 @@ export default {
         }
       }
 
-      // POST /admin/migrate-images-to-r2 - Batch migrate external trek images to Cloudflare R2
-      if (method === 'POST' && (path === '/admin/migrate-images-to-r2' || path === '/admin/migrate_images_to_r2')) {
-        if (!env.DB) return errorResponse('Database binding DB missing', 500);
-        const bucket = env.BUCKET;
-        if (!bucket) return errorResponse('R2 Storage binding BUCKET missing', 500);
-
-        try {
-          // 1. Fetch all treks from D1
-          const { results: rows } = await env.DB.prepare('SELECT id, hike_number, name, featured_image, data_json FROM treks').all();
-          let migratedCount = 0;
-          let skippedCount = 0;
-          const report = [];
-
-          for (const row of (rows || [])) {
-            let rowModified = false;
-            let currentFeatured = row.featured_image || '';
-            let dataObj = {};
-            try {
-              dataObj = JSON.parse(row.data_json || '{}');
-            } catch (_) {
-              dataObj = {};
-            }
-
-            const hikeNum = String(row.hike_number || 'hike').trim();
-
-            // Helper to download an external image and upload to R2
-            const migrateUrlToR2 = async (imgUrl, label) => {
-              if (!imgUrl || typeof imgUrl !== 'string') return imgUrl;
-              const trimmed = imgUrl.trim();
-              if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return trimmed;
-              if (trimmed.includes('/images/') || trimmed.includes('.r2.dev') || trimmed.includes(urlOrigin)) return trimmed;
-
-              try {
-                const fetchRes = await fetch(trimmed, {
-                  headers: { 'User-Agent': 'WalkNepalWalk-ImageMigrator/1.0' }
-                });
-                if (!fetchRes.ok) {
-                  console.warn(`[Migrate] Failed to download image for ${label}: HTTP ${fetchRes.status}`);
-                  return trimmed;
-                }
-
-                const mimeType = fetchRes.headers.get('content-type') || 'image/jpeg';
-                let ext = 'jpg';
-                if (mimeType.includes('png')) ext = 'png';
-                else if (mimeType.includes('webp')) ext = 'webp';
-                else if (mimeType.includes('gif')) ext = 'gif';
-
-                const rand = Math.random().toString(36).substring(2, 7);
-                const r2FileName = `covers_${hikeNum}_${Date.now()}_${rand}.${ext}`;
-                const buffer = await fetchRes.arrayBuffer();
-
-                await bucket.put(r2FileName, buffer, {
-                  httpMetadata: { contentType: mimeType }
-                });
-
-                const newR2Url = `${urlOrigin}/images/${r2FileName}`;
-                console.log(`[Migrate] Successfully moved ${label} to R2: ${newR2Url}`);
-                return newR2Url;
-              } catch (err) {
-                console.error(`[Migrate] Error uploading ${label} to R2:`, err);
-                return trimmed;
-              }
-            };
-
-            // 1. Migrate featured_image
-            if (currentFeatured && !currentFeatured.includes('/images/') && !currentFeatured.includes('.r2.dev')) {
-              const newFeatured = await migrateUrlToR2(currentFeatured, `Trek #${hikeNum} featured_image`);
-              if (newFeatured !== currentFeatured) {
-                currentFeatured = newFeatured;
-                rowModified = true;
-              }
-            }
-
-            // 2. Migrate cardImageUrl inside dataObj
-            if (dataObj.cardImageUrl && typeof dataObj.cardImageUrl === 'string' && !dataObj.cardImageUrl.includes('/images/') && !dataObj.cardImageUrl.includes('.r2.dev')) {
-              const newCardUrl = await migrateUrlToR2(dataObj.cardImageUrl, `Trek #${hikeNum} cardImageUrl`);
-              if (newCardUrl !== dataObj.cardImageUrl) {
-                dataObj.cardImageUrl = newCardUrl;
-                rowModified = true;
-              }
-            }
-
-            // 3. Migrate hero images or overview images inside dataObj if present
-            if (dataObj.overview?.heroImageUrl && !dataObj.overview.heroImageUrl.includes('/images/') && !dataObj.overview.heroImageUrl.includes('.r2.dev')) {
-              const newHeroUrl = await migrateUrlToR2(dataObj.overview.heroImageUrl, `Trek #${hikeNum} heroImageUrl`);
-              if (newHeroUrl !== dataObj.overview.heroImageUrl) {
-                dataObj.overview.heroImageUrl = newHeroUrl;
-                rowModified = true;
-              }
-            }
-
-            if (rowModified) {
-              await env.DB.prepare(
-                'UPDATE treks SET featured_image = ?, data_json = ? WHERE id = ?'
-              ).bind(
-                currentFeatured,
-                JSON.stringify(dataObj),
-                row.id
-              ).run();
-
-              migratedCount++;
-              report.push({
-                hikeNumber: row.hike_number,
-                name: row.name,
-                newFeaturedImage: currentFeatured
-              });
-            } else {
-              skippedCount++;
-            }
-          }
-
-          // Purge Edge Caches
-          await purgeEdgeCache([
-            `${urlOrigin}/treks`,
-            `${urlOrigin}/admin/itineraries`
-          ], ctx);
-
-          await logAdminActivity(env, request, 'MIGRATE_IMAGES_R2', `Batch migrated ${migratedCount} trek images to Cloudflare R2`, { migratedCount, skippedCount });
-
-          return jsonResponse({
-            success: true,
-            message: `Batch migration complete. ${migratedCount} treks migrated to Cloudflare R2 (${skippedCount} already up to date).`,
-            migratedCount,
-            skippedCount,
-            report
-          });
-        } catch (err) {
-          console.error('[Migrate] Global error during batch migration:', err);
-          return errorResponse(`Batch migration failed: ${err.message}`, 500);
-        }
-      }
-
       // ===== TREKS & ADMIN ITINERARIES ENDPOINTS =====
       
       // GET /treks or GET /admin/itineraries - List all treks from precomputed snapshot (0 D1 row reads per request)
@@ -1513,96 +1186,28 @@ export default {
         }
 
         const trekHikeClean = String(row.hike_number || cleanHikeNum).replace(/^#/, '').trim();
-        const trekHikeHash = '#' + trekHikeClean;
 
-        // Fetch confirmed roster entries directly from bookings_roster using index
-        let regs = { results: [] };
+        let sum = null;
         try {
-          regs = await env.DB.prepare(`
-            SELECT 
-              b.id, b.registration_id, b.hike_number, b.full_name, b.gender, b.age_group, b.registration_status,
-              COALESCE(r.pax, 1) as pax,
-              COALESCE(b.created_at, b.updated_at, '') as timestamp
-            FROM bookings_roster b
-            LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
-            WHERE (b.hike_number = ? OR b.hike_number = ?)
-              AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
-              AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
-              AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
-            ORDER BY b.id ASC
-          `).bind(trekHikeClean, trekHikeHash).all();
-        } catch (_) {
-          try {
-            regs = await env.DB.prepare(`
-              SELECT 
-                b.id, b.registration_id, b.hike_number, b.full_name,
-                COALESCE(r.gender, b.gender, '') as gender,
-                COALESCE(r.age_group, b.age_group, '') as age_group,
-                COALESCE(r.pax, 1) as pax,
-                b.registration_status,
-                COALESCE(b.created_at, b.updated_at, '') as timestamp
-              FROM bookings_roster b
-              LEFT JOIN registrations r ON r.id = CAST(b.registration_id AS INTEGER)
-              WHERE (b.hike_number = ? OR b.hike_number = ?)
-                AND LOWER(TRIM(COALESCE(b.registration_status, 'Confirmed'))) = 'confirmed'
-                AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%cancel%'
-                AND LOWER(COALESCE(b.registration_status, '')) NOT LIKE '%waitlist%'
-              ORDER BY b.id ASC
-            `).bind(trekHikeClean, trekHikeHash).all();
-          } catch (e) {
-            regs = { results: [] };
-          }
-        }
+          sum = await env.DB.prepare(
+            'SELECT total_pax, male_pax, female_pax, recent_participants FROM trek_participant_summary WHERE hike_number = ?'
+          ).bind(trekHikeClean).first();
+        } catch (_) {}
 
-        const roster = regs.results || [];
-        let male_count = 0;
-        let female_count = 0;
-        const recent_participants = [];
-        const seenIds = new Set();
-        const seenNames = new Set();
-        const sanitizedRoster = [];
-
-        for (const r of roster) {
-          const st = String(r.registration_status || r.active_status || r.status || 'Confirmed').toLowerCase().trim();
-          if (st !== 'confirmed' || st.includes('cancel') || st.includes('waitlist') || st === 'rejected') continue;
-
-          const regIdKey = r.id !== undefined && r.id !== null ? String(r.id) : null;
-          if (regIdKey && seenIds.has(regIdKey)) continue;
-          if (regIdKey) seenIds.add(regIdKey);
-
-          const rawName = (r.full_name || '').trim();
-          const lowerName = rawName.toLowerCase();
-          if (!rawName) continue;
-          if (!regIdKey && seenNames.has(lowerName)) continue;
-          seenNames.add(lowerName);
-
-          const regPax = Number(r.pax || 1);
-          const isFemale = String(r.gender || '').toLowerCase().startsWith('f');
-          if (isFemale) female_count += regPax;
-          else male_count += regPax;
-
-          const parts = rawName.split(/\s+/).filter(Boolean);
-          const anonymized = parts.length > 1
-            ? `${parts[0]} ${parts[1].charAt(0)}.`
-            : (parts[0] || 'Hiker');
-
-          recent_participants.push({
-            name: anonymized,
-            gender: isFemale ? 'f' : 'm',
-            pax: regPax,
-          });
-
-          sanitizedRoster.push({
-            full_name: anonymized,
-            gender: r.gender,
-            age_group: r.age_group,
-            pax: regPax,
-            hike_number: r.hike_number,
-            timestamp: r.timestamp,
-          });
-        }
-
-        const total_pax = sanitizedRoster.reduce((sum, item) => sum + Number(item.pax || 1), 0);
+        const total_pax = Number(sum?.total_pax) || 0;
+        const male_count = Number(sum?.male_pax) || 0;
+        const female_count = Number(sum?.female_pax) || 0;
+        let recent_participants = [];
+        try {
+          recent_participants = sum?.recent_participants ? JSON.parse(sum.recent_participants) : [];
+        } catch (_) {}
+        const sanitizedRoster = recent_participants.map((p) => ({
+          full_name: p.name,
+          gender: p.gender,
+          pax: p.pax || 1,
+          hike_number: trekHikeClean,
+          timestamp: p.timestamp || '',
+        }));
 
         let parsedData = {};
         try {
@@ -2142,8 +1747,6 @@ export default {
           totalInserted += chunk.length;
         }
 
-        cachedTrekAggMap = null; // Invalidate cache so new treks appear instantly
-
         // Rebuild treks snapshot in background
         if (ctx && ctx.waitUntil) {
           ctx.waitUntil(rebuildTreksSnapshot(env));
@@ -2429,11 +2032,11 @@ export default {
           const cleanEmail = authEmail;
           if (phone) {
             const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
-            regSql += ' WHERE (LOWER(r.email_address) = ? OR r.email_address = ?) AND (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
-            regParams.push(cleanEmail, cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
+            regSql += ' WHERE r.email_address = ? AND (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
+            regParams.push(cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
           } else {
-            regSql += ' WHERE (LOWER(r.email_address) = ? OR r.email_address = ?)';
-            regParams.push(cleanEmail, cleanEmail);
+            regSql += ' WHERE r.email_address = ?';
+            regParams.push(cleanEmail);
           }
         } else {
           // Staff (Admin & Coordinator) access: support all administrative filters
@@ -2444,8 +2047,8 @@ export default {
             regParams.push(cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
           } else if (email) {
             const cleanEmail = email.trim().toLowerCase();
-            regSql += ' WHERE (r.email_address = ? OR LOWER(r.email_address) = ?)';
-            regParams.push(cleanEmail, cleanEmail);
+            regSql += ' WHERE r.email_address = ?';
+            regParams.push(cleanEmail);
           } else if (phone) {
             const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
             regSql += ' WHERE (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
@@ -2535,20 +2138,6 @@ export default {
         const resolvedRegId = !isNaN(numericRegId) ? numericRegId : cleanRegId;
         const targetRowId = regRow && regRow.id !== undefined ? regRow.id : resolvedRegId;
 
-        // Ensure columns exist on registrations so UPDATE never fails due to missing optional columns
-        try {
-          await env.DB.prepare('ALTER TABLE registrations ADD COLUMN phone TEXT').run();
-        } catch (_) {}
-        try {
-          await env.DB.prepare('ALTER TABLE registrations ADD COLUMN status TEXT').run();
-        } catch (_) {}
-        try {
-          await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN gender TEXT').run();
-        } catch (_) {}
-        try {
-          await env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN age_group TEXT').run();
-        } catch (_) {}
-
         // Update active registrations table with all modified fields
         try {
           await env.DB.prepare(`
@@ -2605,12 +2194,6 @@ export default {
 
         // Persist payment_voucher_url and payment_voucher_submitted_at on registrations when provided
         if (body.payment_voucher_url !== undefined) {
-          try {
-            await env.DB.prepare('ALTER TABLE registrations ADD COLUMN payment_voucher_url TEXT').run();
-          } catch (_) {}
-          try {
-            await env.DB.prepare('ALTER TABLE registrations ADD COLUMN payment_voucher_submitted_at TEXT').run();
-          } catch (_) {}
           try {
             await env.DB.prepare(
               'UPDATE registrations SET payment_voucher_url = ?, payment_voucher_submitted_at = ? WHERE id = ?'
@@ -2697,17 +2280,12 @@ export default {
           return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
         }
 
-        // Sync precomputed trek participant summary table for this hike
+        // Only status/pax/gender/hike changes affect public counts
+        const affectsCounts = ['status', 'pax', 'paxCount', 'gender', 'hike_number'].some((k) => body[k] !== undefined);
         const targetHikeNum = body.hike_number || regRow?.hike_number || existingRoster?.hike_number;
-        if (targetHikeNum) {
+        if (affectsCounts && targetHikeNum) {
           await updateTrekParticipantSummary(env, targetHikeNum);
-        }
-
-        // Rebuild treks snapshot in background
-        if (ctx && ctx.waitUntil) {
-          ctx.waitUntil(rebuildTreksSnapshot(env));
-        } else {
-          rebuildTreksSnapshot(env).catch(() => {});
+          bg(ctx, rebuildTreksSnapshot(env));
         }
 
         await logAdminActivity(env, request, 'UPDATE_BOOKING', `Updated booking/roster for '${regRow?.full_name || 'Hiker'}' (#${regRow?.hike_number || ''})`, {
@@ -2740,7 +2318,6 @@ export default {
         try {
           await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(id).run();
           await env.DB.prepare('DELETE FROM bookings_roster WHERE registration_id = ?').bind(String(id)).run();
-          cachedTrekAggMap = null;
           if (regHikeNum) await updateTrekParticipantSummary(env, regHikeNum);
           if (ctx && ctx.waitUntil) {
             ctx.waitUntil(rebuildTreksSnapshot(env));
@@ -2754,7 +2331,6 @@ export default {
           try {
             await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(Number(id) || id).run();
             await env.DB.prepare('DELETE FROM bookings_roster WHERE registration_id = ?').bind(String(id)).run();
-            cachedTrekAggMap = null;
             if (regHikeNum) await updateTrekParticipantSummary(env, regHikeNum);
             if (ctx && ctx.waitUntil) {
               ctx.waitUntil(rebuildTreksSnapshot(env));
@@ -2776,6 +2352,7 @@ export default {
         const body = await request.json();
         const cleanHikeNum = String(body.hike_number || '').replace(/^#/, '').trim();
         const whatsappVal = body.whatsapp_number || body.whatsapp || '';
+        const emailVal = String(body.email_address || body.email || '').trim().toLowerCase();
         const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
         // Map list_name value dynamically as requested
@@ -2792,7 +2369,7 @@ export default {
           cleanHikeNum,
           body.trek_name || '',
           body.full_name || 'Anonymous Hiker',
-          body.email_address || '',
+          emailVal,
           body.phone || '',
           whatsappVal,
           body.emergency_backup_contact || '',
@@ -2814,42 +2391,12 @@ export default {
 
         const insertedId = regResult?.meta?.last_row_id || regResult?.lastRowId;
         if (insertedId) {
-          try {
-            await env.DB.prepare(`
-              INSERT INTO original_registrations_backup (
-                original_registration_id, hike_number, trek_name, full_name, email_address, phone, whatsapp_number,
-                emergency_backup_contact, profession, part_of_group, pax, age_group, gender,
-                fitness, medical_condition, recent_hikes, agreement, suggestions, guide_mode,
-                transport_mode, list_name, timestamp, payment_voucher_url, payment_voucher_submitted_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).bind(
-              Number(insertedId),
-              cleanHikeNum,
-              body.trek_name || '',
-              body.full_name || 'Anonymous Hiker',
-              body.email_address || '',
-              body.phone || '',
-              whatsappVal,
-              body.emergency_backup_contact || '',
-              body.profession || '',
-              body.part_of_group || 'Solo',
-              Number(body.pax) || 1,
-              body.age_group || '',
-              body.gender || '',
-              body.fitness || '',
-              body.medical_condition || 'No',
-              body.recent_hikes || '',
-              body.agreement || 'Yes',
-              body.suggestions || '',
-              body.guide_mode || 'Guided',
-              body.transport_mode || 'Bus',
-              finalListName,
-              body.timestamp || currentTimestamp,
-              body.payment_voucher_url || '',
-              body.payment_voucher_submitted_at || ''
-            ).run();
-          } catch (backupErr) {
-            console.warn('Error saving to original_registrations_backup:', backupErr);
+          if (body.payment_voucher_url) {
+            try {
+              await env.DB.prepare(
+                'UPDATE registrations SET payment_voucher_url = ?, payment_voucher_submitted_at = ? WHERE id = ?'
+              ).bind(body.payment_voucher_url, body.payment_voucher_submitted_at || new Date().toISOString(), insertedId).run();
+            } catch (_) {}
           }
 
           try {
@@ -2876,7 +2423,7 @@ export default {
               body.trek_date || body.timestamp || currentTimestamp,
               body.full_name || 'Anonymous Hiker',
               body.phone || '',
-              body.email_address || '',
+              emailVal,
               whatsappVal,
               body.registration_status || 'Confirmed',
               payStatus,
@@ -2892,17 +2439,12 @@ export default {
           }
         }
 
-        cachedTrekAggMap = null;
         if (cleanHikeNum) {
           await updateTrekParticipantSummary(env, cleanHikeNum);
         }
 
         // Rebuild treks snapshot in background
-        if (ctx && ctx.waitUntil) {
-          ctx.waitUntil(rebuildTreksSnapshot(env));
-        } else {
-          rebuildTreksSnapshot(env).catch(() => {});
-        }
+        bg(ctx, rebuildTreksSnapshot(env));
 
         return jsonResponse({ success: true, message: 'Registration saved successfully', id: insertedId });
       }
@@ -2999,8 +2541,6 @@ export default {
             await env.DB.batch(stmts);
           }
         }
-
-        cachedTrekAggMap = null;
 
         // Synchronize precomputed trek participant summaries for all affected hikes
         for (const hn of affectedHikeNumbers) {
@@ -3291,14 +2831,6 @@ export default {
       if (method === 'GET' && (path === '/notice' || path === '/admin/notice')) {
         if (!env.DB) return jsonResponse({ success: true, data: null });
         try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS system_snapshots (
-              key TEXT PRIMARY KEY,
-              data_json TEXT NOT NULL,
-              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-          `).run().catch(() => {});
-
           const row = await env.DB.prepare(
             "SELECT data_json, updated_at FROM system_snapshots WHERE key = 'site_notice_board'"
           ).first();
@@ -3316,14 +2848,6 @@ export default {
       if (method === 'POST' && (path === '/notice' || path === '/admin/notice')) {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
         try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS system_snapshots (
-              key TEXT PRIMARY KEY,
-              data_json TEXT NOT NULL,
-              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-          `).run().catch(() => {});
-
           const body = await request.json();
           const nowIso = new Date().toISOString();
           const noticeData = {
@@ -3336,6 +2860,7 @@ export default {
             "INSERT OR REPLACE INTO system_snapshots (key, data_json, updated_at) VALUES ('site_notice_board', ?, ?)"
           ).bind(jsonStr, nowIso).run();
 
+          await purgeEdgeCache([`${url.origin}/notice`], ctx);
           return jsonResponse({ success: true, data: noticeData });
         } catch (err) {
           return errorResponse('Failed to update notice: ' + err.message, 500);
@@ -3348,14 +2873,6 @@ export default {
       if (method === 'GET' && (path === '/trek-leaders' || path === '/admin/trek-leaders')) {
         if (!env.DB) return jsonResponse({ success: true, data: null });
         try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS system_snapshots (
-              key TEXT PRIMARY KEY,
-              data_json TEXT NOT NULL,
-              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-          `).run().catch(() => {});
-
           const row = await env.DB.prepare(
             "SELECT data_json, updated_at FROM system_snapshots WHERE key = 'trek_leader_config'"
           ).first();
@@ -3375,14 +2892,6 @@ export default {
       if (method === 'POST' && (path === '/trek-leaders' || path === '/admin/trek-leaders')) {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
         try {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS system_snapshots (
-              key TEXT PRIMARY KEY,
-              data_json TEXT NOT NULL,
-              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-          `).run().catch(() => {});
-
           const body = await request.json();
           const nowIso = new Date().toISOString();
           const configData = {
@@ -3395,6 +2904,7 @@ export default {
             "INSERT OR REPLACE INTO system_snapshots (key, data_json, updated_at) VALUES ('trek_leader_config', ?, ?)"
           ).bind(jsonStr, nowIso).run();
 
+          await purgeEdgeCache([`${url.origin}/trek-leaders`], ctx);
           return jsonResponse({ success: true, data: configData });
         } catch (err) {
           return errorResponse('Failed to update trek leaders config: ' + err.message, 500);
@@ -3603,22 +3113,9 @@ export default {
           if (rawEvents.length === 0) {
             return jsonResponse({ success: true, count: 0 });
           }
-
-          // Ensure table exists on first write (safe SQLite DDL)
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS user_behavior_events (
-              id TEXT PRIMARY KEY,
-              session_id TEXT NOT NULL,
-              user_email TEXT,
-              event_type TEXT NOT NULL,
-              category TEXT NOT NULL,
-              target_id TEXT,
-              metadata TEXT,
-              created_at TEXT NOT NULL
-            )
-          `).run().catch((ddlErr) => {
-            console.warn('D1 user_behavior_events DDL check:', ddlErr.message);
-          });
+          if (Math.random() > 0.5) { // keep ~50% of batches; adjust to taste
+            return jsonResponse({ success: true, count: 0, sampled: true });
+          }
 
           // Insert batch of up to 50 events atomically
           const statements = rawEvents.slice(0, 20).map((evt) => {
@@ -3769,14 +3266,9 @@ export default {
             return errorResponse('Blog not found', 404);
           }
 
-          // Asynchronously increment view count without blocking
-          if (ctx && ctx.waitUntil) {
-            ctx.waitUntil(
-              env.DB.prepare('UPDATE blogs SET views_count = views_count + 1 WHERE id = ?')
-                .bind(blog.id)
-                .run()
-                .catch(() => {})
-            );
+          // Sampled: ~10% of views write +10 (cuts view writes by ~90%, count stays approximate)
+          if (Math.random() < 0.1) {
+            bg(ctx, env.DB.prepare('UPDATE blogs SET views_count = views_count + 10 WHERE id = ?').bind(blog.id).run());
           }
 
           return jsonResponse({ success: true, data: blog });
@@ -4151,10 +3643,12 @@ export default {
       ctx.waitUntil(rebuildTreksSnapshot(env));
       ctx.waitUntil(
         env.DB.prepare('DELETE FROM user_behavior_events WHERE created_at < ?')
-          .bind(new Date(Date.now() - 90 * 864e5).toISOString()).run().catch(() => {})
+          .bind(new Date(Date.now() - 30 * 864e5).toISOString()).run().catch(() => {})
       );
     } else {
       await rebuildTreksSnapshot(env);
     }
   },
 };
+
+export default worker;

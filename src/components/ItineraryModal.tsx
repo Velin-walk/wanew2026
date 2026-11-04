@@ -32,9 +32,10 @@ import {
   Footprints,
   Sparkles,
   Award,
+  ExternalLink,
 } from 'lucide-react';
 import { Trek } from '../types';
-import { TrekItineraryData, TrekFaqItem } from '../data/defaultItineraryTemplate';
+import { TrekItineraryData, TrekFaqItem, getEventPhotos } from '../data/defaultItineraryTemplate';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import { useCitizenPricing } from '../hooks/useCitizenPricing';
 import { useAuth } from '../context/AuthContext';
@@ -125,6 +126,7 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
   const [expandedFaqs, setExpandedFaqs] = useState<Record<string, boolean>>({});
   const [activeSection, setActiveSection] = useState<string>('overview');
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const [selectedLightboxImage, setSelectedLightboxImage] = useState<string | null>(null);
 
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const { isNepaliCitizen, formatPrice } = useCitizenPricing();
@@ -220,9 +222,22 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
 
   if (!isOpen || !trek) return null;
 
-  // Determine if database has custom itinerary JSON data
-  const hasDbCustomData = trek.data && typeof trek.data === 'object' && (trek.data as any).title;
-  const dbData: TrekItineraryData | null = hasDbCustomData ? (trek.data as any) : null;
+  // Safely parse custom itinerary JSON data from D1 if passed as string or object
+  const rawCustomData = (() => {
+    if (!trek.data && !(trek as any).data_json) return null;
+    let val = trek.data || (trek as any).data_json;
+    if (typeof val === 'string') {
+      try {
+        val = JSON.parse(val);
+      } catch (_) {
+        return null;
+      }
+    }
+    return val && typeof val === 'object' ? val : null;
+  })();
+
+  const hasDbCustomData = Boolean(rawCustomData && (rawCustomData.title || rawCustomData.itineraryDays || rawCustomData.overview));
+  const dbData: TrekItineraryData | null = hasDbCustomData ? (rawCustomData as any) : null;
   const customFaqs: TrekFaqItem[] = (
     (dbData?.faqs && dbData.faqs.length > 0)
       ? dbData.faqs
@@ -491,61 +506,117 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
         {/* Scrollable Merged Prospectus Content */}
         <div ref={contentScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-7">
           
-          {/* Cover Hero Banner */}
-          <div className="relative w-full rounded-2xl overflow-hidden bg-neutral-900 shadow-sm border border-[#E5E1DB] group">
-            <div className="relative w-full overflow-hidden bg-neutral-900 flex items-center justify-center">
-              <img
-                src={dbData?.coverImageUrl || trek.featured_image || 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80'}
-                alt={trek.name}
-                className="w-full h-auto object-contain block transition-transform duration-700 group-hover:scale-101"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80';
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
+          {/* Cover Hero Banner & Gallery */}
+          {(() => {
+            const photos = getEventPhotos(dbData?.coverImageUrl || trek.featured_image);
+            const mainPhoto = photos[0];
+            return (
+              <div className="space-y-3">
+                <div className="relative w-full rounded-2xl overflow-hidden bg-neutral-900 shadow-sm border border-[#E5E1DB] group">
+                  {mainPhoto && (
+                    <div
+                      className="relative w-full overflow-hidden bg-neutral-900 flex items-center justify-center cursor-pointer"
+                      onClick={() => setSelectedLightboxImage(mainPhoto.url)}
+                      title="Click to view full image"
+                    >
+                      <img
+                        src={mainPhoto.url}
+                        alt={trek.name}
+                        className="w-full h-auto object-contain block transition-transform duration-700 group-hover:scale-101"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
 
-              {/* Auspicious miniature prayer flag garland draped over cover */}
-              <div className="absolute top-0 left-3 sm:left-6 w-36 sm:w-48 z-20 pointer-events-none drop-shadow-md">
-                <MiniPrayerFlags variant="draped" count={6} />
-              </div>
+                      {/* Auspicious miniature prayer flag garland draped over cover */}
+                      <div className="absolute top-0 left-3 sm:left-6 w-36 sm:w-48 z-20 pointer-events-none drop-shadow-md">
+                        <MiniPrayerFlags variant="draped" count={6} />
+                      </div>
 
-              {/* Title & Badge Overlay */}
-              <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 text-white space-y-2">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  {trek.hike_number && (
-                    <span className="font-mono tabular-nums font-black text-amber-300 bg-amber-400/20 backdrop-blur-md px-2.5 py-0.5 rounded-md border border-amber-300/30">
-                      Hike #{trek.hike_number}
-                    </span>
-                  )}
-                  <span className="text-white/90 font-medium">
-                    {dbData?.category || trek.type_of_trail || 'Weekend Expedition'}
-                  </span>
-                  {(dbData?.hikeDate || trek.date) && (
-                    <>
-                      <span className="text-white/40" aria-hidden="true">·</span>
-                      <span className="flex items-center gap-1 font-semibold text-white/95">
-                        <Calendar className="w-3.5 h-3.5 text-amber-300" />
-                        {dbData?.hikeDate || trek.date}
-                      </span>
-                    </>
+                      {/* Click to expand badge */}
+                      <div className="absolute top-3 right-3 z-30 bg-black/60 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                        Click to expand full image
+                      </div>
+
+                      {/* Title & Badge Overlay */}
+                      <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 text-white space-y-2 z-20">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {trek.hike_number && (
+                            <span className="font-mono tabular-nums font-black text-amber-300 bg-amber-400/20 backdrop-blur-md px-2.5 py-0.5 rounded-md border border-amber-300/30">
+                              Hike #{trek.hike_number}
+                            </span>
+                          )}
+                          <span className="text-white/90 font-medium">
+                            {dbData?.category || trek.type_of_trail || 'Weekend Expedition'}
+                          </span>
+                          {(dbData?.hikeDate || trek.date) && (
+                            <>
+                              <span className="text-white/40" aria-hidden="true">·</span>
+                              <span className="flex items-center gap-1 font-semibold text-white/95">
+                                <Calendar className="w-3.5 h-3.5 text-amber-300" />
+                                {dbData?.hikeDate || trek.date}
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-sm text-balance">
+                          {dbData?.title || trek.name}
+                        </h1>
+
+                        {((trek as any).destination || dbData?.overview?.endingPoint) && (
+                          <p className="text-xs sm:text-sm text-white/80 flex items-center gap-1.5 font-medium">
+                            <MapPin className="w-3.5 h-3.5 text-[#E08828]" />
+                            <span>Destination: {(trek as any).destination || dbData?.overview?.endingPoint}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-sm text-balance">
-                  {dbData?.title || trek.name}
-                </h1>
-
-                {((trek as any).destination || dbData?.overview?.endingPoint) && (
-                  <p className="text-xs sm:text-sm text-white/80 flex items-center gap-1.5 font-medium">
-                    <MapPin className="w-3.5 h-3.5 text-[#E08828]" />
-                    <span>Destination: {(trek as any).destination || dbData?.overview?.endingPoint}</span>
-                  </p>
+                {/* Preview Photos Strip underneath main cover photo: 4 per row */}
+                {photos.length > 1 && (
+                  <div className="p-4 bg-white rounded-2xl border border-[#E5E1DB] shadow-2xs space-y-3">
+                    <p className="text-xs font-bold text-[#5A5551] uppercase tracking-wider mb-2">
+                      Event Photo Gallery ({photos.length} Photos) — Click any picture to expand full size
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      {photos.map((photo, idx) => (
+                        <div key={idx} className="bg-[#FAF8F5] p-2.5 rounded-xl border border-[#E5E1DB] space-y-2 flex flex-col justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLightboxImage(photo.url)}
+                            className="relative w-full h-36 sm:h-40 rounded-lg overflow-hidden bg-neutral-900 block cursor-pointer group"
+                          >
+                            <img
+                              src={photo.url}
+                              alt={`Photo ${idx + 1}`}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              referrerPolicy="no-referrer"
+                            />
+                            {idx === 0 && (
+                              <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#E08828] text-white text-[9px] font-bold rounded-md uppercase">
+                                Cover
+                              </span>
+                            )}
+                          </button>
+                          {photo.caption && (
+                            <p className="text-xs text-[#5A5551] font-medium px-1 line-clamp-2">
+                              {photo.caption}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* SECTION 1: OVERVIEW & KEY STATS */}
           <section id="section-overview" className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E5E1DB] shadow-xs space-y-4">
@@ -576,9 +647,22 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                 <span className="text-[10px] text-[#6A645D] font-bold flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-[#E08828]" /> Meeting Point
                 </span>
-                <p className="text-xs font-black text-[#1F1F1F] mt-1 truncate" title={dbData?.overview?.meetingPoint || trek.start_location}>
-                  {dbData?.overview?.meetingPoint || trek.start_location || 'Kathmandu'}
-                </p>
+                {dbData?.overview?.meetingPointLink ? (
+                  <a
+                    href={dbData.overview.meetingPointLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-black text-[#E08828] hover:text-[#C86B1A] hover:underline mt-1 truncate flex items-center gap-1 group"
+                    title={`Open map/link for ${dbData.overview.meetingPoint || trek.start_location || 'Meeting Point'}`}
+                  >
+                    <span className="truncate">{dbData?.overview?.meetingPoint || trek.start_location || 'Kathmandu'}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0 opacity-70 group-hover:opacity-100" />
+                  </a>
+                ) : (
+                  <p className="text-xs font-black text-[#1F1F1F] mt-1 truncate" title={dbData?.overview?.meetingPoint || trek.start_location}>
+                    {dbData?.overview?.meetingPoint || trek.start_location || 'Kathmandu'}
+                  </p>
+                )}
               </div>
 
               <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E5E1DB]">
@@ -617,9 +701,22 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                 <span className="text-[10px] text-[#6A645D] font-bold flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Ending Location
                 </span>
-                <p className="text-xs font-black text-[#1F1F1F] mt-1 truncate" title={dbData?.overview?.endingPoint}>
-                  {dbData?.overview?.endingPoint || 'Kathmandu Drop-off'}
-                </p>
+                {dbData?.overview?.endingPointLink ? (
+                  <a
+                    href={dbData.overview.endingPointLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-black text-emerald-600 hover:text-emerald-700 hover:underline mt-1 truncate flex items-center gap-1 group"
+                    title={`Open map/link for ${dbData.overview.endingPoint || 'Ending Location'}`}
+                  >
+                    <span className="truncate">{dbData?.overview?.endingPoint || 'Kathmandu Drop-off'}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0 opacity-70 group-hover:opacity-100" />
+                  </a>
+                ) : (
+                  <p className="text-xs font-black text-[#1F1F1F] mt-1 truncate" title={dbData?.overview?.endingPoint}>
+                    {dbData?.overview?.endingPoint || 'Kathmandu Drop-off'}
+                  </p>
+                )}
               </div>
 
               <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E5E1DB]">
@@ -1241,6 +1338,30 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
         </div>
 
       </div>
+
+      {/* Lightbox Modal */}
+      {selectedLightboxImage && (
+        <div
+          className="fixed inset-0 z-[999999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedLightboxImage(null)}
+        >
+          <div className="relative max-w-5xl max-h-[90vh] w-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={selectedLightboxImage}
+              alt="Full size view"
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+              referrerPolicy="no-referrer"
+            />
+            <button
+              type="button"
+              onClick={() => setSelectedLightboxImage(null)}
+              className="absolute -top-12 right-0 sm:-right-4 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              ✕ Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

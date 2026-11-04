@@ -338,7 +338,7 @@ export function normalizeTrek(row: any): Trek {
         console.warn('Failed to parse row.data JSON string:', row.data, e);
         d = {};
       }
-    } else {
+    } else if (typeof row.data === 'object' && row.data !== null) {
       d = row.data;
     }
   }
@@ -348,34 +348,9 @@ export function normalizeTrek(row: any): Trek {
     try {
       rawJsonData = JSON.parse(row.data_json);
     } catch (_) {}
+  } else if (typeof row.data_json === 'object' && row.data_json !== null) {
+    rawJsonData = row.data_json;
   }
-
-  // Prefer values from the nested data object if they exist
-  const title = d.title || rawJsonData.title || row.title || row.name || row.trek_name || "";
-  const hikeNum = d.hikeNumber || rawJsonData.hikeNumber || row.hike_number || row.hikeNumber || "";
-  const date = d.hikeDate || rawJsonData.hikeDate || row.hike_date || row.date || "";
-  const category = d.category || rawJsonData.category || row.category || "";
-  
-  const difficulty = String(d.overview?.difficulty || rawJsonData.overview?.difficulty || row.difficulty || "Easy").toLowerCase();
-  
-  // Price logic: Prefer calculating from priceTiers in 'data' object
-  let displayPrice = row.price || "";
-  const prices = (d.priceTiers || rawJsonData.priceTiers || []).map((t: any) => Number(t.price) || 0).filter((p: number) => p > 0);
-  
-  if (prices.length > 0) {
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    displayPrice = max !== min 
-      ? `${d.currency || 'NPR'} ${min.toLocaleString()} - ${max.toLocaleString()}`
-      : `${d.currency || 'NPR'} ${min.toLocaleString()}`;
-  } else if (!displayPrice && row.min_price) {
-    displayPrice = row.max_price && row.max_price !== row.min_price
-      ? `NPR ${row.min_price} - ${row.max_price}`
-      : `NPR ${row.min_price}+`;
-  }
-
-  const rawRowId = row.id || row.trek_id || d.id || rawJsonData.id || "";
-  const fallbackUniqueId = `${hikeNum && hikeNum !== 'TBD' ? hikeNum : title}-${date}`.replace(/\s+/g, '-').toLowerCase();
 
   // Strip null/undefined values from d (which can come from unmatched LEFT JOIN event_executions in worker.js)
   const cleanD: Record<string, any> = {};
@@ -386,6 +361,33 @@ export function normalizeTrek(row: any): Trek {
       }
     }
   }
+
+  // Prefer values from rawJsonData (Cloudflare data_json) then cleanD then row root
+  const title = rawJsonData.title || cleanD.title || d.title || row.title || row.name || row.trek_name || "";
+  const hikeNum = rawJsonData.hikeNumber || cleanD.hikeNumber || d.hikeNumber || row.hike_number || row.hikeNumber || "";
+  const date = rawJsonData.hikeDate || cleanD.hikeDate || d.hikeDate || row.hike_date || row.date || "";
+  const category = rawJsonData.category || cleanD.category || d.category || row.category || "";
+  
+  const difficulty = String(rawJsonData.overview?.difficulty || cleanD.overview?.difficulty || d.overview?.difficulty || row.difficulty || "Easy").toLowerCase();
+  
+  // Price logic: Prefer calculating from priceTiers in 'data' object
+  let displayPrice = row.price || "";
+  const prices = (rawJsonData.priceTiers || cleanD.priceTiers || d.priceTiers || []).map((t: any) => Number(t.price) || 0).filter((p: number) => p > 0);
+  
+  if (prices.length > 0) {
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    displayPrice = max !== min 
+      ? `${rawJsonData.currency || cleanD.currency || d.currency || 'NPR'} ${min.toLocaleString()} - ${max.toLocaleString()}`
+      : `${rawJsonData.currency || cleanD.currency || d.currency || 'NPR'} ${min.toLocaleString()}`;
+  } else if (!displayPrice && row.min_price) {
+    displayPrice = row.max_price && row.max_price !== row.min_price
+      ? `NPR ${row.min_price} - ${row.max_price}`
+      : `NPR ${row.min_price}+`;
+  }
+
+  const rawRowId = row.id || row.trek_id || rawJsonData.id || d.id || "";
+  const fallbackUniqueId = `${hikeNum && hikeNum !== 'TBD' ? hikeNum : title}-${date}`.replace(/\s+/g, '-').toLowerCase();
 
   // Prefer live event_executions capacity over static initial values
   const resolvedCapacity =
@@ -426,15 +428,64 @@ export function normalizeTrek(row: any): Trek {
     row.cancellation_reason ||
     "";
 
+  const resolvedItineraryDays = (Array.isArray(rawJsonData.itineraryDays) && rawJsonData.itineraryDays.length > 0)
+    ? rawJsonData.itineraryDays
+    : (Array.isArray(cleanD.itineraryDays) && cleanD.itineraryDays.length > 0 ? cleanD.itineraryDays : (Array.isArray(d.itineraryDays) ? d.itineraryDays : []));
+
+  const resolvedFaqs = (Array.isArray(rawJsonData.faqs) && rawJsonData.faqs.length > 0)
+    ? rawJsonData.faqs
+    : (Array.isArray(cleanD.faqs) && cleanD.faqs.length > 0 ? cleanD.faqs : (Array.isArray(d.faqs) ? d.faqs : (Array.isArray(row.faqs) ? row.faqs : [])));
+
+  const resolvedOverview = {
+    ...(cleanD.overview || d.overview || {}),
+    ...(rawJsonData.overview || {}),
+  };
+
+  const resolvedCostIncludes = (Array.isArray(rawJsonData.costIncludes) && rawJsonData.costIncludes.length > 0)
+    ? rawJsonData.costIncludes
+    : (Array.isArray(cleanD.costIncludes) ? cleanD.costIncludes : (Array.isArray(d.costIncludes) ? d.costIncludes : []));
+
+  const resolvedCostExcludes = (Array.isArray(rawJsonData.costExcludes) && rawJsonData.costExcludes.length > 0)
+    ? rawJsonData.costExcludes
+    : (Array.isArray(cleanD.costExcludes) ? cleanD.costExcludes : (Array.isArray(d.costExcludes) ? d.costExcludes : []));
+
   const mergedData = {
     ...cleanD,
     ...rawJsonData,
+    title,
+    hikeNumber: hikeNum,
+    hikeDate: date,
+    category,
+    itineraryDays: resolvedItineraryDays,
+    overview: resolvedOverview,
+    costIncludes: resolvedCostIncludes,
+    costExcludes: resolvedCostExcludes,
+    faqs: resolvedFaqs,
     maxCapacity: resolvedCapacity,
     teamLeader: resolvedLeader,
     execution_status: resolvedExecStatus,
     is_cancelled: resolvedIsCancelled,
     cancellation_reason: resolvedCancelReason,
   };
+
+  const resolvedItineraryText = (() => {
+    if (row.itinerary && String(row.itinerary).trim()) return String(row.itinerary).trim();
+    if (rawJsonData.itinerary && String(rawJsonData.itinerary).trim()) return String(rawJsonData.itinerary).trim();
+    if (cleanD.itinerary && String(cleanD.itinerary).trim()) return String(cleanD.itinerary).trim();
+    if (d.itinerary && String(d.itinerary).trim()) return String(d.itinerary).trim();
+    if (resolvedItineraryDays && resolvedItineraryDays.length > 0) {
+      return resolvedItineraryDays
+        .map((day: any) => {
+          const dayHeader = day.title ? `Day ${day.dayNumber || 1}: ${day.title}` : `Day ${day.dayNumber || 1}`;
+          const itemsStr = Array.isArray(day.items)
+            ? day.items.map((it: any) => `${it.time ? it.time + ' ' : ''}${it.activity || ''}`.trim()).filter(Boolean).join(' -> ')
+            : '';
+          return itemsStr ? `${dayHeader} (${itemsStr})` : dayHeader;
+        })
+        .join(' | ');
+    }
+    return "";
+  })();
 
   const resolvedGenderCounts = (() => {
     const rawG = row.participants_by_gender || row.participantsByGender || d.participants_by_gender || rawJsonData.participants_by_gender;
@@ -476,8 +527,8 @@ export function normalizeTrek(row: any): Trek {
     hike_number: String(hikeNum),
     name: title,
     date: date,
-    days: d.overview?.expectedDuration || rawJsonData.overview?.expectedDuration || row.expected_duration || row.days || "1",
-    days_label: d.overview?.days || rawJsonData.overview?.days || row.days || "",
+    days: resolvedOverview.expectedDuration || rawJsonData.overview?.expectedDuration || row.expected_duration || row.days || "1",
+    days_label: resolvedOverview.days || rawJsonData.overview?.days || row.days || "",
     difficulty: (difficulty === "hard" || difficulty === "difficult") ? "difficult" : (difficulty === "moderate" ? "moderate" : (difficulty === "extreme" ? "extreme" : (difficulty === "easy" ? "easy" : difficulty))),
     leader: resolvedLeader,
     capacity: resolvedCapacity,
@@ -490,19 +541,19 @@ export function normalizeTrek(row: any): Trek {
       }
       return Array.isArray(rawR) ? rawR : undefined;
     })(),
-    itinerary_link: row.itinerary_link || "",
-    faq_link: row.faq_link || "",
-    faqs: Array.isArray(mergedData.faqs) ? mergedData.faqs : (Array.isArray(d.faqs) ? d.faqs : (Array.isArray(rawJsonData.faqs) ? rawJsonData.faqs : [])),
-    whatsapp_link: row.whatsapp_link || "",
+    itinerary_link: row.itinerary_link || rawJsonData.itineraryLink || cleanD.itineraryLink || "",
+    faq_link: row.faq_link || rawJsonData.faqLink || cleanD.faqLink || "",
+    faqs: resolvedFaqs,
+    whatsapp_link: row.whatsapp_link || rawJsonData.whatsappLink || cleanD.whatsappLink || "",
     price: displayPrice,
-    featured_image: d.cardImageUrl || d.coverImageUrl || rawJsonData.cardImageUrl || rawJsonData.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",
-    fitness_level: d.overview?.difficulty || rawJsonData.overview?.difficulty || row.fitness_level || "All fitness levels",
+    featured_image: rawJsonData.cardImageUrl || rawJsonData.coverImageUrl || cleanD.cardImageUrl || cleanD.coverImageUrl || d.cardImageUrl || d.coverImageUrl || row.cover_image_url || row.featured_image || row.thumbnail_url || "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1000&auto=format&fit=crop",
+    fitness_level: resolvedOverview.difficulty || rawJsonData.overview?.difficulty || row.fitness_level || "All fitness levels",
     season: row.season || "Autumn / Year-round",
-    type_of_trail: row.type_of_trail || "",
-    start_location: d.overview?.meetingPoint || rawJsonData.overview?.meetingPoint || row.meeting_point || row.start_location || "",
-    elevation: d.overview?.elevationRange || rawJsonData.overview?.elevationRange || row.elevation_range || row.elevation || "",
-    distance: d.overview?.approxDistance || rawJsonData.overview?.approxDistance || row.approx_distance || row.distance || "",
-    itinerary: row.itinerary || "",
+    type_of_trail: row.type_of_trail || category || "",
+    start_location: resolvedOverview.meetingPoint || rawJsonData.overview?.meetingPoint || row.meeting_point || row.start_location || "",
+    elevation: resolvedOverview.elevationRange || rawJsonData.overview?.elevationRange || row.elevation_range || row.elevation || "",
+    distance: resolvedOverview.approxDistance || rawJsonData.overview?.approxDistance || row.approx_distance || row.distance || "",
+    itinerary: resolvedItineraryText,
     is_cancelled: resolvedIsCancelled,
     cancellation_reason: resolvedCancelReason,
     status: (row.status || d.status || rawJsonData.status || 'published').toString().toLowerCase(),

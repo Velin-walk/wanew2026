@@ -10,12 +10,13 @@ import {
   ItineraryDay,
   SafetyRule,
   formatSingleDate,
-  formatDateRange
+  formatDateRange,
+  getEventPhotos
 } from '../../data/defaultItineraryTemplate';
 import { ItineraryPreview } from './ItineraryPreview';
 import { ShareHikeModal } from './ShareHikeModal';
 import { ImageCropperModal } from './ImageCropperModal';
-import { apiFetch, clearApiCache } from '../../services/api';
+import { apiFetch, clearApiCache, uploadImageToR2WithProgress } from '../../services/api';
 import { getAdminDeviceMetadata } from '../../adminUtils';
 import { db } from '../../lib/firebase';
 // Firestore methods removed as app now uses Cloudflare D1 for storage
@@ -96,8 +97,95 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [copiedFaqLink, setCopiedFaqLink] = useState(false);
   
-  // Image Cropping States
+  // Image Uploading & Cropping States
   const [croppingImage, setCroppingImage] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Resize image client-side via canvas (max 1600px, 0.85 quality) and upload directly to Cloudflare R2
+  const handleUploadPhotoFile = async (file: File) => {
+    if (!file) return;
+    setIsUploadingPhoto(true);
+    setUploadProgress(0);
+    setUploadError(null);
+
+    try {
+      // 1. Resize/compress image client-side via canvas to ensure fast upload and small footprint (~150KB-300KB)
+      const blob: Blob = await new Promise((resolve) => {
+        const img = new Image();
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+          img.src = e.target?.result as string;
+        };
+
+        img.onload = () => {
+          const maxDim = 1600;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((maxDim / w) * h);
+              w = maxDim;
+            } else {
+              w = Math.round((maxDim / h) * w);
+              h = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h);
+            canvas.toBlob(
+              (b) => {
+                resolve(b || file);
+              },
+              'image/jpeg',
+              0.85
+            );
+          } else {
+            resolve(file);
+          }
+        };
+
+        img.onerror = () => {
+          resolve(file);
+        };
+
+        reader.readAsDataURL(file);
+      });
+
+      // 2. Upload directly to Cloudflare R2 Storage with progress tracking
+      const result = await uploadImageToR2WithProgress(blob, 'covers', (pct) => {
+        setUploadProgress(pct);
+      });
+
+      if (!result?.url) {
+        throw new Error('Failed to retrieve uploaded image URL from Cloudflare');
+      }
+
+      // 3. Append to event photos array
+      const current = getEventPhotos(formData.coverImageUrl);
+      if (current.length < 10) {
+        const updated = [...current, { url: result.url, caption: '' }];
+        updateData((prev) => ({ ...prev, coverImageUrl: JSON.stringify(updated) }));
+        // If it's the very first photo (cover), open cropping tool to frame the card preview
+        if (current.length === 0) {
+          setCroppingImage(result.url);
+        }
+      }
+    } catch (err: any) {
+      console.error('Photo upload failed:', err);
+      setUploadError(err.message || 'Failed to upload photo. Please check your connection.');
+      setTimeout(() => setUploadError(null), 5000);
+    } finally {
+      setIsUploadingPhoto(false);
+      setUploadProgress(null);
+    }
+  };
 
   // Hike Date Interactive Calendar States
   const [datePickerMode, setDatePickerMode] = useState<'single' | 'range' | 'custom'>('single');
@@ -250,15 +338,39 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     updateData((prev) => ({ ...prev, hikeDate: formatted }));
   };
 
+  // Thorough sanitizer to strip all in-memory base64 image strings before saving to localStorage
+  const sanitizeItineraryForStorage = (data: TrekItineraryData): TrekItineraryData => {
+    const copy = { ...data };
+    if (typeof copy.cardImageUrl === 'string' && copy.cardImageUrl.startsWith('data:image')) {
+      copy.cardImageUrl = '';
+    }
+    if (typeof copy.coverImageUrl === 'string') {
+      if (copy.coverImageUrl.startsWith('data:image')) {
+        copy.coverImageUrl = '';
+      } else if (copy.coverImageUrl.startsWith('[')) {
+        try {
+          const arr = JSON.parse(copy.coverImageUrl);
+          if (Array.isArray(arr)) {
+            const cleanArr = arr
+              .filter((item: any) => item && typeof item.url === 'string' && !item.url.startsWith('data:image'))
+              .map((item: any) => ({
+                url: item.url,
+                caption: typeof item.caption === 'string' ? item.caption : '',
+              }));
+            copy.coverImageUrl = cleanArr.length > 0 ? JSON.stringify(cleanArr) : '';
+          }
+        } catch (_) {}
+      }
+    }
+    return copy;
+  };
+
   // Auto-save draft changes to localStorage
   const updateData = (updater: (prev: TrekItineraryData) => TrekItineraryData) => {
     setFormData((prev) => {
       const next = updater(prev);
       try {
-        const sanitized = { ...next };
-        if (typeof sanitized.coverImageUrl === 'string' && sanitized.coverImageUrl.startsWith('data:image')) {
-          sanitized.coverImageUrl = '';
-        }
+        const sanitized = sanitizeItineraryForStorage(next);
         localStorage.setItem(draftKey, JSON.stringify(sanitized));
       } catch (_) {}
       return next;
@@ -488,10 +600,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
 
     try {
       // Safe local draft backup (strip large base64 data to avoid quota errors)
-      const sanitizedDraft = { ...updatedFormData };
-      if (typeof sanitizedDraft.coverImageUrl === 'string' && sanitizedDraft.coverImageUrl.startsWith('data:image')) {
-        sanitizedDraft.coverImageUrl = '';
-      }
+      const sanitizedDraft = sanitizeItineraryForStorage(updatedFormData);
       localStorage.setItem('wnw_itinerary_template_draft', JSON.stringify(sanitizedDraft));
     } catch (_) {}
 
@@ -521,6 +630,10 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
 
       const activeDevice = getAdminDeviceMetadata();
 
+      // Extract the primary cover photo URL for the D1 treks table column
+      const photosList = getEventPhotos(updatedFormData.coverImageUrl);
+      const primaryCoverUrl = photosList[0]?.url || (typeof updatedFormData.coverImageUrl === 'string' && !updatedFormData.coverImageUrl.startsWith('[') ? updatedFormData.coverImageUrl : '');
+
       const syncPayload = {
         id: trekFinalId,
         hike_number: cleanHikeNum || 'TBD',
@@ -528,7 +641,7 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         title: updatedFormData.title || 'Walk Nepal Walk Hike',
         category: updatedFormData.category || 'Overnight Bus Hikes',
         status: statusToSave,
-        cover_image_url: updatedFormData.coverImageUrl || '',
+        cover_image_url: primaryCoverUrl,
         hike_date: updatedFormData.hikeDate || '',
         min_price: minPrice,
         max_price: maxPrice,
@@ -979,164 +1092,239 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
             </div>
           </div>
 
-          {/* Cover Image URL / Upload Field */}
+          {/* Cover & Preview Photos (Upto 10 Photos) */}
           <div className="mt-4 pt-4 border-t border-[#F5F2ED]">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <div>
                 <label className="text-xs font-bold text-[#1F1F1F] flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-[#E08828]" />
-                  <span>Trek Cover Image (Full Itinerary & Card Preview)</span>
+                  <span>Event Photos (Up to 10 Photos) - 1st photo is Cover, rest are Preview Thumbnails</span>
                 </label>
                 <span className="text-[11px] text-[#8B8680]">
-                  Full size image is displayed on the Itinerary page. Use <b>Adjust Card Crop</b> to frame the Home Page Trek Card preview.
+                  Upload or add up to 10 event photos. The first photo acts as the main cover banner.
                 </span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] text-[#8B8680] font-semibold">Nepal Trail Presets:</span>
+                <span className="text-[10px] text-[#8B8680] font-semibold">Nepal Presets:</span>
                 <button
                   type="button"
-                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80', cardImageUrl: '' }))}
+                  onClick={() => {
+                    const photos = getEventPhotos('https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80');
+                    updateData((prev) => ({ ...prev, coverImageUrl: JSON.stringify(photos), cardImageUrl: '' }));
+                  }}
                   className="px-2 py-0.5 text-[10px] font-semibold bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white border border-[#E5E1DB] rounded-md transition-colors cursor-pointer"
                 >
                   Sailung Ridge
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1585938389612-a552a28d6914?auto=format&fit=crop&w=1200&q=80', cardImageUrl: '' }))}
+                  onClick={() => {
+                    const photos = getEventPhotos('https://images.unsplash.com/photo-1585938389612-a552a28d6914?auto=format&fit=crop&w=1200&q=80');
+                    updateData((prev) => ({ ...prev, coverImageUrl: JSON.stringify(photos), cardImageUrl: '' }));
+                  }}
                   className="px-2 py-0.5 text-[10px] font-semibold bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white border border-[#E5E1DB] rounded-md transition-colors cursor-pointer"
                 >
-                  Gosainkunda Lake
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1580618672591-eb180b1a973f?auto=format&fit=crop&w=1200&q=80', cardImageUrl: '' }))}
-                  className="px-2 py-0.5 text-[10px] font-semibold bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white border border-[#E5E1DB] rounded-md transition-colors cursor-pointer"
-                >
-                  Langtang Valley
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: 'https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=1200&q=80', cardImageUrl: '' }))}
-                  className="px-2 py-0.5 text-[10px] font-semibold bg-[#FAF8F5] hover:bg-[#E08828] hover:text-white border border-[#E5E1DB] rounded-md transition-colors cursor-pointer"
-                >
-                  Phulchowki Forest
+                  Gosainkunda
                 </button>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="relative flex-1">
-                <LinkIcon className="w-3.5 h-3.5 text-[#8B8680] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="url"
-                  value={formData.coverImageUrl || ''}
-                  onChange={(e) => updateData((prev) => ({ ...prev, coverImageUrl: e.target.value, cardImageUrl: '' }))}
-                  placeholder="Paste direct Image URL (e.g. https://images.unsplash.com/... or Google Drive / Cloudinary)"
-                  className="w-full pl-8 pr-3 py-2 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
-                />
-              </div>
-
-              {/* Direct File Upload - Preserves Full Image for Itinerary + Opens Card Cropper */}
-              <label className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#FAF8F5] hover:bg-[#F0EBE5] border border-[#E5E1DB] text-[#1F1F1F] rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0">
-                <Upload className="w-3.5 h-3.5 text-[#E08828]" />
-                <span>Upload Local File</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const rawDataUrl = event.target?.result ? String(event.target.result) : '';
-                        if (!rawDataUrl) return;
-
-                        const img = new Image();
-                        img.onload = () => {
-                          const maxDim = 1600;
-                          let w = img.width;
-                          let h = img.height;
-                          if (w > maxDim || h > maxDim) {
-                            if (w > h) {
-                              h = Math.round((maxDim / w) * h);
-                              w = maxDim;
-                            } else {
-                              w = Math.round((maxDim / h) * w);
-                              h = maxDim;
-                            }
+            {/* Add Photo Input / Uploader Row */}
+            {getEventPhotos(formData.coverImageUrl).length < 10 && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
+                <div className="relative flex-1">
+                  <LinkIcon className="w-3.5 h-3.5 text-[#8B8680] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="url"
+                    id="input-add-photo-url"
+                    placeholder="Paste image URL to add photo (up to 10)"
+                    className="w-full pl-8 pr-3 py-2 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = (e.target as HTMLInputElement).value.trim();
+                        if (val) {
+                          const current = getEventPhotos(formData.coverImageUrl);
+                          if (current.length < 10) {
+                            const updated = [...current, { url: val, caption: '' }];
+                            updateData((prev) => ({ ...prev, coverImageUrl: JSON.stringify(updated) }));
+                            (e.target as HTMLInputElement).value = '';
                           }
-                          const canvas = document.createElement('canvas');
-                          canvas.width = w;
-                          canvas.height = h;
-                          const ctx = canvas.getContext('2d');
-                          const fullOptimizedUrl = ctx
-                            ? (ctx.drawImage(img, 0, 0, w, h), canvas.toDataURL('image/jpeg', 0.85))
-                            : rawDataUrl;
-
-                          // Preserve full uncropped image for Itinerary view, then open cropper for Trek Card preview
-                          updateData((prev) => ({
-                            ...prev,
-                            coverImageUrl: fullOptimizedUrl,
-                            cardImageUrl: '',
-                          }));
-                          setCroppingImage(fullOptimizedUrl);
-                        };
-                        img.onerror = () => {
-                          updateData((prev) => ({
-                            ...prev,
-                            coverImageUrl: rawDataUrl,
-                            cardImageUrl: '',
-                          }));
-                          setCroppingImage(rawDataUrl);
-                        };
-                        img.src = rawDataUrl;
-                      };
-                      reader.readAsDataURL(file);
-                      // Reset value so same file can be selected again
-                      e.target.value = '';
+                        }
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = document.getElementById('input-add-photo-url') as HTMLInputElement;
+                    if (input && input.value.trim()) {
+                      const val = input.value.trim();
+                      const current = getEventPhotos(formData.coverImageUrl);
+                      if (current.length < 10) {
+                        const updated = [...current, { url: val, caption: '' }];
+                        updateData((prev) => ({ ...prev, coverImageUrl: JSON.stringify(updated) }));
+                        input.value = '';
+                      }
                     }
                   }}
-                />
-              </label>
+                  className="px-3 py-2 bg-[#FAF8F5] hover:bg-[#F0EBE5] border border-[#E5E1DB] text-[#1F1F1F] rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+                >
+                  Add URL
+                </button>
 
-              {formData.coverImageUrl && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCroppingImage(formData.coverImageUrl || null)}
-                    className="px-2.5 py-2 bg-[#FAF8F5] hover:bg-[#F0EBE5] border border-[#E5E1DB] text-[#E08828] rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                    title="Adjust cropped preview for Home Page Trek Card while keeping full image for Itinerary"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>{formData.cardImageUrl ? 'Re-adjust Card Crop' : 'Adjust Card Crop'}</span>
-                  </button>
-                  <div
-                    className="relative w-14 h-9 rounded-lg overflow-hidden border border-[#E5E1DB] shrink-0 bg-neutral-100 group"
-                    title="Trek Card Preview (Full image preserved for Itinerary)"
-                  >
-                    <img
-                      src={formData.cardImageUrl || formData.coverImageUrl}
-                      alt="Cover preview"
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=300&q=80';
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => updateData((prev) => ({ ...prev, coverImageUrl: '', cardImageUrl: '' }))}
-                      className="absolute inset-0 bg-black/60 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
-                      title="Remove cover image"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                <label
+                  className={`flex items-center justify-center gap-1.5 px-3.5 py-2 border rounded-xl text-xs font-bold transition-all shrink-0 ${
+                    isUploadingPhoto
+                      ? 'bg-amber-50 border-amber-300 text-amber-800 cursor-wait opacity-80'
+                      : 'bg-[#FAF8F5] hover:bg-[#F0EBE5] border-[#E5E1DB] text-[#1F1F1F] cursor-pointer'
+                  }`}
+                >
+                  {isUploadingPhoto ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 text-[#E08828] animate-spin" />
+                      <span>{uploadProgress !== null ? `Uploading (${uploadProgress}%)...` : 'Uploading...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-3.5 h-3.5 text-[#E08828]" />
+                      <span>Upload Photo ({getEventPhotos(formData.coverImageUrl).length}/10)</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={isUploadingPhoto}
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleUploadPhotoFile(file);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Upload Error Banner */}
+            {uploadError && (
+              <div className="mb-3 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center justify-between">
+                <span>{uploadError}</span>
+                <button
+                  type="button"
+                  onClick={() => setUploadError(null)}
+                  className="text-rose-500 hover:text-rose-700 font-bold ml-2 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Photos Grid: 4 per row, larger preview, text caption input underneath */}
+            {(() => {
+              const photos = getEventPhotos(formData.coverImageUrl);
+              if (photos.length === 0) return null;
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    {photos.map((photo, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white rounded-2xl border-2 border-[#E5E1DB] overflow-hidden shadow-2xs flex flex-col group relative"
+                      >
+                        <div className="relative w-full h-40 sm:h-44 bg-neutral-900 overflow-hidden flex items-center justify-center">
+                          <img
+                            src={photo.url}
+                            alt={`Photo ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=600&q=80';
+                            }}
+                          />
+                          {/* Badge */}
+                          <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase shadow-xs bg-black/75 text-white backdrop-blur-xs">
+                            {idx === 0 ? '★ Cover Photo' : `Preview #${idx}`}
+                          </div>
+
+                          {/* Hover action overlay */}
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity p-2">
+                            {idx !== 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const copy = [...photos];
+                                  const [removed] = copy.splice(idx, 1);
+                                  copy.unshift(removed);
+                                  updateData((prev) => ({ ...prev, coverImageUrl: JSON.stringify(copy) }));
+                                }}
+                                className="px-2.5 py-1.5 bg-[#E08828] text-white text-[11px] font-bold rounded-xl hover:bg-[#C86B1A] transition-colors cursor-pointer shadow-xs"
+                                title="Make main cover photo"
+                              >
+                                Make Cover
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const copy = photos.filter((_, i) => i !== idx);
+                                updateData((prev) => ({
+                                  ...prev,
+                                  coverImageUrl: copy.length > 0 ? JSON.stringify(copy) : '',
+                                }));
+                              }}
+                              className="p-2 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors cursor-pointer shadow-xs"
+                              title="Remove photo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Caption input underneath */}
+                        <div className="p-3 bg-[#FAF8F5] border-t border-[#E5E1DB] flex-1 flex flex-col justify-end">
+                          <label className="text-[10px] font-bold text-[#8B8680] uppercase tracking-wider block mb-1">
+                            {idx === 0 ? 'Cover Banner Caption / Title' : `Picture #${idx} Caption / Description`}
+                          </label>
+                          <input
+                            type="text"
+                            value={photo.caption || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const copy = [...photos];
+                              copy[idx] = { ...copy[idx], caption: val };
+                              updateData((prev) => ({ ...prev, coverImageUrl: JSON.stringify(copy) }));
+                            }}
+                            placeholder={idx === 0 ? 'e.g. Sunrise view at Sailung summit' : 'e.g. En-route tea break at Mudhe'}
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-[#E5E1DB] rounded-xl focus:outline-[#E08828] text-[#1F1F1F]"
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
+
+                  {photos.length > 0 && (
+                    <div className="flex items-center justify-between text-[11px] text-[#8B8680]">
+                      <span>{photos.length} / 10 photos uploaded (4 per row). Add captions underneath each picture for rich storytelling.</span>
+                      {photos[0]?.url && (
+                        <button
+                          type="button"
+                          onClick={() => setCroppingImage(photos[0].url)}
+                          className="text-[#E08828] hover:underline font-bold cursor-pointer flex items-center gap-1"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>Adjust Trek Card Crop</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* External Links Subsection */}
             <div className="mt-4 pt-4 border-t border-[#F5F2ED]">
@@ -1478,9 +1666,9 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
             </div>
 
             {/* Meeting Point */}
-            <div>
-              <label className="text-[11px] font-bold text-[#5A5551] uppercase tracking-wider block mb-1">
-                Meeting Point
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-[#5A5551] uppercase tracking-wider block">
+                Starting / Meeting Point
               </label>
               <input
                 type="text"
@@ -1494,6 +1682,21 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                 placeholder="e.g. Godawari Bus park"
                 className="w-full px-3 py-2 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
               />
+              <div className="relative">
+                <LinkIcon className="w-3.5 h-3.5 text-[#8B8680] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="url"
+                  value={formData.overview.meetingPointLink || ''}
+                  onChange={(e) =>
+                    updateData((prev) => ({
+                      ...prev,
+                      overview: { ...prev.overview, meetingPointLink: e.target.value }
+                    }))
+                  }
+                  placeholder="Starting / Meeting point link (e.g. Google Maps URL)"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
+                />
+              </div>
             </div>
 
             {/* Expected Duration */}
@@ -1596,8 +1799,8 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
             </div>
 
             {/* Ending Point */}
-            <div className="sm:col-span-2">
-              <label className="text-[11px] font-bold text-[#5A5551] uppercase tracking-wider block mb-1">
+            <div className="sm:col-span-2 space-y-1.5">
+              <label className="text-[11px] font-bold text-[#5A5551] uppercase tracking-wider block">
                 Ending Point
               </label>
               <input
@@ -1612,6 +1815,21 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                 placeholder="e.g. Takhel Bageshwori Temple"
                 className="w-full px-3 py-2 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
               />
+              <div className="relative">
+                <LinkIcon className="w-3.5 h-3.5 text-[#8B8680] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="url"
+                  value={formData.overview.endingPointLink || ''}
+                  onChange={(e) =>
+                    updateData((prev) => ({
+                      ...prev,
+                      overview: { ...prev.overview, endingPointLink: e.target.value }
+                    }))
+                  }
+                  placeholder="Ending point link (e.g. Google Maps URL)"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#FAF8F5] border border-[#E5E1DB] rounded-xl focus:bg-white focus:outline-[#E08828]"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -2195,13 +2413,37 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         <ImageCropperModal
           image={croppingImage}
           onClose={() => setCroppingImage(null)}
-          onCropComplete={(croppedImage) => {
+          onCropComplete={async (croppedImage) => {
+            setCroppingImage(null);
+            if (croppedImage.startsWith('data:image')) {
+              try {
+                const parts = croppedImage.split(',');
+                const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+                const bstr = atob(parts[1]);
+                let n = bstr.length;
+                const u8arr = new Uint8Array(n);
+                while (n--) {
+                  u8arr[n] = bstr.charCodeAt(n);
+                }
+                const blob = new Blob([u8arr], { type: mime });
+                const uploaded = await uploadImageToR2WithProgress(blob, 'cards');
+                if (uploaded?.url) {
+                  updateData((prev) => ({
+                    ...prev,
+                    coverImageUrl: prev.coverImageUrl || croppingImage,
+                    cardImageUrl: uploaded.url,
+                  }));
+                  return;
+                }
+              } catch (cropErr) {
+                console.warn('Failed to upload cropped card image to R2:', cropErr);
+              }
+            }
             updateData((prev) => ({
               ...prev,
               coverImageUrl: prev.coverImageUrl || croppingImage,
-              cardImageUrl: croppedImage,
+              cardImageUrl: croppedImage.startsWith('data:image') ? '' : croppedImage,
             }));
-            setCroppingImage(null);
           }}
         />
       )}

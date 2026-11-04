@@ -944,38 +944,27 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const sanitized = records.map((rec) => {
         if (!rec) return rec;
         const d = rec.data ? { ...rec.data } : ({} as any);
-        if (typeof d.coverImageUrl === 'string' && d.coverImageUrl.startsWith('data:image')) {
-          d.coverImageUrl = '';
+        if (typeof d.cardImageUrl === 'string' && d.cardImageUrl.startsWith('data:image')) {
+          d.cardImageUrl = '';
+        }
+        if (typeof d.coverImageUrl === 'string') {
+          if (d.coverImageUrl.startsWith('data:image')) {
+            d.coverImageUrl = '';
+          } else if (d.coverImageUrl.startsWith('[')) {
+            try {
+              const arr = JSON.parse(d.coverImageUrl);
+              if (Array.isArray(arr)) {
+                const cleanArr = arr.filter((item: any) => item && typeof item.url === 'string' && !item.url.startsWith('data:image'));
+                d.coverImageUrl = cleanArr.length > 0 ? JSON.stringify(cleanArr) : '';
+              }
+            } catch (_) {}
+          }
         }
         return { ...rec, data: d };
       });
       localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(sanitized));
     } catch (err) {
-      try {
-        localStorage.removeItem('wnw_saved_itineraries_cache');
-        localStorage.removeItem('wnw_itinerary_template_draft');
-        const compact = records.slice(0, 30).map((r) => ({
-          id: r.id,
-          hikeNumber: r.hikeNumber,
-          title: r.title,
-          category: r.category,
-          status: r.status,
-          updatedAt: r.updatedAt,
-          data: r.data ? {
-            title: r.data.title,
-            hikeNumber: r.data.hikeNumber,
-            category: r.data.category,
-            hikeDate: r.data.hikeDate,
-            status: r.data.status,
-            is_cancelled: (r.data as any).is_cancelled,
-            cancellation_reason: (r.data as any).cancellation_reason,
-            execution_status: (r.data as any).execution_status,
-            teamLeader: r.data.teamLeader,
-            maxCapacity: r.data.maxCapacity,
-          } : undefined,
-        }));
-        localStorage.setItem('wnw_saved_itineraries_cache', JSON.stringify(compact));
-      } catch (_) {}
+      console.warn('Could not persist full itineraries cache to localStorage:', err);
     }
   };
 
@@ -1027,6 +1016,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       try {
         parsedJson = JSON.parse(t.data_json);
       } catch (_) {}
+    } else if (typeof t.data_json === 'object' && t.data_json !== null) {
+      parsedJson = t.data_json;
     }
     let parsedDataObj: any = {};
     if (t.data) {
@@ -1034,7 +1025,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         try {
           parsedDataObj = JSON.parse(t.data);
         } catch (_) {}
-      } else if (typeof t.data === 'object') {
+      } else if (typeof t.data === 'object' && t.data !== null) {
         parsedDataObj = t.data;
       }
     }
@@ -1048,6 +1039,23 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     }
 
     const d: any = { ...cleanDataObj, ...parsedJson };
+
+    // Explicitly guarantee rich itinerary fields from parsedJson (data_json) are preserved
+    if (Array.isArray(parsedJson.itineraryDays) && parsedJson.itineraryDays.length > 0) {
+      d.itineraryDays = parsedJson.itineraryDays;
+    }
+    if (Array.isArray(parsedJson.faqs) && parsedJson.faqs.length > 0) {
+      d.faqs = parsedJson.faqs;
+    }
+    if (parsedJson.overview && typeof parsedJson.overview === 'object') {
+      d.overview = { ...(cleanDataObj.overview || {}), ...parsedJson.overview };
+    }
+    if (Array.isArray(parsedJson.costIncludes) && parsedJson.costIncludes.length > 0) {
+      d.costIncludes = parsedJson.costIncludes;
+    }
+    if (Array.isArray(parsedJson.costExcludes) && parsedJson.costExcludes.length > 0) {
+      d.costExcludes = parsedJson.costExcludes;
+    }
 
     const rawStatus = (t.status || parsedJson.status || cleanDataObj.status || 'published').toString().toLowerCase();
     const status: 'draft' | 'published' | 'archived' =
@@ -1190,7 +1198,24 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 const localTime = Date.parse(localMatch.updatedAt || (localMatch.data as any)?.updatedAt || '') || 0;
                 const serverTime = Date.parse(srv.updatedAt || (srv.data as any)?.updatedAt || '') || 0;
                 if (localTime >= serverTime && localTime > 0) {
-                  allCollectedHikes[i] = ensureHikeData(localMatch);
+                  const localEnsured = ensureHikeData(localMatch);
+                  // Always preserve rich Cloudflare D1 server itinerary data over local cache
+                  if (srv.data?.itineraryDays && srv.data.itineraryDays.length > 0) {
+                    localEnsured.data.itineraryDays = srv.data.itineraryDays;
+                  }
+                  if (srv.data?.overview) {
+                    localEnsured.data.overview = { ...(localEnsured.data?.overview || {}), ...srv.data.overview };
+                  }
+                  if (srv.data?.costIncludes && srv.data.costIncludes.length > 0) {
+                    localEnsured.data.costIncludes = srv.data.costIncludes;
+                  }
+                  if (srv.data?.costExcludes && srv.data.costExcludes.length > 0) {
+                    localEnsured.data.costExcludes = srv.data.costExcludes;
+                  }
+                  if (srv.data?.faqs && srv.data.faqs.length > 0) {
+                    localEnsured.data.faqs = srv.data.faqs;
+                  }
+                  allCollectedHikes[i] = localEnsured;
                 }
               }
             }
