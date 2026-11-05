@@ -578,19 +578,16 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                   )}
                 </div>
 
-                {/* Preview Photos Strip underneath main cover photo: 4 per row */}
+                {/* Preview Photos Strip underneath main cover photo */}
                 {photos.length > 1 && (
-                  <div className="p-4 bg-white rounded-2xl border border-[#E5E1DB] shadow-2xs space-y-3">
-                    <p className="text-xs font-bold text-[#5A5551] uppercase tracking-wider mb-2">
-                      Event Photo Gallery ({photos.length} Photos) — Click any picture to expand full size
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="p-3 sm:p-4 bg-white rounded-2xl border border-[#E5E1DB] shadow-2xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
                       {photos.map((photo, idx) => (
-                        <div key={idx} className="bg-[#FAF8F5] p-2.5 rounded-xl border border-[#E5E1DB] space-y-2 flex flex-col justify-between">
+                        <div key={idx} className="bg-[#FAF8F5] p-2 sm:p-2.5 rounded-xl border border-[#E5E1DB] space-y-1.5 sm:space-y-2 flex flex-col justify-between">
                           <button
                             type="button"
                             onClick={() => setSelectedLightboxImage(photo.url)}
-                            className="relative w-full h-36 sm:h-40 rounded-lg overflow-hidden bg-neutral-900 block cursor-pointer group"
+                            className="relative w-full aspect-4/3 sm:h-40 rounded-lg overflow-hidden bg-neutral-900 block cursor-pointer group"
                           >
                             <img
                               src={photo.url}
@@ -599,13 +596,13 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                               referrerPolicy="no-referrer"
                             />
                             {idx === 0 && (
-                              <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#E08828] text-white text-[9px] font-bold rounded-md uppercase">
+                              <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 px-1.5 sm:px-2 py-0.5 bg-[#E08828] text-white text-[9px] font-bold rounded-md uppercase">
                                 Cover
                               </span>
                             )}
                           </button>
                           {photo.caption && (
-                            <p className="text-xs text-[#5A5551] font-medium px-1 line-clamp-2">
+                            <p className="text-[11px] sm:text-xs text-[#5A5551] font-medium px-0.5 sm:px-1 line-clamp-2">
                               {photo.caption}
                             </p>
                           )}
@@ -828,11 +825,11 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                           D{activeDay.dayNumber}
                         </span>
                         <div className="min-w-0">
-                          <h4 className="text-xs sm:text-sm font-black text-[#1F1F1F] truncate">
-                            Day {activeDay.dayNumber}: {activeDay.title}
+                          <h4 className="text-xs sm:text-sm font-black text-[#1F1F1F]">
+                            Day {activeDay.dayNumber}
                           </h4>
-                          <p className="text-[11px] text-[#6A645D] font-medium">
-                            {activeDay.items?.length || 0} Scheduled Checkpoints · Tap to {isDayExpanded ? 'collapse' : 'expand'}
+                          <p className="text-[11px] text-[#6A645D] font-medium whitespace-normal">
+                            {activeDay.title}
                           </p>
                         </div>
                       </div>
