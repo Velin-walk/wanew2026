@@ -28,7 +28,9 @@ import {
   UploadCloud,
   Eye,
   X,
+  LogIn,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface MyBookingsScreenProps {
   bookings: Booking[];
@@ -55,6 +57,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   onOpenPaymentPage,
   onUploadVoucher,
 }) => {
+  const { user, openAuthModal } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState<'active' | 'hikes'>('active');
   const [expandedId, setExpandedId] = useState<number | string | null>(null);
   const [cancelingId, setCancelingId] = useState<number | string | null>(null);
@@ -301,6 +304,28 @@ function parseBookingDate(dateStr?: string): Date | null {
           )}
         </button>
       </div>
+
+      {/* Sync Across Devices Notice for Unauthenticated Users */}
+      {!user && (
+        <div className="p-3 sm:p-3.5 bg-gradient-to-r from-amber-50/90 via-orange-50/80 to-amber-50/90 border border-amber-200/90 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs">
+              <LogIn className="w-4 h-4" />
+            </div>
+            <p className="text-xs text-amber-950 font-medium leading-snug">
+              Sign in to view booking/profile across multiple devices.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openAuthModal('Sign in to view booking/profile across multiple devices.')}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-[#E08828] hover:bg-[#c9741b] active:scale-95 text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Sign In</span>
+          </button>
+        </div>
+      )}
 
       {activeSubTab === 'hikes' ? (
         <MyHikesView userBookings={bookings} />

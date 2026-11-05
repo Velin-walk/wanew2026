@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Users, Sparkles, UserCheck, EyeOff, ArrowRight } from 'lucide-react';
+import { X, Users, Sparkles, UserCheck, EyeOff, ArrowRight, LogIn } from 'lucide-react';
 import { ParticipantCount } from '../types';
 import { apiFetch } from '../services/api';
 import { isHikerAnonymous, useAnonymity } from '../utils/anonymity';
+import { useAuth } from '../context/AuthContext';
 
 export interface ParticipantItem {
   name: string;
@@ -75,6 +76,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
   recentParticipants = [],
   guideName,
 }) => {
+  const { user, openAuthModal } = useAuth();
   useAnonymity();
   const [roster, setRoster] = useState<ParticipantItem[]>(() => enrichWithGuide(recentParticipants, guideName));
   const [loading, setLoading] = useState(false);
@@ -238,25 +240,59 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
         </div>
 
         {/* Anonymous Mode Privacy Notice */}
-        <div className="px-3 sm:px-4 py-2 bg-gradient-to-r from-purple-50/90 via-purple-50/70 to-purple-100/40 border-b border-purple-200/80">
-          <div className="flex items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div className="w-6 h-6 rounded-md bg-purple-100/90 border border-purple-200/80 flex items-center justify-center text-purple-700 shrink-0">
+        <div className="px-3 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-purple-50/90 via-purple-50/70 to-purple-100/40 border-b border-purple-200/80">
+          {!user ? (
+            <div className="flex items-start gap-2.5">
+              <div className="w-6 h-6 rounded-md bg-purple-100/90 border border-purple-200/80 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
                 <EyeOff className="w-3.5 h-3.5" />
               </div>
-              <p className="text-[11px] sm:text-xs text-purple-950 leading-snug min-w-0">
-                <span className="font-bold text-purple-900">Prefer privacy?</span> Enable Anonymous Mode to appear as <span className="font-semibold text-purple-900">"Anonymous Hiker"</span>.
-              </p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] sm:text-xs text-purple-950 leading-snug min-w-0">
+                  <span className="font-bold text-purple-900">Prefer privacy?</span> Enable Anonymous Mode to appear as <span className="font-semibold text-purple-900">"Anonymous Hiker"</span>.
+                </p>
+                <p className="text-[11px] sm:text-xs text-purple-900 font-bold mt-1 leading-snug">
+                  Please SIGN IN to turn on Anonymous mode. Use gmail that you used for registration.
+                </p>
+                <div className="mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openAuthModal(
+                        'Please sign in to turn on Anonymous mode. Use the Gmail you used for registration.',
+                        () => {
+                          onClose();
+                          window.dispatchEvent(new CustomEvent('wnw-open-profile', { detail: { tab: 'settings' } }));
+                        }
+                      );
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold text-[10.5px] sm:text-[11px] rounded-lg shadow-2xs transition-all cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Sign In</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={handleOpenSettings}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold text-[10.5px] sm:text-[11px] rounded-lg shadow-2xs transition-all cursor-pointer shrink-0"
-            >
-              <span>Open Settings</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="w-6 h-6 rounded-md bg-purple-100/90 border border-purple-200/80 flex items-center justify-center text-purple-700 shrink-0">
+                  <EyeOff className="w-3.5 h-3.5" />
+                </div>
+                <p className="text-[11px] sm:text-xs text-purple-950 leading-snug min-w-0">
+                  <span className="font-bold text-purple-900">Prefer privacy?</span> Enable Anonymous Mode to appear as <span className="font-semibold text-purple-900">"Anonymous Hiker"</span>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenSettings}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold text-[10.5px] sm:text-[11px] rounded-lg shadow-2xs transition-all cursor-pointer shrink-0"
+              >
+                <span>Open Settings</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Content - Multi-Column Grid */}
