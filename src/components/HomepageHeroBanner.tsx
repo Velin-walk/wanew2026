@@ -293,7 +293,7 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
       {/* Bottom-Left Editorial Destination Title & Relative Subtitle */}
       <div className="absolute bottom-5 sm:bottom-8 left-5 sm:left-8 right-5 z-10 flex flex-col items-start text-left pointer-events-none">
         <h2 className="font-editorial text-[clamp(1.2rem,4vw,4.2rem)] font-bold text-white tracking-tight leading-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.9)] max-w-[95%] flex flex-col gap-1.5 sm:gap-2">
-          <span className="text-[0.42em] sm:text-[0.48em] font-sans font-semibold tracking-[0.25em] text-stone-200 uppercase flex items-center gap-2">
+          <span className="text-[0.25em] sm:text-[0.29em] font-sans font-semibold tracking-[0.25em] text-stone-200 uppercase flex items-center gap-2">
             <span>NEPAL · HIMALAYAS</span>
             <span className="w-5 sm:w-10 h-[1px] bg-white/70"></span>
           </span>

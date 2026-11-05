@@ -23,6 +23,24 @@
         if (e && e.message && (e.message.indexOf("reading 'send'") !== -1 || e.message.indexOf("WebSocket") !== -1)) {
           e.stopImmediatePropagation();
           e.preventDefault();
+          return;
+        }
+        // Self-healing recovery for stale asset chunk mismatch errors
+        var isChunkError = e && e.message && (
+          e.message.indexOf("Loading chunk") !== -1 ||
+          e.message.indexOf("Unexpected token '<'") !== -1 ||
+          e.message.indexOf("Failed to fetch dynamically imported module") !== -1
+        );
+        if (isChunkError && !sessionStorage.getItem('wnw_chunk_reload')) {
+          sessionStorage.setItem('wnw_chunk_reload', '1');
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              for (var i = 0; i < regs.length; i++) regs[i].unregister();
+              window.location.reload();
+            }).catch(function() { window.location.reload(); });
+          } else {
+            window.location.reload();
+          }
         }
       });
       window.addEventListener('unhandledrejection', function (e) {
