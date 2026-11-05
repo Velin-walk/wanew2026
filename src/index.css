@@ -160,4 +160,14 @@ button:not(:disabled),
   transform: scale(0.98);
 }
 
+.font-jolly {
+  font-family: 'Fredoka', 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+.font-editorial {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+
+
 

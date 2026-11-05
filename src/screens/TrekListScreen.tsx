@@ -3,7 +3,7 @@ import { Trek } from '../types';
 import { TrekCard } from '../components/TrekCard';
 import { PastEventListItem } from '../components/PastEventListItem';
 import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFlags';
-import { HomepageHeroBanner } from '../components/HomepageHeroBanner';
+import { HomepageHeroBanner, HeroStatsBar } from '../components/HomepageHeroBanner';
 import { OffersBanner } from '../components/OffersBanner';
 import { HomeGalleryReviewsSection } from '../components/HomeGalleryReviewsSection';
 
@@ -307,9 +307,18 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
       )}
 
-      {/* Hourly Rotating Homepage Hero Banner (with embedded Upcoming, Completed, and Reviews stats) */}
+      {/* Hourly Rotating Homepage Hero Banner */}
       {!savedOnly && (
         <HomepageHeroBanner
+          upcomingCount={upcomingTreks.length}
+          completedCount={pastTreks.length}
+          onOpenReviews={() => onOpenInfoPage?.('reviews')}
+        />
+      )}
+
+      {/* Upcoming, Completed and Reviews Stats Bar right after hero section */}
+      {!savedOnly && (
+        <HeroStatsBar
           upcomingCount={upcomingTreks.length}
           completedCount={pastTreks.length}
           onOpenReviews={() => onOpenInfoPage?.('reviews')}

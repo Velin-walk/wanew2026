@@ -288,65 +288,118 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
           </div>
         ))}
       </div>
-      <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
 
-      {/* Bottom Overlay: Optional Caption + Roster & Reviews Stats Bar */}
-      <div className="absolute bottom-2 sm:bottom-3.5 left-2 sm:left-4 right-2 sm:right-4 z-10 flex flex-col gap-1.5 sm:gap-2">
-        {activeItem.caption && (
-          <div className="flex items-end justify-between pointer-events-none">
-            <span className="inline-block px-2.5 py-1 rounded-lg bg-black/50 backdrop-blur-xs border border-white/15 text-white text-[10px] sm:text-xs font-bold tracking-wide truncate max-w-full shadow-2xs">
-              {activeItem.caption}
-            </span>
-          </div>
-        )}
-
-        <div className="relative grid grid-cols-3 gap-1 sm:gap-2 bg-white/35 backdrop-blur-md rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 border border-[#E5E1DB] shadow-sm overflow-hidden">
-          <div className="absolute -top-1 right-2 sm:right-6 w-24 xs:w-32 sm:w-36 pointer-events-none z-10 opacity-80 hidden xs:block">
-            <MiniPrayerFlags variant="draped" count={5} />
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-[#E08828]/10 text-[#E08828] shrink-0">
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            </div>
-            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-medium whitespace-nowrap leading-none">
-              <strong className="text-[#1F1F1F] font-black text-[10.5px] xs:text-xs sm:text-sm">
-                {upcomingCount}
-              </strong>{' '}
-              Upcoming
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-[#7ABA42]/10 text-[#7ABA42] shrink-0">
-              <History className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            </div>
-            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-medium whitespace-nowrap leading-none">
-              <strong className="text-[#1F1F1F] font-black text-[10.5px] xs:text-xs sm:text-sm">
-                {completedCount}
-              </strong>{' '}
-              Completed
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={onOpenReviews}
-            className="flex items-center gap-1 sm:gap-1.5 min-w-0 text-left cursor-pointer group"
-            title={`Rating ${avgRating}/5.0 from ${totalReviews} verified reviews`}
-          >
-            <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-amber-50 text-amber-500 shrink-0 group-hover:bg-amber-100 transition-colors">
-              <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-amber-400 text-amber-500 shrink-0" />
-            </div>
-            <span className="text-[9.5px] xs:text-[10.5px] sm:text-xs text-stone-600 font-medium whitespace-nowrap leading-none group-hover:text-[#1F1F1F] transition-colors">
-              <strong className="text-[#1F1F1F] font-black text-[10.5px] xs:text-xs sm:text-sm">
-                {avgRating} ★
-              </strong>{' '}
-              Reviews
-            </span>
-          </button>
-        </div>
+      {/* Bottom-Left Editorial Destination Title & Relative Subtitle */}
+      <div className="absolute bottom-5 sm:bottom-8 left-5 sm:left-8 right-5 z-10 flex flex-col items-start text-left pointer-events-none">
+        <h2 className="font-editorial text-[clamp(1.2rem,4vw,4.2rem)] font-bold text-white tracking-tight leading-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.9)] max-w-[95%] flex flex-col gap-1.5 sm:gap-2">
+          <span className="text-[0.42em] sm:text-[0.48em] font-sans font-semibold tracking-[0.25em] text-stone-200 uppercase flex items-center gap-2">
+            <span>NEPAL · HIMALAYAS</span>
+            <span className="w-5 sm:w-10 h-[1px] bg-white/70"></span>
+          </span>
+          <span>{activeItem.caption || 'Phoksundo'}</span>
+        </h2>
       </div>
     </div>
   );
 };
+
+export interface HeroStatsBarProps {
+  upcomingCount: number;
+  completedCount: number;
+  onOpenReviews?: () => void;
+}
+
+export const HeroStatsBar: React.FC<HeroStatsBarProps> = ({
+  upcomingCount,
+  completedCount,
+  onOpenReviews,
+}) => {
+  const [liveReviews, setLiveReviews] = useState<any[]>(() => {
+    try {
+      const local = localStorage.getItem('wnw_user_feedbacks');
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const syncLocalFeedbacks = () => {
+      try {
+        const local = localStorage.getItem('wnw_user_feedbacks');
+        if (local) {
+          setLiveReviews(JSON.parse(local));
+        }
+      } catch {}
+    };
+    window.addEventListener('wnw-feedback-updated', syncLocalFeedbacks);
+    return () => window.removeEventListener('wnw-feedback-updated', syncLocalFeedbacks);
+  }, []);
+
+  const { avgRating, totalReviews } = useMemo(() => {
+    const combined = [...(liveReviews || []), ...HISTORIC_COMMUNITY_REVIEWS];
+    if (combined.length === 0) {
+      return { avgRating: '5.0', totalReviews: 0 };
+    }
+    let sum = 0;
+    combined.forEach((r: any) => {
+      const rating = Math.min(5, Math.max(1, Number(r.overall_rating || r.overallRating) || 5));
+      sum += rating;
+    });
+    return {
+      avgRating: (sum / combined.length).toFixed(1),
+      totalReviews: combined.length,
+    };
+  }, [liveReviews]);
+
+  return (
+    <div className="relative grid grid-cols-3 gap-1.5 sm:gap-2.5 bg-white/90 backdrop-blur-md rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#E5E1DB] shadow-sm overflow-hidden">
+      <div className="absolute -top-1 right-2 sm:right-6 w-24 xs:w-32 sm:w-36 pointer-events-none z-10 opacity-80 hidden xs:block">
+        <MiniPrayerFlags variant="draped" count={5} />
+      </div>
+
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+        <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-[#E08828]/10 text-[#E08828] shrink-0">
+          <Sparkles className="w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0" />
+        </div>
+        <span className="text-[10px] xs:text-xs sm:text-sm text-stone-700 font-medium whitespace-nowrap leading-none">
+          <strong className="text-[#1F1F1F] font-black text-xs xs:text-sm sm:text-base">
+            {upcomingCount}
+          </strong>{' '}
+          Upcoming
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+        <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-[#7ABA42]/10 text-[#7ABA42] shrink-0">
+          <History className="w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0" />
+        </div>
+        <span className="text-[10px] xs:text-xs sm:text-sm text-stone-700 font-medium whitespace-nowrap leading-none">
+          <strong className="text-[#1F1F1F] font-black text-xs xs:text-sm sm:text-base">
+            {completedCount}
+          </strong>{' '}
+          Completed
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={onOpenReviews}
+        className="flex items-center gap-1.5 sm:gap-2 min-w-0 text-left cursor-pointer group"
+        title={`Rating ${avgRating}/5.0 from ${totalReviews} verified reviews`}
+      >
+        <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-amber-50 text-amber-500 shrink-0 group-hover:bg-amber-100 transition-colors">
+          <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-amber-400 text-amber-500 shrink-0" />
+        </div>
+        <span className="text-[10px] xs:text-xs sm:text-sm text-stone-700 font-medium whitespace-nowrap leading-none group-hover:text-[#1F1F1F] transition-colors">
+          <strong className="text-[#1F1F1F] font-black text-xs xs:text-sm sm:text-base">
+            {avgRating} ★
+          </strong>{' '}
+          Reviews
+        </span>
+      </button>
+    </div>
+  );
+};
+
