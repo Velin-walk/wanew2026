@@ -12,6 +12,7 @@ export interface SiteVisibilitySettings {
 
   // Homepage Sections
   heroBanner: boolean;     // Hourly Rotating Hero Banner
+  flashcards: boolean;     // Homepage Offers & Flashcards Banner
   upcomingHikes: boolean;  // Upcoming Hikes Grid
   pastEvents: boolean;     // Past Events Archive
   prayerFlags: boolean;    // Authentic Nepali Prayer Flags Garland
@@ -39,6 +40,7 @@ export const DEFAULT_VISIBILITY_SETTINGS: SiteVisibilitySettings = {
   saved: true,
 
   heroBanner: true,
+  flashcards: true,
   upcomingHikes: true,
   pastEvents: true,
   prayerFlags: true,

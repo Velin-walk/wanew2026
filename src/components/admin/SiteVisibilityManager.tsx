@@ -20,6 +20,7 @@ import {
   Users,
   AlertTriangle,
   Lock,
+  Tag,
 } from 'lucide-react';
 import {
   SiteVisibilitySettings,
@@ -366,6 +367,12 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
               'Rotating Homepage Hero Banner',
               'Hourly rotating Himalayan cover photo with live upcoming & completed count chips.',
               <Sparkles className="w-5 h-5" />
+            )}
+            {renderToggleRow(
+              'flashcards',
+              'Homepage Offers & Flashcards Banner',
+              'Special announcement cards and promotional flashcard banners shown to homepage visitors.',
+              <Tag className="w-5 h-5" />
             )}
             {renderToggleRow(
               'upcomingHikes',

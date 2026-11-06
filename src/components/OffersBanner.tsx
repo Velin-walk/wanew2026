@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Tag, ChevronLeft, ChevronRight, X, Eye, Megaphone, Clock } from 'lucide-react';
 import { apiFetch } from '../services/api';
+import { useSiteVisibility } from '../services/siteVisibilityService';
 import {
   OFFER_TREK_ID,
   OFFERS_STORAGE_KEY,
@@ -97,9 +98,10 @@ export const OffersBanner: React.FC = () => {
     };
   }, [fetchOffers]);
 
+  const { visibility } = useSiteVisibility();
   const activeOffers = offers.filter(isNotExpired);
 
-  if (dismissed || activeOffers.length === 0) {
+  if (visibility.flashcards === false || dismissed || activeOffers.length === 0) {
     return null;
   }
 
