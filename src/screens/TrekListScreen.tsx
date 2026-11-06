@@ -5,6 +5,7 @@ import { PastEventListItem } from '../components/PastEventListItem';
 import { NepaliPrayerFlags, MiniPrayerFlags } from '../components/NepaliPrayerFlags';
 import { HomepageHeroBanner, HeroStatsBar } from '../components/HomepageHeroBanner';
 import { OffersBanner } from '../components/OffersBanner';
+import { BookingProcessBanner } from '../components/BookingProcessBanner';
 import { HomeGalleryReviewsSection } from '../components/HomeGalleryReviewsSection';
 
 import { SubPageType } from '../components/InfoPagesModal';
@@ -12,7 +13,7 @@ import { trackFilterChange, trackSearchQuery } from '../services/behaviorTracker
 import {
   Search,
   Mountain,
-  SlidersHorizontal,
+  Calendar,
   Flame,
   ShieldCheck,
   Heart,
@@ -59,7 +60,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
   onOpenInfoPage,
 }) => {
   const [tripTypeFilter, setTripTypeFilter] = useState<'all' | 'treks' | 'overnight' | 'day'>('all');
-  const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'easy' | 'moderate' | 'difficult'>('all');
+  const [saturdayOnly, setSaturdayOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [pastLimit, setPastLimit] = useState(25);
   const [showPastEvents, setShowPastEvents] = useState(false);
@@ -150,6 +151,98 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
     return null;
   };
 
+  // Helper to extract end date from a range date string (e.g. "Wed 14 Oct – Sun 18 Oct 2026")
+  const parseTrekEndDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+    const trimmed = String(dateStr).trim();
+    try {
+      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+      const year = yearMatch ? yearMatch[1] : '';
+      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+      const parts = cleanRange.split(/[–—\-]/);
+      if (parts.length > 1 && year) {
+        const secondPart = parts[1]
+          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+          .trim();
+        const testStr = secondPart.includes(year) ? secondPart : `${secondPart} ${year}`;
+        const rangeDate = new Date(testStr);
+        if (!isNaN(rangeDate.getTime())) return rangeDate;
+      }
+    } catch {}
+    return null;
+  };
+
+  // Helper to calculate event duration in calendar days
+  const getEventDurationDays = (trek: Trek): number => {
+    const daysStr = String(
+      trek.days ||
+      trek.days_label ||
+      (trek as any).days_label ||
+      (trek as any).expected_duration ||
+      trek.data?.days ||
+      trek.data?.overview?.days ||
+      ''
+    ).toLowerCase();
+
+    const m = daysStr.match(/(\d+)\s*(?:d|day)/i) || daysStr.match(/^(\d+)$/);
+    if (m) return Math.max(1, parseInt(m[1], 10));
+    if (daysStr.includes('overnight') || daysStr.includes('1n') || daysStr.includes('2d')) return 2;
+    return 1;
+  };
+
+  // Helper to determine if an event happens on a Saturday on the calendar
+  const isSaturdayTrek = (trek: Trek): boolean => {
+    const rawDate = String(
+      trek.date ||
+      trek.hike_date ||
+      (trek as any).hike_date ||
+      trek.data?.hikeDate ||
+      trek.data?.date ||
+      trek.data?.hike_date ||
+      ''
+    ).trim();
+
+    const startDate = parseTrekDate(rawDate);
+
+    // If we have a valid calendar start date
+    if (startDate && !isNaN(startDate.getTime())) {
+      // 1. Direct check: Start date is a Saturday
+      if (startDate.getDay() === 6) {
+        return true;
+      }
+
+      // 2. Check if a range end date exists in the date string (e.g. "Wed 14 Oct – Sun 18 Oct 2026")
+      const endDate = parseTrekEndDate(rawDate);
+      if (endDate && !isNaN(endDate.getTime()) && endDate >= startDate) {
+        const cur = new Date(startDate);
+        let count = 0;
+        while (cur <= endDate && count < 30) {
+          if (cur.getDay() === 6) return true;
+          cur.setDate(cur.getDate() + 1);
+          count++;
+        }
+      } else {
+        // 3. Check event duration (e.g. 2D 1N, 3D 3N, 5 Days)
+        const durationDays = getEventDurationDays(trek);
+        if (durationDays > 1) {
+          const cur = new Date(startDate);
+          for (let i = 1; i < durationDays && i < 30; i++) {
+            cur.setDate(cur.getDate() + 1);
+            if (cur.getDay() === 6) return true;
+          }
+        }
+      }
+    }
+
+    // 4. Fallback check: does raw date string, duration, or title explicitly mention Saturday or Sat
+    const textToCheck = `${rawDate} ${trek.days || (trek as any).expected_duration || ''} ${trek.name || trek.title || ''}`.toLowerCase();
+    if (/\b(sat|saturday)\b/i.test(textToCheck)) {
+      return true;
+    }
+
+    return false;
+  };
+
   // Base filtering logic
   const filteredTreks = useMemo(() => {
     return treks.filter((trek) => {
@@ -189,14 +282,8 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       if (tripTypeFilter === 'overnight' && !isOvernight) return false;
       if (tripTypeFilter === 'day' && !isDayHike) return false;
 
-      if (difficultyFilter !== 'all') {
-        const trekDiff = trek.difficulty?.toLowerCase();
-        if (difficultyFilter === 'difficult' && trekDiff !== 'difficult' && trekDiff !== 'hard') {
-          return false;
-        }
-        if (difficultyFilter !== 'difficult' && trekDiff !== difficultyFilter) {
-          return false;
-        }
+      if (saturdayOnly && !isSaturdayTrek(trek)) {
+        return false;
       }
 
       if (searchQuery.trim()) {
@@ -210,7 +297,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
       return true;
     });
-  }, [treks, savedOnly, favorites, tripTypeFilter, difficultyFilter, searchQuery]);
+  }, [treks, savedOnly, favorites, tripTypeFilter, saturdayOnly, searchQuery]);
 
   // Separate upcoming vs past events based on calendar date
   const { upcomingTreks, pastTreks } = useMemo(() => {
@@ -328,6 +415,9 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       {/* Offers / Flashcards Banner (in between hero card and search box) */}
       {!savedOnly && <OffersBanner />}
 
+      {/* 3-Step Booking Process & Reassurance Badges */}
+      {!savedOnly && <BookingProcessBanner />}
+
       {/* Saved header if in saved mode */}
       {savedOnly && (
         <div className="relative bg-white rounded-xl border border-[#F0EBE5] p-4 flex items-center justify-between shadow-xs overflow-hidden">
@@ -352,7 +442,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       )}
 
       {/* Filter and Search Controls - Clean Mobile Layout */}
-      <div className="bg-white p-3 sm:p-4 rounded-xl border border-[#F0EBE5] shadow-xs space-y-3 w-full max-w-full">
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5E1DB] shadow-2xs space-y-3 w-full max-w-full">
         {/* Search Box */}
         <div className="flex items-center gap-2 w-full">
           <div className="relative flex-1">
@@ -362,82 +452,74 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
               placeholder="Search by peak, hike #, location, or guide..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-[#E5E1DB] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] text-[#1F1F1F] placeholder:text-[#8B8680]"
+              className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-[#E5E1DB] rounded-xl bg-[#FAF8F5] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] text-[#1F1F1F] placeholder:text-[#8B8680] transition-colors"
             />
           </div>
           <a
             href="https://wa.me/9779803568612"
             target="_blank"
             rel="noopener noreferrer"
-            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg text-white bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 transition-all shadow-xs"
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl text-white bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 transition-all shadow-2xs"
           >
             <MessageCircle className="w-4 h-4" />
             <span className="whitespace-nowrap">Talk to Sales</span>
           </a>
         </div>
 
-        {/* Trip Type Pills - Fully Optimized for Mobile Views */}
-        <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-          <span className="text-[#8B8680] font-bold text-[10px] sm:text-[11px] flex items-center gap-1 mr-1 shrink-0 w-full sm:w-auto mb-0.5 sm:mb-0">
-            Trip Category:
-          </span>
-          <div className="flex flex-wrap gap-1 w-full sm:w-auto">
-            {(
-              [
-                { id: 'all', label: 'All Types' },
-                { id: 'day', label: '1 Day Hikes' },
-                { id: 'overnight', label: 'Overnight' },
-                { id: 'treks', label: 'Multi-Day Treks' },
-              ] as const
-            ).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setTripTypeFilter(item.id);
-                  trackFilterChange('trip_type', item.id);
-                }}
-                className={`flex-1 sm:flex-initial text-center px-1.5 sm:px-2.5 py-1 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
-                  tripTypeFilter === item.id
-                    ? 'bg-[#7ABA42] text-white shadow-sm ring-1 sm:ring-2 ring-[#7ABA42]/30 font-black'
-                    : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Grade / Difficulty Tags - Fully Optimized for Mobile Views */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-[#F0EBE5] text-xs">
-          <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-            <span className="text-[#8B8680] font-bold text-[10px] sm:text-[11px] flex items-center gap-1 mr-1 shrink-0 w-full sm:w-auto mb-0.5 sm:mb-0">
-              <SlidersHorizontal className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Difficulty Grade:
-            </span>
-            <div className="flex flex-wrap gap-1 w-full sm:w-auto">
-              {(['all', 'easy', 'moderate', 'difficult'] as const).map((diff) => (
+        {/* Filter Bar: Segmented Categories + Saturday Hikes + Showing Events */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-[#F0EBE5] text-xs">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* Segmented Control for Categories */}
+            <div className="inline-flex items-center bg-[#F4EFEA] p-0.5 rounded-xl border border-[#EBE6DF]">
+              {(
+                [
+                  { id: 'all', label: 'All Types' },
+                  { id: 'day', label: '1 Day Hikes' },
+                  { id: 'overnight', label: 'Overnight' },
+                  { id: 'treks', label: 'Multi-Day' },
+                ] as const
+              ).map((item) => (
                 <button
-                  key={diff}
+                  key={item.id}
                   type="button"
                   onClick={() => {
-                    setDifficultyFilter(diff);
-                    trackFilterChange('difficulty', diff);
+                    setTripTypeFilter(item.id);
+                    trackFilterChange('trip_type', item.id);
                   }}
-                  className={`flex-1 sm:flex-initial text-center px-1.5 sm:px-2.5 py-1 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold capitalize transition-all active:scale-95 cursor-pointer shadow-3xs select-none ${
-                    difficultyFilter === diff
-                      ? 'bg-[#1F1F1F] text-white shadow-xs font-black'
-                      : 'bg-[#F9F7F5] text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8] hover:bg-white hover:text-[#1F1F1F]'
+                  className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                    tripTypeFilter === item.id
+                      ? 'bg-white text-[#1F1F1F] shadow-2xs font-extrabold'
+                      : 'text-[#6E6862] hover:text-[#1F1F1F]'
                   }`}
                 >
-                  {diff}
+                  {item.label}
                 </button>
               ))}
             </div>
+
+            {/* Saturday Hikes Toggle Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setSaturdayOnly((prev) => !prev);
+                trackFilterChange('saturday_filter', !saturdayOnly ? 'saturday' : 'all');
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-3xs select-none border ${
+                saturdayOnly
+                  ? 'bg-[#1F1F1F] text-white border-[#1F1F1F] shadow-xs'
+                  : 'bg-white text-[#5A5551] border-[#E5E1DB] hover:border-[#C8C2B8] hover:text-[#1F1F1F]'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
+              <span>Saturday Hikes</span>
+              {saturdayOnly && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#7ABA42] ml-0.5" />
+              )}
+            </button>
           </div>
 
-          <span className="text-[11px] text-[#8B8680] font-medium ml-auto w-full sm:w-auto text-right sm:text-left mt-1 sm:mt-0">
-            Showing <strong className="text-[#1F1F1F]">{filteredTreks.length}</strong> events
+          <span className="text-[11px] text-[#8B8680] font-medium ml-auto w-full sm:w-auto text-right sm:text-left">
+            Showing <strong className="text-[#1F1F1F] font-black">{filteredTreks.length}</strong> events
           </span>
         </div>
       </div>
@@ -491,7 +573,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
                 type="button"
                 onClick={() => {
                   setTripTypeFilter('all');
-                  setDifficultyFilter('all');
+                  setSaturdayOnly(false);
                   setSearchQuery('');
                 }}
                 className="mt-4 px-4 py-2 bg-[#7ABA42] text-white text-xs font-bold rounded-lg hover:bg-[#6CA838] transition-all"

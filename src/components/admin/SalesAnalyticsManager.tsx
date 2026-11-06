@@ -216,12 +216,13 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
       regStatus.includes('user cancel') ||
       regStatus.includes('cancelled_by_user');
     const isCancelledGeneral = regStatus.includes('cancel');
+    const isCancelled = isCancelledByUser || isCancelledGeneral;
 
     if (isDuplicate) {
       trekSalesMap[key].duplicatePax += pax;
     } else if (isWaitlisted) {
       trekSalesMap[key].waitlistPax += pax;
-    } else if (isCancelledByUser || (isCancelledGeneral && regStatus.includes('user'))) {
+    } else if (isCancelled) {
       trekSalesMap[key].cancelledByUserPax += pax;
     }
 
@@ -351,7 +352,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
                 <th className="p-4">Projected Revenue</th>
                 <th className="p-4">Duplicate Ratio</th>
                 <th className="p-4">Waitlist Ratio</th>
-                <th className="p-4">Cancelled (User) Ratio</th>
+                <th className="p-4">Cancelled Ratio</th>
                 <th className="p-4">Execution Status</th>
                 <th className="p-4 text-right">Action</th>
               </tr>

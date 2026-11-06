@@ -354,49 +354,44 @@ export const HeroStatsBar: React.FC<HeroStatsBarProps> = ({
   }, [liveReviews]);
 
   return (
-    <div className="relative grid grid-cols-3 gap-1.5 sm:gap-2.5 bg-white/90 backdrop-blur-md rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#E5E1DB] shadow-sm overflow-hidden">
+    <div className="relative grid grid-cols-3 divide-x divide-[#EFEAE4] bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-[#E5E1DB] shadow-2xs overflow-hidden">
       <div className="absolute -top-1 right-2 sm:right-6 w-24 xs:w-32 sm:w-36 pointer-events-none z-10 opacity-80 hidden xs:block">
         <MiniPrayerFlags variant="draped" count={5} />
       </div>
 
-      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-        <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-[#E08828]/10 text-[#E08828] shrink-0">
-          <Sparkles className="w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0" />
-        </div>
-        <span className="text-[10px] xs:text-xs sm:text-sm text-stone-700 font-medium whitespace-nowrap leading-none">
-          <strong className="text-[#1F1F1F] font-black text-xs xs:text-sm sm:text-base">
-            {upcomingCount}
-          </strong>{' '}
-          Upcoming
+      {/* Stat 1 */}
+      <div className="flex items-baseline justify-center sm:justify-start gap-1.5 px-1 sm:px-3 min-w-0">
+        <span className="text-base sm:text-lg font-black text-[#1F1F1F] tracking-tight">
+          {upcomingCount}
+        </span>
+        <span className="text-[11px] sm:text-xs font-semibold text-[#6E6862] truncate">
+          Upcoming Treks
         </span>
       </div>
 
-      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-        <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-[#7ABA42]/10 text-[#7ABA42] shrink-0">
-          <History className="w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0" />
-        </div>
-        <span className="text-[10px] xs:text-xs sm:text-sm text-stone-700 font-medium whitespace-nowrap leading-none">
-          <strong className="text-[#1F1F1F] font-black text-xs xs:text-sm sm:text-base">
-            {completedCount}
-          </strong>{' '}
-          Completed
+      {/* Stat 2 */}
+      <div className="flex items-baseline justify-center sm:justify-start gap-1.5 px-1 sm:px-3 min-w-0">
+        <span className="text-base sm:text-lg font-black text-[#1F1F1F] tracking-tight">
+          {completedCount}
+        </span>
+        <span className="text-[11px] sm:text-xs font-semibold text-[#6E6862] truncate">
+          Completed Hikes
         </span>
       </div>
 
+      {/* Stat 3 */}
       <button
         type="button"
         onClick={onOpenReviews}
-        className="flex items-center gap-1.5 sm:gap-2 min-w-0 text-left cursor-pointer group"
+        className="flex items-baseline justify-center sm:justify-start gap-1.5 px-1 sm:px-3 min-w-0 text-left cursor-pointer group transition-colors"
         title={`Rating ${avgRating}/5.0 from ${totalReviews} verified reviews`}
       >
-        <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-amber-50 text-amber-500 shrink-0 group-hover:bg-amber-100 transition-colors">
-          <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-amber-400 text-amber-500 shrink-0" />
-        </div>
-        <span className="text-[10px] xs:text-xs sm:text-sm text-stone-700 font-medium whitespace-nowrap leading-none group-hover:text-[#1F1F1F] transition-colors">
-          <strong className="text-[#1F1F1F] font-black text-xs xs:text-sm sm:text-base">
-            {avgRating} ★
-          </strong>{' '}
-          Reviews
+        <span className="text-base sm:text-lg font-black text-[#1F1F1F] tracking-tight flex items-center gap-1 group-hover:text-[#E08828] transition-colors">
+          {avgRating}
+          <Star className="w-3.5 h-3.5 fill-[#E08828] text-[#E08828]" />
+        </span>
+        <span className="text-[11px] sm:text-xs font-semibold text-[#6E6862] group-hover:text-[#1F1F1F] transition-colors underline decoration-dotted decoration-[#C8C2B8] underline-offset-2 truncate">
+          Reviews ({totalReviews})
         </span>
       </button>
     </div>
