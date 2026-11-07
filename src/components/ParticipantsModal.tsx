@@ -177,83 +177,89 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="participants-modal-title"
-      className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-5 bg-slate-950/45 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl border border-[#E5E1DB] max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+        className="bg-[#F0F3F8] rounded-3xl border border-white/90 shadow-[0_25px_60px_-15px_rgba(15,23,42,0.30),0_10px_25px_-5px_rgba(15,23,42,0.15),inset_0_1px_1px_rgba(255,255,255,1)] max-w-lg w-full max-h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-[#F0EBE5] flex items-start justify-between gap-3 bg-[#FAF8F5]">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
+        <div className="p-4 sm:p-6 pb-3 sm:pb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
               {hikeNumber && (
-                <span className="text-[10px] font-bold text-[#5A5551] bg-[#F4EFEA] px-2 py-0.5 rounded-md border border-[#E5E1DB]">
+                <span className="text-[10px] font-bold text-[#55637D] bg-[#F0F3F8] px-2.5 py-1 rounded-xl shadow-[2px_2px_5px_#d1d8e3,-2px_-2px_5px_#ffffff] border border-white/80">
                   Hike #{hikeNumber}
                 </span>
               )}
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live Roster
+              <span className="text-[10px] font-bold text-emerald-700 bg-[#F0F3F8] px-2.5 py-1 rounded-xl shadow-[2px_2px_5px_#d1d8e3,-2px_-2px_5px_#ffffff] border border-white/80 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                <span>Live Roster</span>
               </span>
             </div>
+
             <h3
               id="participants-modal-title"
-              className="text-base sm:text-lg font-bold text-[#1F1F1F] leading-snug truncate"
+              className="text-lg sm:text-2xl font-black text-[#1E293B] tracking-tight leading-snug truncate"
               title={trekName}
             >
               {trekName}
             </h3>
-            <p className="text-xs text-[#8B8680] mt-0.5 flex items-center gap-1">
+
+            <p className="text-xs font-semibold text-[#64748B] flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-[#E08828]" />
               <span>Registered Participants Roster</span>
             </p>
           </div>
 
+          {/* Premium Neumorphic Circular/Squircle Close Button */}
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-[#8B8680] hover:text-[#1F1F1F] hover:bg-[#EFEAE4] transition-colors cursor-pointer shrink-0"
+            className="w-9 h-9 rounded-2xl bg-[#F0F3F8] text-[#64748B] hover:text-[#1E293B] shadow-[3px_3px_7px_#d1d8e3,-3px_-3px_7px_#ffffff] hover:shadow-[inset_2px_2px_4px_#d1d8e3,inset_-2px_-2px_4px_#ffffff] active:scale-95 transition-all flex items-center justify-center cursor-pointer shrink-0 border border-white/80"
             aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Stats Summary Bar */}
-        <div className="px-4 py-2.5 bg-[#F5F2ED] border-b border-[#E8E3DC] flex items-center justify-between text-xs">
-          <span className="font-semibold text-[#1F1F1F] flex items-center gap-1.5">
-            <UserCheck className="w-4 h-4 text-[#7ABA42]" />
+        {/* Stats Summary Bar - Sunken Concave Track */}
+        <div className="mx-4 sm:mx-6 mb-3 p-2.5 sm:p-3 rounded-2xl bg-[#E8EDF4] shadow-[inset_2px_2px_5px_#d1d8e3,inset_-2px_-2px_5px_#ffffff] border border-white/50 flex items-center justify-between text-xs">
+          <span className="font-bold text-[#1E293B] flex items-center gap-2">
+            <span className="w-6 h-6 rounded-xl bg-[#F0F3F8] shadow-[1px_1px_3px_#d1d8e3,-1px_-1px_3px_#ffffff] flex items-center justify-center text-[#7ABA42]">
+              <UserCheck className="w-3.5 h-3.5" />
+            </span>
             <span>
-              Total: <strong className="text-[#E08828]">{totalParticipants}</strong> Hikers
+              Total: <strong className="text-[#E08828] font-black">{totalParticipants}</strong> Hikers
             </span>
           </span>
-          <div className="text-[11px] font-medium text-[#5A5551] flex items-center gap-2">
-            <span className="px-2 py-0.5 bg-sky-50 text-sky-800 rounded-md border border-sky-200/60 font-semibold">
+
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 bg-[#F0F3F8] text-sky-800 rounded-xl shadow-[2px_2px_5px_#d1d8e3,-2px_-2px_5px_#ffffff] border border-sky-200/50 text-[11px] font-bold">
               M: {maleCount}
             </span>
-            <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md border border-rose-200/60 font-semibold">
+            <span className="px-2.5 py-1 bg-[#F0F3F8] text-rose-700 rounded-xl shadow-[2px_2px_5px_#d1d8e3,-2px_-2px_5px_#ffffff] border border-rose-200/50 text-[11px] font-bold">
               F: {femaleCount}
             </span>
           </div>
         </div>
 
-        {/* Anonymous Mode Privacy Notice */}
-        <div className="px-3 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-purple-50/90 via-purple-50/70 to-purple-100/40 border-b border-purple-200/80">
+        {/* Anonymous Mode Privacy Notice - Tactile Card with Vibrant Gradient Button */}
+        <div className="mx-4 sm:mx-6 mb-3 p-3 sm:p-3.5 rounded-2xl bg-[#F0F3F8] shadow-[3px_3px_8px_#d1d8e3,-3px_-3px_8px_#ffffff] border border-white/80">
           {!user ? (
-            <div className="flex items-start gap-2.5">
-              <div className="w-6 h-6 rounded-md bg-purple-100/90 border border-purple-200/80 flex items-center justify-center text-purple-700 shrink-0 mt-0.5">
-                <EyeOff className="w-3.5 h-3.5" />
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-50 to-violet-100 shadow-[inset_1px_1px_2px_#ffffff,1px_1px_3px_#d1d8e3] text-indigo-600 flex items-center justify-center shrink-0 mt-0.5 border border-indigo-200/50">
+                <EyeOff className="w-4 h-4" />
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] sm:text-xs text-purple-950 leading-snug min-w-0">
-                  <span className="font-bold text-purple-900">Prefer privacy?</span> Enable Anonymous Mode to appear as <span className="font-semibold text-purple-900">"Anonymous Hiker"</span>.
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-[11px] sm:text-xs text-[#334155] leading-snug">
+                  <strong className="text-[#1E293B]">Prefer privacy?</strong> Enable Anonymous Mode to appear as <span className="font-bold text-indigo-700">"Anonymous Hiker"</span>.
                 </p>
-                <p className="text-[11px] sm:text-xs text-purple-900 font-bold mt-1 leading-snug">
-                  Please SIGN IN to turn on Anonymous mode. Use gmail that you used for registration.
+                <p className="text-[10.5px] sm:text-[11px] text-[#64748B] font-medium leading-snug">
+                  Please sign in with the email used during registration to manage your privacy.
                 </p>
-                <div className="mt-1.5">
+                <div className="pt-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -265,7 +271,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                         }
                       );
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold text-[10.5px] sm:text-[11px] rounded-lg shadow-2xs transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-[0_6px_16px_rgba(37,99,235,0.35)] active:scale-95 transition-all cursor-pointer"
                   >
                     <LogIn className="w-3.5 h-3.5" />
                     <span>Sign In</span>
@@ -274,37 +280,39 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <div className="w-6 h-6 rounded-md bg-purple-100/90 border border-purple-200/80 flex items-center justify-center text-purple-700 shrink-0">
-                  <EyeOff className="w-3.5 h-3.5" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-50 to-violet-100 shadow-[inset_1px_1px_2px_#ffffff,1px_1px_3px_#d1d8e3] text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-200/50">
+                  <EyeOff className="w-4 h-4" />
                 </div>
-                <p className="text-[11px] sm:text-xs text-purple-950 leading-snug min-w-0">
-                  <span className="font-bold text-purple-900">Prefer privacy?</span> Enable Anonymous Mode to appear as <span className="font-semibold text-purple-900">"Anonymous Hiker"</span>.
+                <p className="text-[11px] sm:text-xs text-[#334155] leading-snug min-w-0">
+                  <strong className="text-[#1E293B]">Prefer privacy?</strong> Enable Anonymous Mode to appear as <span className="font-bold text-indigo-700">"Anonymous Hiker"</span>.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleOpenSettings}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold text-[10.5px] sm:text-[11px] rounded-lg shadow-2xs transition-all cursor-pointer shrink-0"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-[0_6px_16px_rgba(37,99,235,0.35)] active:scale-95 transition-all cursor-pointer shrink-0"
               >
                 <span>Open Settings</span>
-                <ArrowRight className="w-3 h-3" />
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
         </div>
 
-        {/* Content - Multi-Column Grid */}
-        <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-[140px] max-h-[58vh]">
+        {/* Content - Tactile Hiker Tiles Grid */}
+        <div className="px-4 sm:px-6 py-2 overflow-y-auto flex-1 min-h-[140px] max-h-[52vh]">
           {roster.length === 0 ? (
-            <div className="py-8 text-center text-[#8B8680]">
-              <Sparkles className="w-8 h-8 text-[#E08828] mx-auto mb-2 opacity-70" />
-              <p className="text-xs font-semibold text-[#1F1F1F]">No public participant names yet</p>
-              <p className="text-[11px] mt-1 text-[#8B8680]">Be among the first to register for this hike!</p>
+            <div className="py-10 text-center text-[#64748B]">
+              <div className="w-12 h-12 rounded-2xl bg-[#F0F3F8] shadow-[3px_3px_8px_#d1d8e3,-3px_-3px_8px_#ffffff] flex items-center justify-center text-[#E08828] mx-auto mb-3 border border-white/80">
+                <Sparkles className="w-6 h-6 opacity-80" />
+              </div>
+              <p className="text-sm font-bold text-[#1E293B]">No public participant names yet</p>
+              <p className="text-xs mt-1 text-[#64748B]">Be among the first to register for this hike!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-2.5">
+            <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3">
               {roster.map((p, idx) => {
                 const isGuide = Boolean(
                   p.isGuide ||
@@ -319,36 +327,36 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                 return (
                   <div
                     key={idx}
-                    className={`flex items-center gap-2 p-2 rounded-xl transition-all shadow-3xs min-w-0 ${
+                    className={`flex items-center gap-2.5 p-2.5 rounded-2xl transition-all duration-200 min-w-0 border ${
                       isGuide
-                        ? 'bg-amber-50/60 border border-amber-200 hover:border-[#E08828]/50 hover:bg-amber-50'
-                        : 'bg-[#F9F7F5] border border-[#EFEAE4] hover:border-[#E08828]/40 hover:bg-white'
+                        ? 'bg-[#F9F7EE] shadow-[3px_3px_8px_#d1d8e3,-3px_-3px_8px_#ffffff] border-amber-300/80 hover:-translate-y-0.5'
+                        : 'bg-[#F0F3F8] shadow-[3px_3px_8px_#d1d8e3,-3px_-3px_8px_#ffffff] border-white/80 hover:-translate-y-0.5 hover:shadow-[2px_2px_5px_#d1d8e3,-2px_-2px_5px_#ffffff]'
                     }`}
                   >
-                    {/* Initial Circle Badge */}
+                    {/* Initial Circle Bead - Soft 3D extruded circle */}
                     <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 shadow-2xs ${
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0 border border-white/90 ${
                         isGuide
-                          ? 'bg-amber-100 text-[#E08828] ring-1 ring-amber-300'
+                          ? 'bg-gradient-to-br from-amber-100 to-amber-200 text-[#B45309] shadow-[2px_2px_4px_#d1d8e3,-2px_-2px_4px_#ffffff] ring-1 ring-amber-300'
                           : isFemale
-                          ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-200'
-                          : 'bg-sky-100 text-sky-800 ring-1 ring-sky-200'
+                          ? 'bg-gradient-to-br from-rose-100 to-rose-200 text-rose-700 shadow-[2px_2px_4px_#d1d8e3,-2px_-2px_4px_#ffffff]'
+                          : 'bg-gradient-to-br from-sky-100 to-sky-200 text-sky-800 shadow-[2px_2px_4px_#d1d8e3,-2px_-2px_4px_#ffffff]'
                       }`}
                       title={isGuide ? 'Leader' : isFemale ? 'Female' : 'Male'}
                     >
                       {firstInitial}
                     </div>
 
-                    {/* Participant Name with Last Name Initial, or full name + badge for Leader */}
+                    {/* Participant Name & Leader Chip */}
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       <span
-                        className="text-xs font-semibold text-[#1F1F1F] truncate"
+                        className="text-xs font-bold text-[#1E293B] truncate"
                         title={formatted}
                       >
                         {formatted}
                       </span>
                       {isGuide && (
-                        <span className="text-[9px] font-bold text-[#E08828] bg-amber-100/90 px-1.5 py-0.5 rounded border border-amber-300/70 shrink-0 leading-none">
+                        <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#B45309] bg-amber-100/90 px-1.5 py-0.5 rounded-md shadow-[1px_1px_2px_#d1d8e3,-1px_-1px_2px_#ffffff] border border-amber-300/80 shrink-0 leading-none">
                           Leader
                         </span>
                       )}
@@ -360,18 +368,18 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
           )}
 
           {loading && roster.length > 0 && (
-            <div className="text-center py-2 text-[10px] text-[#8B8680] animate-pulse">
+            <div className="text-center py-2 text-xs font-semibold text-[#64748B] animate-pulse">
               Syncing latest roster...
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-3 sm:p-4 border-t border-[#F0EBE5] bg-[#FAF8F5] flex justify-end">
+        {/* Footer - Tactile Charcoal Button */}
+        <div className="p-4 sm:p-5 pt-3 sm:pt-4 border-t border-slate-200/50 flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-3.5 sm:px-5 py-2 bg-[#1F1F1F] hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+            className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-b from-[#2B3545] to-[#18212F] hover:from-[#1E2736] hover:to-[#101722] text-white text-xs font-bold rounded-2xl shadow-[3px_3px_8px_#d1d8e3,-3px_-3px_8px_#ffffff,0_4px_12px_rgba(15,23,42,0.25)] active:scale-95 transition-all cursor-pointer border border-white/10"
           >
             Close Roster
           </button>

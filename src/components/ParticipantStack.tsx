@@ -45,12 +45,19 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
 
   if (totalParticipants === 0 && avatars.length === 0) {
     return (
-      <div className="my-2.5 py-1.5 px-2.5 bg-[#F9F7F5] rounded-lg border border-[#EFEAE4] flex items-center justify-between">
-        <span className="text-[11px] font-medium text-[#5A5551] flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Live Roster Open
-        </span>
-        <span className="text-[10px] font-bold text-[#E08828]">Be first to join</span>
+      <div className="relative my-2.5 overflow-hidden rounded-xl border border-[#E5E1DB] bg-[#F7F5F2] p-1.5 shadow-[0_6px_16px_-3px_rgba(0,0,0,0.06),0_2px_6px_-1px_rgba(0,0,0,0.03)]">
+        <div className="relative overflow-hidden rounded-lg bg-white border border-[#EFEAE4] px-3 py-2 flex items-center justify-between shadow-[inset_0_12px_20px_-6px_rgba(0,0,0,0.08),inset_0_4px_8px_-2px_rgba(0,0,0,0.05),inset_0_18px_26px_-14px_rgba(0,0,0,0.04),inset_4px_0_10px_-6px_rgba(0,0,0,0.03),inset_-4px_0_10px_-6px_rgba(0,0,0,0.03),inset_0_-1px_0_rgba(255,255,255,1)]">
+          {/* Top shade falloff */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-4 bg-linear-to-b from-black/[0.05] to-transparent"
+          />
+          <span className="relative text-[11px] font-medium text-[#5A5551] flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live Roster Open
+          </span>
+          <span className="relative text-[10px] font-bold text-[#E08828]">Be first to join</span>
+        </div>
       </div>
     );
   }
@@ -79,46 +86,55 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
             setIsModalOpen(true);
           }
         }}
-        className="my-2 py-1 px-1.5 -mx-1.5 rounded-xl hover:bg-[#F9F7F5] border border-transparent hover:border-[#E5E1DB] transition-all cursor-pointer group select-none"
+        className="relative my-2.5 overflow-hidden rounded-xl border border-[#E5E1DB] bg-[#F7F5F2] p-1.5 shadow-[0_6px_16px_-3px_rgba(0,0,0,0.06),0_2px_6px_-1px_rgba(0,0,0,0.03)] transition-all cursor-pointer group select-none hover:border-[#D5CEC2]"
         title="Click to view participant roster"
         aria-label="View registered participants"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex -space-x-2 overflow-hidden items-center">
-            {avatars.map((p, i) => (
-              <div
-                key={i}
-                title={`${p.name} (${p.gender === 'f' ? 'Female' : 'Male'})`}
-                className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform group-hover:scale-105 ${
-                  p.gender === 'f'
-                    ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-200'
-                    : 'bg-sky-100 text-sky-800 ring-1 ring-sky-200'
-                }`}
-              >
-                {(p.name || 'H').charAt(0).toUpperCase()}
-              </div>
-            ))}
-            {overflow > 0 && (
-              <div className="w-7 h-7 rounded-full border-2 border-white bg-[#E5E1DB] text-[#5A5551] flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform group-hover:scale-105">
-                +{overflow}
-              </div>
-            )}
+        {/* Recessed roster panel: heavy inner shadows from top and sides create sunk-in depth */}
+        <div className="relative overflow-hidden rounded-lg bg-white border border-[#EFEAE4] px-3 py-2.5 space-y-1.5 shadow-[inset_0_12px_20px_-6px_rgba(0,0,0,0.08),inset_0_4px_8px_-2px_rgba(0,0,0,0.05),inset_0_18px_26px_-14px_rgba(0,0,0,0.04),inset_4px_0_10px_-6px_rgba(0,0,0,0.03),inset_-4px_0_10px_-6px_rgba(0,0,0,0.03),inset_0_-1px_0_rgba(255,255,255,1)]">
+          {/* Top shade falloff */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-4 bg-linear-to-b from-black/[0.05] to-transparent"
+          />
+
+          <div className="relative flex items-center justify-between">
+            <div className="flex -space-x-2 overflow-hidden items-center">
+              {avatars.map((p, i) => (
+                <div
+                  key={i}
+                  title={`${p.name} (${p.gender === 'f' ? 'Female' : 'Male'})`}
+                  className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform group-hover:scale-105 ${
+                    p.gender === 'f'
+                      ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-200'
+                      : 'bg-sky-100 text-sky-800 ring-1 ring-sky-200'
+                  }`}
+                >
+                  {(p.name || 'H').charAt(0).toUpperCase()}
+                </div>
+              ))}
+              {overflow > 0 && (
+                <div className="w-7 h-7 rounded-full border-2 border-white bg-[#E5E1DB] text-[#5A5551] flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform group-hover:scale-105">
+                  +{overflow}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 group-hover:bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-200/60 transition-colors">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Live Roster</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 group-hover:bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-200/60 transition-colors">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Live Roster</span>
+          <div className="relative flex items-center justify-between text-[11px] font-medium text-[#8B8680] mt-1 uppercase tracking-wider">
+            <span>
+              M: <span className="font-semibold text-[#1F1F1F]">{maleCount}</span> • F:{' '}
+              <span className="font-semibold text-[#1F1F1F]">{femaleCount}</span>
+            </span>
+            <span className="font-semibold text-[#E08828] normal-case group-hover:underline">
+              Total: <span className="font-bold">{totalParticipants}</span>
+            </span>
           </div>
-        </div>
-
-        <div className="flex items-center justify-between text-[11px] font-medium text-[#8B8680] mt-1.5 uppercase tracking-wider">
-          <span>
-            M: <span className="font-semibold text-[#1F1F1F]">{maleCount}</span> • F:{' '}
-            <span className="font-semibold text-[#1F1F1F]">{femaleCount}</span>
-          </span>
-          <span className="font-semibold text-[#E08828] normal-case group-hover:underline">
-            Total: <span className="font-bold">{totalParticipants}</span>
-          </span>
         </div>
       </div>
 
