@@ -8,13 +8,15 @@ interface SpiralDistanceBarChartProps {
   activePoint: JourneyPoint | null;
   onSelectPoint: (pt: JourneyPoint) => void;
   milestones?: Array<{ km: number; trek: string }>;
+  totalCommunityKm?: number;
 }
 
 export const SpiralDistanceBarChart: React.FC<SpiralDistanceBarChartProps> = ({
   points,
   activePoint,
   onSelectPoint,
-  milestones = []
+  milestones = [],
+  totalCommunityKm: propTotalCommunityKm,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -562,7 +564,7 @@ export const SpiralDistanceBarChart: React.FC<SpiralDistanceBarChartProps> = ({
             ))}
 
             {/* Background Ghost Slots with Angular Edges (strokeLinecap="butt") */}
-            <g className="ghost-slots opacity-75">
+            <g className="ghost-slots opacity-40">
               {bars.map((bar) => (
                 <line
                   key={`slot-${bar.idx}`}

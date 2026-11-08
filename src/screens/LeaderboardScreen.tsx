@@ -12,7 +12,8 @@ import {
   Medal,
   Gem,
   Tent,
-  ChevronDown
+  ChevronDown,
+  RefreshCw
 } from 'lucide-react';
 import { HikerStats, LeaderboardResponse } from '../types/leaderboard';
 import { fetchLeaderboardData } from '../services/api';
@@ -541,23 +542,27 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
 
     // Pre-calculate individual event distances on the chronological curve so that
     // each bar represents that single event's total KM (relative to each other)
-    const enrichedCurve = rawCurve.map((pt, idx) => {
-      const prev = idx > 0 ? rawCurve[idx - 1] : null;
-      let eventKm = 20;
-      let eventHikeKm = 0;
-      let eventTrekKm = 0;
+    const enrichedCurve = rawCurve.map((pt: any, idx: number) => {
+      let eventKm = typeof pt.event_km === 'number' && pt.event_km > 0 ? pt.event_km : 0;
+      let eventHikeKm = pt.event_hike_km ?? pt.hike_km ?? 0;
+      let eventTrekKm = pt.event_trek_km ?? pt.trek_km ?? 0;
 
-      if (prev && typeof pt.total_km === 'number' && typeof prev.total_km === 'number') {
-        const diffTotal = pt.total_km - prev.total_km;
-        if (diffTotal > 0) {
-          eventKm = diffTotal;
-          eventHikeKm = Math.max(0, (pt.hike_km || 0) - (prev.hike_km || 0));
-          eventTrekKm = Math.max(0, (pt.trek_km || 0) - (prev.trek_km || 0));
+      if (!eventKm) {
+        const prev = idx > 0 ? rawCurve[idx - 1] : null;
+        if (prev && typeof pt.total_km === 'number' && typeof prev.total_km === 'number') {
+          const diffTotal = pt.total_km - prev.total_km;
+          if (diffTotal > 0) {
+            eventKm = diffTotal;
+            eventHikeKm = Math.max(0, (pt.hike_km || 0) - (prev.hike_km || 0));
+            eventTrekKm = Math.max(0, (pt.trek_km || 0) - (prev.trek_km || 0));
+          }
+        } else if (typeof pt.total_km === 'number' && pt.total_km > 0 && pt.total_km <= 500) {
+          eventKm = pt.total_km;
+          eventHikeKm = pt.hike_km || 0;
+          eventTrekKm = pt.trek_km || 0;
+        } else {
+          eventKm = 20;
         }
-      } else if (typeof pt.total_km === 'number' && pt.total_km > 0 && pt.total_km <= 500) {
-        eventKm = pt.total_km;
-        eventHikeKm = pt.hike_km || 0;
-        eventTrekKm = pt.trek_km || 0;
       }
 
       return {
@@ -565,9 +570,9 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
         event_km: Math.max(1, Math.round(eventKm * 10) / 10),
         event_hike_km: Math.max(0, Math.round(eventHikeKm * 10) / 10),
         event_trek_km: Math.max(0, Math.round(eventTrekKm * 10) / 10),
-        cum_total_km: pt.total_km,
-        cum_hike_km: pt.hike_km,
-        cum_trek_km: pt.trek_km
+        cum_total_km: pt.cum_total_km ?? pt.total_km,
+        cum_hike_km: pt.cum_hike_km ?? pt.hike_km,
+        cum_trek_km: pt.cum_trek_km ?? pt.trek_km
       };
     });
 
@@ -633,6 +638,15 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   <span>Updated: {lastUpdatedText}</span>
                 </span>
+                <button
+                  type="button"
+                  onClick={() => loadData(true)}
+                  disabled={loading}
+                  title="Refresh & sync latest feed"
+                  className="p-1.5 rounded-full bg-slate-100 hover:bg-white text-slate-600 hover:text-blue-600 border border-slate-200 shadow-[2px_2px_5px_#c8d2df,-2px_-2px_5px_#ffffff] active:shadow-[inset_1px_1px_3px_#c8d2df] transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin text-blue-600' : ''}`} />
+                </button>
               </div>
             </div>
 
@@ -843,6 +857,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                   activePoint={activeJourneyPoint}
                   onSelectPoint={(pt) => setActiveJourneyPoint(pt)}
                   milestones={data.milestones}
+                  totalCommunityKm={currentStats?.totalDistance}
                 />
               ) : (
                 <LowPolyMountainTrailChart
