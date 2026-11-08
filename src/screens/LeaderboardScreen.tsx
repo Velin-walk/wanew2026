@@ -17,6 +17,7 @@ import {
 import { HikerStats, LeaderboardResponse } from '../types/leaderboard';
 import { fetchLeaderboardData } from '../services/api';
 import { LowPolyMountainTrailChart } from '../components/3d/LowPolyMountainTrailChart';
+import { SpiralDistanceBarChart } from '../components/SpiralDistanceBarChart';
 import { HikerReviewsSection } from '../components/InfoPagesModal';
 import { MapContributionBoard } from '../components/MapContributionBoard';
 import { isHikerAnonymous, useAnonymity } from '../utils/anonymity';
@@ -488,6 +489,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [journeyPeriod, setJourneyPeriod] = useState<TimePeriod>('overall');
+  const [chartView, setChartView] = useState<'spiral' | 'mountain'>('spiral');
   const [selectedHiker, setSelectedHiker] = useState<HikerStats | null>(null);
   const [activeJourneyPoint, setActiveJourneyPoint] = useState<any | null>(null);
 
@@ -534,13 +536,46 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
   const currentStats = data?.stats;
 
   const filteredGrowthCurve = useMemo(() => {
-    const curve = data?.growthCurve || data?.growth_curve;
-    if (!curve || curve.length === 0) return [];
-    if (journeyPeriod === 'overall') return curve;
+    const rawCurve = data?.growthCurve || data?.growth_curve;
+    if (!rawCurve || rawCurve.length === 0) return [];
+
+    // Pre-calculate individual event distances on the chronological curve so that
+    // each bar represents that single event's total KM (relative to each other)
+    const enrichedCurve = rawCurve.map((pt, idx) => {
+      const prev = idx > 0 ? rawCurve[idx - 1] : null;
+      let eventKm = 20;
+      let eventHikeKm = 0;
+      let eventTrekKm = 0;
+
+      if (prev && typeof pt.total_km === 'number' && typeof prev.total_km === 'number') {
+        const diffTotal = pt.total_km - prev.total_km;
+        if (diffTotal > 0) {
+          eventKm = diffTotal;
+          eventHikeKm = Math.max(0, (pt.hike_km || 0) - (prev.hike_km || 0));
+          eventTrekKm = Math.max(0, (pt.trek_km || 0) - (prev.trek_km || 0));
+        }
+      } else if (typeof pt.total_km === 'number' && pt.total_km > 0 && pt.total_km <= 500) {
+        eventKm = pt.total_km;
+        eventHikeKm = pt.hike_km || 0;
+        eventTrekKm = pt.trek_km || 0;
+      }
+
+      return {
+        ...pt,
+        event_km: Math.max(1, Math.round(eventKm * 10) / 10),
+        event_hike_km: Math.max(0, Math.round(eventHikeKm * 10) / 10),
+        event_trek_km: Math.max(0, Math.round(eventTrekKm * 10) / 10),
+        cum_total_km: pt.total_km,
+        cum_hike_km: pt.hike_km,
+        cum_trek_km: pt.trek_km
+      };
+    });
+
+    if (journeyPeriod === 'overall') return enrichedCurve;
 
     const days = journeyPeriod === 't30' ? 30 : journeyPeriod === 't60' ? 60 : journeyPeriod === 't90' ? 90 : 365;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    return curve.filter((pt) => {
+    return enrichedCurve.filter((pt) => {
       if (!pt.date) return true;
       return new Date(pt.date) >= cutoff;
     });
@@ -714,30 +749,59 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                 </div>
               </div>
 
-              {/* Time Filter Tabs in Recessed Track */}
-              <div className="flex items-center gap-1 p-1 bg-[#e5ebf2] rounded-2xl shadow-[inset_2px_2px_5px_#c8d2df,inset_-2px_-2px_5px_#ffffff] border border-[#dce3ec] overflow-x-auto no-scrollbar">
-                {(
-                  [
-                    { id: 'overall', label: 'All Time' },
-                    { id: 't365', label: '1 Year' },
-                    { id: 't90', label: '90 Days' },
-                    { id: 't60', label: '60 Days' },
-                    { id: 't30', label: '30 Days' },
-                  ] as const
-                ).map((t) => (
+              {/* View Mode Toggle & Time Filter Tabs */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Spiral vs Mountain Toggle */}
+                <div className="flex items-center gap-1 p-1 bg-[#e5ebf2] rounded-2xl shadow-[inset_1px_1px_3px_#c8d2df,inset_-1px_-1px_3px_#ffffff] border border-[#dce3ec] shrink-0">
                   <button
-                    key={t.id}
                     type="button"
-                    onClick={() => setJourneyPeriod(t.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 active:scale-95 cursor-pointer select-none ${
-                      journeyPeriod === t.id
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]'
+                    onClick={() => setChartView('spiral')}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-black transition-all cursor-pointer select-none flex items-center gap-1 active:scale-95 ${
+                      chartView === 'spiral'
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_3px_8px_rgba(37,99,235,0.35)]'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {t.label}
+                    <span>🌀 Spiral Bar</span>
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setChartView('mountain')}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-black transition-all cursor-pointer select-none flex items-center gap-1 active:scale-95 ${
+                      chartView === 'mountain'
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_3px_8px_rgba(37,99,235,0.35)]'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>⛰️ Trail Chart</span>
+                  </button>
+                </div>
+
+                {/* Time Filter Tabs in Recessed Track */}
+                <div className="flex items-center gap-1 p-1 bg-[#e5ebf2] rounded-2xl shadow-[inset_2px_2px_5px_#c8d2df,inset_-2px_-2px_5px_#ffffff] border border-[#dce3ec] overflow-x-auto no-scrollbar">
+                  {(
+                    [
+                      { id: 'overall', label: 'All Time' },
+                      { id: 't365', label: '1 Year' },
+                      { id: 't90', label: '90 Days' },
+                      { id: 't60', label: '60 Days' },
+                      { id: 't30', label: '30 Days' },
+                    ] as const
+                  ).map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setJourneyPeriod(t.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 active:scale-95 cursor-pointer select-none ${
+                        journeyPeriod === t.id
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -771,14 +835,23 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
               </div>
             )}
 
-            {/* 3D Low-Poly Mountain Trail Chart Area */}
+            {/* Circular Spiral Bar Chart or 3D Low-Poly Mountain Trail Chart Area */}
             <div className="w-full pt-1">
-              <LowPolyMountainTrailChart
-                points={filteredGrowthCurve}
-                mode="total"
-                activePoint={activeJourneyPoint}
-                onSelectPoint={(pt) => setActiveJourneyPoint(pt)}
-              />
+              {chartView === 'spiral' ? (
+                <SpiralDistanceBarChart
+                  points={filteredGrowthCurve}
+                  activePoint={activeJourneyPoint}
+                  onSelectPoint={(pt) => setActiveJourneyPoint(pt)}
+                  milestones={data.milestones}
+                />
+              ) : (
+                <LowPolyMountainTrailChart
+                  points={filteredGrowthCurve}
+                  mode="total"
+                  activePoint={activeJourneyPoint}
+                  onSelectPoint={(pt) => setActiveJourneyPoint(pt)}
+                />
+              )}
             </div>
 
             {/* Active Event Inspection Strip (designed like slider tooltip card in reference) */}
@@ -801,14 +874,20 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                         )}
                       </div>
                       <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-                        Day Hike: <strong className="text-emerald-700">{activeJourneyPoint.hike_km?.toLocaleString() || 0} km</strong> (Cum: <strong className="text-emerald-700">{activeJourneyPoint.cum_hike_km?.toLocaleString() || activeJourneyPoint.hike_km?.toLocaleString() || 0} km</strong>) • Multi-day Trek: <strong className="text-indigo-700">{activeJourneyPoint.trek_km?.toLocaleString() || 0} km</strong> (Cum: <strong className="text-indigo-700">{activeJourneyPoint.cum_trek_km?.toLocaleString() || activeJourneyPoint.trek_km?.toLocaleString() || 0} km</strong>)
+                        Event Total: <strong className="text-blue-700">{activeJourneyPoint.event_km || (activeJourneyPoint.hike_km + activeJourneyPoint.trek_km) || 0} km</strong>
+                        {activeJourneyPoint.event_trek_km ? ` (Trek: ${activeJourneyPoint.event_trek_km} km)` : activeJourneyPoint.event_hike_km ? ` (Hike: ${activeJourneyPoint.event_hike_km} km)` : ''}
+                        {' • '}
+                        Community Total: <strong className="text-emerald-700">{(activeJourneyPoint.cum_total_km || activeJourneyPoint.total_km)?.toLocaleString()} km</strong>
                       </p>
                     </div>
                   </div>
                   <div className="text-left sm:text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-300">
-                    <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Cumulative Total</span>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Event Distance</span>
                     <span className="text-sm sm:text-base font-black text-blue-600">
-                      {activeJourneyPoint.total_km?.toLocaleString()} km
+                      {activeJourneyPoint.event_km || (activeJourneyPoint.hike_km + activeJourneyPoint.trek_km) || 0} km
+                    </span>
+                    <span className="text-[9px] text-slate-500 font-bold block">
+                      Cum: {(activeJourneyPoint.cum_total_km || activeJourneyPoint.total_km)?.toLocaleString()} km
                     </span>
                   </div>
                 </div>

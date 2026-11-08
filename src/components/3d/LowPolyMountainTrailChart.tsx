@@ -9,6 +9,9 @@ export interface JourneyPoint {
   hike_km: number;
   trek_km: number;
   total_km: number;
+  event_km?: number;
+  event_hike_km?: number;
+  event_trek_km?: number;
   cum_hike_km?: number;
   cum_trek_km?: number;
   cum_total_km?: number;
