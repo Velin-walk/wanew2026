@@ -302,7 +302,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
         </div>
 
         {/* Content - Tactile Hiker Tiles Grid */}
-        <div className="px-4 sm:px-6 py-2 overflow-y-auto flex-1 min-h-[140px] max-h-[52vh]">
+        <div className="px-3 sm:px-6 py-2 overflow-y-auto flex-1 min-h-[140px] max-h-[52vh]">
           {roster.length === 0 ? (
             <div className="py-10 text-center text-[#64748B]">
               <div className="w-12 h-12 rounded-2xl bg-[#F0F3F8] shadow-[3px_3px_8px_#d1d8e3,-3px_-3px_8px_#ffffff] flex items-center justify-center text-[#E08828] mx-auto mb-3 border border-white/80">
@@ -312,7 +312,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
               <p className="text-xs mt-1 text-[#64748B]">Be among the first to register for this hike!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
               {roster.map((p, idx) => {
                 const isGuide = Boolean(
                   p.isGuide ||
@@ -327,7 +327,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                 return (
                   <div
                     key={idx}
-                    className={`flex items-center gap-2.5 p-2.5 rounded-2xl transition-all duration-200 min-w-0 border ${
+                    className={`flex items-center gap-2 p-2 sm:p-2.5 rounded-2xl transition-all duration-200 min-w-0 border ${
                       isGuide
                         ? 'bg-[#F9F7EE] shadow-[3px_3px_8px_#d1d8e3,-3px_-3px_8px_#ffffff] border-amber-300/80 hover:-translate-y-0.5'
                         : 'bg-[#F0F3F8] shadow-[3px_3px_8px_#d1d8e3,-3px_-3px_8px_#ffffff] border-white/80 hover:-translate-y-0.5 hover:shadow-[2px_2px_5px_#d1d8e3,-2px_-2px_5px_#ffffff]'
@@ -335,7 +335,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                   >
                     {/* Initial Circle Bead - Soft 3D extruded circle */}
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0 border border-white/90 ${
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[11px] sm:text-xs font-black shrink-0 border border-white/90 ${
                         isGuide
                           ? 'bg-gradient-to-br from-amber-100 to-amber-200 text-[#B45309] shadow-[2px_2px_4px_#d1d8e3,-2px_-2px_4px_#ffffff] ring-1 ring-amber-300'
                           : isFemale
@@ -348,15 +348,15 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                     </div>
 
                     {/* Participant Name & Leader Chip */}
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-1 min-w-0 flex-1">
                       <span
-                        className="text-xs font-bold text-[#1E293B] truncate"
+                        className="text-[11px] sm:text-xs font-bold text-[#1E293B] truncate"
                         title={formatted}
                       >
                         {formatted}
                       </span>
                       {isGuide && (
-                        <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#B45309] bg-amber-100/90 px-1.5 py-0.5 rounded-md shadow-[1px_1px_2px_#d1d8e3,-1px_-1px_2px_#ffffff] border border-amber-300/80 shrink-0 leading-none">
+                        <span className="text-[8px] sm:text-[9px] font-extrabold uppercase tracking-wide text-[#B45309] bg-amber-100/90 px-1 py-0.5 rounded shadow-[1px_1px_2px_#d1d8e3,-1px_-1px_2px_#ffffff] border border-amber-300/80 shrink-0 leading-none">
                           Leader
                         </span>
                       )}
