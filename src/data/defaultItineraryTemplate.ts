@@ -177,7 +177,7 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
     'Review the itinerary, dates, route elevation, and what is included before you commit.',
     'Fill the signup registration form with your accurate information.',
     'Make advance payment / deposit to secure your booking and confirm your place.',
-    'Forward payment voucher screenshot via WhatsApp for instant verification.',
+    'Forward payment voucher screenshot via Website for instant verification.',
     'Get added to the hike-specific WhatsApp group for live coordination, packing tips, and weather updates.',
   ],
   bookingNotes: [
