@@ -2065,6 +2065,20 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   );
                 })}
               </tbody>
+              <tfoot className="bg-[#FAF8F5] border-t-2 border-[#E5E1DB] font-bold text-[#1F1F1F]">
+                <tr>
+                  <td colSpan={7} className="py-2.5 px-2.5 text-right uppercase text-[9px] tracking-wider text-[#6B6560]">
+                    Total
+                  </td>
+                  <td className="py-2.5 px-2 text-emerald-700 font-black text-xs">
+                    NPR {totalPaidCash.toLocaleString()}
+                  </td>
+                  <td className="py-2.5 px-2 text-amber-700 font-black text-xs">
+                    NPR {totalDueBalance.toLocaleString()}
+                  </td>
+                  <td colSpan={3} className="py-2.5 px-2.5"></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

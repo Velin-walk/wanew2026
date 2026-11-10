@@ -1124,7 +1124,7 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                 'Review route elevation, distance, and gear requirements.',
                 'Click "Register / Book Now" and submit your hiker details.',
                 'Complete booking advance deposit using eSewa, Khalti, or Bank QR.',
-                'Forward payment receipt screenshot directly to our coordinator WhatsApp.',
+                'Forward payment voucher screenshot via Website for instant verification.',
               ]).map((step, idx) => (
                 <div key={idx} className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E5E1DB] flex items-start gap-3">
                   <span className="w-6 h-6 rounded-lg bg-[#E08828]/15 text-[#E08828] flex items-center justify-center text-xs font-black shrink-0 font-mono">

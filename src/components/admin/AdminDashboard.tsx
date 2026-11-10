@@ -31,6 +31,7 @@ import {
   MessageSquare,
   Tag,
   UserCheck,
+  BarChart3,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -67,6 +68,7 @@ import { UserActivityNotificationsPanel } from './UserActivityNotificationsPanel
 import { AdminAccessManager } from './AdminAccessManager';
 import { OffersManager } from './OffersManager';
 import { GuidesManager } from './GuidesManager';
+import { AdminReportsDashboard } from './AdminReportsDashboard';
 import {
   fetchAllUserActivities,
   getAdminLastSeenTimestamp,
@@ -76,7 +78,6 @@ import {
   DEFAULT_SAVED_HIKES,
   normalizeItineraryData
 } from '../../data/defaultItineraryTemplate';
-import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { Trek } from '../../types';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -92,13 +93,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const isCoordinatorOnly = !isFullAdmin && isCoordinatorEmail(currentUserEmail);
 
   const [activeTab, setActiveTab] = useState<
-    'bookings' | 'execution' | 'coordinator' | 'chat' | 'library' | 'editor' | 'maps' | 'notifications' | 'system' | 'links'
+    'bookings' | 'execution' | 'coordinator' | 'chat' | 'library' | 'editor' | 'maps' | 'notifications' | 'system' | 'links' | 'reports'
   >(() => {
     if (isCoordinatorOnly) {
       try {
         const saved = sessionStorage.getItem('wnw_admin_active_tab');
         if (saved === 'coordinator' || saved === 'links' || saved === 'chat') {
-          return saved;
+          return saved as any;
         }
       } catch {}
       return 'coordinator';
@@ -115,9 +116,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'maps' ||
         saved === 'notifications' ||
         saved === 'system' ||
-        saved === 'links'
+        saved === 'links' ||
+        saved === 'reports'
       ) {
-        return saved;
+        return saved as any;
       }
     } catch {}
     return 'bookings';
@@ -273,6 +275,43 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const [gasUrl, setGasUrl] = useState(() => localStorage.getItem('wnw_leaderboard_gas_url') || 'https://script.google.com/macros/s/AKfycbxlPLjXzYuQr5LVT6R5SGiXleiRNJWSCcRSl9LLAExgV4LyhTUHzFVFwatmsX7MTbg6dA/exec');
   const [syncingLeaderboard, setSyncingLeaderboard] = useState(false);
   const [leaderboardSyncMsg, setLeaderboardSyncMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [feedback, setFeedback] = useState<any[]>([]);
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
+  const [leaderboardData, setLeaderboardData] = useState<any>(null);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+
+  const fetchFeedback = async () => {
+    setLoadingFeedback(true);
+    try {
+      const res = await apiFetch('feedback', { forceFresh: true });
+      if (res.ok) {
+        const json = await res.json();
+        const items = Array.isArray(json) ? json : json?.data;
+        if (Array.isArray(items)) {
+          setFeedback(items);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch real feedback:', err);
+    } finally {
+      setLoadingFeedback(false);
+    }
+  };
+
+  const fetchLeaderboard = async () => {
+    setLoadingLeaderboard(true);
+    try {
+      const res = await apiFetch('leaderboard', { forceFresh: true });
+      if (res.ok) {
+        const data = await res.json();
+        setLeaderboardData(data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch real leaderboard:', err);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
 
   const handleSyncLeaderboard = async () => {
     if (!gasUrl.trim()) return;
@@ -362,6 +401,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   useEffect(() => {
     fetchItineraries();
     fetchRegistrations();
+    fetchFeedback();
+    fetchLeaderboard();
   }, [currentUserEmail]);
 
   useEffect(() => {
@@ -410,9 +451,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             };
 
             const hNum = extractHikeNum(r);
-            const hist = hNum
-              ? HISTORICAL_TREKS.find(
-                  (h) => String(h.hike_number).match(/\d+/)?.[0] === hNum
+            const hist = hNum && leaderboardData?.growthCurve
+              ? leaderboardData.growthCurve.find(
+                  (h: any) => String(h.event_no || h.hike_number).match(/\d+/)?.[0] === hNum
                 )
               : null;
 
@@ -495,75 +536,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       console.warn('API fetch registrations error:', err);
     }
 
-    // 2. Fail-safe gorgeous mock data if both are completely empty
+    // 2. No dummy data fallback (Strict Rule)
     if (loaded.length === 0) {
-      const sampleBookings: AdminRegistration[] = [
-        {
-          id: "sample-reg-1",
-          trek_id: "290",
-          hike_number: "290",
-          trek_name: "Godawari Takhel",
-          trek_date: "12 Sep 2026",
-          full_name: "Anish Shrestha",
-          phone: "9841234567",
-          whatsapp: "9841234567",
-          email: "anish.shrestha@gmail.com",
-          paxCount: 2,
-          pickup_point: "Koteshwor",
-          gender: "Male",
-          age_group: "20-30",
-          status: "Confirmed",
-          payment_status: "Fully Paid",
-          paid_amount: 3000,
-          due_amount: 0,
-          admin_notes: "Regular hiker. Needs veg lunch.",
-          created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString()
-        },
-        {
-          id: "sample-reg-2",
-          trek_id: "288",
-          hike_number: "288",
-          trek_name: "Dhap Dam loop",
-          trek_date: "05 Sep 2026",
-          full_name: "Sonia Thapa",
-          phone: "9801234567",
-          whatsapp: "9801234567",
-          email: "sonia.thapa@gmail.com",
-          paxCount: 1,
-          pickup_point: "Chabahil",
-          gender: "Female",
-          age_group: "30-40",
-          status: "Pending",
-          payment_status: "Unpaid",
-          paid_amount: 0,
-          due_amount: 1500,
-          admin_notes: "Waiting for bank transfer verification.",
-          created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString()
-        },
-        {
-          id: "sample-reg-3",
-          trek_id: "272",
-          hike_number: "272",
-          trek_name: "Bheda Farm Mohini Jharna Hike",
-          trek_date: "15 Aug 2026",
-          full_name: "Rohan Basnet",
-          phone: "9812345678",
-          whatsapp: "9812345678",
-          email: "rohan.basnet@gmail.com",
-          paxCount: 3,
-          pickup_point: "Kalanki",
-          gender: "Male",
-          age_group: "20-30",
-          status: "Confirmed",
-          payment_status: "Deposit Paid",
-          paid_amount: 2000,
-          due_amount: 1000,
-          admin_notes: "Paid token advance. Will clear rest at meeting point.",
-          created_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString()
-        }
-      ];
-      loaded = sampleBookings;
-      setRawRegistrations(sampleBookings);
+      loaded = [];
+      setRawRegistrations([]);
     }
 
     // Merge any locally saved registration edits so edits are permanently preserved across refreshes
@@ -800,7 +776,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
     if (!found) {
       const nowIso = new Date().toISOString();
-      const hist = resolvedHNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === resolvedHNum) : null;
+      const hist = (resolvedHNum && leaderboardData?.growthCurve) 
+        ? leaderboardData.growthCurve.find((h: any) => String(h.event_no || h.hike_number).match(/\d+/)?.[0] === resolvedHNum) 
+        : null;
       const newRecord: SavedHikeRecord = {
         id: cleanTrekId,
         hikeNumber: resolvedHNum || 'TBD',
@@ -1775,6 +1753,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         id: h.id,
         hike_number: h.hikeNumber || d.hikeNumber || '',
         name: h.title || d.title || 'Himalayan Trek',
+        title: h.title || d.title || 'Himalayan Trek',
         date: d.hikeDate || d.date || d.schedule?.eventDate || '',
         days: d.overview?.expectedDuration || (d.itineraryDays?.length ? String(d.itineraryDays.length) : '1'),
         days_label: d.overview?.days || '',
@@ -1839,7 +1818,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         existingIds.add(resolvedId.toLowerCase());
         if (hNum) existingHikeNums.add(hNum);
 
-        const hist = hNum ? HISTORICAL_TREKS.find(h => String(h.hike_number).match(/\d+/)?.[0] === hNum) : null;
+        const hist = hNum && leaderboardData?.growthCurve
+          ? leaderboardData.growthCurve.find((h: any) => String(h.event_no || h.hike_number).match(/\d+/)?.[0] === hNum)
+          : null;
         const trekTitle = r.trek_name && r.trek_name !== 'Himalayan Trek'
           ? r.trek_name
           : (hist?.title || (hNum ? `Hike #${hNum}` : 'Himalayan Trek'));
@@ -1859,6 +1840,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           id: resolvedId,
           hike_number: hNum || rawId || '',
           name: trekTitle,
+          title: trekTitle,
           date: trekDate,
           days: '1',
           difficulty: 'moderate',
@@ -2110,6 +2092,21 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 )}
               </button>
 
+              {/* Reports & Analytics Tab */}
+              <button
+                id="admin-tab-reports"
+                type="button"
+                onClick={() => setActiveTab('reports')}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'reports'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span>Reports</span>
+              </button>
+
               {/* System Zone Tab */}
               <button
                 id="admin-tab-system"
@@ -2340,6 +2337,19 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           <UserActivityNotificationsPanel
             onNavigateTab={(tab) => setActiveTab(tab)}
             onUnreadCountChange={(count) => setUnreadActivityCount(count)}
+          />
+        )}
+
+        {activeTab === 'reports' && (
+          <AdminReportsDashboard
+            treks={enrichedTreks}
+            registrations={registrations}
+            feedback={feedback}
+            leaderboard={leaderboardData}
+            onSelectTrekRoster={(hikeNum) => {
+              setSelectedBookingsTrekFilter(hikeNum);
+              setActiveTab('bookings');
+            }}
           />
         )}
 

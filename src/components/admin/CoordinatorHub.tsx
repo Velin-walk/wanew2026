@@ -1263,6 +1263,20 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                 })
               )}
             </tbody>
+            <tfoot className="bg-[#F8FAFC] border-t-2 border-stone-200 font-bold text-stone-800">
+              <tr>
+                <td colSpan={4} className="py-2.5 px-2.5 text-right uppercase text-[9px] tracking-wider text-stone-500">
+                  Total
+                </td>
+                <td className="py-2.5 px-2.5 text-emerald-700 font-black text-xs">
+                  Rs {filteredAndSortedRegistrations.reduce((acc, r) => acc + (r.paid_amount || 0), 0).toLocaleString()}
+                </td>
+                <td className="py-2.5 px-2.5 text-rose-700 font-black text-xs">
+                  Rs {filteredAndSortedRegistrations.reduce((acc, r) => acc + (r.due_amount || 0), 0).toLocaleString()}
+                </td>
+                <td colSpan={6} className="py-2.5 px-2.5"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
 
