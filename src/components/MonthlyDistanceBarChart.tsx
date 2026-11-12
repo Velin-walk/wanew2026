@@ -256,37 +256,10 @@ export const MonthlyDistanceBarChart: React.FC<MonthlyDistanceBarChartProps> = (
         </div>
       </div>
       
-      {/* Pop-up Info: Shows Event Name & Distance when a bar is clicked */}
-      {activePoint && (
-        <div className="w-full bg-blue-50 border border-blue-200/60 rounded-2xl p-3 sm:p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-300 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
-              <Footprints className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate">
-                {activePoint.title || `Event #${activePoint.event_no}`}
-              </h4>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 font-bold mt-0.5">
-                Event Total: <span className="text-blue-700">{activePoint.event_km || activePoint.total_km || 0} km</span>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => { triggerHaptic(10); onSelectPoint(null as any); }}
-            className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors cursor-pointer shrink-0 ml-2"
-            title="Dismiss"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* Main Sideways Continuous Scrollable Track (Continuous Bars with Month Header Info at Beginning of Each Month) */}
       <div
         ref={scrollContainerRef}
-        className="w-full overflow-x-auto pb-3 pt-2 no-scrollbar sm:scroll-smooth touch-pan-x bg-white rounded-3xl p-3.5 sm:p-5 border border-slate-200/90 shadow-[4px_4px_16px_#d1d9e6,-4px_-4px_16px_#ffffff]"
+        className="w-full overflow-x-auto pb-3 pt-10 no-scrollbar sm:scroll-smooth touch-pan-x bg-white rounded-3xl p-3.5 sm:p-5 border border-slate-200/90 shadow-[4px_4px_16px_#d1d9e6,-4px_-4px_16px_#ffffff]"
       >
         <div className="inline-flex items-stretch min-w-full">
           {displayedMonthGroups.map((group, groupIdx) => {
@@ -365,6 +338,15 @@ export const MonthlyDistanceBarChart: React.FC<MonthlyDistanceBarChartProps> = (
                         }`}
                         title={`Event #${event.event_no}: ${event.title || 'Hike'} (${eventKm} km)`}
                       >
+                        {/* Compact Text Pop-up above the clicked bar */}
+                        {isSelected && (
+                          <div className="absolute -top-11 left-1/2 -translate-x-1/2 z-30 bg-slate-900 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-md border border-slate-700 whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95 duration-150 flex items-center gap-1">
+                            <span>{event.title || `Event #${event.event_no}`}</span>
+                            <span className="text-orange-400 font-black">• {eventKm} km</span>
+                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-slate-900 rotate-45 border-r border-b border-slate-700" />
+                          </div>
+                        )}
+
                         {/* Event Distance Pill above the bar */}
                         <div className="mb-1 text-center w-full">
                           <span
