@@ -7,6 +7,7 @@ import { HomepageHeroBanner, HeroStatsBar } from '../components/HomepageHeroBann
 import { OffersBanner } from '../components/OffersBanner';
 import { BookingProcessBanner } from '../components/BookingProcessBanner';
 import { HomeGalleryReviewsSection } from '../components/HomeGalleryReviewsSection';
+import { CommunityMilestoneCard } from '../components/CommunityMilestoneCard';
 
 import { SubPageType } from '../components/InfoPagesModal';
 import { trackFilterChange, trackSearchQuery } from '../services/behaviorTracker';
@@ -778,6 +779,13 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
               </div>
             );
           })()}
+
+          {/* 2.5 COMMUNITY KM JOURNEY (Shared Milestone Visualization - Chart Only) */}
+          {!savedOnly && (
+            <div className="pt-2">
+              <CommunityMilestoneCard variant="chartOnly" />
+            </div>
+          )}
 
           {/* 3. COMMUNITY GALLERY & REVIEWS PREVIEW (Desktop 2-Col, Mobile Stacked) */}
           {!savedOnly && (

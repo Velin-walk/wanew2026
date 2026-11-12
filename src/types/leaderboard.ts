@@ -1,3 +1,5 @@
+export type TimePeriod = 't30' | 't60' | 't90' | 't365' | 'overall';
+
 export interface HikerCompletedEvent {
   no?: string | number;
   name?: string;
@@ -58,6 +60,23 @@ export interface LeaderboardStats {
   longestHike: { name: string; dist: number };
 }
 
+export interface JourneyPoint {
+  event_no: string | number;
+  title: string;
+  date: string;
+  timestamp?: number;
+  hike_km: number;
+  trek_km: number;
+  total_km: number;
+  event_km?: number;
+  event_hike_km?: number;
+  event_trek_km?: number;
+  cum_total_km?: number;
+  cum_hike_km?: number;
+  cum_trek_km?: number;
+  formattedDate?: string;
+}
+
 export interface LeaderboardResponse {
   ok: boolean;
   ts?: string | number;
@@ -65,24 +84,8 @@ export interface LeaderboardResponse {
   hikers: HikerStats[];
   last_updated?: string;
   updated_at?: string;
-  growth_curve?: Array<{
-    event_no: string | number;
-    title: string;
-    date: string;
-    timestamp?: number;
-    hike_km: number;
-    trek_km: number;
-    total_km: number;
-  }>;
-  growthCurve?: Array<{
-    event_no: string | number;
-    title: string;
-    date: string;
-    timestamp?: number;
-    hike_km: number;
-    trek_km: number;
-    total_km: number;
-  }>;
+  growth_curve?: JourneyPoint[];
+  growthCurve?: JourneyPoint[];
   milestones?: Array<{
     km: number;
     trek: string;
