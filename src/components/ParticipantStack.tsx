@@ -10,6 +10,12 @@ interface ParticipantStackProps {
   hikeNumber?: string;
   trekId?: string;
   guideName?: string;
+  onRosterSynced?: (synced: {
+    total: number;
+    male: number;
+    female: number;
+    recentParticipants: Array<{ name: string; gender: 'm' | 'f'; pax?: number }>;
+  }) => void;
 }
 
 export const ParticipantStack: React.FC<ParticipantStackProps> = ({
@@ -20,6 +26,7 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
   hikeNumber,
   trekId,
   guideName,
+  onRosterSynced,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const avatars = (recentParticipants || []).slice(0, 8);
@@ -148,6 +155,7 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
         participantsCount={participantsCount}
         recentParticipants={recentParticipants}
         guideName={guideName}
+        onRosterSynced={onRosterSynced}
       />
     </>
   );

@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trek } from '../types';
 import { ParticipantStack } from './ParticipantStack';
+import { enrichWithGuide } from './ParticipantsModal';
 import { useAuth } from '../context/AuthContext';
 import { useCitizenPricing } from '../hooks/useCitizenPricing';
 import { TrekPhotosModal } from './TrekPhotosModal';
@@ -47,7 +48,17 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 }) => {
   const [photosOpen, setPhotosOpen] = useState(false);
   const [guideModalOpen, setGuideModalOpen] = useState(false);
+  const [syncedRoster, setSyncedRoster] = useState<{
+    total: number;
+    male: number;
+    female: number;
+    recentParticipants?: Array<{ name: string; gender: 'm' | 'f'; pax?: number }>;
+  } | null>(null);
   const { isAdmin } = useAuth();
+
+  useEffect(() => {
+    setSyncedRoster(null);
+  }, [trek.id, trek.participants, trek.participants_by_gender?.total]);
   const { formatPrice } = useCitizenPricing();
   const priceInfo = formatPrice(trek.price);
 
@@ -169,16 +180,27 @@ export const TrekCard: React.FC<TrekCardProps> = ({
     '';
 
   const badge = getDifficultyBadge(effectiveDifficulty);
-  const recent = trek.recent_participants || [];
+  const rawRecent = syncedRoster?.recentParticipants ?? (trek.recent_participants || []);
+  const rosterList = rawRecent.length > 0
+    ? enrichWithGuide(rawRecent, trek.leader || trek.team_leader)
+    : [];
 
-  const pg = trek.participants_by_gender;
-  const serverTotal = Number(pg?.total ?? trek.participants ?? (trek as any).registered_pax ?? 0);
+  const pg = syncedRoster ?? trek.participants_by_gender;
+  const fallbackTotal = syncedRoster
+    ? syncedRoster.total
+    : Number(pg?.total ?? trek.participants ?? (trek as any).registered_pax ?? 0);
 
-  const filteredParticipants = {
-    male: Number(pg?.male ?? recent.filter(p => p.gender === 'm').length) || 0,
-    female: Number(pg?.female ?? recent.filter(p => p.gender === 'f').length) || 0,
-    total: serverTotal > 0 ? serverTotal : recent.length,
-  };
+  const filteredParticipants = rosterList.length > 0
+    ? {
+        male: rosterList.filter(p => p.gender === 'm').length,
+        female: rosterList.filter(p => p.gender === 'f').length,
+        total: rosterList.length,
+      }
+    : {
+        male: Number(pg?.male ?? 0) || 0,
+        female: Number(pg?.female ?? 0) || 0,
+        total: fallbackTotal,
+      };
   const currentParticipants = filteredParticipants.total;
   
   const execStatus = trek.data?.execution_status;
@@ -466,12 +488,13 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         {/* Participant Stack */}
         <ParticipantStack
           participantsCount={filteredParticipants}
-          recentParticipants={trek.recent_participants}
+          recentParticipants={rosterList.length > 0 ? rosterList : rawRecent}
           totalCount={currentParticipants}
           trekName={trek.name}
           hikeNumber={trek.hike_number}
           trekId={trek.id}
           guideName={trek.leader || trek.team_leader}
+          onRosterSynced={setSyncedRoster}
         />
 
         {/* Leader Info */}

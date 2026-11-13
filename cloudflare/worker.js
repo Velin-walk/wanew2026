@@ -1227,6 +1227,15 @@ const worker = {
         if (parsedData && typeof parsedData === 'object') {
           parsedData.maxCapacity = resolvedMaxCap;
           if (execLeader) parsedData.teamLeader = execLeader;
+          if (row.exec_is_cancelled !== null && row.exec_is_cancelled !== undefined) {
+            parsedData.is_cancelled = row.exec_is_cancelled === 1;
+          }
+          if (row.exec_cancellation_reason !== null && row.exec_cancellation_reason !== undefined) {
+            parsedData.cancellation_reason = row.exec_cancellation_reason;
+          }
+          if (row.execution_status !== null && row.execution_status !== undefined) {
+            parsedData.execution_status = row.execution_status;
+          }
         }
 
         const trekObj = {
@@ -1542,22 +1551,39 @@ const worker = {
         }
         // Note: We preserve 'published' status so the public schedule displays the event with the CANCELLED badge and reason instead of hiding it into drafts.
 
-        await env.DB.prepare(`
-          UPDATE treks SET
-            max_capacity = ?,
-            team_leader = ?,
-            status = ?,
-            data_json = ?,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? OR hike_number = ?
-        `).bind(
-          maxCapacity,
-          teamLeader,
-          newStatus,
-          dataJson,
-          row.id,
-          row.hike_number
-        ).run();
+        if (row.id) {
+          await env.DB.prepare(`
+            UPDATE treks SET
+              max_capacity = ?,
+              team_leader = ?,
+              status = ?,
+              data_json = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).bind(
+            maxCapacity,
+            teamLeader,
+            newStatus,
+            dataJson,
+            row.id
+          ).run();
+        } else if (row.hike_number && row.hike_number !== 'TBD') {
+          await env.DB.prepare(`
+            UPDATE treks SET
+              max_capacity = ?,
+              team_leader = ?,
+              status = ?,
+              data_json = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE hike_number = ?
+          `).bind(
+            maxCapacity,
+            teamLeader,
+            newStatus,
+            dataJson,
+            row.hike_number
+          ).run();
+        }
 
         // 2. Upsert into event_executions table
         try {
@@ -1571,6 +1597,8 @@ const worker = {
             WHERE hike_number = ? OR hike_number = ? OR REPLACE(hike_number, '#', '') = ?
           `).bind(hikeNum, '#' + cleanHikeNum, cleanHikeNum).first();
 
+          const resolvedExecStatus = body.data?.execution_status || (body.data?.is_cancelled ? 'Cancelled' : 'Active');
+
           if (existingExec) {
             await env.DB.prepare(`
               UPDATE event_executions SET
@@ -1582,7 +1610,7 @@ const worker = {
                 updated_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `).bind(
-              body.data?.execution_status || 'Scheduled',
+              resolvedExecStatus,
               body.data?.is_cancelled ? 1 : 0,
               body.data?.cancellation_reason || '',
               maxCapacity,
@@ -1599,7 +1627,7 @@ const worker = {
               hikeNum,
               trekName,
               eventDate,
-              body.data?.execution_status || 'Scheduled',
+              resolvedExecStatus,
               body.data?.is_cancelled ? 1 : 0,
               body.data?.cancellation_reason || '',
               maxCapacity,
@@ -1613,24 +1641,25 @@ const worker = {
 
         await logAdminActivity(env, request, 'UPDATE_EVENT_EXECUTION', `Updated event execution for trek '${row.title}' (#${row.hike_number || idOrNum})`, {
           hike_number: row.hike_number || idOrNum,
-          execution_status: body.data?.execution_status || 'Scheduled',
+          execution_status: body.data?.execution_status || (body.data?.is_cancelled ? 'Cancelled' : 'Active'),
           assigned_leader: teamLeader,
           capacity: maxCapacity
         });
 
-        // Recompute participant summary and rebuild treks snapshot in background
+        // Purge edge cache and rebuild treks snapshot synchronously so immediate refreshes reflect the update
         const hikeNumToSync = row.hike_number || idOrNum;
-        if (ctx && ctx.waitUntil) {
-          ctx.waitUntil((async () => {
-            await updateTrekParticipantSummary(env, hikeNumToSync);
-            await rebuildTreksSnapshot(env);
-          })());
-        } else {
-          (async () => {
-            await updateTrekParticipantSummary(env, hikeNumToSync);
-            await rebuildTreksSnapshot(env);
-          })().catch(() => {});
-        }
+        await purgeEdgeCache([
+          `${url.origin}/treks`,
+          `${url.origin}/admin/itineraries`,
+          `${url.origin}/treks/${idOrNum}`,
+          `${url.origin}/admin/itineraries/${idOrNum}`,
+          `${url.origin}/treks/${row.id}`,
+          `${url.origin}/admin/itineraries/${row.id}`,
+          `${url.origin}/treks/${hikeNumToSync}`,
+          `${url.origin}/admin/itineraries/${hikeNumToSync}`
+        ], ctx);
+        await updateTrekParticipantSummary(env, hikeNumToSync);
+        await rebuildTreksSnapshot(env);
 
         return jsonResponse({
           success: true,
@@ -1837,7 +1866,7 @@ const worker = {
               elevation_gross = ?, ending_point = ?, team_leader = ?, whatsapp_link = ?,
               itinerary_link = ?, faq_link = ?, max_capacity = ?, data_json = ?,
               author_email = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? OR (id IS NULL AND hike_number = ?)
+            WHERE id = ? OR (id IS NULL AND hike_number = ? AND hike_number != 'TBD')
           `).bind(
             hikeNum,
             title,

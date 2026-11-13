@@ -23,6 +23,12 @@ interface ParticipantsModalProps {
   participantsCount?: ParticipantCount;
   recentParticipants?: ParticipantItem[];
   guideName?: string;
+  onRosterSynced?: (synced: {
+    total: number;
+    male: number;
+    female: number;
+    recentParticipants: ParticipantItem[];
+  }) => void;
 }
 
 /**
@@ -47,7 +53,7 @@ export function formatNameWithLastInitial(rawName: string): string {
   return `${firstName} ${cleanLast.charAt(0).toUpperCase()}.`;
 }
 
-const enrichWithGuide = (items: ParticipantItem[], guide?: string): ParticipantItem[] => {
+export const enrichWithGuide = (items: ParticipantItem[], guide?: string): ParticipantItem[] => {
   const list = [...items];
   if (guide && guide.trim()) {
     const cleanGuide = guide.replace(/\s*\((?:lead\s+)?(?:guide|leader)\)/i, '').trim();
@@ -75,6 +81,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
   participantsCount = { total: 0, male: 0, female: 0 },
   recentParticipants = [],
   guideName,
+  onRosterSynced,
 }) => {
   const { user, openAuthModal } = useAuth();
   useAnonymity();
@@ -101,7 +108,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
         if (res.ok && isMounted) {
           const json = await res.json();
           const serverRoster = json.roster || json.data?.roster;
-          if (Array.isArray(serverRoster) && serverRoster.length > 0) {
+          if (Array.isArray(serverRoster)) {
             const mapped: ParticipantItem[] = serverRoster
               .filter((r: any) => {
                 const st = String(r.status || r.registration_status || r.roster_registration_status || 'Confirmed').toLowerCase().trim();
@@ -110,10 +117,22 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
               .map((r: any) => ({
                 name: r.full_name || r.name || 'Hiker',
                 gender: (String(r.gender || '').toLowerCase().startsWith('f') ? 'f' : 'm') as 'm' | 'f',
+                pax: Number(r.pax || 1),
               }));
-            if (mapped.length > 0 || (guideName && guideName.trim())) {
-              setRoster(enrichWithGuide(mapped, guideName));
+            const enrichedList =
+              mapped.length > 0 || (guideName && guideName.trim())
+                ? enrichWithGuide(mapped, guideName)
+                : [];
+            if (enrichedList.length > 0) {
+              setRoster(enrichedList);
             }
+            const countList = mapped.length > 0 ? enrichedList : [];
+            onRosterSynced?.({
+              total: countList.length,
+              male: countList.filter(p => p.gender === 'm').length,
+              female: countList.filter(p => p.gender === 'f').length,
+              recentParticipants: mapped,
+            });
           }
         }
       } catch (err) {
@@ -158,18 +177,18 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
 
   const totalParticipants =
     roster.length > 0
-      ? roster.reduce((sum, p: any) => sum + Number(p.pax || 1), 0)
+      ? roster.length
       : (totalCount !== undefined && totalCount > 0
         ? totalCount
         : (participantsCount?.total || 0));
 
   const maleCount =
     roster.length > 0
-      ? roster.filter((p: any) => p.gender === 'm').reduce((sum, p: any) => sum + Number(p.pax || 1), 0)
+      ? roster.filter((p: any) => p.gender === 'm').length
       : (participantsCount?.male || 0);
   const femaleCount =
     roster.length > 0
-      ? roster.filter((p: any) => p.gender === 'f').reduce((sum, p: any) => sum + Number(p.pax || 1), 0)
+      ? roster.filter((p: any) => p.gender === 'f').length
       : (participantsCount?.female || 0);
 
   return createPortal(

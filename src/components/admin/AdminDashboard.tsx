@@ -688,6 +688,16 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const [selectedBookingsTrekFilter, setSelectedBookingsTrekFilter] = useState<string>('all');
 
+  const parseUtcTimestampMs = (val?: string): number => {
+    if (!val || typeof val !== 'string') return 0;
+    const s = val.trim();
+    if (!s) return 0;
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) {
+      return Date.parse(s.replace(' ', 'T') + 'Z') || 0;
+    }
+    return Date.parse(s) || 0;
+  };
+
   const getAdminEventExecutions = (): Record<string, any> => {
     try {
       const raw = localStorage.getItem('wnw_admin_event_executions');
@@ -697,14 +707,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     }
   };
 
-  const saveAdminEventExecution = (trekId: string, hNum: string, override: any) => {
+  const saveAdminEventExecution = (trekId: string, hNum: string, override: any, nowIso?: string) => {
     try {
       const current = getAdminEventExecutions();
       const updated = { ...current };
-      const nowIso = new Date().toISOString();
-      const payload = { ...override, updatedAt: nowIso };
-      if (trekId) updated[String(trekId).trim()] = { ...(updated[String(trekId).trim()] || {}), ...payload };
-      if (hNum) updated[String(hNum).trim()] = { ...(updated[String(hNum).trim()] || {}), ...payload };
+      const ts = nowIso || new Date().toISOString();
+      const payload = { ...override, updatedAt: ts };
+      const cleanId = String(trekId || '').trim();
+      const cleanHNum = String(hNum || '').trim();
+      if (cleanId) updated[cleanId] = { ...(updated[cleanId] || {}), ...payload };
+      if (cleanHNum && cleanHNum.toUpperCase() !== 'TBD') {
+        updated[cleanHNum] = { ...(updated[cleanHNum] || {}), ...payload };
+      }
       localStorage.setItem('wnw_admin_event_executions', JSON.stringify(updated));
     } catch (_) {}
   };
@@ -714,10 +728,11 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     updates: Partial<Trek> & { is_cancelled?: boolean; cancellation_reason?: string }
   ) => {
     const cleanTrekId = String(trekId || '').trim();
-    const numMatch = cleanTrekId.match(/\d+/);
-    const targetHNum = numMatch ? numMatch[0] : '';
     const hNumFromUpdates = String(updates.hike_number || updates.data?.hikeNumber || '').trim();
-    const resolvedHNum = targetHNum || hNumFromUpdates;
+    const cleanHNumFromUpdates = hNumFromUpdates && hNumFromUpdates.toUpperCase() !== 'TBD' ? hNumFromUpdates : '';
+    const hikeIdDigitsMatch = cleanTrekId.match(/^hike-(\d{1,5})$/i) || cleanTrekId.match(/^(\d{1,5})$/);
+    const targetHNum = hikeIdDigitsMatch ? hikeIdDigitsMatch[1] : '';
+    const resolvedHNum = cleanHNumFromUpdates || targetHNum;
 
     const isCancelled = updates.data?.is_cancelled !== undefined
       ? Boolean(updates.data.is_cancelled)
@@ -748,23 +763,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     const updatedAssistantGuideStr =
       updatedAssistantGuides !== undefined ? updatedAssistantGuides.join(', ') : undefined;
     const updatedExecStatus = updates.data?.execution_status ?? (isCancelled ? 'Cancelled' : 'Active');
-
-    // 1. Immediately persist to dedicated admin event execution storage map so admin UI never reverts
-    saveAdminEventExecution(cleanTrekId, resolvedHNum, {
-      is_cancelled: isCancelled,
-      cancellation_reason: cancelReason,
-      execution_status: updatedExecStatus,
-      ...(updatedCap !== undefined ? { capacity: updatedCap, maxCapacity: updatedCap } : {}),
-      ...(updatedLeader ? { leader: updatedLeader, teamLeader: updatedLeader } : {}),
-      ...(updatedAssistantGuides !== undefined
-        ? {
-            assistant_guides: updatedAssistantGuides,
-            assistantGuides: updatedAssistantGuides,
-            assistant_guide: updatedAssistantGuideStr,
-            assistantGuide: updatedAssistantGuideStr,
-          }
-        : {}),
-    });
+    const nowIso = new Date().toISOString();
 
     let found = false;
     let updatedRecordForSync: SavedHikeRecord | null = null;
@@ -773,8 +772,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const hNumClean = String(h.hikeNumber || h.data?.hikeNumber || '').trim();
       const isExactMatch =
         h.id === cleanTrekId ||
-        (resolvedHNum && hNumClean !== 'TBD' && hNumClean === resolvedHNum) ||
-        (hNumClean && cleanTrekId.includes(hNumClean));
+        (resolvedHNum && hNumClean && hNumClean.toUpperCase() !== 'TBD' && hNumClean === resolvedHNum);
 
       if (isExactMatch && !found) {
         found = true;
@@ -791,7 +789,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             : [];
         const curAssistantGuideStr = curAssistantGuides.join(', ');
 
-        const nowIso = new Date().toISOString();
         const updatedItem: SavedHikeRecord = {
           ...h,
           updatedAt: nowIso,
@@ -814,7 +811,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     });
 
     if (!found) {
-      const nowIso = new Date().toISOString();
       const hist = (resolvedHNum && leaderboardData?.growthCurve) 
         ? leaderboardData.growthCurve.find((h: any) => String(h.event_no || h.hike_number).match(/\d+/)?.[0] === resolvedHNum) 
         : null;
@@ -847,55 +843,30 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       nextHikes.push(newRecord);
     }
 
-    setHikes(nextHikes);
-    try {
-      safeSaveItinerariesCache(nextHikes);
-      window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
-    } catch (_) {}
-
-    // Save to server: update both PUT (treks data_json + max_capacity + edge cache purge) and PATCH (event_executions)
+    // Save to server first and verify response so failed writes never show as "Saved"
     const rec = updatedRecordForSync as SavedHikeRecord | null;
     const serverTargetId = rec ? rec.id : cleanTrekId;
     const activeDevice = getAdminDeviceMetadata();
-    try {
-      if (rec) {
-        await apiFetch(`admin/itineraries/${encodeURIComponent(rec.id)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: rec.id,
-            hike_number: rec.hikeNumber,
-            title: rec.title,
-            category: rec.category,
-            status: rec.status,
-            hike_date: rec.data?.hikeDate,
-            max_capacity: rec.data?.maxCapacity,
-            team_leader: rec.data?.teamLeader,
-            device_name: activeDevice.device_name,
-            device_id: activeDevice.device_id,
-            user_agent: activeDevice.user_agent,
-            data: {
-              ...(rec.data || {}),
-              device_name: activeDevice.device_name,
-              device_id: activeDevice.device_id,
-              user_agent: activeDevice.user_agent,
-            },
-          }),
-          forceFresh: true,
-        });
-      }
-      await apiFetch(`admin/itineraries/${encodeURIComponent(serverTargetId)}`, {
-        method: 'PATCH',
+    const isAlreadyOnServer = Boolean(rec && serverHikeIds.includes(rec.id));
+
+    if (rec && !isAlreadyOnServer) {
+      const putRes = await apiFetch(`admin/itineraries/${encodeURIComponent(rec.id)}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...updates,
-          capacity: rec?.data?.maxCapacity ?? updates.capacity,
-          leader: rec?.data?.teamLeader ?? updates.leader,
+          id: rec.id,
+          hike_number: rec.hikeNumber,
+          title: rec.title,
+          category: rec.category,
+          status: rec.status,
+          hike_date: rec.data?.hikeDate,
+          max_capacity: rec.data?.maxCapacity,
+          team_leader: rec.data?.teamLeader,
           device_name: activeDevice.device_name,
           device_id: activeDevice.device_id,
           user_agent: activeDevice.user_agent,
           data: {
-            ...(rec?.data ?? updates.data ?? {}),
+            ...(rec.data || {}),
             device_name: activeDevice.device_name,
             device_id: activeDevice.device_id,
             user_agent: activeDevice.user_agent,
@@ -903,12 +874,63 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         }),
         forceFresh: true,
       });
-      clearApiCache('admin/itineraries');
-      clearApiCache('treks');
-      window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
-    } catch (err) {
-      console.warn('Network update trek execution:', err);
+      if (!putRes.ok) {
+        const errJson = await putRes.json().catch(() => null);
+        throw new Error(errJson?.error || `Failed to save trek record (${putRes.status})`);
+      }
     }
+
+    const patchRes = await apiFetch(`admin/itineraries/${encodeURIComponent(serverTargetId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...updates,
+        capacity: rec?.data?.maxCapacity ?? updates.capacity,
+        leader: rec?.data?.teamLeader ?? updates.leader,
+        device_name: activeDevice.device_name,
+        device_id: activeDevice.device_id,
+        user_agent: activeDevice.user_agent,
+        data: {
+          ...(rec?.data ?? updates.data ?? {}),
+          device_name: activeDevice.device_name,
+          device_id: activeDevice.device_id,
+          user_agent: activeDevice.user_agent,
+        },
+      }),
+      forceFresh: true,
+    });
+    if (!patchRes.ok) {
+      const errJson = await patchRes.json().catch(() => null);
+      throw new Error(errJson?.error || `Failed to update event execution (${patchRes.status})`);
+    }
+
+    // Only commit local state, cache, and short-lived override after server save succeeds
+    if (rec) {
+      setServerHikeIds((prev) => Array.from(new Set([...prev, rec.id])));
+    }
+    saveAdminEventExecution(cleanTrekId, resolvedHNum, {
+      is_cancelled: isCancelled,
+      cancellation_reason: cancelReason,
+      execution_status: updatedExecStatus,
+      ...(updatedCap !== undefined ? { capacity: updatedCap, maxCapacity: updatedCap } : {}),
+      ...(updatedLeader ? { leader: updatedLeader, teamLeader: updatedLeader } : {}),
+      ...(updatedAssistantGuides !== undefined
+        ? {
+            assistant_guides: updatedAssistantGuides,
+            assistantGuides: updatedAssistantGuides,
+            assistant_guide: updatedAssistantGuideStr,
+            assistantGuide: updatedAssistantGuideStr,
+          }
+        : {}),
+    }, nowIso);
+
+    setHikes(nextHikes);
+    try {
+      safeSaveItinerariesCache(nextHikes);
+    } catch (_) {}
+    clearApiCache('admin/itineraries');
+    clearApiCache('treks');
+    window.dispatchEvent(new CustomEvent('wnw-treks-updated'));
   };
 
   const ensureHikeData = (h: SavedHikeRecord): SavedHikeRecord => {
@@ -1234,9 +1256,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 return srvNum && srvNum !== 'TBD' && locNum === srvNum && locDate === srvDate;
               });
               if (localMatch) {
-                const localTime = Date.parse(localMatch.updatedAt || (localMatch.data as any)?.updatedAt || '') || 0;
-                const serverTime = Date.parse(srv.updatedAt || (srv.data as any)?.updatedAt || '') || 0;
-                if (localTime >= serverTime && localTime > 0) {
+                const localTime = parseUtcTimestampMs(localMatch.updatedAt || (localMatch.data as any)?.updatedAt);
+                const serverTime = parseUtcTimestampMs(srv.updatedAt || (srv.data as any)?.updatedAt);
+                if (localTime > serverTime && localTime > 0) {
                   const localEnsured = ensureHikeData(localMatch);
                   // Always preserve rich Cloudflare D1 server itinerary data over local cache
                   if (srv.data?.itineraryDays && srv.data.itineraryDays.length > 0) {
@@ -1259,6 +1281,31 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               }
             }
           }
+        }
+      } catch (_) {}
+
+      // Prune stale local execution overrides once the server copy is at least as new
+      try {
+        const execOverrides = getAdminEventExecutions();
+        let execChanged = false;
+        allCollectedHikes.forEach((srv) => {
+          const srvTime = parseUtcTimestampMs(srv.updatedAt || (srv.data as any)?.updatedAt);
+          if (!srvTime) return;
+          const hNumClean = String(srv.hikeNumber || srv.data?.hikeNumber || '').trim();
+          const candidateKeys = [srv.id, hNumClean && hNumClean.toUpperCase() !== 'TBD' ? hNumClean : ''].filter(Boolean);
+          candidateKeys.forEach((k) => {
+            const ovr = execOverrides[k];
+            if (ovr) {
+              const ovrTime = parseUtcTimestampMs(ovr.updatedAt);
+              if (!ovrTime || ovrTime <= srvTime) {
+                delete execOverrides[k];
+                execChanged = true;
+              }
+            }
+          });
+        });
+        if (execChanged) {
+          localStorage.setItem('wnw_admin_event_executions', JSON.stringify(execOverrides));
         }
       } catch (_) {}
 
@@ -1792,11 +1839,13 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     return hikes.map((h) => {
       const d = h.data || ({} as any);
       const hNumClean = String(h.hikeNumber || d.hikeNumber || '').trim();
-      const numMatch = (h.id || '').match(/\d+/) || hNumClean.match(/\d+/);
-      const numKey = numMatch ? numMatch[0] : '';
+      const validHNumKey = hNumClean && hNumClean.toUpperCase() !== 'TBD' ? hNumClean : '';
 
-      // Check for admin execution override by ID, hike number, or numeric key
-      const override = execOverrides[h.id] || (hNumClean && execOverrides[hNumClean]) || (numKey && execOverrides[numKey]) || {};
+      // Only apply a local override if it is strictly newer than the server/hike record
+      const rawOverride = execOverrides[h.id] || (validHNumKey && execOverrides[validHNumKey]) || null;
+      const serverUpdatedMs = parseUtcTimestampMs(h.updatedAt || d.updatedAt);
+      const overrideUpdatedMs = parseUtcTimestampMs(rawOverride?.updatedAt);
+      const override = rawOverride && overrideUpdatedMs > serverUpdatedMs ? rawOverride : {};
 
       const isCancelled = Boolean(
         override.is_cancelled !== undefined
@@ -1913,9 +1962,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           : (hist?.title || (hNum ? `Hike #${hNum}` : 'Himalayan Trek'));
         const trekDate = r.trek_date || hist?.hike_date || '';
 
-        const numMatch = (resolvedId || '').match(/\d+/) || (hNum || '').match(/\d+/);
-        const numKey = numMatch ? numMatch[0] : '';
-        const override = execOverrides[resolvedId] || (hNum && execOverrides[hNum]) || (numKey && execOverrides[numKey]) || {};
+        const validHNumKey = hNum && hNum.toUpperCase() !== 'TBD' ? hNum : '';
+        const override = execOverrides[resolvedId] || (validHNumKey && execOverrides[validHNumKey]) || {};
 
         const isCancelled = Boolean(override.is_cancelled !== undefined ? override.is_cancelled : false);
         const cancelReason = override.cancellation_reason || '';

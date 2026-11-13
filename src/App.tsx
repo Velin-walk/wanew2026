@@ -650,8 +650,16 @@ function MainApp() {
               if (!existing) {
                 trekMap.set(key, norm);
               } else {
-                const localTime = Date.parse(item?.updatedAt || item?.data?.updatedAt || '') || 0;
-                const serverTime = Date.parse(existing.data?.updatedAt || '') || 0;
+                const parseTsMs = (v?: string) => {
+                  if (!v || typeof v !== 'string') return 0;
+                  const s = v.trim();
+                  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) {
+                    return Date.parse(s.replace(' ', 'T') + 'Z') || 0;
+                  }
+                  return Date.parse(s) || 0;
+                };
+                const localTime = parseTsMs(item?.updatedAt || item?.data?.updatedAt);
+                const serverTime = parseTsMs(existing.data?.updatedAt);
 
                 const mergedItineraryDays = (norm.data?.itineraryDays && norm.data.itineraryDays.length > 0)
                   ? norm.data.itineraryDays
@@ -660,7 +668,7 @@ function MainApp() {
                   ? norm.data.faqs
                   : (existing.data?.faqs || []);
 
-                if (localTime >= serverTime && localTime > 0) {
+                if (localTime > serverTime && localTime > 0) {
                   trekMap.set(key, {
                     ...existing,
                     ...norm,

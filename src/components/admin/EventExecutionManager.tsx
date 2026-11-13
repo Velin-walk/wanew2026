@@ -50,6 +50,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
 
   const [savingRowIds, setSavingRowIds] = useState<Record<string, boolean>>({});
   const [justSavedRowIds, setJustSavedRowIds] = useState<Record<string, boolean>>({});
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
   const [showAllEvents, setShowAllEvents] = useState(false);
 
   // Fetch list of trek leaders from trek leaders page
@@ -184,23 +185,6 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
   ): 'Active' | 'Registration Closed' | 'Completed' | 'Cancelled' => {
     const cap = overrideCapacity !== undefined ? Number(overrideCapacity) : Number(t.capacity || 25);
 
-    // 1. Check local admin execution overrides directly so admin UI never reverts
-    try {
-      const raw = localStorage.getItem('wnw_admin_event_executions');
-      if (raw) {
-        const overrides = JSON.parse(raw);
-        const numMatch = String(t.hike_number || t.id || '').match(/\d+/);
-        const numKey = numMatch ? numMatch[0] : '';
-        const ovr = overrides[t.id] || (t.hike_number && overrides[t.hike_number]) || (numKey && overrides[numKey]);
-        if (ovr) {
-          if (ovr.execution_status === 'Cancelled' || ovr.is_cancelled) return 'Cancelled';
-          if (ovr.execution_status === 'Completed') return 'Completed';
-          if (ovr.execution_status === 'Registration Closed') return 'Registration Closed';
-          if (ovr.execution_status === 'Active') return 'Active';
-        }
-      }
-    } catch {}
-
     const savedStatus = t.data?.execution_status;
     if (savedStatus === 'Cancelled' || t.data?.is_cancelled || t.is_cancelled) return 'Cancelled';
     if (savedStatus === 'Completed') return 'Completed';
@@ -259,35 +243,17 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
 
     const isCancelling = curStatus === 'Cancelled';
 
-    // Synchronously write to local storage so admin UI never snaps back
-    try {
-      const raw = localStorage.getItem('wnw_admin_event_executions');
-      const overrides = raw ? JSON.parse(raw) : {};
-      const numMatch = String(t.hike_number || t.id || '').match(/\d+/);
-      const numKey = numMatch ? numMatch[0] : '';
-      const payload = {
-        execution_status: curStatus,
-        is_cancelled: isCancelling,
-        cancellation_reason: isCancelling ? curReason : '',
-        capacity: curCapacity,
-        maxCapacity: curCapacity,
-        leader: curLeader,
-        teamLeader: curLeader,
-        assistant_guides: curAssistantGuides,
-        assistantGuides: curAssistantGuides,
-        assistant_guide: curAssistantGuideStr,
-        assistantGuide: curAssistantGuideStr,
-        updatedAt: new Date().toISOString(),
-      };
-      if (t.id) overrides[String(t.id).trim()] = payload;
-      if (t.hike_number) overrides[String(t.hike_number).trim()] = payload;
-      if (numKey) overrides[numKey] = payload;
-      localStorage.setItem('wnw_admin_event_executions', JSON.stringify(overrides));
-    } catch (_) {}
-
+    setSaveErrors((prev) => {
+      if (!prev[t.id]) return prev;
+      const next = { ...prev };
+      delete next[t.id];
+      return next;
+    });
     setSavingRowIds((prev) => ({ ...prev, [t.id]: true }));
     try {
       await onUpdateTrekExecution(t.id, {
+        hike_number: t.hike_number,
+        name: t.name,
         capacity: curCapacity,
         leader: curLeader,
         assistant_guides: curAssistantGuides,
@@ -318,6 +284,8 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
       }, 2500);
     } catch (err) {
       console.error('Failed to update event execution:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to save event execution changes to server.';
+      setSaveErrors((prev) => ({ ...prev, [t.id]: msg }));
     } finally {
       setSavingRowIds((prev) => ({ ...prev, [t.id]: false }));
     }
@@ -396,6 +364,27 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
             </p>
           </div>
         </div>
+
+        {Object.keys(saveErrors).length > 0 && (
+          <div className="mx-4 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start justify-between gap-2 text-xs text-rose-800 font-semibold">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                {Object.entries(saveErrors).map(([rowId, errText]) => (
+                  <div key={rowId}>{errText}</div>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSaveErrors({})}
+              className="text-rose-500 hover:text-rose-700 cursor-pointer"
+              title="Dismiss error"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center items-center py-16">
