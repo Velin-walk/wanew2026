@@ -727,6 +727,26 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       : (updates.cancellation_reason !== undefined ? String(updates.cancellation_reason) : '');
     const updatedCap = updates.capacity !== undefined ? Number(updates.capacity) : undefined;
     const updatedLeader = updates.leader !== undefined ? updates.leader : undefined;
+    const hasAssistantGuidesUpdate =
+      updates.assistant_guides !== undefined ||
+      updates.data?.assistantGuides !== undefined ||
+      updates.assistant_guide !== undefined ||
+      updates.data?.assistantGuide !== undefined;
+    const updatedAssistantGuides: string[] | undefined = hasAssistantGuidesUpdate
+      ? (() => {
+          const rawArr = updates.assistant_guides ?? updates.data?.assistantGuides;
+          if (Array.isArray(rawArr)) {
+            return Array.from(new Set(rawArr.map((s: any) => String(s || '').trim()).filter(Boolean)));
+          }
+          const rawStr = updates.assistant_guide ?? updates.data?.assistantGuide;
+          if (typeof rawStr === 'string' && rawStr.trim()) {
+            return Array.from(new Set(rawStr.split(',').map((s) => s.trim()).filter(Boolean)));
+          }
+          return [];
+        })()
+      : undefined;
+    const updatedAssistantGuideStr =
+      updatedAssistantGuides !== undefined ? updatedAssistantGuides.join(', ') : undefined;
     const updatedExecStatus = updates.data?.execution_status ?? (isCancelled ? 'Cancelled' : 'Active');
 
     // 1. Immediately persist to dedicated admin event execution storage map so admin UI never reverts
@@ -736,6 +756,14 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       execution_status: updatedExecStatus,
       ...(updatedCap !== undefined ? { capacity: updatedCap, maxCapacity: updatedCap } : {}),
       ...(updatedLeader ? { leader: updatedLeader, teamLeader: updatedLeader } : {}),
+      ...(updatedAssistantGuides !== undefined
+        ? {
+            assistant_guides: updatedAssistantGuides,
+            assistantGuides: updatedAssistantGuides,
+            assistant_guide: updatedAssistantGuideStr,
+            assistantGuide: updatedAssistantGuideStr,
+          }
+        : {}),
     });
 
     let found = false;
@@ -753,6 +781,15 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         const data = h.data || ({} as any);
         const curCap = updatedCap !== undefined ? updatedCap : Number(data.maxCapacity || 25);
         const curLeader = updatedLeader !== undefined ? updatedLeader : (data.teamLeader || 'Walk Nepal Walk Guide');
+        const curAssistantGuides: string[] =
+          updatedAssistantGuides !== undefined
+            ? updatedAssistantGuides
+            : Array.isArray(data.assistantGuides)
+            ? data.assistantGuides
+            : typeof data.assistantGuide === 'string' && data.assistantGuide.trim()
+            ? data.assistantGuide.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : [];
+        const curAssistantGuideStr = curAssistantGuides.join(', ');
 
         const nowIso = new Date().toISOString();
         const updatedItem: SavedHikeRecord = {
@@ -762,6 +799,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             ...data,
             maxCapacity: curCap,
             teamLeader: curLeader,
+            assistantGuides: curAssistantGuides,
+            assistantGuide: curAssistantGuideStr,
             is_cancelled: isCancelled,
             cancellation_reason: cancelReason,
             execution_status: updatedExecStatus,
@@ -795,6 +834,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           status: 'published',
           maxCapacity: updatedCap !== undefined ? updatedCap : 25,
           teamLeader: updatedLeader ?? 'Walk Nepal Walk Guide',
+          assistantGuides: updatedAssistantGuides ?? [],
+          assistantGuide: updatedAssistantGuideStr ?? '',
           is_cancelled: isCancelled,
           cancellation_reason: cancelReason,
           execution_status: updatedExecStatus,
@@ -1058,6 +1099,24 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       (t.team_leader && String(t.team_leader).trim()) ||
       (t.leader && String(t.leader).trim()) ||
       'Walk Nepal Walk Guide';
+    const assistantGuides: string[] = (() => {
+      const rawArr =
+        (Array.isArray(parsedJson.assistantGuides) && parsedJson.assistantGuides) ||
+        (Array.isArray(cleanDataObj.assistantGuides) && cleanDataObj.assistantGuides) ||
+        (Array.isArray(t.assistant_guides) && t.assistant_guides) ||
+        null;
+      if (rawArr) {
+        return Array.from(new Set(rawArr.map((s: any) => String(s || '').trim()).filter(Boolean)));
+      }
+      const rawStr =
+        (parsedJson.assistantGuide && String(parsedJson.assistantGuide).trim()) ||
+        (cleanDataObj.assistantGuide && String(cleanDataObj.assistantGuide).trim()) ||
+        (t.assistant_guide && String(t.assistant_guide).trim()) ||
+        '';
+      if (!rawStr) return [];
+      return Array.from(new Set(rawStr.split(',').map((s) => s.trim()).filter(Boolean)));
+    })();
+    const assistantGuide = assistantGuides.join(', ');
     const execStatus = parsedJson.execution_status || cleanDataObj.execution_status || (parsedJson.is_cancelled ? 'Cancelled' : 'Active');
     const isCancelled = Boolean(
       parsedJson.is_cancelled ??
@@ -1092,6 +1151,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         status: status,
         maxCapacity: maxCap,
         teamLeader: leader,
+        assistantGuide,
+        assistantGuides,
         is_cancelled: isCancelled,
         cancellation_reason: cancelReason,
         execution_status: execStatus,
@@ -1748,6 +1809,28 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       const execStatus = override.execution_status || d.execution_status || (isCancelled ? 'Cancelled' : 'Active');
       const capacity = Number(override.capacity || override.maxCapacity || d.maxCapacity || 25);
       const leader = override.leader || override.teamLeader || d.teamLeader || 'Walk Nepal Walk Guide';
+      const assistantGuides: string[] = (() => {
+        const rawArr =
+          override.assistantGuides !== undefined
+            ? override.assistantGuides
+            : override.assistant_guides !== undefined
+            ? override.assistant_guides
+            : d.assistantGuides;
+        if (Array.isArray(rawArr)) {
+          return Array.from(new Set(rawArr.map((s: any) => String(s || '').trim()).filter(Boolean)));
+        }
+        const rawStr =
+          override.assistantGuide !== undefined
+            ? override.assistantGuide
+            : override.assistant_guide !== undefined
+            ? override.assistant_guide
+            : (d.assistantGuide || '');
+        if (typeof rawStr === 'string' && rawStr.trim()) {
+          return Array.from(new Set(rawStr.split(',').map((s) => s.trim()).filter(Boolean)));
+        }
+        return [];
+      })();
+      const assistantGuide = assistantGuides.join(', ');
 
       return {
         id: h.id,
@@ -1759,6 +1842,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         days_label: d.overview?.days || '',
         difficulty: (d.overview?.difficulty || d.difficulty || 'moderate').toLowerCase() as any,
         leader,
+        assistant_guide: assistantGuide,
+        assistant_guides: assistantGuides,
         capacity,
         participants: Number((h as any).participants ?? (h as any).data?.participants ?? 0),
         participants_by_gender: (h as any).participants_by_gender || (h as any).data?.participants_by_gender,
@@ -1774,6 +1859,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           cancellation_reason: cancelReason,
           execution_status: execStatus,
           teamLeader: leader,
+          assistantGuide,
+          assistantGuides,
           maxCapacity: capacity,
         },
       };
@@ -1835,6 +1922,18 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         const execStatus = override.execution_status || (isCancelled ? 'Cancelled' : 'Active');
         const cap = Number(override.capacity || override.maxCapacity || 30);
         const leader = override.leader || override.teamLeader || 'Walk Nepal Walk Guide';
+        const assistantGuides: string[] = (() => {
+          const rawArr = override.assistantGuides ?? override.assistant_guides;
+          if (Array.isArray(rawArr)) {
+            return Array.from(new Set(rawArr.map((s: any) => String(s || '').trim()).filter(Boolean)));
+          }
+          const rawStr = override.assistantGuide ?? override.assistant_guide ?? '';
+          if (typeof rawStr === 'string' && rawStr.trim()) {
+            return Array.from(new Set(rawStr.split(',').map((s) => s.trim()).filter(Boolean)));
+          }
+          return [];
+        })();
+        const assistantGuide = assistantGuides.join(', ');
 
         virtualTreks.push({
           id: resolvedId,
@@ -1845,6 +1944,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           days: '1',
           difficulty: 'moderate',
           leader,
+          assistant_guide: assistantGuide,
+          assistant_guides: assistantGuides,
           capacity: cap,
           participants: 0,
           price: 'NPR 1,500',
@@ -1857,6 +1958,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             title: trekTitle,
             maxCapacity: cap,
             teamLeader: leader,
+            assistantGuide,
+            assistantGuides,
             is_cancelled: isCancelled,
             cancellation_reason: cancelReason,
             execution_status: execStatus,

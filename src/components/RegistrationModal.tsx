@@ -37,6 +37,7 @@ interface RegistrationModalProps {
   latestBooking?: any;
   onNavigateToPayment?: () => void;
   onNavigateToBookings?: () => void;
+  onOpenSafetyPolicy?: () => void;
   isAdminProxy?: boolean;
   pastHikers?: any[];
 }
@@ -51,6 +52,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   latestBooking,
   onNavigateToPayment,
   onNavigateToBookings,
+  onOpenSafetyPolicy,
   isAdminProxy = false,
   pastHikers = [],
 }) => {
@@ -1219,7 +1221,11 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      window.dispatchEvent(new CustomEvent('wnw-navigate-tab', { detail: { tab: 'info', target: 'safety_policy' } }));
+                      if (onOpenSafetyPolicy) {
+                        onOpenSafetyPolicy();
+                      } else {
+                        window.dispatchEvent(new CustomEvent('wnw-navigate-tab', { detail: { tab: 'info', target: 'safety_policy' } }));
+                      }
                     }}
                     className="text-[#E08828] hover:text-[#C86B1A] hover:underline text-[10px] font-bold"
                   >

@@ -1105,7 +1105,11 @@ function MainApp() {
       if (e.detail) {
         const targetTab = typeof e.detail === 'string' ? e.detail : e.detail.tab;
         const targetId = typeof e.detail === 'object' ? e.detail.targetId : undefined;
-        if (targetTab) {
+        const targetPage = typeof e.detail === 'object' ? (e.detail.target || e.detail.page) : undefined;
+        if (targetTab === 'info' || targetTab === 'safety_policy' || targetPage === 'safety_policy') {
+          setSelectedTrekForRegister(null);
+          setInfoModalPage('safety_policy');
+        } else if (targetTab) {
           handleMainTabChange(targetTab as any, targetId);
         }
       }
@@ -1831,6 +1835,10 @@ function MainApp() {
             onNavigateToPayment={() => {
               setSelectedTrekForRegister(null);
               setInfoModalPage('payment');
+            }}
+            onOpenSafetyPolicy={() => {
+              setSelectedTrekForRegister(null);
+              setInfoModalPage('safety_policy');
             }}
           />
         )}

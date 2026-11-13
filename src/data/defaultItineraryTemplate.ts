@@ -49,6 +49,8 @@ export interface TrekItineraryData {
   
   // New basic fields
   teamLeader: string;
+  assistantGuide?: string;
+  assistantGuides?: string[];
   maxCapacity: number;
   whatsappLink?: string;
   itineraryLink?: string;
@@ -104,6 +106,8 @@ export const INITIAL_ITINERARY_TEMPLATE: TrekItineraryData = {
   currency: 'NPR',
   pricingNotes: 'Normal Package price per person by Scorpio (7/8 pax)',
   teamLeader: 'Walk Nepal Walk Guide',
+  assistantGuide: '',
+  assistantGuides: [],
   maxCapacity: 25,
   whatsappLink: '',
   itineraryLink: '',
@@ -275,6 +279,24 @@ export const normalizeItineraryData = (raw?: Partial<TrekItineraryData> | null):
     currency: d.currency || 'NPR',
     pricingNotes: d.pricingNotes ?? (hasRawData ? '' : INITIAL_ITINERARY_TEMPLATE.pricingNotes),
     teamLeader: d.teamLeader !== undefined && d.teamLeader !== null ? String(d.teamLeader) : (d.leader || 'Walk Nepal Walk Guide'),
+    assistantGuides: (() => {
+      const raw = d.assistantGuides ?? d.assistant_guides;
+      if (Array.isArray(raw)) {
+        return Array.from(new Set(raw.map((s: any) => String(s || '').trim()).filter(Boolean)));
+      }
+      const str = d.assistantGuide ?? d.assistant_guide;
+      if (typeof str === 'string' && str.trim()) {
+        return Array.from(new Set(str.split(',').map((s) => s.trim()).filter(Boolean)));
+      }
+      return [];
+    })(),
+    assistantGuide: (() => {
+      const raw = d.assistantGuides ?? d.assistant_guides;
+      if (Array.isArray(raw)) {
+        return Array.from(new Set(raw.map((s: any) => String(s || '').trim()).filter(Boolean))).join(', ');
+      }
+      return d.assistantGuide !== undefined && d.assistantGuide !== null ? String(d.assistantGuide) : (d.assistant_guide || '');
+    })(),
     maxCapacity: Number(d.maxCapacity || d.capacity) > 0 ? Number(d.maxCapacity || d.capacity) : 25,
     whatsappLink: d.whatsappLink || d.whatsapp_link || '',
     itineraryLink: d.itineraryLink || d.itinerary_link || '',

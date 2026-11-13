@@ -408,6 +408,24 @@ export function normalizeTrek(row: any): Trek {
     (cleanD.teamLeader && String(cleanD.teamLeader).trim()) ||
     (row.leader && String(row.leader).trim()) ||
     "Walk Nepal Walk Guide";
+  const resolvedAssistantGuides: string[] = (() => {
+    const rawArr =
+      (Array.isArray(rawJsonData.assistantGuides) && rawJsonData.assistantGuides) ||
+      (Array.isArray(cleanD.assistantGuides) && cleanD.assistantGuides) ||
+      (Array.isArray(row.assistant_guides) && row.assistant_guides) ||
+      null;
+    if (rawArr) {
+      return Array.from(new Set(rawArr.map((s: any) => String(s || '').trim()).filter(Boolean)));
+    }
+    const rawStr =
+      (rawJsonData.assistantGuide && String(rawJsonData.assistantGuide).trim()) ||
+      (cleanD.assistantGuide && String(cleanD.assistantGuide).trim()) ||
+      (row.assistant_guide && String(row.assistant_guide).trim()) ||
+      "";
+    if (!rawStr) return [];
+    return Array.from(new Set(rawStr.split(',').map((s) => s.trim()).filter(Boolean)));
+  })();
+  const resolvedAssistantGuide = resolvedAssistantGuides.join(', ');
   const resolvedExecStatus =
     rawJsonData.execution_status ||
     cleanD.execution_status ||
@@ -463,6 +481,8 @@ export function normalizeTrek(row: any): Trek {
     faqs: resolvedFaqs,
     maxCapacity: resolvedCapacity,
     teamLeader: resolvedLeader,
+    assistantGuide: resolvedAssistantGuide,
+    assistantGuides: resolvedAssistantGuides,
     execution_status: resolvedExecStatus,
     is_cancelled: resolvedIsCancelled,
     cancellation_reason: resolvedCancelReason,
@@ -531,6 +551,8 @@ export function normalizeTrek(row: any): Trek {
     days_label: resolvedOverview.days || rawJsonData.overview?.days || row.days || "",
     difficulty: (difficulty === "hard" || difficulty === "difficult") ? "difficult" : (difficulty === "moderate" ? "moderate" : (difficulty === "extreme" ? "extreme" : (difficulty === "easy" ? "easy" : difficulty))),
     leader: resolvedLeader,
+    assistant_guide: resolvedAssistantGuide,
+    assistant_guides: resolvedAssistantGuides,
     capacity: resolvedCapacity,
     participants: resolvedTotalParticipants,
     participants_by_gender: resolvedGenderCounts,

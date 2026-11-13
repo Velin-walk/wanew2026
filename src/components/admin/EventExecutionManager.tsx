@@ -12,6 +12,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  X,
 } from 'lucide-react';
 import { Trek } from '../../types';
 import { getGuidesSettings, DEFAULT_GUIDES } from '../../services/guidesService';
@@ -41,6 +42,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
         status?: 'Active' | 'Registration Closed' | 'Completed' | 'Cancelled';
         capacity?: number;
         leader?: string;
+        assistant_guides?: string[];
         cancellation_reason?: string;
       }
     >
@@ -227,6 +229,20 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
     }));
   };
 
+  const resolveAssistantGuides = (t: Trek): string[] => {
+    const rawArr = Array.isArray(t.assistant_guides)
+      ? t.assistant_guides
+      : Array.isArray(t.data?.assistantGuides)
+      ? t.data.assistantGuides
+      : null;
+    if (rawArr) {
+      return Array.from(new Set(rawArr.map((s: any) => String(s || '').trim()).filter(Boolean)));
+    }
+    const rawStr = String(t.assistant_guide || t.data?.assistantGuide || '').trim();
+    if (!rawStr) return [];
+    return Array.from(new Set(rawStr.split(',').map((s) => s.trim()).filter(Boolean)));
+  };
+
   const handleSaveRow = async (t: Trek) => {
     const draft = rowDrafts[t.id] || {};
     const curCapacity = draft.capacity !== undefined ? Number(draft.capacity) : Number(t.capacity || 25);
@@ -236,6 +252,9 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
         : resolveTrekExecStatus(t, curCapacity);
 
     const curLeader = draft.leader !== undefined ? draft.leader : t.leader || 'Walk Nepal Walk Guide';
+    const curAssistantGuides =
+      draft.assistant_guides !== undefined ? draft.assistant_guides : resolveAssistantGuides(t);
+    const curAssistantGuideStr = curAssistantGuides.join(', ');
     const curReason = draft.cancellation_reason !== undefined ? draft.cancellation_reason : (t.data?.cancellation_reason || t.cancellation_reason || '');
 
     const isCancelling = curStatus === 'Cancelled';
@@ -254,6 +273,10 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
         maxCapacity: curCapacity,
         leader: curLeader,
         teamLeader: curLeader,
+        assistant_guides: curAssistantGuides,
+        assistantGuides: curAssistantGuides,
+        assistant_guide: curAssistantGuideStr,
+        assistantGuide: curAssistantGuideStr,
         updatedAt: new Date().toISOString(),
       };
       if (t.id) overrides[String(t.id).trim()] = payload;
@@ -267,6 +290,8 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
       await onUpdateTrekExecution(t.id, {
         capacity: curCapacity,
         leader: curLeader,
+        assistant_guides: curAssistantGuides,
+        assistant_guide: curAssistantGuideStr,
         is_cancelled: isCancelling,
         cancellation_reason: isCancelling ? curReason : '',
         data: {
@@ -276,6 +301,8 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
           execution_status: curStatus,
           maxCapacity: curCapacity,
           teamLeader: curLeader,
+          assistantGuides: curAssistantGuides,
+          assistantGuide: curAssistantGuideStr,
         },
       });
 
@@ -388,6 +415,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                   <th className="py-3 px-3 w-[160px]">Status</th>
                   <th className="py-3 px-3 min-w-[180px]">Occupancy &amp; Max Seats</th>
                   <th className="py-3 px-3 min-w-[180px]">Assigned Lead Guide</th>
+                  <th className="py-3 px-3 min-w-[215px]">Assistant Guides</th>
                   <th className="py-3 px-3 min-w-[200px]">Cancellation Reason</th>
                   <th className="py-3 px-4 w-[180px] text-right">Actions</th>
                 </tr>
@@ -403,6 +431,10 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                       : resolveTrekExecStatus(t, Number(curCapacity));
 
                   const curLeader = draft.leader !== undefined ? draft.leader : t.leader || 'Walk Nepal Walk Guide';
+                  const curAssistantGuides =
+                    draft.assistant_guides !== undefined
+                      ? draft.assistant_guides
+                      : resolveAssistantGuides(t);
                   const curReason = draft.cancellation_reason !== undefined ? draft.cancellation_reason : t.data?.cancellation_reason || '';
 
                   const isCancelled = curStatus === 'Cancelled';
@@ -511,6 +543,70 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                             </option>
                           ))}
                         </select>
+                      </td>
+
+                      {/* Assistant Guides (Multi-select chips + dropdown) */}
+                      <td className="py-3 px-3 align-middle">
+                        <div className="space-y-1.5 min-w-[195px]">
+                          {curAssistantGuides.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {curAssistantGuides.map((gName) => (
+                                <span
+                                  key={gName}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FFF5EB] border border-[#E08828]/30 text-[#1F1F1F] rounded-lg text-[11px] font-bold"
+                                >
+                                  <span className="truncate max-w-[140px]">{gName}</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRowChange(
+                                        t.id,
+                                        'assistant_guides',
+                                        curAssistantGuides.filter((g) => g !== gName)
+                                      );
+                                    }}
+                                    className="text-[#8B8680] hover:text-rose-600 transition-colors cursor-pointer"
+                                    title={`Remove ${gName}`}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {(() => {
+                            const availableGuides = guideLeadersList.filter(
+                              (gName) => !curAssistantGuides.includes(gName)
+                            );
+                            return (
+                              <select
+                                value=""
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (!val) return;
+                                  handleRowChange(t.id, 'assistant_guides', [
+                                    ...curAssistantGuides,
+                                    val,
+                                  ]);
+                                }}
+                                disabled={availableGuides.length === 0}
+                                className="w-full p-2 bg-[#F9F7F5] border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                <option value="">
+                                  {availableGuides.length === 0
+                                    ? 'All guides assigned'
+                                    : '+ Add assistant guide...'}
+                                </option>
+                                {availableGuides.map((gName, gIdx) => (
+                                  <option key={gIdx} value={gName}>
+                                    {gName}
+                                  </option>
+                                ))}
+                              </select>
+                            );
+                          })()}
+                        </div>
                       </td>
 
                       {/* Cancellation Reason */}

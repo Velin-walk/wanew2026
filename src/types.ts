@@ -12,6 +12,8 @@ export interface Trek {
   days: string | number;
   difficulty: 'easy' | 'moderate' | 'difficult' | 'extreme' | string;
   leader?: string;
+  assistant_guide?: string;
+  assistant_guides?: string[];
   capacity: number;
   itinerary?: string;
   itinerary_link?: string;

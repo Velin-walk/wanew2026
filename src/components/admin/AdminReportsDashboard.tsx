@@ -35,7 +35,10 @@ import {
   Phone,
   Mail,
   UserX,
-  FileText
+  FileText,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { Trek } from '../../types';
 import { AdminRegistration, doesRegistrationMatchTrek } from './BookingsManager';
@@ -115,6 +118,29 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [eventSearchTerm, setEventSearchTerm] = useState<string>('');
   const [filterMonths, setFilterMonths] = useState<number | 'all' | 'upcoming'>(1); // Default: 1 month (30 days)
+  const [perEventSort, setPerEventSort] = useState<{
+    key:
+      | 'default'
+      | 'hikeNumber'
+      | 'date'
+      | 'revenue'
+      | 'returning'
+      | 'new'
+      | 'gender_m'
+      | 'gender_f'
+      | 'gender_nb'
+      | 'age_under20'
+      | 'age_20to30'
+      | 'age_31to40'
+      | 'age_40to50'
+      | 'age_over50'
+      | 'registrations'
+      | 'cancellations'
+      | 'leadGuide'
+      | 'review'
+      | 'commission';
+    dir: 'asc' | 'desc';
+  }>({ key: 'default', dir: 'desc' });
   const [detailModal, setDetailModal] = useState<{
     item: EventReportItem;
     type:
@@ -1103,6 +1129,105 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
     });
   }, [metrics.perEventList, eventSearchTerm, filterMonths]);
 
+  type PerEventSortKey = typeof perEventSort.key;
+
+  const handleSortToggle = (key: PerEventSortKey, defaultDir: 'asc' | 'desc' = 'desc') => {
+    setPerEventSort((prev) => {
+      if (prev.key !== key) return { key, dir: defaultDir };
+      if (prev.dir === defaultDir) {
+        return { key, dir: defaultDir === 'desc' ? 'asc' : 'desc' };
+      }
+      return { key: 'default', dir: 'desc' };
+    });
+  };
+
+  const renderSortIcon = (key: PerEventSortKey) => {
+    if (perEventSort.key !== key) {
+      return <ArrowUpDown className="w-3 h-3 opacity-35 group-hover:opacity-90 shrink-0 transition-opacity" />;
+    }
+    return perEventSort.dir === 'asc' ? (
+      <ArrowUp className="w-3 h-3 text-[#FF6600] shrink-0" />
+    ) : (
+      <ArrowDown className="w-3 h-3 text-[#FF6600] shrink-0" />
+    );
+  };
+
+  const sortedEventList = useMemo(() => {
+    if (perEventSort.key === 'default') return filteredEventList;
+
+    const dirMult = perEventSort.dir === 'asc' ? 1 : -1;
+    const parseHikeSortNum = (val: string): number | null => {
+      const m = String(val || '').match(/\d+/);
+      return m ? parseInt(m[0], 10) : null;
+    };
+    const parseReviewNum = (val: string): number | null => {
+      const m = String(val || '').match(/[\d.]+/);
+      return m ? parseFloat(m[0]) : null;
+    };
+
+    return [...filteredEventList].sort((a, b) => {
+      switch (perEventSort.key) {
+        case 'hikeNumber': {
+          const na = parseHikeSortNum(a.hikeNumber);
+          const nb = parseHikeSortNum(b.hikeNumber);
+          if (na === null && nb === null) return 0;
+          if (na === null) return 1;
+          if (nb === null) return -1;
+          return (na - nb) * dirMult;
+        }
+        case 'date': {
+          const ta = a.timestamp ?? null;
+          const tb = b.timestamp ?? null;
+          if (ta === null && tb === null) return a.title.localeCompare(b.title) * dirMult;
+          if (ta === null) return 1;
+          if (tb === null) return -1;
+          if (ta !== tb) return (ta - tb) * dirMult;
+          return a.title.localeCompare(b.title) * dirMult;
+        }
+        case 'revenue':
+          return (a.revenue - b.revenue) * dirMult;
+        case 'returning':
+          return (a.returningCount - b.returningCount) * dirMult;
+        case 'new':
+          return (a.newCount - b.newCount) * dirMult;
+        case 'gender_m':
+          return (a.genders.male.count - b.genders.male.count) * dirMult;
+        case 'gender_f':
+          return (a.genders.female.count - b.genders.female.count) * dirMult;
+        case 'gender_nb':
+          return (a.genders.nb.count - b.genders.nb.count) * dirMult;
+        case 'age_under20':
+          return (a.ageGroups.under20.count - b.ageGroups.under20.count) * dirMult;
+        case 'age_20to30':
+          return (a.ageGroups.age20to30.count - b.ageGroups.age20to30.count) * dirMult;
+        case 'age_31to40':
+          return (a.ageGroups.age31to40.count - b.ageGroups.age31to40.count) * dirMult;
+        case 'age_40to50':
+          return (a.ageGroups.age40to50.count - b.ageGroups.age40to50.count) * dirMult;
+        case 'age_over50':
+          return (a.ageGroups.over50.count - b.ageGroups.over50.count) * dirMult;
+        case 'registrations':
+          return (a.registrationsCount - b.registrationsCount) * dirMult;
+        case 'cancellations':
+          return (a.cancellationsCount - b.cancellationsCount) * dirMult;
+        case 'leadGuide':
+          return a.leadGuide.localeCompare(b.leadGuide) * dirMult;
+        case 'review': {
+          const ra = parseReviewNum(a.averageReview);
+          const rb = parseReviewNum(b.averageReview);
+          if (ra === null && rb === null) return 0;
+          if (ra === null) return 1;
+          if (rb === null) return -1;
+          return (ra - rb) * dirMult;
+        }
+        case 'commission':
+          return (a.commission - b.commission) * dirMult;
+        default:
+          return 0;
+      }
+    });
+  }, [filteredEventList, perEventSort]);
+
   return (
     <div className="w-full space-y-6 select-none animate-in fade-in duration-200">
       {/* Executive Control Header */}
@@ -1479,42 +1604,266 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
 
         {/* Per Event Report Table (One Row Per Event, All 12 Requested Columns) */}
         <div className="overflow-x-auto border border-[#EFEAE4] rounded-xl">
-          <table className="w-full text-left border-collapse min-w-[1100px]">
+          <table className="w-full text-left border-collapse min-w-[1180px]">
             <thead>
               <tr className="bg-[#FAF8F5] border-b border-[#EFEAE4] text-[10.5px] font-black uppercase text-[#8B8680] tracking-wider whitespace-nowrap">
-                <th rowSpan={2} className="py-2.5 px-3 align-middle">Hike Number</th>
-                <th rowSpan={2} className="py-2.5 px-3 align-middle">Hike Name &amp; Date</th>
-                <th rowSpan={2} className="py-2.5 px-3 text-right align-middle">Revenue</th>
-                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">Returning</th>
-                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">New</th>
-                <th colSpan={3} className="py-1 px-2 text-center border-b border-[#EFEAE4] border-r border-[#EFEAE4]/80">Gender</th>
-                <th colSpan={5} className="py-1 px-2 text-center border-b border-[#EFEAE4]">Age Group</th>
-                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">Registrations</th>
-                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">Cancellations</th>
-                <th rowSpan={2} className="py-2.5 px-3 align-middle">Lead Guide</th>
-                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">Average Review</th>
-                <th rowSpan={2} className="py-2.5 px-3 text-right align-middle">Commission</th>
+                <th rowSpan={2} className="py-2.5 px-3 align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('hikeNumber', 'desc')}
+                    className="group inline-flex items-center gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                    title="Sort by Hike Number"
+                  >
+                    <span>Hike Number</span>
+                    {renderSortIcon('hikeNumber')}
+                  </button>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('date', 'desc')}
+                    className="group inline-flex items-center gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                    title="Sort by Event Date"
+                  >
+                    <span>Hike Name &amp; Date</span>
+                    {renderSortIcon('date')}
+                  </button>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 text-right align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('revenue', 'desc')}
+                    className="group inline-flex items-center justify-end gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors ml-auto"
+                    title="Sort by Revenue"
+                  >
+                    <span>Revenue</span>
+                    {renderSortIcon('revenue')}
+                  </button>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('returning', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                    title="Sort by Returning Hikers"
+                  >
+                    <span>Returning</span>
+                    {renderSortIcon('returning')}
+                  </button>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('new', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                    title="Sort by New Hikers"
+                  >
+                    <span>New</span>
+                    {renderSortIcon('new')}
+                  </button>
+                </th>
+                <th
+                  colSpan={3}
+                  className="py-1.5 px-2 text-center border-b border-[#EFEAE4] border-l border-r-2 border-l-[#E5E1DB] border-r-[#E5E1DB] bg-pink-50/40 text-pink-900/80"
+                >
+                  <span className="inline-flex items-center justify-center gap-1">
+                    <svg className="w-3 h-3 text-pink-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="5.5" cy="5.5" r="2.75" />
+                      <path d="M1.5 13.5c0-2.1 1.8-3.5 4-3.5s4 1.4 4 3.5" />
+                      <circle cx="11.2" cy="6" r="2.2" />
+                      <path d="M10.5 10.2c2.1.2 4 1.4 4 3.3" />
+                    </svg>
+                    <span>Gender</span>
+                  </span>
+                </th>
+                <th
+                  colSpan={5}
+                  className="py-1.5 px-2 text-center border-b border-[#EFEAE4] border-r border-r-[#E5E1DB] bg-amber-50/50 text-amber-900/80"
+                >
+                  <span className="inline-flex items-center justify-center gap-1">
+                    <svg className="w-3 h-3 text-amber-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="8" cy="8" r="6" />
+                      <path d="M8 4.8V8l2.2 1.4" />
+                    </svg>
+                    <span>Age Group</span>
+                  </span>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('registrations', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                    title="Sort by Registrations"
+                  >
+                    <span>Registrations</span>
+                    {renderSortIcon('registrations')}
+                  </button>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('cancellations', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                    title="Sort by Cancellations"
+                  >
+                    <span>Cancellations</span>
+                    {renderSortIcon('cancellations')}
+                  </button>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('leadGuide', 'asc')}
+                    className="group inline-flex items-center gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                    title="Sort by Lead Guide"
+                  >
+                    <span>Lead Guide</span>
+                    {renderSortIcon('leadGuide')}
+                  </button>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 text-center align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('review', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                    title="Sort by Average Review"
+                  >
+                    <span>Average Review</span>
+                    {renderSortIcon('review')}
+                  </button>
+                </th>
+                <th rowSpan={2} className="py-2.5 px-3 text-right align-middle">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('commission', 'desc')}
+                    className="group inline-flex items-center justify-end gap-1 hover:text-[#1F1F1F] cursor-pointer transition-colors ml-auto"
+                    title="Sort by Commission"
+                  >
+                    <span>Commission</span>
+                    {renderSortIcon('commission')}
+                  </button>
+                </th>
               </tr>
               <tr className="bg-[#FAF8F5] border-b border-[#EFEAE4] text-[10px] font-bold text-[#8B8680] tracking-wider whitespace-nowrap">
-                <th className="py-1 px-2 text-center border-r border-[#EFEAE4]/60">M</th>
-                <th className="py-1 px-2 text-center border-r border-[#EFEAE4]/60">F</th>
-                <th className="py-1 px-2 text-center border-r border-[#EFEAE4]/80">NB</th>
-                <th className="py-1 px-2 text-center border-r border-[#EFEAE4]/60">&lt;20</th>
-                <th className="py-1 px-2 text-center border-r border-[#EFEAE4]/60">20-30</th>
-                <th className="py-1 px-2 text-center border-r border-[#EFEAE4]/60">31-40</th>
-                <th className="py-1 px-2 text-center border-r border-[#EFEAE4]/60">40-50</th>
-                <th className="py-1 px-2 text-center">&gt;50</th>
+                <th className="py-1.5 px-2 text-center border-l border-l-[#E5E1DB] border-r border-[#EFEAE4]/60 bg-sky-50/35 text-sky-700">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('gender_m', 'desc')}
+                    className="group inline-flex items-center justify-center gap-0.5 hover:text-sky-900 cursor-pointer"
+                    title="Sort by Male count"
+                  >
+                    <span>M</span>
+                    {renderSortIcon('gender_m')}
+                  </button>
+                </th>
+                <th className="py-1.5 px-2 text-center border-r border-[#EFEAE4]/60 bg-pink-50/45 text-pink-600">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('gender_f', 'desc')}
+                    className="group inline-flex items-center justify-center gap-0.5 hover:text-pink-800 cursor-pointer"
+                    title="Sort by Female count"
+                  >
+                    <span>F</span>
+                    {renderSortIcon('gender_f')}
+                  </button>
+                </th>
+                <th className="py-1.5 px-2 text-center border-r-2 border-r-[#E5E1DB] bg-violet-50/35 text-violet-700">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('gender_nb', 'desc')}
+                    className="group inline-flex items-center justify-center gap-0.5 hover:text-violet-900 cursor-pointer"
+                    title="Sort by NB / Unspecified count"
+                  >
+                    <span>NB</span>
+                    {renderSortIcon('gender_nb')}
+                  </button>
+                </th>
+                <th className="py-1.5 px-2 text-center border-r border-[#EFEAE4]/60 bg-amber-50/25 text-amber-900/75">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('age_under20', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer"
+                    title="Sort by Age <20"
+                  >
+                    <svg className="w-2.5 h-2.5 text-amber-600/80 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <circle cx="6" cy="3.5" r="2" />
+                      <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                    </svg>
+                    <span>&lt;20</span>
+                    {renderSortIcon('age_under20')}
+                  </button>
+                </th>
+                <th className="py-1.5 px-2 text-center border-r border-[#EFEAE4]/60 bg-amber-50/25 text-amber-900/75">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('age_20to30', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer"
+                    title="Sort by Age 20-30"
+                  >
+                    <svg className="w-2.5 h-2.5 text-amber-600/80 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <circle cx="6" cy="3.5" r="2" />
+                      <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                    </svg>
+                    <span>20-30</span>
+                    {renderSortIcon('age_20to30')}
+                  </button>
+                </th>
+                <th className="py-1.5 px-2 text-center border-r border-[#EFEAE4]/60 bg-amber-50/25 text-amber-900/75">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('age_31to40', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer"
+                    title="Sort by Age 31-40"
+                  >
+                    <svg className="w-2.5 h-2.5 text-amber-600/80 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <circle cx="6" cy="3.5" r="2" />
+                      <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                    </svg>
+                    <span>31-40</span>
+                    {renderSortIcon('age_31to40')}
+                  </button>
+                </th>
+                <th className="py-1.5 px-2 text-center border-r border-[#EFEAE4]/60 bg-amber-50/25 text-amber-900/75">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('age_40to50', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer"
+                    title="Sort by Age 40-50"
+                  >
+                    <svg className="w-2.5 h-2.5 text-amber-600/80 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <circle cx="6" cy="3.5" r="2" />
+                      <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                    </svg>
+                    <span>40-50</span>
+                    {renderSortIcon('age_40to50')}
+                  </button>
+                </th>
+                <th className="py-1.5 px-2 text-center border-r border-r-[#E5E1DB] bg-amber-50/25 text-amber-900/75">
+                  <button
+                    type="button"
+                    onClick={() => handleSortToggle('age_over50', 'desc')}
+                    className="group inline-flex items-center justify-center gap-1 hover:text-[#1F1F1F] cursor-pointer"
+                    title="Sort by Age >50"
+                  >
+                    <svg className="w-2.5 h-2.5 text-amber-600/80 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <circle cx="6" cy="3.5" r="2" />
+                      <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                    </svg>
+                    <span>&gt;50</span>
+                    {renderSortIcon('age_over50')}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFEAE4] text-xs">
-              {filteredEventList.length === 0 ? (
+              {sortedEventList.length === 0 ? (
                 <tr>
                   <td colSpan={17} className="py-8 text-center text-[#8B8680]">
                     No matching events found for the selected timeframe / search filter.
                   </td>
                 </tr>
               ) : (
-                filteredEventList.map((item) => (
+                sortedEventList.map((item) => (
                   <tr key={item.hikeNumber} className="hover:bg-[#FAF8F5] transition-colors">
                     {/* 1. Hike Number */}
                     <td className="py-3 px-3">
@@ -1585,16 +1934,16 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                     </td>
 
                     {/* 6. Gender Sub-columns (M, F, NB) */}
-                    <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-l border-l-[#E5E1DB] border-r border-[#EFEAE4]/40 bg-sky-50/15">
                       {item.genders && item.genders.male.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'gender_male' })}
-                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50/90 hover:bg-sky-100 border border-sky-200/80 text-sky-700 font-bold cursor-pointer transition-colors"
                           title="View male hikers"
                         >
-                          {item.genders.male.count}{' '}
-                          <span className="text-[10px] text-[#8B8680] font-normal">
+                          <span>{item.genders.male.count}</span>
+                          <span className="text-[10px] text-sky-600/80 font-normal">
                             ({item.genders.male.pct}%)
                           </span>
                         </button>
@@ -1602,16 +1951,16 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-[#EFEAE4]/40 bg-pink-50/20">
                       {item.genders && item.genders.female.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'gender_female' })}
-                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-600 font-bold cursor-pointer transition-colors"
                           title="View female hikers"
                         >
-                          {item.genders.female.count}{' '}
-                          <span className="text-[10px] text-[#8B8680] font-normal">
+                          <span className="text-pink-600 font-extrabold">{item.genders.female.count}</span>
+                          <span className="text-[10px] text-pink-500/80 font-normal">
                             ({item.genders.female.pct}%)
                           </span>
                         </button>
@@ -1619,16 +1968,16 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/80">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-r-2 border-r-[#E5E1DB] bg-violet-50/15">
                       {item.genders && item.genders.nb.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'gender_nb' })}
-                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-violet-50/90 hover:bg-violet-100 border border-violet-200/80 text-violet-700 font-bold cursor-pointer transition-colors"
                           title="View non-binary / other hikers"
                         >
-                          {item.genders.nb.count}{' '}
-                          <span className="text-[10px] text-[#8B8680] font-normal">
+                          <span>{item.genders.nb.count}</span>
+                          <span className="text-[10px] text-violet-600/80 font-normal">
                             ({item.genders.nb.pct}%)
                           </span>
                         </button>
@@ -1638,15 +1987,19 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                     </td>
 
                     {/* 7. Age Group Sub-columns (<20, 20-30, 31-40, 40-50, >50) */}
-                    <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-[#EFEAE4]/40 bg-amber-50/10">
                       {item.ageGroups && item.ageGroups.under20.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'age_under20' })}
-                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#FAF8F5] hover:bg-amber-50 border border-[#E5E1DB] text-[#1F1F1F] font-bold cursor-pointer transition-colors"
                           title="View hikers under 20"
                         >
-                          {item.ageGroups.under20.count}{' '}
+                          <svg className="w-2.5 h-2.5 text-amber-600/85 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                            <circle cx="6" cy="3.5" r="2" />
+                            <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                          </svg>
+                          <span>{item.ageGroups.under20.count}</span>
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.under20.pct}%)
                           </span>
@@ -1655,15 +2008,19 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-[#EFEAE4]/40 bg-amber-50/10">
                       {item.ageGroups && item.ageGroups.age20to30.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'age_20to30' })}
-                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#FAF8F5] hover:bg-amber-50 border border-[#E5E1DB] text-[#1F1F1F] font-bold cursor-pointer transition-colors"
                           title="View hikers aged 20-30"
                         >
-                          {item.ageGroups.age20to30.count}{' '}
+                          <svg className="w-2.5 h-2.5 text-amber-600/85 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                            <circle cx="6" cy="3.5" r="2" />
+                            <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                          </svg>
+                          <span>{item.ageGroups.age20to30.count}</span>
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.age20to30.pct}%)
                           </span>
@@ -1672,15 +2029,19 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-[#EFEAE4]/40 bg-amber-50/10">
                       {item.ageGroups && item.ageGroups.age31to40.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'age_31to40' })}
-                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#FAF8F5] hover:bg-amber-50 border border-[#E5E1DB] text-[#1F1F1F] font-bold cursor-pointer transition-colors"
                           title="View hikers aged 31-40"
                         >
-                          {item.ageGroups.age31to40.count}{' '}
+                          <svg className="w-2.5 h-2.5 text-amber-600/85 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                            <circle cx="6" cy="3.5" r="2" />
+                            <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                          </svg>
+                          <span>{item.ageGroups.age31to40.count}</span>
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.age31to40.pct}%)
                           </span>
@@ -1689,15 +2050,19 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-[#EFEAE4]/40 bg-amber-50/10">
                       {item.ageGroups && item.ageGroups.age40to50.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'age_40to50' })}
-                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#FAF8F5] hover:bg-amber-50 border border-[#E5E1DB] text-[#1F1F1F] font-bold cursor-pointer transition-colors"
                           title="View hikers aged 40-50"
                         >
-                          {item.ageGroups.age40to50.count}{' '}
+                          <svg className="w-2.5 h-2.5 text-amber-600/85 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                            <circle cx="6" cy="3.5" r="2" />
+                            <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                          </svg>
+                          <span>{item.ageGroups.age40to50.count}</span>
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.age40to50.pct}%)
                           </span>
@@ -1706,15 +2071,19 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551]">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-r-[#E5E1DB] bg-amber-50/10">
                       {item.ageGroups && item.ageGroups.over50.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'age_over50' })}
-                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#FAF8F5] hover:bg-amber-50 border border-[#E5E1DB] text-[#1F1F1F] font-bold cursor-pointer transition-colors"
                           title="View hikers over 50"
                         >
-                          {item.ageGroups.over50.count}{' '}
+                          <svg className="w-2.5 h-2.5 text-amber-600/85 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                            <circle cx="6" cy="3.5" r="2" />
+                            <path d="M2.2 10.5c0-1.9 1.7-3.2 3.8-3.2s3.8 1.3 3.8 3.2H2.2z" />
+                          </svg>
+                          <span>{item.ageGroups.over50.count}</span>
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.over50.pct}%)
                           </span>
@@ -1725,11 +2094,11 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                     </td>
 
                     {/* 8. Number of Registrations */}
-                    <td className="py-3 px-3 text-center font-black text-stone-900">
+                    <td className="py-3 px-3 text-center font-black">
                       <button
                         type="button"
                         onClick={() => setDetailModal({ item, type: 'registrations' })}
-                        className="px-2 py-0.5 rounded-md hover:bg-stone-100 underline decoration-stone-300 underline-offset-2 cursor-pointer transition-colors"
+                        className="px-2.5 py-0.5 rounded-md bg-yellow-100/90 hover:bg-yellow-200 border border-yellow-300 text-yellow-700 font-black cursor-pointer transition-colors"
                         title="View all registered hikers"
                       >
                         {item.registrationsCount}
