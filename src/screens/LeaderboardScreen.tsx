@@ -246,9 +246,9 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
   }[category];
 
   const categoryIcon = {
-    all: <Trophy className="w-5 h-5 text-blue-600" />,
-    hikers: <Footprints className="w-5 h-5 text-blue-600" />,
-    trekkers: <Mountain className="w-5 h-5 text-indigo-600" />
+    all: <Trophy className="w-5 h-5 text-orange-600" />,
+    hikers: <Footprints className="w-5 h-5 text-orange-600" />,
+    trekkers: <Mountain className="w-5 h-5 text-amber-600" />
   }[category];
 
   return (
@@ -266,7 +266,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
               <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Top 100 Community Rankings</p>
             </div>
           </div>
-          <div className="px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-[10px] font-black uppercase tracking-tight shrink-0 shadow-2xs">
+          <div className="px-3 py-1 rounded-full bg-orange-50 border border-orange-200/80 text-orange-700 text-[10px] font-black uppercase tracking-tight shrink-0 shadow-2xs">
             Top 100
           </div>
         </div>
@@ -276,7 +276,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
           {/* Recessed Time Period Track */}
           <div className="flex flex-col gap-1.5 w-full">
             <span className="text-[10px] font-extrabold text-slate-500 shrink-0 flex items-center gap-1.5 uppercase tracking-wider">
-              <Calendar className="w-3.5 h-3.5 text-blue-600" /> Period
+              <Calendar className="w-3.5 h-3.5 text-orange-600" /> Period
             </span>
             <div className="grid grid-cols-5 gap-1.5 p-1 rounded-2xl bg-[#e5ebf2] shadow-[inset_2px_2px_5px_#c8d2df,inset_-2px_-2px_5px_#ffffff] border border-[#dce3ec] w-full">
               {(
@@ -294,7 +294,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                   onClick={() => { setPeriod(t.id); setLimit(20); }}
                   className={`py-1.5 px-1 rounded-xl text-[10px] sm:text-xs font-black transition-all active:scale-95 cursor-pointer select-none text-center whitespace-nowrap ${
                     period === t.id
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]'
+                      ? 'bg-gradient-to-r from-[#FF6600] to-orange-600 text-white shadow-[0_4px_12px_rgba(249,115,22,0.4)]'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -311,7 +311,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
               onClick={() => { setMetric('dist'); setLimit(20); }}
               className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95 select-none min-h-[38px] ${
                 metric === 'dist'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-[0_4px_14px_rgba(37,99,235,0.4)]'
+                  ? 'bg-gradient-to-r from-[#FF6600] to-orange-600 text-white shadow-[0_4px_14px_rgba(249,115,22,0.4)]'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -323,7 +323,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
               onClick={() => { setMetric('count'); setLimit(20); }}
               className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95 select-none min-h-[38px] ${
                 metric === 'count'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-[0_4px_14px_rgba(37,99,235,0.4)]'
+                  ? 'bg-gradient-to-r from-[#FF6600] to-orange-600 text-white shadow-[0_4px_14px_rgba(249,115,22,0.4)]'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -410,7 +410,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                         <RankBadge rank={idx + 1} />
                       </div>
 
-                      <span className="text-xs font-black text-slate-900 group-hover:text-blue-600 transition-colors truncate shrink-1">
+                      <span className="text-xs font-black text-slate-900 group-hover:text-orange-600 transition-colors truncate shrink-1">
                         {maskName(hiker.n)}
                       </span>
 
@@ -418,7 +418,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0 text-right whitespace-nowrap pl-1 font-mono tabular-nums">
-                      <span className="text-xs font-black text-blue-600">
+                      <span className="text-xs font-black text-orange-600">
                         {distanceVal.toLocaleString()}<span className="text-[10px] font-sans font-bold text-slate-500 ml-0.5">km</span>
                       </span>
                       <span className="text-slate-300 text-[10px] font-sans">·</span>
@@ -435,14 +435,14 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
                     </div>
 
                     <div className="col-span-6 flex items-center gap-2 pr-2 min-w-0 overflow-hidden">
-                      <span className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors truncate">
+                      <span className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-orange-600 transition-colors truncate">
                         {maskName(hiker.n)}
                       </span>
                       <HikerTierBadge distance={hiker.d} isTop3AllTime={isTop3AllTime} />
                     </div>
 
                     <div className="col-span-3 text-right">
-                      <span className="text-xs sm:text-sm font-black text-blue-600">
+                      <span className="text-xs sm:text-sm font-black text-orange-600">
                         {distanceVal.toLocaleString()} km
                       </span>
                       <span className="text-[9px] sm:text-[10px] text-slate-500 font-bold ml-1">
@@ -470,7 +470,7 @@ const LeaderboardBoardSection: React.FC<LeaderboardSectionProps> = ({
               <button
                 type="button"
                 onClick={() => setLimit((prev) => prev + 20)}
-                className="w-full sm:w-auto px-6 py-2.5 bg-[#f0f4f9] hover:bg-white text-blue-600 font-black text-xs rounded-2xl border border-white/80 shadow-[4px_4px_12px_#d1d9e6,-4px_-4px_12px_#ffffff] hover:shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] active:shadow-[inset_2px_2px_5px_#c8d2df,inset_-2px_-2px_5px_#ffffff] transition-all cursor-pointer min-h-[42px] flex items-center justify-center gap-1.5 mx-auto active:scale-95"
+                className="w-full sm:w-auto px-6 py-2.5 bg-[#f0f4f9] hover:bg-white text-orange-600 font-black text-xs rounded-2xl border border-white/80 shadow-[4px_4px_12px_#d1d9e6,-4px_-4px_12px_#ffffff] hover:shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] active:shadow-[inset_2px_2px_5px_#c8d2df,inset_-2px_-2px_5px_#ffffff] transition-all cursor-pointer min-h-[42px] flex items-center justify-center gap-1.5 mx-auto active:scale-95"
               >
                 <span>Load More Hikers</span>
                 <ChevronDown className="w-4 h-4" />
@@ -570,13 +570,13 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
         
         {/* Soft Neumorphic Hero Banner */}
         <div className="bg-white rounded-3xl p-5 sm:p-7 border border-slate-200/90 shadow-[6px_6px_20px_#d1d9e6,-6px_-6px_20px_#ffffff] relative overflow-hidden">
-          {/* Subtle ambient electric blue glow in background */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+          {/* Subtle ambient orange glow in background */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-orange-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
 
           <div className="relative z-10 w-full">
             <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200/80 shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] text-blue-700 text-xs font-black uppercase tracking-wider">
-                <Crown className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200/80 shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] text-orange-700 text-xs font-black uppercase tracking-wider">
+                <Crown className="w-3.5 h-3.5 text-orange-600 shrink-0" />
                 <span>Community Leadership Board</span>
               </div>
 
@@ -590,9 +590,9 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                   onClick={() => loadData(true)}
                   disabled={loading}
                   title="Refresh & sync latest feed"
-                  className="p-1.5 rounded-full bg-slate-100 hover:bg-white text-slate-600 hover:text-blue-600 border border-slate-200 shadow-[2px_2px_5px_#c8d2df,-2px_-2px_5px_#ffffff] active:shadow-[inset_1px_1px_3px_#c8d2df] transition-all cursor-pointer disabled:opacity-50"
+                  className="p-1.5 rounded-full bg-slate-100 hover:bg-white text-slate-600 hover:text-orange-600 border border-slate-200 shadow-[2px_2px_5px_#c8d2df,-2px_-2px_5px_#ffffff] active:shadow-[inset_1px_1px_3px_#c8d2df] transition-all cursor-pointer disabled:opacity-50"
                 >
-                  <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin text-blue-600' : ''}`} />
+                  <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin text-orange-600' : ''}`} />
                 </button>
               </div>
             </div>
@@ -620,12 +620,12 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                       strokeWidth="5"
                       fill="transparent"
                     />
-                    {/* Electric Blue Progress Arc */}
+                    {/* Orange Progress Arc */}
                     <circle
                       cx="32"
                       cy="32"
                       r="26"
-                      stroke="#2563eb"
+                      stroke="#FF6600"
                       strokeWidth="5"
                       strokeDasharray={2 * Math.PI * 26}
                       strokeDashoffset={2 * Math.PI * 26 * (1 - milestoneProgress.pct / 100)}
@@ -644,7 +644,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                   <span className="text-xs font-black text-slate-800 block mt-0.5">
                     {currentStats?.totalDistance?.toLocaleString() || 0} / {milestoneProgress.nextTarget.toLocaleString()} km
                   </span>
-                  <span className="text-[10px] text-blue-600 font-bold block">Next major landmark</span>
+                  <span className="text-[10px] text-orange-600 font-bold block">Next major landmark</span>
                 </div>
               </div>
             </div>
@@ -653,7 +653,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
             {currentStats && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mt-4 pt-4 border-t border-slate-200/80">
                 <div className="bg-[#f8fafc] rounded-2xl p-3 border border-slate-200/80 shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/60 text-blue-600 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/60 text-orange-600 flex items-center justify-center shrink-0">
                     <Footprints className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
@@ -663,7 +663,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                 </div>
 
                 <div className="bg-[#f8fafc] rounded-2xl p-3 border border-slate-200/80 shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200/60 text-indigo-600 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/60 text-amber-600 flex items-center justify-center shrink-0">
                     <Mountain className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
@@ -707,9 +707,9 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
               const el = document.getElementById('board-overall');
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }}
-            className="flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none bg-[#f0f4f9] text-slate-800 border border-white/90 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff] hover:text-blue-600 active:scale-95 cursor-pointer"
+            className="flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none bg-[#f0f4f9] text-slate-800 border border-white/90 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff] hover:text-orange-600 active:scale-95 cursor-pointer"
           >
-            <Trophy className="w-3.5 h-3.5 text-blue-600" />
+            <Trophy className="w-3.5 h-3.5 text-orange-600" />
             <span>Overall</span>
           </button>
 
@@ -719,9 +719,9 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
               const el = document.getElementById('board-hikers');
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }}
-            className="flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none bg-[#f0f4f9] text-slate-800 border border-white/90 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff] hover:text-blue-600 active:scale-95 cursor-pointer"
+            className="flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none bg-[#f0f4f9] text-slate-800 border border-white/90 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff] hover:text-orange-600 active:scale-95 cursor-pointer"
           >
-            <Footprints className="w-3.5 h-3.5 text-blue-600" />
+            <Footprints className="w-3.5 h-3.5 text-orange-600" />
             <span>Day Hikes</span>
           </button>
 
@@ -731,9 +731,9 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
               const el = document.getElementById('board-trekkers');
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }}
-            className="flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none bg-[#f0f4f9] text-slate-800 border border-white/90 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff] hover:text-blue-600 active:scale-95 cursor-pointer"
+            className="flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all select-none bg-[#f0f4f9] text-slate-800 border border-white/90 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff] hover:text-orange-600 active:scale-95 cursor-pointer"
           >
-            <Mountain className="w-3.5 h-3.5 text-indigo-600" />
+            <Mountain className="w-3.5 h-3.5 text-amber-600" />
             <span>Treks</span>
           </button>
         </div>
@@ -791,11 +791,11 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           </div>
 
           <div className="p-3 sm:p-5 bg-white rounded-3xl border border-slate-200/90 shadow-[6px_6px_20px_#d1d9e6,-6px_-6px_20px_#ffffff] text-center">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 mx-auto mb-2 rounded-2xl bg-blue-50 border border-blue-200/80 shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] flex items-center justify-center text-blue-600">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 mx-auto mb-2 rounded-2xl bg-orange-50 border border-orange-200/80 shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] flex items-center justify-center text-orange-600">
               <Gem className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <h4 className="text-[10px] sm:text-xs font-black text-slate-900 uppercase tracking-wider truncate">200KM Summit</h4>
-            <p className="text-[10px] sm:text-xs text-blue-700 font-bold mt-0.5 sm:mt-1 truncate">
+            <p className="text-[10px] sm:text-xs text-orange-700 font-bold mt-0.5 sm:mt-1 truncate">
               {clubCounts.summit} Trekkers
             </p>
           </div>
@@ -816,14 +816,14 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
           <HikerReviewsSection initialVisibleCount={5} />
         </div>
 
-        {/* Hiker Detail Modal (Styled with Soft-UI Neumorphic surfaces and electric blue CTA) */}
+        {/* Hiker Detail Modal (Styled with Soft-UI Neumorphic surfaces and orange CTA) */}
         {selectedHiker && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="relative w-full max-w-md max-h-[92vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
               {/* Header */}
               <div className="p-4 sm:p-5 border-b border-slate-200/80 flex items-center justify-between shrink-0 bg-white">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-blue-50 border border-blue-200/80 shadow-xs flex items-center justify-center text-blue-600 font-black text-base sm:text-lg shrink-0">
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-orange-50 border border-orange-200/80 shadow-xs flex items-center justify-center text-orange-600 font-black text-base sm:text-lg shrink-0">
                     {(selectedHiker.n || 'H')[0]?.toUpperCase()}
                   </div>
                   <div className="min-w-0">
@@ -850,7 +850,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                   <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                     Lifetime Total Distance
                   </span>
-                  <span className="text-2xl sm:text-3xl font-black text-blue-600 mt-1 block">
+                  <span className="text-2xl sm:text-3xl font-black text-orange-600 mt-1 block">
                     {selectedHiker.d.toLocaleString()} KM
                   </span>
                   <span className="text-[11px] sm:text-xs text-slate-600 font-bold">
@@ -871,14 +871,14 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                     </span>
                   </div>
 
-                  <div className="p-3 sm:p-3.5 bg-indigo-50/80 rounded-2xl border border-indigo-200/80 text-center">
-                    <span className="text-base sm:text-lg font-black text-indigo-800 flex items-center justify-center gap-1">
-                      <Tent className="w-4 h-4 text-indigo-600" /> {selectedHiker.tc || 0}
+                  <div className="p-3 sm:p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200/80 text-center">
+                    <span className="text-base sm:text-lg font-black text-amber-800 flex items-center justify-center gap-1">
+                      <Tent className="w-4 h-4 text-amber-600" /> {selectedHiker.tc || 0}
                     </span>
-                    <span className="text-[9px] sm:text-[10px] font-bold uppercase text-indigo-700 tracking-wider">
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase text-amber-700 tracking-wider">
                       Treks
                     </span>
-                    <span className="text-xs font-bold text-indigo-800 block mt-0.5 sm:mt-1">
+                    <span className="text-xs font-bold text-amber-800 block mt-0.5 sm:mt-1">
                       {(selectedHiker.td || 0).toLocaleString()} km
                     </span>
                   </div>
@@ -893,7 +893,7 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-600 font-medium">Hiker Title:</span>
-                    <strong className="text-blue-600 font-black">
+                    <strong className="text-orange-600 font-black">
                       {getHikerTitleInfo(
                         selectedHiker.d,
                         top3AllTimeNames.has((selectedHiker.n || '').trim().toLowerCase())
@@ -903,12 +903,12 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
                 </div>
               </div>
 
-              {/* Footer with Electric Blue CTA Button */}
+              {/* Footer with Orange CTA Button */}
               <div className="p-4 bg-slate-50 border-t border-slate-200 text-center shrink-0">
                 <button
                   type="button"
                   onClick={() => setSelectedHiker(null)}
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs rounded-2xl shadow-[0_8px_20px_rgba(37,99,235,0.4)] active:scale-98 transition-all min-h-[44px] flex items-center justify-center cursor-pointer"
+                  className="w-full py-3 bg-gradient-to-r from-[#FF6600] to-orange-600 text-white font-black text-xs rounded-2xl shadow-[0_8px_20px_rgba(249,115,22,0.4)] active:scale-98 transition-all min-h-[44px] flex items-center justify-center cursor-pointer"
                 >
                   Close
                 </button>

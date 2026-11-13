@@ -442,10 +442,12 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return { phoneMap, nameMap };
   }, [leaderboardHikers]);
 
-  // Lifetime Hike Count Map from local registrations
+  // Lifetime Hike Count Map from local registrations (excluding duplicate applications)
   const hikerPastHikesMap = useMemo(() => {
     const map = new Map<string, number>();
     registrations.forEach((r) => {
+      const st = String(r.status || (r as any).registration_status || '').trim().toLowerCase();
+      if (st.includes('duplicate') || st.includes('double')) return;
       const ph = (r.phone || r.whatsapp || (r as any).whatsapp_number || '').trim();
       const nameKey = (r.full_name || '').toLowerCase().trim();
       if (ph) {
@@ -1083,16 +1085,16 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                   DUE {sortCol === 'due' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th
-                  onClick={() => handleSort('gender')}
-                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
-                >
-                  GENDER {sortCol === 'gender' ? (sortAsc ? '▲' : '▼') : '⇅'}
-                </th>
-                <th
                   onClick={() => handleSort('age')}
                   className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
                   AGE GROUP {sortCol === 'age' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
+                  onClick={() => handleSort('gender')}
+                  className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
+                >
+                  GENDER {sortCol === 'gender' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th className="py-2 px-2.5 select-none">SUGGESTIONS ⇅</th>
                 <th
@@ -1222,14 +1224,14 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                         )}
                       </td>
 
-                      {/* GENDER */}
-                      <td className="py-2 px-2.5 font-medium text-stone-700 text-xs">
-                        {r.gender || '—'}
-                      </td>
-
                       {/* AGE GROUP */}
                       <td className="py-2 px-2.5 font-medium text-stone-700 text-xs">
                         {r.age_group || '—'}
+                      </td>
+
+                      {/* GENDER */}
+                      <td className="py-2 px-2.5 font-medium text-stone-700 text-xs">
+                        {r.gender || '—'}
                       </td>
 
                       {/* SUGGESTIONS */}

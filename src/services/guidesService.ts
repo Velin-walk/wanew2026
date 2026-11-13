@@ -198,11 +198,19 @@ export function deduplicateGuides(guides: CustomGuideData[]): CustomGuideData[] 
     if (!seenIds.has(id) && !seenNames.has(nameKey)) {
       seenIds.add(id);
       seenNames.add(nameKey);
-      result.push({
-        ...guide,
+      const cleanGuide: CustomGuideData = {
         id,
         name,
-      });
+        role: guide.role || 'Trek Leader & Coordinator',
+        bio: guide.bio || 'Certified Himalayan route guide with Walk Nepal Walk.',
+        gender: guide.gender === 'Female' ? 'Female' : 'Male',
+        is_visible: guide.is_visible !== false,
+      };
+      if (guide.specialty !== undefined) cleanGuide.specialty = guide.specialty;
+      if (guide.badge !== undefined) cleanGuide.badge = guide.badge;
+      if (guide.experienceKm !== undefined) cleanGuide.experienceKm = guide.experienceKm;
+      if (guide.phone !== undefined) cleanGuide.phone = guide.phone;
+      result.push(cleanGuide);
     }
   }
 
@@ -237,7 +245,7 @@ export async function saveGuidesSettings(settings: GuidesSettings, adminEmail: s
       show_trek_leaders_tab: settings.show_trek_leaders_tab !== false,
       custom_guides: deduplicateGuides(settings.custom_guides || []),
       updatedAt: new Date().toISOString(),
-      updatedBy: adminEmail,
+      updatedBy: adminEmail || 'admin',
     };
 
     // 1. Save synchronously to localStorage & broadcast locally

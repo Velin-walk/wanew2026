@@ -88,7 +88,7 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
 
   if (loading) {
     return (
-      <div className="bg-white rounded-3xl p-8 border border-slate-200/90 shadow-sm animate-pulse space-y-4">
+      <div className="bg-white -mx-3.5 w-[calc(100%+1.75rem)] sm:mx-0 sm:w-full rounded-none sm:rounded-3xl p-5 sm:p-8 border-y border-x-0 sm:border border-slate-200/90 shadow-sm animate-pulse space-y-4">
         <div className="h-6 w-48 bg-slate-100 rounded" />
         <div className="h-32 w-full bg-slate-50 rounded-2xl" />
       </div>
@@ -108,10 +108,10 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
   }
 
   return (
-    <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-[6px_6px_20px_#d1d9e6,-6px_-6px_20px_#ffffff] space-y-4 relative z-10 w-full overflow-hidden">
+    <div className="bg-white -mx-3.5 w-[calc(100%+1.75rem)] sm:mx-0 sm:w-full rounded-none sm:rounded-3xl p-3.5 sm:p-6 border-y border-x-0 sm:border border-slate-200/90 shadow-[6px_6px_20px_#d1d9e6,-6px_-6px_20px_#ffffff] space-y-4 relative z-10 overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-[#f0f4f9] border border-slate-200/80 shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] flex items-center justify-center text-blue-600 shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-[#f0f4f9] border border-slate-200/80 shadow-[2px_2px_6px_#d1d9e6,-2px_-2px_6px_#ffffff] flex items-center justify-center text-orange-600 shrink-0">
             <Mountain className="w-5 h-5" />
           </div>
           <div>
@@ -137,7 +137,7 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
                 onClick={() => { triggerHaptic(10); setJourneyPeriod(t.id); }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 active:scale-95 cursor-pointer select-none ${
                   journeyPeriod === t.id
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.4)]'
+                    ? 'bg-gradient-to-r from-[#FF6600] to-orange-600 text-white shadow-[0_4px_12px_rgba(249,115,22,0.4)]'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -152,7 +152,7 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <div className="p-3 bg-[#f0f4f9] rounded-2xl border border-white/90 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff]">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total KM</span>
-            <span className="text-base sm:text-lg font-black text-blue-600 block mt-0.5">
+            <span className="text-base sm:text-lg font-black text-orange-600 block mt-0.5">
               {currentStats.totalDistance?.toLocaleString() || '0'} km
             </span>
           </div>
@@ -168,9 +168,9 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
               {currentStats.totalHikeDist?.toLocaleString() || '0'} km
             </span>
           </div>
-          <div className="p-3 bg-indigo-50/70 rounded-2xl border border-indigo-200/80 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff]">
-            <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block">Trek KM</span>
-            <span className="text-base sm:text-lg font-black text-indigo-700 block mt-0.5">
+          <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-200/80 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff]">
+            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Trek KM</span>
+            <span className="text-base sm:text-lg font-black text-amber-700 block mt-0.5">
               {currentStats.totalTrekDist?.toLocaleString() || '0'} km
             </span>
           </div>
@@ -189,7 +189,7 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
         {activeJourneyPoint ? (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-[0_4px_10px_rgba(37,99,235,0.4)]">
+              <div className="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-[0_4px_10px_rgba(249,115,22,0.4)]">
                 <Footprints className="w-4 h-4" />
               </div>
               <div>
@@ -204,7 +204,7 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
                   )}
                 </div>
                 <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-                  Event Total: <strong className="text-blue-700">{activeJourneyPoint.event_km || (activeJourneyPoint.hike_km + activeJourneyPoint.trek_km) || 0} km</strong>
+                  Event Total: <strong className="text-orange-700">{activeJourneyPoint.event_km || (activeJourneyPoint.hike_km + activeJourneyPoint.trek_km) || 0} km</strong>
                   {activeJourneyPoint.event_trek_km ? ` (Trek: ${activeJourneyPoint.event_trek_km} km)` : activeJourneyPoint.event_hike_km ? ` (Hike: ${activeJourneyPoint.event_hike_km} km)` : ''}
                   {' • '}
                   Community Total: <strong className="text-emerald-700">{(activeJourneyPoint.cum_total_km || activeJourneyPoint.total_km)?.toLocaleString()} km</strong>
@@ -213,7 +213,7 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
             </div>
             <div className="text-left sm:text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-300">
               <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Event Distance</span>
-              <span className="text-sm sm:text-base font-black text-blue-600">
+              <span className="text-sm sm:text-base font-black text-orange-600">
                 {activeJourneyPoint.event_km || (activeJourneyPoint.hike_km + activeJourneyPoint.trek_km) || 0} km
               </span>
               <span className="text-[9px] text-slate-500 font-bold block">
@@ -224,13 +224,13 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
         ) : (
           <div className="flex items-center justify-between text-xs text-slate-600 py-0.5">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+              <Sparkles className="w-4 h-4 text-orange-600 shrink-0" />
               <span className="font-semibold text-slate-600 text-[11px] sm:text-xs">
                 Tap or scrub across the mountain curve to inspect any milestone
               </span>
             </div>
             {filteredGrowthCurve.length > 0 && (
-              <span className="text-[11px] font-black text-blue-600 shrink-0 pl-2">
+              <span className="text-[11px] font-black text-orange-600 shrink-0 pl-2">
                 Latest: {filteredGrowthCurve[filteredGrowthCurve.length - 1].total_km?.toLocaleString()} km
               </span>
             )}
@@ -246,7 +246,7 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
             {data.milestones.map((m, idx) => (
               <div key={idx} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f0f4f9] border border-white/80 shadow-[3px_3px_8px_#d1d9e6,-3px_-3px_8px_#ffffff] text-slate-800 text-[11px] font-bold">
-                <Trophy className="w-3.5 h-3.5 text-blue-600" />
+                <Trophy className="w-3.5 h-3.5 text-orange-600" />
                 <span>{m.km.toLocaleString()} km</span>
                 <span className="text-[10px] text-slate-500 font-medium">({m.trek})</span>
               </div>

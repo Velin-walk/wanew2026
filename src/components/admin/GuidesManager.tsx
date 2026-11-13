@@ -111,39 +111,36 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
 
   // Sync any additional trek leaders from scheduled/library treks if not present
   useEffect(() => {
-    if (treks && treks.length > 0) {
-      setSettings((prev) => {
-        let updated = false;
-        const currentGuides = [...prev.custom_guides];
-        const existingNames = new Set(currentGuides.map((g) => (g.name || '').toLowerCase().trim()));
+    if (!treks || treks.length === 0) return;
+    const latest = getGuidesSettings();
+    let updated = false;
+    const currentGuides = [...latest.custom_guides];
+    const existingNames = new Set(currentGuides.map((g) => (g.name || '').toLowerCase().trim()));
 
-        treks.forEach((t) => {
-          const leader = (t.leader || t.team_leader || '').trim();
-          if (leader && !existingNames.has(leader.toLowerCase())) {
-            const cleanId = leader.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-            currentGuides.push({
-              id: cleanId,
-              name: leader,
-              role: 'Trek Leader & Coordinator',
-              bio: 'Certified route guide leading scheduled Himalayan hikes with Walk Nepal Walk.',
-              gender: leader.toLowerCase().includes('salina') || leader.toLowerCase().includes('saraswoti') || leader.toLowerCase().includes('laxmi') ? 'Female' : 'Male',
-              badge: 'Trek Leader',
-              is_visible: true,
-            });
-            existingNames.add(leader.toLowerCase());
-            updated = true;
-          }
+    treks.forEach((t) => {
+      const leader = (t.leader || t.team_leader || '').trim();
+      if (leader && !existingNames.has(leader.toLowerCase())) {
+        const cleanId = leader.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        currentGuides.push({
+          id: cleanId,
+          name: leader,
+          role: 'Trek Leader & Coordinator',
+          bio: 'Certified route guide leading scheduled Himalayan hikes with Walk Nepal Walk.',
+          gender: leader.toLowerCase().includes('salina') || leader.toLowerCase().includes('saraswoti') || leader.toLowerCase().includes('laxmi') ? 'Female' : 'Male',
+          badge: 'Trek Leader',
+          is_visible: true,
         });
+        existingNames.add(leader.toLowerCase());
+        updated = true;
+      }
+    });
 
-        if (updated) {
-          const newSettings = { ...prev, custom_guides: currentGuides };
-          saveGuidesSettings(newSettings);
-          return newSettings;
-        }
-        return prev;
-      });
+    if (updated) {
+      const newSettings: GuidesSettings = { ...latest, custom_guides: deduplicateGuides(currentGuides) };
+      setSettings(newSettings);
+      saveGuidesSettings(newSettings, currentUserEmail);
     }
-  }, [treks]);
+  }, [treks, currentUserEmail]);
 
   const handleToggleMasterTab = () => {
     const nextState = !settings.show_trek_leaders_tab;
@@ -249,12 +246,24 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
       is_visible: true,
     };
 
+    const current = getGuidesSettings();
+    const baseGuides = current.custom_guides.length >= settings.custom_guides.length
+      ? current.custom_guides
+      : settings.custom_guides;
+
     const updated: GuidesSettings = {
       ...settings,
-      custom_guides: [created, ...settings.custom_guides],
+      custom_guides: deduplicateGuides([created, ...baseGuides]),
     };
     setSettings(updated);
-    saveGuidesSettings(updated);
+    saveGuidesSettings(updated, currentUserEmail);
+
+    if (filterGender !== 'all' && filterGender !== created.gender) {
+      setFilterGender('all');
+    }
+    if (searchQuery.trim()) {
+      setSearchQuery('');
+    }
 
     // Record in Admin Audit Trail
     recordAdminAuditLog({
@@ -683,8 +692,14 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
 
       {/* Add New Guide Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-[#E5E1DB] space-y-4">
+        <div
+          className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-[#E5E1DB] space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-[#F0EBE5]">
               <div className="flex items-center gap-2">
                 <Plus className="w-5 h-5 text-[#E08828]" />
@@ -719,7 +734,6 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   <label className="block font-bold text-[#1F1F1F] mb-1">Role Title</label>
                   <input
                     type="text"
-                    required
                     placeholder="e.g. Senior Mountain Guide"
                     value={newGuide.role}
                     onChange={(e) => setNewGuide({ ...newGuide, role: e.target.value })}
@@ -755,7 +769,6 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                 <label className="block font-bold text-[#1F1F1F] mb-1">Bio / Intro</label>
                 <textarea
                   rows={3}
-                  required
                   placeholder="Short introductory bio about mountain experience and trail expertise..."
                   value={newGuide.bio}
                   onChange={(e) => setNewGuide({ ...newGuide, bio: e.target.value })}

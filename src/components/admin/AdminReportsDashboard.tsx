@@ -30,7 +30,12 @@ import {
   RotateCcw,
   ArrowRight,
   Clock,
-  Percent
+  Percent,
+  X,
+  Phone,
+  Mail,
+  UserX,
+  FileText
 } from 'lucide-react';
 import { Trek } from '../../types';
 import { AdminRegistration, doesRegistrationMatchTrek } from './BookingsManager';
@@ -76,6 +81,27 @@ export interface EventReportItem {
   commission: number;
   monthKey: string;
   timestamp: number | null;
+  details?: {
+    activeRegs: AdminRegistration[];
+    cancelledRegs: AdminRegistration[];
+    returningRegs: Array<{ reg: AdminRegistration; pastCount: number }>;
+    newRegs: AdminRegistration[];
+    genderRegs: {
+      male: AdminRegistration[];
+      female: AdminRegistration[];
+      nb: AdminRegistration[];
+    };
+    ageGroupRegs: {
+      under20: AdminRegistration[];
+      age20to30: AdminRegistration[];
+      age31to40: AdminRegistration[];
+      age40to50: AdminRegistration[];
+      over50: AdminRegistration[];
+    };
+    reviews: any[];
+    monthlyTotalRevenue: number;
+    commissionRate: number;
+  };
 }
 
 export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
@@ -89,6 +115,34 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [eventSearchTerm, setEventSearchTerm] = useState<string>('');
   const [filterMonths, setFilterMonths] = useState<number | 'all' | 'upcoming'>(1); // Default: 1 month (30 days)
+  const [detailModal, setDetailModal] = useState<{
+    item: EventReportItem;
+    type:
+      | 'revenue'
+      | 'returning'
+      | 'new'
+      | 'gender_male'
+      | 'gender_female'
+      | 'gender_nb'
+      | 'age_under20'
+      | 'age_20to30'
+      | 'age_31to40'
+      | 'age_40to50'
+      | 'age_over50'
+      | 'registrations'
+      | 'cancellations'
+      | 'reviews'
+      | 'commission';
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (!detailModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDetailModal(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [detailModal]);
 
   const [leaderboardHikers, setLeaderboardHikers] = useState<any[]>(() => {
     if (leaderboard && Array.isArray(leaderboard.hikers)) return leaderboard.hikers;
@@ -321,10 +375,12 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
     return { phoneMap, nameMap };
   }, [leaderboardHikers]);
 
-  // Lifetime Hike Count Map from local registrations
+  // Lifetime Hike Count Map from local registrations (excluding duplicate applications)
   const hikerPastHikesMap = useMemo(() => {
     const map = new Map<string, number>();
     registrations.forEach((r) => {
+      const st = safeTrimLower(r.status || (r as any).registration_status);
+      if (st.includes('duplicate') || st.includes('double')) return;
       const ph = (r.phone || r.whatsapp || (r as any).whatsapp_number || '').trim();
       const nameKey = (r.full_name || '').toLowerCase().trim();
       if (ph) {
@@ -666,11 +722,21 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
       let female = 0;
       let male = 0;
       let nb = 0;
+      const maleRegs: AdminRegistration[] = [];
+      const femaleRegs: AdminRegistration[] = [];
+      const nbRegs: AdminRegistration[] = [];
       activeRegs.forEach((r) => {
         const g = safeTrimLower(r.gender);
-        if (g.includes('female') || g === 'f' || g.includes('woman')) female++;
-        else if (g.includes('male') || g === 'm' || g.includes('man')) male++;
-        else nb++;
+        if (g.includes('female') || g === 'f' || g.includes('woman')) {
+          female++;
+          femaleRegs.push(r);
+        } else if (g.includes('male') || g === 'm' || g.includes('man')) {
+          male++;
+          maleRegs.push(r);
+        } else {
+          nb++;
+          nbRegs.push(r);
+        }
       });
 
       const totalPax = activeRegs.length;
@@ -694,6 +760,11 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
       let count31to40 = 0;
       let count40to50 = 0;
       let countOver50 = 0;
+      const under20Regs: AdminRegistration[] = [];
+      const age20to30Regs: AdminRegistration[] = [];
+      const age31to40Regs: AdminRegistration[] = [];
+      const age40to50Regs: AdminRegistration[] = [];
+      const over50Regs: AdminRegistration[] = [];
 
       activeRegs.forEach((r) => {
         const raw = safeLower(r.age_group);
@@ -706,12 +777,16 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
           raw.includes('teen')
         ) {
           countUnder20++;
+          under20Regs.push(r);
         } else if (raw.includes('20') && (raw.includes('30') || raw.includes('25') || raw.includes('29'))) {
           count20to30++;
+          age20to30Regs.push(r);
         } else if (raw.includes('31') || raw.includes('35') || raw === '31-40') {
           count31to40++;
+          age31to40Regs.push(r);
         } else if (raw.includes('41') || raw.includes('40-50') || raw.includes('41-50') || (raw.includes('40') && raw.includes('50'))) {
           count40to50++;
+          age40to50Regs.push(r);
         } else if (
           raw.includes('50') ||
           raw.includes('over') ||
@@ -720,10 +795,13 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
           raw.includes('senior')
         ) {
           countOver50++;
+          over50Regs.push(r);
         } else if (raw.includes('40')) {
           count40to50++;
+          age40to50Regs.push(r);
         } else {
           count20to30++;
+          age20to30Regs.push(r);
         }
       });
 
@@ -764,9 +842,20 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
         : 'N/A';
 
       // Returning vs New (using master leaderboard phone & name lookup)
-      const returningCount = activeRegs.filter(
-        (r) => getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name) > 1
-      ).length;
+      const returningRegs: Array<{ reg: AdminRegistration; pastCount: number }> = [];
+      const newRegs: AdminRegistration[] = [];
+      activeRegs.forEach((r) => {
+        const pastCount = getHikerPastCount(
+          r.phone || r.whatsapp || (r as any).whatsapp_number || '',
+          r.full_name
+        );
+        if (pastCount > 1) {
+          returningRegs.push({ reg: r, pastCount });
+        } else {
+          newRegs.push(r);
+        }
+      });
+      const returningCount = returningRegs.length;
       const newCount = Math.max(0, totalPax - returningCount);
       const returningPct = totalPax > 0 ? Math.round((returningCount / totalPax) * 100) : 0;
       const newPct = totalPax > 0 ? Math.round((newCount / totalPax) * 100) : 0;
@@ -836,7 +925,24 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
         leadGuide,
         averageReview: avgRevStr,
         monthKey: mKey,
-        timestamp: parseEventTimestamp(finalDate)
+        timestamp: parseEventTimestamp(finalDate),
+        activeRegs,
+        cancelledRegs,
+        returningRegs,
+        newRegs,
+        genderRegs: {
+          male: maleRegs,
+          female: femaleRegs,
+          nb: nbRegs,
+        },
+        ageGroupRegs: {
+          under20: under20Regs,
+          age20to30: age20to30Regs,
+          age31to40: age31to40Regs,
+          age40to50: age40to50Regs,
+          over50: over50Regs,
+        },
+        matchedRev,
       };
     });
 
@@ -874,7 +980,18 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
         averageReview: ev.averageReview,
         commission,
         monthKey: ev.monthKey,
-        timestamp: ev.timestamp
+        timestamp: ev.timestamp,
+        details: {
+          activeRegs: ev.activeRegs,
+          cancelledRegs: ev.cancelledRegs,
+          returningRegs: ev.returningRegs,
+          newRegs: ev.newRegs,
+          genderRegs: ev.genderRegs,
+          ageGroupRegs: ev.ageGroupRegs,
+          reviews: ev.matchedRev,
+          monthlyTotalRevenue: monthlyTotal,
+          commissionRate,
+        },
       };
     });
 
@@ -1428,61 +1545,93 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
 
                     {/* 3. Revenue */}
                     <td className="py-3 px-3 text-right font-black text-emerald-700 whitespace-nowrap">
-                      <div>NPR {item.revenue.toLocaleString()}</div>
-                      {item.dueAmount && item.dueAmount > 0 ? (
-                        <div className="text-[10px] text-amber-600 font-semibold">
-                          Due: NPR {item.dueAmount.toLocaleString()}
-                        </div>
-                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setDetailModal({ item, type: 'revenue' })}
+                        className="text-right hover:underline decoration-emerald-500/60 underline-offset-2 cursor-pointer transition-opacity hover:opacity-80"
+                        title="View revenue & payment breakdown"
+                      >
+                        <div>NPR {item.revenue.toLocaleString()}</div>
+                        {item.dueAmount && item.dueAmount > 0 ? (
+                          <div className="text-[10px] text-amber-600 font-semibold">
+                            Due: NPR {item.dueAmount.toLocaleString()}
+                          </div>
+                        ) : null}
+                      </button>
                     </td>
 
                     {/* 4. Returning */}
                     <td className="py-3 px-3 text-center whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                      <button
+                        type="button"
+                        onClick={() => setDetailModal({ item, type: 'returning' })}
+                        className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 cursor-pointer transition-colors"
+                        title="View returning hikers"
+                      >
                         {item.returningCount} ({item.returningPct}%)
-                      </span>
+                      </button>
                     </td>
 
                     {/* 5. New */}
                     <td className="py-3 px-3 text-center whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                      <button
+                        type="button"
+                        onClick={() => setDetailModal({ item, type: 'new' })}
+                        className="inline-flex items-center gap-1 font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 cursor-pointer transition-colors"
+                        title="View new hikers"
+                      >
                         {item.newCount} ({item.newPct}%)
-                      </span>
+                      </button>
                     </td>
 
                     {/* 6. Gender Sub-columns (M, F, NB) */}
                     <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
                       {item.genders && item.genders.male.count > 0 ? (
-                        <span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'gender_male' })}
+                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          title="View male hikers"
+                        >
                           {item.genders.male.count}{' '}
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.genders.male.pct}%)
                           </span>
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
                     <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
                       {item.genders && item.genders.female.count > 0 ? (
-                        <span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'gender_female' })}
+                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          title="View female hikers"
+                        >
                           {item.genders.female.count}{' '}
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.genders.female.pct}%)
                           </span>
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
                     <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/80">
                       {item.genders && item.genders.nb.count > 0 ? (
-                        <span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'gender_nb' })}
+                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          title="View non-binary / other hikers"
+                        >
                           {item.genders.nb.count}{' '}
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.genders.nb.pct}%)
                           </span>
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
@@ -1491,60 +1640,85 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                     {/* 7. Age Group Sub-columns (<20, 20-30, 31-40, 40-50, >50) */}
                     <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
                       {item.ageGroups && item.ageGroups.under20.count > 0 ? (
-                        <span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'age_under20' })}
+                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          title="View hikers under 20"
+                        >
                           {item.ageGroups.under20.count}{' '}
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.under20.pct}%)
                           </span>
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
                     <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
                       {item.ageGroups && item.ageGroups.age20to30.count > 0 ? (
-                        <span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'age_20to30' })}
+                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          title="View hikers aged 20-30"
+                        >
                           {item.ageGroups.age20to30.count}{' '}
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.age20to30.pct}%)
                           </span>
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
                     <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
                       {item.ageGroups && item.ageGroups.age31to40.count > 0 ? (
-                        <span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'age_31to40' })}
+                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          title="View hikers aged 31-40"
+                        >
                           {item.ageGroups.age31to40.count}{' '}
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.age31to40.pct}%)
                           </span>
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
                     <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551] border-r border-[#EFEAE4]/40">
                       {item.ageGroups && item.ageGroups.age40to50.count > 0 ? (
-                        <span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'age_40to50' })}
+                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          title="View hikers aged 40-50"
+                        >
                           {item.ageGroups.age40to50.count}{' '}
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.age40to50.pct}%)
                           </span>
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
                     <td className="py-3 px-2 text-center whitespace-nowrap font-semibold text-[#5A5551]">
                       {item.ageGroups && item.ageGroups.over50.count > 0 ? (
-                        <span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'age_over50' })}
+                          className="px-1.5 py-0.5 rounded hover:bg-[#EFEAE4]/60 hover:text-[#1F1F1F] cursor-pointer transition-colors"
+                          title="View hikers over 50"
+                        >
                           {item.ageGroups.over50.count}{' '}
                           <span className="text-[10px] text-[#8B8680] font-normal">
                             ({item.ageGroups.over50.pct}%)
                           </span>
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
@@ -1552,12 +1726,26 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
 
                     {/* 8. Number of Registrations */}
                     <td className="py-3 px-3 text-center font-black text-stone-900">
-                      {item.registrationsCount}
+                      <button
+                        type="button"
+                        onClick={() => setDetailModal({ item, type: 'registrations' })}
+                        className="px-2 py-0.5 rounded-md hover:bg-stone-100 underline decoration-stone-300 underline-offset-2 cursor-pointer transition-colors"
+                        title="View all registered hikers"
+                      >
+                        {item.registrationsCount}
+                      </button>
                     </td>
 
                     {/* 9. Number of Cancellations */}
                     <td className="py-3 px-3 text-center font-bold text-rose-600">
-                      {item.cancellationsCount}
+                      <button
+                        type="button"
+                        onClick={() => setDetailModal({ item, type: 'cancellations' })}
+                        className="px-2 py-0.5 rounded-md bg-rose-50/70 hover:bg-rose-100 border border-rose-200/80 cursor-pointer transition-colors"
+                        title="View cancelled & cancelled by user hikers"
+                      >
+                        {item.cancellationsCount}
+                      </button>
                     </td>
 
                     {/* 10. Lead Guide */}
@@ -1567,14 +1755,32 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
 
                     {/* 11. Average Review */}
                     <td className="py-3 px-3 text-center whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        {item.averageReview}
-                      </span>
+                      {item.details && item.details.reviews.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setDetailModal({ item, type: 'reviews' })}
+                          className="inline-flex items-center gap-1 font-black text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 cursor-pointer transition-colors"
+                          title="View event reviews"
+                        >
+                          {item.averageReview}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                          {item.averageReview}
+                        </span>
+                      )}
                     </td>
 
                     {/* 12. Commission */}
                     <td className="py-3 px-3 text-right font-black text-[#FF6600] whitespace-nowrap">
-                      NPR {item.commission.toLocaleString()}
+                      <button
+                        type="button"
+                        onClick={() => setDetailModal({ item, type: 'commission' })}
+                        className="hover:underline decoration-[#FF6600]/60 underline-offset-2 cursor-pointer transition-opacity hover:opacity-80"
+                        title="View commission calculation details"
+                      >
+                        NPR {item.commission.toLocaleString()}
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -1583,6 +1789,297 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Per Event Figure Detail Popup Modal */}
+      {detailModal && (() => {
+        const { item, type } = detailModal;
+        const details = item.details;
+        const activeRegs = details?.activeRegs || [];
+        const cancelledRegs = details?.cancelledRegs || [];
+
+        const cancelledByUserList = cancelledRegs.filter((r) => {
+          const st = safeTrimLower(r.status || (r as any).registration_status);
+          return st.includes('user');
+        });
+        const cancelledOtherList = cancelledRegs.filter((r) => {
+          const st = safeTrimLower(r.status || (r as any).registration_status);
+          return !st.includes('user');
+        });
+
+        const getTitle = () => {
+          switch (type) {
+            case 'revenue': return 'Revenue & Payment Breakdown';
+            case 'returning': return `Returning Hikers (${item.returningCount})`;
+            case 'new': return `New Hikers (${item.newCount})`;
+            case 'gender_male': return `Male Hikers (${item.genders.male.count})`;
+            case 'gender_female': return `Female Hikers (${item.genders.female.count})`;
+            case 'gender_nb': return `Non-Binary / Unspecified Hikers (${item.genders.nb.count})`;
+            case 'age_under20': return `Age Group <20 (${item.ageGroups.under20.count})`;
+            case 'age_20to30': return `Age Group 20-30 (${item.ageGroups.age20to30.count})`;
+            case 'age_31to40': return `Age Group 31-40 (${item.ageGroups.age31to40.count})`;
+            case 'age_40to50': return `Age Group 40-50 (${item.ageGroups.age40to50.count})`;
+            case 'age_over50': return `Age Group >50 (${item.ageGroups.over50.count})`;
+            case 'registrations': return `Registered Hikers (${item.registrationsCount})`;
+            case 'cancellations': return `Cancellations Breakdown (${item.cancellationsCount})`;
+            case 'reviews': return `Hiker Reviews (${details?.reviews.length || 0})`;
+            case 'commission': return 'Monthly Tiered Commission Breakdown';
+          }
+        };
+
+        const renderHikerList = (list: AdminRegistration[], emptyMsg: string, badgeFn?: (r: AdminRegistration) => React.ReactNode) => {
+          if (list.length === 0) {
+            return (
+              <div className="p-4 rounded-xl bg-[#FAF8F5] border border-[#EFEAE4] text-xs text-[#8B8680] text-center font-medium">
+                {emptyMsg}
+              </div>
+            );
+          }
+          return (
+            <div className="divide-y divide-[#EFEAE4] border border-[#EFEAE4] rounded-xl overflow-hidden bg-white">
+              {list.map((r, idx) => {
+                const phone = r.phone || r.whatsapp || (r as any).whatsapp_number || '';
+                const statusLabel = r.status || (r as any).registration_status || 'Confirmed';
+                return (
+                  <div key={r.id || idx} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-[#FAF8F5]/70">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-[#1F1F1F]">{r.full_name || 'Unnamed Hiker'}</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FAF8F5] border border-[#EFEAE4] text-[#5A5551]">
+                          {statusLabel}
+                        </span>
+                        {badgeFn && badgeFn(r)}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#8B8680]">
+                        {phone && (
+                          <span className="inline-flex items-center gap-1">
+                            <Phone className="w-3 h-3" />
+                            {phone}
+                          </span>
+                        )}
+                        {(r.email || r.user_email || r.email_address) && (
+                          <span className="inline-flex items-center gap-1 truncate max-w-[220px]">
+                            <Mail className="w-3 h-3 shrink-0" />
+                            {r.email || r.user_email || r.email_address}
+                          </span>
+                        )}
+                        {r.gender && <span>{r.gender}</span>}
+                        {r.age_group && <span>{r.age_group}</span>}
+                      </div>
+                      {(r.admin_notes || r.person_remarks) && (
+                        <div className="text-[11px] text-[#5A5551] bg-amber-50/70 border border-amber-200/60 rounded-lg px-2 py-1 mt-1 inline-flex items-start gap-1">
+                          <FileText className="w-3 h-3 text-amber-600 shrink-0 mt-0.5" />
+                          <span>{r.admin_notes || r.person_remarks}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0 text-[11px]">
+                      {r.payment_status && (
+                        <span className="font-bold text-[#5A5551] block">{r.payment_status}</span>
+                      )}
+                      {(Number(r.paid_amount) > 0 || Number(r.due_amount) > 0) && (
+                        <span className="text-[10px] text-[#8B8680] font-semibold">
+                          Paid: NPR {Number(r.paid_amount || 0).toLocaleString()}
+                          {Number(r.due_amount) > 0 ? ` • Due: NPR ${Number(r.due_amount).toLocaleString()}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        };
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-text"
+            onClick={() => setDetailModal(null)}
+          >
+            <div
+              className="bg-white rounded-2xl border border-[#E5E1DB] shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="px-5 py-4 border-b border-[#EFEAE4] bg-[#FAF8F5] flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-md bg-stone-900 text-white font-mono text-[10px] font-extrabold">
+                      #{item.hikeNumber}
+                    </span>
+                    <h3 className="text-base font-black text-[#1F1F1F]">{getTitle()}</h3>
+                  </div>
+                  <p className="text-xs text-[#8B8680] mt-0.5 font-medium">
+                    {item.title} • {item.date}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailModal(null)}
+                  className="p-1.5 rounded-xl text-[#8B8680] hover:text-[#1F1F1F] hover:bg-[#EFEAE4]/60 transition-colors cursor-pointer"
+                  aria-label="Close popup"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 overflow-y-auto space-y-4">
+                {type === 'cancellations' && (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#EFEAE4]">
+                        <span className="text-[10px] font-black uppercase text-[#8B8680] block">Total Cancelled</span>
+                        <span className="text-lg font-black text-[#1F1F1F]">{cancelledRegs.length}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                        <span className="text-[10px] font-black uppercase text-amber-700 block">Cancelled by User</span>
+                        <span className="text-lg font-black text-amber-800">{cancelledByUserList.length}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                        <span className="text-[10px] font-black uppercase text-rose-700 block">Cancelled / Rejected</span>
+                        <span className="text-lg font-black text-rose-800">{cancelledOtherList.length}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                        <UserX className="w-3.5 h-3.5" />
+                        Cancelled by User ({cancelledByUserList.length})
+                      </h4>
+                      {renderHikerList(
+                        cancelledByUserList,
+                        'No hikers cancelled by themselves for this event.'
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        Cancelled / Rejected ({cancelledOtherList.length})
+                      </h4>
+                      {renderHikerList(
+                        cancelledOtherList,
+                        'No admin-cancelled or rejected bookings for this event.'
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {type === 'revenue' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                        <span className="text-[10px] font-black uppercase text-emerald-700 block">Collected Revenue</span>
+                        <span className="text-lg font-black text-emerald-800">NPR {item.revenue.toLocaleString()}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                        <span className="text-[10px] font-black uppercase text-amber-700 block">Outstanding Due</span>
+                        <span className="text-lg font-black text-amber-800">NPR {(item.dueAmount || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+                    {renderHikerList(activeRegs, 'No active payment records for this event.')}
+                  </>
+                )}
+
+                {type === 'returning' && renderHikerList(
+                  (details?.returningRegs || []).map((x) => x.reg),
+                  'No returning hikers found for this event.',
+                  (r) => {
+                    const found = (details?.returningRegs || []).find((x) => x.reg === r);
+                    return found ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        {found.pastCount} Lifetime Hikes
+                      </span>
+                    ) : null;
+                  }
+                )}
+
+                {type === 'new' && renderHikerList(
+                  details?.newRegs || [],
+                  'No first-time hikers found for this event.'
+                )}
+
+                {type === 'gender_male' && renderHikerList(details?.genderRegs.male || [], 'No male hikers found.')}
+                {type === 'gender_female' && renderHikerList(details?.genderRegs.female || [], 'No female hikers found.')}
+                {type === 'gender_nb' && renderHikerList(details?.genderRegs.nb || [], 'No non-binary / unspecified hikers found.')}
+
+                {type === 'age_under20' && renderHikerList(details?.ageGroupRegs.under20 || [], 'No hikers under 20 found.')}
+                {type === 'age_20to30' && renderHikerList(details?.ageGroupRegs.age20to30 || [], 'No hikers aged 20-30 found.')}
+                {type === 'age_31to40' && renderHikerList(details?.ageGroupRegs.age31to40 || [], 'No hikers aged 31-40 found.')}
+                {type === 'age_40to50' && renderHikerList(details?.ageGroupRegs.age40to50 || [], 'No hikers aged 40-50 found.')}
+                {type === 'age_over50' && renderHikerList(details?.ageGroupRegs.over50 || [], 'No hikers over 50 found.')}
+
+                {type === 'registrations' && renderHikerList(activeRegs, 'No active registrations found for this event.')}
+
+                {type === 'reviews' && (
+                  <div className="space-y-3">
+                    {(details?.reviews || []).length === 0 ? (
+                      <div className="p-4 rounded-xl bg-[#FAF8F5] border border-[#EFEAE4] text-xs text-[#8B8680] text-center font-medium">
+                        No reviews submitted for this event.
+                      </div>
+                    ) : (
+                      (details?.reviews || []).map((rev: any, idx: number) => (
+                        <div key={rev.id || idx} className="p-3.5 rounded-xl bg-[#FAF8F5] border border-[#EFEAE4] space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-[#1F1F1F]">{rev.full_name || 'Verified Hiker'}</span>
+                            <div className="flex items-center gap-2 text-[11px] font-black text-amber-700">
+                              <span>Overall: {rev.overall_rating || rev.rating || 5} ★</span>
+                              {rev.team_rating && <span className="text-[#8B8680]">• Team: {rev.team_rating} ★</span>}
+                            </div>
+                          </div>
+                          {(rev.overall_feedback || rev.feedback || rev.comment) && (
+                            <p className="text-xs text-[#5A5551] leading-relaxed">
+                              {rev.overall_feedback || rev.feedback || rev.comment}
+                            </p>
+                          )}
+                          {rev.team_feedback && (
+                            <p className="text-[11px] text-[#8B8680]">
+                              <span className="font-bold">Team note:</span> {rev.team_feedback}
+                            </p>
+                          )}
+                          {rev.submitted_at && (
+                            <div className="text-[10px] text-[#8B8680]">{rev.submitted_at}</div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {type === 'commission' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#EFEAE4]">
+                        <span className="text-[10px] font-black uppercase text-[#8B8680] block">Event Revenue</span>
+                        <span className="text-base font-black text-[#1F1F1F]">NPR {item.revenue.toLocaleString()}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#EFEAE4]">
+                        <span className="text-[10px] font-black uppercase text-[#8B8680] block">Month ({item.monthKey}) Total</span>
+                        <span className="text-base font-black text-[#1F1F1F]">
+                          NPR {(details?.monthlyTotalRevenue || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                        <span className="text-[10px] font-black uppercase text-amber-700 block">Applied Tier Rate</span>
+                        <span className="text-base font-black text-amber-800">
+                          {((details?.commissionRate || 0.01) * 100).toFixed(0)}%
+                          <span className="text-[11px] font-semibold ml-1">
+                            ({(details?.monthlyTotalRevenue || 0) > 600000 ? '> NPR 600k tier' : '≤ NPR 600k tier'})
+                          </span>
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-[#FF6600]/10 border border-[#FF6600]/30">
+                        <span className="text-[10px] font-black uppercase text-[#FF6600] block">Calculated Commission</span>
+                        <span className="text-base font-black text-[#FF6600]">NPR {item.commission.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

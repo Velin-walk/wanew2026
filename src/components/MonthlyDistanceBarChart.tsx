@@ -204,9 +204,9 @@ export const MonthlyDistanceBarChart: React.FC<MonthlyDistanceBarChartProps> = (
       <div className="w-full flex flex-wrap items-center justify-between gap-2.5 px-1 text-[11px] font-bold text-slate-600">
         {/* Orange Theme Indicator */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200/80 px-3 py-1.5 rounded-full shadow-2xs">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-blue-950 font-black text-[10px] sm:text-[11px]">
+          <div className="flex items-center gap-1.5 bg-orange-50 border border-orange-200/80 px-3 py-1.5 rounded-full shadow-2xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
+            <span className="text-orange-950 font-black text-[10px] sm:text-[11px]">
               Combined Community Milestone
             </span>
           </div>
@@ -259,7 +259,7 @@ export const MonthlyDistanceBarChart: React.FC<MonthlyDistanceBarChartProps> = (
       {/* Main Sideways Continuous Scrollable Track (Continuous Bars with Month Header Info at Beginning of Each Month) */}
       <div
         ref={scrollContainerRef}
-        className="w-full overflow-x-auto pb-3 pt-10 no-scrollbar sm:scroll-smooth touch-pan-x bg-white rounded-3xl p-3.5 sm:p-5 border border-slate-200/90 shadow-[4px_4px_16px_#d1d9e6,-4px_-4px_16px_#ffffff]"
+        className="-mx-3.5 w-[calc(100%+1.75rem)] sm:mx-0 sm:w-full overflow-x-auto pb-3 pt-10 no-scrollbar sm:scroll-smooth touch-pan-x bg-white rounded-none sm:rounded-3xl p-3.5 sm:p-5 border-y border-x-0 sm:border border-slate-200/90 shadow-[4px_4px_16px_#d1d9e6,-4px_-4px_16px_#ffffff]"
       >
         <div className="inline-flex items-stretch min-w-full">
           {displayedMonthGroups.map((group, groupIdx) => {
@@ -431,7 +431,7 @@ export const MonthlyDistanceBarChart: React.FC<MonthlyDistanceBarChartProps> = (
           <button
             type="button"
             onClick={() => onSelectPoint(null as any)}
-            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer shrink-0 ml-2"
+            className="text-[10px] font-bold text-orange-600 hover:text-orange-800 flex items-center gap-1 cursor-pointer shrink-0 ml-2"
           >
             <RotateCcw className="w-3 h-3" />
             <span>Clear Selection</span>
