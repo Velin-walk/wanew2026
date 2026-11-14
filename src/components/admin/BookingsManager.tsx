@@ -374,7 +374,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         return doesRegistrationMatchTrek(r, t);
       });
 
-      const tRegsCount = matchedActiveRegs.reduce((sum, r) => sum + (Number(r.paxCount) || 1), 0);
+      const tRegsCount = matchedActiveRegs.length;
 
       return {
         trek: t,

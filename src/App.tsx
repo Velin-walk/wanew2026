@@ -1836,6 +1836,7 @@ function MainApp() {
             allTreks={treks}
             userEmail={activeUserEmail}
             latestBooking={latestUserBooking}
+            existingBookings={bookings}
             isOpen={Boolean(selectedTrekForRegister)}
             onClose={() => setSelectedTrekForRegister(null)}
             onSubmit={handleRegisterSubmit}

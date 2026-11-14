@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trek, TeamMember, BookingFormData } from '../types';
+import { Trek, TeamMember, BookingFormData, Booking } from '../types';
 import { triggerHaptic } from '../utils/haptics';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import { useCitizenPricing, isNepalPhoneNumber } from '../hooks/useCitizenPricing';
@@ -40,6 +40,7 @@ interface RegistrationModalProps {
   onOpenSafetyPolicy?: () => void;
   isAdminProxy?: boolean;
   pastHikers?: any[];
+  existingBookings?: Booking[];
 }
 
 export const RegistrationModal: React.FC<RegistrationModalProps> = ({
@@ -55,6 +56,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   onOpenSafetyPolicy,
   isAdminProxy = false,
   pastHikers = [],
+  existingBookings = [],
 }) => {
   // Helper to accurately parse trek date
   const parseTrekDate = (dateStr?: string): Date | null => {
@@ -182,6 +184,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [submissionProgress, setSubmissionProgress] = useState<number>(0);
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [matchedHiker, setMatchedHiker] = useState<{ name: string; phone?: string } | null>(null);
+  const [showDuplicatePopup, setShowDuplicatePopup] = useState<boolean>(false);
 
   const handlePhoneChange = (inputVal: string) => {
     setPhone(inputVal);
@@ -357,6 +360,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     } else {
       setIsAutoFilled(false);
       setIsReviewMode(false);
+      setShowDuplicatePopup(false);
     }
   }, [isOpen, latestBooking, userEmail]);
 
@@ -457,8 +461,162 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     }
   };
 
-  const handleFinalSubmit = async () => {
+  const isDuplicateFormSubmission = (): boolean => {
+    if (isAdminProxy) return false;
+
+    const norm = (val?: string | number | null) =>
+      String(val ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const normAlnum = (val?: string | number | null) =>
+      String(val ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normPhone = (val?: string | null) => {
+      const digits = String(val ?? '').replace(/\D/g, '');
+      return digits.length > 10 ? digits.slice(-10) : digits;
+    };
+    const normMedical = (hasMed?: string, specMed?: string) => {
+      const h = norm(hasMed);
+      const s = norm(specMed);
+      if (h === 'yes' || (s && s !== 'no' && s !== 'none')) {
+        return `yes:${s === 'yes' ? '' : s}`;
+      }
+      return 'no';
+    };
+
+    const cancelledIds = new Set<string>();
+    try {
+      const cJson = localStorage.getItem('wnw_cancelled_booking_ids');
+      if (cJson) {
+        const parsed = JSON.parse(cJson);
+        if (Array.isArray(parsed)) parsed.forEach((id: any) => cancelledIds.add(String(id)));
+      }
+    } catch {}
+
+    const candidateMap = new Map<string, any>();
+    const addCandidate = (b: any) => {
+      if (!b) return;
+      const id = String(b.id || (b as any).registration_id || '');
+      if (id && cancelledIds.has(id)) return;
+      const st = norm(b.status || (b as any).roster_registration_status || (b as any).registration_status);
+      if (st.includes('cancel') || st === 'duplicate' || st === 'double registration') return;
+      const key = id || `${norm(b.trek_id)}_${norm(b.full_name)}_${normPhone(b.phone || b.whatsapp)}_${norm(b.trek_date)}`;
+      if (!candidateMap.has(key)) candidateMap.set(key, b);
+    };
+
+    if (Array.isArray(existingBookings)) {
+      existingBookings.forEach(addCandidate);
+    }
+    try {
+      const devRaw = localStorage.getItem('wnw_device_bookings');
+      if (devRaw) {
+        const parsed = JSON.parse(devRaw);
+        if (Array.isArray(parsed)) parsed.forEach(addCandidate);
+      }
+    } catch {}
+
+    const curTrekId = norm(selectedTrekId);
+    const curHikeNum = norm(activeTrek?.hike_number);
+    const curTrekName = normAlnum(activeTrek?.name);
+    const curDate = normAlnum(selectedDate);
+    const curName = norm(fullName);
+    const curPhone = normPhone(phone);
+    const curWhatsapp = normPhone(whatsapp || phone);
+    const curEmail = norm(email);
+    const curEmergency = norm(emergencyContact);
+    const curProfession = norm(profession);
+    const curIsGroup = norm(isGroup);
+    const curAgeGroup = norm(ageGroup);
+    const curGender = norm(gender);
+    const curMed = normMedical(hasMedical, specifyMedical);
+    const curRecentHikes = norm(recentHikes);
+    const curSuggestions = norm(suggestions);
+    const curGuide = norm(guidePreference);
+    const curTransport = norm(transportPreference);
+    const curMembers = teamMembers || [];
+    const curPax = 1 + curMembers.length;
+
+    for (const b of candidateMap.values()) {
+      const bTrekId = norm(b.trek_id || b.trekId);
+      const bHikeNum = norm(b.hike_number);
+      const bTrekName = normAlnum(b.trek_name || b.trekTitle);
+      const sameTrek =
+        (curTrekId && bTrekId && curTrekId === bTrekId) ||
+        (curHikeNum && curHikeNum !== 'tbd' && bHikeNum && curHikeNum === bHikeNum) ||
+        (curTrekName && bTrekName && curTrekName === bTrekName);
+      if (!sameTrek) continue;
+
+      const bDate = normAlnum(b.trek_date);
+      if (curDate && bDate && curDate !== bDate) continue;
+
+      if (norm(b.full_name || b.hikerName || b.name) !== curName) continue;
+
+      const bPhone = normPhone(b.phone || b.phoneNumber);
+      const bWhatsapp = normPhone(b.whatsapp || b.whatsapp_number);
+      const hasPhoneMatch =
+        (bPhone ? bPhone === curPhone : true) &&
+        (bWhatsapp ? bWhatsapp === curWhatsapp : true) &&
+        Boolean((bPhone && bPhone === curPhone) || (bWhatsapp && bWhatsapp === curWhatsapp));
+      if (!hasPhoneMatch) continue;
+
+      const bEmail = norm(b.email || b.user_email || b.email_address);
+      if (bEmail !== curEmail) continue;
+
+      const bEmergency = norm(b.emergency_contact || b.emergency_backup_contact);
+      if (bEmergency !== curEmergency) continue;
+
+      if (norm(b.profession) !== curProfession) continue;
+
+      const bIsGroup = norm(b.is_group || b.part_of_group || 'Solo');
+      if (bIsGroup !== curIsGroup) continue;
+
+      if (norm(b.age_group || b.ageGroup) !== curAgeGroup) continue;
+      if (norm(b.gender) !== curGender) continue;
+
+      const bMed = normMedical(b.has_medical || b.medical_condition, b.specify_medical || b.medical_condition);
+      if (bMed !== curMed) continue;
+
+      if (norm(b.recent_hikes) !== curRecentHikes) continue;
+      if (norm(b.suggestions) !== curSuggestions) continue;
+
+      if (isOvernight2D1N) {
+        const bGuide = norm(b.guide_preference || b.guide_mode || 'Guided');
+        const bTransport = norm(b.transport_preference || b.transport_mode || 'Bus');
+        if (bGuide !== curGuide || bTransport !== curTransport) continue;
+      }
+
+      const bMembers = Array.isArray(b.team_members) ? b.team_members : [];
+      const bPax = Number(b.pax) > 0 ? Number(b.pax) : 1 + bMembers.length;
+      if (bPax !== curPax) continue;
+
+      if (curMembers.length > 0 && bMembers.length > 0) {
+        if (curMembers.length !== bMembers.length) continue;
+        let membersMatch = true;
+        for (let i = 0; i < curMembers.length; i++) {
+          const cm = curMembers[i];
+          const bm = bMembers[i];
+          if (
+            norm(cm.full_name) !== norm(bm.full_name) ||
+            normPhone(cm.phone) !== normPhone(bm.phone) ||
+            norm(cm.age_group || '20-30') !== norm(bm.age_group || '20-30') ||
+            norm(cm.gender) !== norm(bm.gender)
+          ) {
+            membersMatch = false;
+            break;
+          }
+        }
+        if (!membersMatch) continue;
+      }
+
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleFinalSubmit = async (ignoreDuplicate = false) => {
     if (!validateForm()) return;
+    if (!ignoreDuplicate && isDuplicateFormSubmission()) {
+      setShowDuplicatePopup(true);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setSubmissionProgress(0);
@@ -1468,7 +1626,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   type="button"
                   id="finalSubmitBtn"
                   disabled={submitting}
-                  onClick={handleFinalSubmit}
+                  onClick={() => handleFinalSubmit(false)}
                   className="flex-2 min-h-[42px] py-2 px-4 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-50 active:scale-[0.99] cursor-pointer"
                 >
                   {submitting ? (
@@ -1485,6 +1643,65 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
           )}
         </div>
       </div>
+
+      {showDuplicatePopup && (
+        <div
+          id="duplicate-registration-popup"
+          className="fixed inset-0 z-[2100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+        >
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-[#EBE7E1] space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-amber-100 text-[#E08828] flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-[#1F1F1F]">Duplicate Registration</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDuplicatePopup(false)}
+                className="p-1 text-[#78716C] hover:text-[#1F1F1F] rounded-lg hover:bg-[#F3EFEA] transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[#44403C] leading-relaxed">
+              You have already submitted exact form, please check "My bookings" tab to view your bookings. You can ignore this message and submit another form if you wish.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDuplicatePopup(false);
+                  onClose();
+                  if (onNavigateToBookings) {
+                    onNavigateToBookings();
+                  } else {
+                    window.dispatchEvent(new CustomEvent('wnw-navigate-tab', { detail: { tab: 'bookings' } }));
+                  }
+                }}
+                className="flex-1 py-2.5 px-3 bg-[#7ABA42] hover:bg-[#6AA437] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <BookmarkCheck className="w-3.5 h-3.5" />
+                <span>My bookings</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDuplicatePopup(false);
+                  handleFinalSubmit(true);
+                }}
+                className="flex-1 py-2.5 px-3 bg-white border border-[#D6D3CD] hover:bg-[#FAF9F6] text-[#1F1F1F] font-bold rounded-xl text-xs transition-all cursor-pointer"
+              >
+                Ignore & Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

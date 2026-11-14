@@ -166,6 +166,9 @@ async function verifyFirebaseToken(token, request = null) {
     return {
       valid: true,
       email,
+      emailVerified: payload.email_verified === true,
+      phone: payload.phone_number || null,
+      name: payload.name || null,
       uid: payload.user_id || payload.sub,
       isAdmin,
       isCoordinator,
@@ -185,6 +188,94 @@ async function getAuthUser(request) {
     if (verified) return verified;
   }
   return null;
+}
+
+const USER_RESOLVE_TTL_MS = 5 * 60 * 1000;
+const userResolveCache = new Map(); // uid -> { id, at, sig }
+
+function normalizePhoneE164(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  let cleaned = raw.trim().replace(/[\s\-().]/g, '');
+  if (!cleaned) return null;
+  if (cleaned.startsWith('00')) cleaned = '+' + cleaned.slice(2);
+  if (/^\+[1-9]\d{6,14}$/.test(cleaned)) return cleaned;
+  if (/^9\d{9}$/.test(cleaned)) return '+977' + cleaned;
+  if (/^09\d{9}$/.test(cleaned)) return '+977' + cleaned.slice(1);
+  if (/^9779\d{9}$/.test(cleaned)) return '+' + cleaned;
+  return null;
+}
+
+async function resolveUser(env, fb) {
+  if (!env || !env.DB || !fb || !fb.uid) return null;
+
+  const contacts = [['uid', String(fb.uid)]];
+  const cleanEmail = fb.emailVerified && fb.email ? String(fb.email).trim().toLowerCase() : '';
+  if (cleanEmail) contacts.push(['email', cleanEmail]);
+  const normPhone = fb.phone ? normalizePhoneE164(String(fb.phone)) : null;
+  if (normPhone) contacts.push(['phone', normPhone]);
+
+  const sig = `${fb.uid}|${cleanEmail}|${normPhone || ''}`;
+  const now = Date.now();
+  const cached = userResolveCache.get(fb.uid);
+  if (cached && (now - cached.at < USER_RESOLVE_TTL_MS) && cached.sig === sig) {
+    return cached.id;
+  }
+
+  const whereClauses = contacts.map(() => '(type = ? AND value = ?)').join(' OR ');
+  const whereParams = contacts.flat();
+  const { results: existingRows } = await env.DB.prepare(
+    `SELECT user_id, type, value FROM user_contacts WHERE ${whereClauses}`
+  ).bind(...whereParams).all();
+
+  const matched = existingRows || [];
+  const uidMatch = matched.find((r) => r.type === 'uid');
+  const emailMatch = matched.find((r) => r.type === 'email');
+  const phoneMatch = matched.find((r) => r.type === 'phone');
+  let userId = (uidMatch || emailMatch || phoneMatch)?.user_id || null;
+  const isNewUser = !userId;
+
+  if (isNewUser) {
+    userId = crypto.randomUUID();
+  }
+
+  const existingSet = new Set(matched.map((r) => `${r.type}\0${r.value}`));
+  const missingContacts = contacts.filter(([t, v]) => !existingSet.has(`${t}\0${v}`));
+
+  if (isNewUser || missingContacts.length > 0) {
+    const stmts = [];
+    if (isNewUser) {
+      const seedName = fb.name ? String(fb.name).trim().slice(0, 100) : null;
+      stmts.push(
+        env.DB.prepare(
+          'INSERT OR IGNORE INTO users (id, display_name) VALUES (?, ?)'
+        ).bind(userId, seedName)
+      );
+    }
+    for (const [type, value] of missingContacts) {
+      stmts.push(
+        env.DB.prepare(
+          'INSERT OR IGNORE INTO user_contacts (user_id, type, value) VALUES (?, ?, ?)'
+        ).bind(userId, type, value)
+      );
+    }
+    const batchResults = await env.DB.batch(stmts);
+
+    // Handle parallel first-login race: if a concurrent request inserted the contact first, adopt its user_id
+    if (isNewUser && batchResults.slice(1).every((r) => (r?.meta?.changes ?? 0) === 0)) {
+      const { results: winnerRows } = await env.DB.prepare(
+        `SELECT user_id, type FROM user_contacts WHERE ${whereClauses}`
+      ).bind(...whereParams).all();
+      const winner = (winnerRows || []).find((r) => r.type === 'uid') || (winnerRows || [])[0];
+      if (winner?.user_id && winner.user_id !== userId) {
+        await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run().catch(() => {});
+        userId = winner.user_id;
+      }
+    }
+  }
+
+  if (userResolveCache.size > 2000) userResolveCache.clear();
+  userResolveCache.set(fb.uid, { id: userId, at: now, sig });
+  return userId;
 }
 
 function cleanLightweightData(parsedObj, isListView = true, depth = 0) {
@@ -1013,6 +1104,115 @@ const worker = {
           country: String(country).toUpperCase(),
           isNepal: String(country).toUpperCase() === 'NP'
         });
+      }
+
+      // ===== USER IDENTITY & PROFILE (/me) =====
+      if ((method === 'GET' || method === 'PATCH') && path === '/me') {
+        if (!env.DB) return errorResponse('Database binding DB missing', 500);
+        const authUser = await getAuthUser(request);
+        if (!authUser) return errorResponse('Authentication required', 401);
+
+        const userId = await resolveUser(env, authUser);
+        if (!userId) return errorResponse('Could not resolve user', 500);
+
+        const privateHeaders = { 'Cache-Control': 'private, no-store' };
+
+        if (method === 'GET') {
+          const [userRes, contactsRes] = await env.DB.batch([
+            env.DB.prepare('SELECT id, display_name, profile_json, created_at FROM users WHERE id = ?').bind(userId),
+            env.DB.prepare('SELECT type, value FROM user_contacts WHERE user_id = ? ORDER BY type, value').bind(userId),
+          ]);
+          const userRow = userRes?.results?.[0];
+          let profile = {};
+          try {
+            profile = userRow?.profile_json ? JSON.parse(userRow.profile_json) : {};
+          } catch (_) {
+            profile = {};
+          }
+
+          return jsonResponse({
+            success: true,
+            data: {
+              id: userId,
+              display_name: userRow?.display_name || null,
+              profile,
+              contacts: contactsRes?.results || [],
+              created_at: userRow?.created_at || null,
+            },
+          }, 200, privateHeaders);
+        }
+
+        let body = {};
+        try {
+          body = await request.json();
+        } catch (_) {
+          return errorResponse('Invalid JSON body', 400);
+        }
+
+        const PROFILE_KEYS = new Set([
+          'gender',
+          'age_group',
+          'emergency_contact',
+          'emergency_backup_contact',
+          'whatsapp_number',
+          'profession',
+          'fitness',
+          'preferences',
+          'trekking_experience',
+          'dietary',
+        ]);
+
+        const existingRow = await env.DB.prepare(
+          'SELECT display_name, profile_json FROM users WHERE id = ?'
+        ).bind(userId).first();
+
+        let mergedProfile = {};
+        try {
+          mergedProfile = existingRow?.profile_json ? JSON.parse(existingRow.profile_json) : {};
+        } catch (_) {
+          mergedProfile = {};
+        }
+
+        if (body.profile !== undefined) {
+          if (!body.profile || typeof body.profile !== 'object' || Array.isArray(body.profile)) {
+            return errorResponse('profile must be an object', 400);
+          }
+          for (const [k, v] of Object.entries(body.profile)) {
+            if (!PROFILE_KEYS.has(k)) continue;
+            if (v === null) {
+              delete mergedProfile[k];
+            } else {
+              mergedProfile[k] = v;
+            }
+          }
+        }
+
+        const profileStr = JSON.stringify(mergedProfile);
+        if (new TextEncoder().encode(profileStr).length >= 10240) {
+          return errorResponse('Profile payload exceeds 10 KB limit', 400);
+        }
+
+        const nextDisplayName = body.display_name !== undefined
+          ? (body.display_name === null ? null : String(body.display_name).trim().slice(0, 100))
+          : (existingRow?.display_name ?? null);
+
+        await env.DB.prepare(
+          'UPDATE users SET display_name = ?, profile_json = ? WHERE id = ?'
+        ).bind(nextDisplayName, profileStr, userId).run();
+
+        const { results: contacts } = await env.DB.prepare(
+          'SELECT type, value FROM user_contacts WHERE user_id = ? ORDER BY type, value'
+        ).bind(userId).all();
+
+        return jsonResponse({
+          success: true,
+          data: {
+            id: userId,
+            display_name: nextDisplayName,
+            profile: mergedProfile,
+            contacts: contacts || [],
+          },
+        }, 200, privateHeaders);
       }
 
       // GET /images/:fileName - Serve R2 uploaded trek cover images
@@ -2027,11 +2227,21 @@ const worker = {
         const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
 
         // Security check for regular hikers:
-        // Regular hikers CANNOT perform unfiltered queries and CANNOT query other users' data
+        // Resolve unified user_id and ensure any explicit ?email= belongs to this user
+        let hikerUserId = null;
         if (!isAuthorizedStaff) {
+          hikerUserId = await resolveUser(env, verifiedAuth);
+          if (!hikerUserId) {
+            return errorResponse('Unable to resolve user account.', 401);
+          }
           const requestedEmail = (email || '').trim().toLowerCase();
-          if (!requestedEmail || requestedEmail !== authEmail) {
-            return errorResponse('Forbidden: Hikers can only access their own registrations.', 403);
+          if (requestedEmail && !(verifiedAuth.emailVerified && requestedEmail === authEmail)) {
+            const ownsEmail = await env.DB.prepare(
+              "SELECT 1 FROM user_contacts WHERE user_id = ? AND type = 'email' AND value = ?"
+            ).bind(hikerUserId, requestedEmail).first();
+            if (!ownsEmail) {
+              return errorResponse('Forbidden: Hikers can only access their own registrations.', 403);
+            }
           }
         }
 
@@ -2057,16 +2267,9 @@ const worker = {
         let regParams = [];
 
         if (!isAuthorizedStaff) {
-          // Strictly lock regular hikers to their own verified email
-          const cleanEmail = authEmail;
-          if (phone) {
-            const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
-            regSql += ' WHERE r.email_address = ? AND (r.phone LIKE ? OR r.whatsapp_number LIKE ?)';
-            regParams.push(cleanEmail, `%${cleanPhone}%`, `%${cleanPhone}%`);
-          } else {
-            regSql += ' WHERE r.email_address = ?';
-            regParams.push(cleanEmail);
-          }
+          // Lock regular hikers to their user_id or any verified email contact
+          regSql += ` WHERE r.user_id = ? OR LOWER(r.email_address) IN (SELECT value FROM user_contacts WHERE user_id = ? AND type = 'email')`;
+          regParams.push(hikerUserId, hikerUserId);
         } else {
           // Staff (Admin & Coordinator) access: support all administrative filters
           if (email && phone) {
@@ -2386,14 +2589,16 @@ const worker = {
 
         // Map list_name value dynamically as requested
         const finalListName = body.person_remarks || body.list_name || 'Solo registration';
+        const authUser = await getAuthUser(request);
+        const userId = authUser ? await resolveUser(env, authUser) : null;
 
         const regResult = await env.DB.prepare(`
           INSERT INTO registrations (
             hike_number, trek_name, full_name, email_address, phone, whatsapp_number,
             emergency_backup_contact, profession, part_of_group, pax, age_group, gender,
             fitness, medical_condition, recent_hikes, agreement, suggestions, guide_mode,
-            transport_mode, list_name, timestamp
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            transport_mode, list_name, timestamp, user_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           cleanHikeNum,
           body.trek_name || '',
@@ -2415,7 +2620,8 @@ const worker = {
           body.guide_mode || 'Guided',
           body.transport_mode || 'Bus',
           finalListName,
-          body.timestamp || currentTimestamp
+          body.timestamp || currentTimestamp,
+          userId
         ).run();
 
         const insertedId = regResult?.meta?.last_row_id || regResult?.lastRowId;
