@@ -63,41 +63,95 @@ interface InfoPagesModalProps {
 
 export const PaymentAndPricingSection: React.FC<{
   onOpenVoucherUpload?: () => void;
-}> = ({ onOpenVoucherUpload }) => (
-  <div className="space-y-5 animate-in fade-in duration-150">
-    <div className="border-b border-[#F0EBE5] pb-3">
-      <h3 className="text-lg font-extrabold text-[#1F1F1F]">Payment Methods &amp; Transparent Pricing</h3>
-      <p className="text-xs text-[#8B8680] mt-0.5">Secure, community-backed transparent payment guidelines for all Himalayan treks.</p>
-    </div>
+  compact?: boolean;
+}> = ({ onOpenVoucherUpload, compact = false }) => {
+  if (compact) {
+    return (
+      <div className="space-y-3 animate-in fade-in duration-150">
+        <div className="border-b border-orange-100 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+          <div>
+            <h3 className="text-sm sm:text-base font-extrabold text-[#1F1F1F]">
+              Payment Methods &amp; Transparent Pricing
+            </h3>
+            <p className="text-[11px] text-[#7C5338]/85">
+              Scan QR to pay and forward your voucher screenshot for instant roster verification.
+            </p>
+          </div>
+        </div>
 
-    <div className="flex justify-center bg-[#FAF8F5] p-3 rounded-2xl border border-[#E5E1DB]">
-      <img src="/paymentqr.png" alt="Payment QR Codes" className="max-w-xl w-full h-auto rounded-xl object-contain shadow-2xs" />
-    </div>
+        <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-3.5">
+          <div className="flex justify-center items-center bg-orange-50/45 p-2 rounded-xl border border-orange-200/70 shrink-0 max-w-full">
+            <img
+              src="/paymentqr.png"
+              alt="Payment QR Codes"
+              className="w-[352px] max-w-full sm:w-96 h-auto rounded-lg object-contain shadow-2xs"
+            />
+          </div>
 
-    {/* Forward Voucher Button at the end of Payment & Pricing page */}
-    <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF8F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xs">
-      <div>
-        <h4 className="font-extrabold text-sm text-[#1F1F1F] flex items-center gap-1.5">
-          <CreditCard className="w-4 h-4 text-[#E08828]" />
-          Already Made A Payment Transfer?
-        </h4>
-        <p className="text-[11px] text-[#8B8680] mt-0.5 leading-relaxed">
-          Forward your payment receipt screenshot or transaction voucher so our coordinators can verify and update your booking roster immediately.
-        </p>
+          <div className="flex-1 w-full p-3.5 rounded-xl bg-orange-50/45 border border-orange-200/70 flex flex-col justify-between gap-3 text-xs">
+            <div className="space-y-1.5">
+              <h4 className="font-extrabold text-xs sm:text-sm text-[#1F1F1F] flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-[#E08828] shrink-0" />
+                <span>Already Made A Payment Transfer?</span>
+              </h4>
+              <p className="text-[11px] text-[#6A645D] leading-relaxed">
+                Please mention your name in payment remarks, then forward your payment receipt screenshot or transaction voucher so our coordinators can verify and update your booking roster.
+              </p>
+            </div>
+            {onOpenVoucherUpload && (
+              <div>
+                <button
+                  type="button"
+                  onClick={onOpenVoucherUpload}
+                  className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] text-white font-black text-xs rounded-lg inline-flex items-center justify-center gap-1.5 transition-all shadow-2xs shrink-0 cursor-pointer active:scale-95"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>Forward Voucher</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-      {onOpenVoucherUpload && (
-        <button
-          type="button"
-          onClick={onOpenVoucherUpload}
-          className="w-full sm:w-auto px-5 py-2.5 bg-[#E08828] hover:bg-[#cc781f] text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
-        >
-          <UploadCloud className="w-4 h-4" />
-          <span>Forward Voucher</span>
-        </button>
-      )}
+    );
+  }
+
+  return (
+    <div className="space-y-5 animate-in fade-in duration-150">
+      <div className="border-b border-[#F0EBE5] pb-3">
+        <h3 className="text-lg font-extrabold text-[#1F1F1F]">Payment Methods &amp; Transparent Pricing</h3>
+        <p className="text-xs text-[#8B8680] mt-0.5">Secure, community-backed transparent payment guidelines for all Himalayan treks.</p>
+      </div>
+
+      <div className="flex justify-center bg-[#FAF8F5] p-3 rounded-2xl border border-[#E5E1DB]">
+        <img src="/paymentqr.png" alt="Payment QR Codes" className="max-w-xl w-full h-auto rounded-xl object-contain shadow-2xs" />
+      </div>
+
+      {/* Forward Voucher Button at the end of Payment & Pricing page */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF8F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xs">
+        <div>
+          <h4 className="font-extrabold text-sm text-[#1F1F1F] flex items-center gap-1.5">
+            <CreditCard className="w-4 h-4 text-[#E08828]" />
+            Already Made A Payment Transfer?
+          </h4>
+          <p className="text-[11px] text-[#8B8680] mt-0.5 leading-relaxed">
+            Forward your payment receipt screenshot or transaction voucher so our coordinators can verify and update your booking roster immediately.
+          </p>
+        </div>
+        {onOpenVoucherUpload && (
+          <button
+            type="button"
+            onClick={onOpenVoucherUpload}
+            className="w-full sm:w-auto px-5 py-2.5 bg-[#E08828] hover:bg-[#cc781f] text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Forward Voucher</span>
+          </button>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const HikerReviewsSection: React.FC<{
   onNavigateToBookings?: () => void;

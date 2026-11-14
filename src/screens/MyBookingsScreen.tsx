@@ -246,18 +246,18 @@ function parseBookingDate(dateStr?: string): Date | null {
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-4xl w-full mx-auto my-4">
+      <div className="space-y-3 max-w-4xl w-full mx-auto my-2">
         {[1, 2].map((i) => (
-          <div key={i} className="bg-white rounded-2xl border border-[#E5E1DB]/60 p-5 space-y-4 animate-pulse">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div key={i} className="bg-white rounded-2xl border border-orange-200/70 p-4 space-y-3 animate-pulse">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5">
               <div className="space-y-2 flex-1 w-full">
-                <div className="bg-stone-200 h-4 w-24 rounded" />
-                <div className="bg-stone-200 h-6 w-3/4 rounded" />
-                <div className="bg-stone-200 h-4 w-1/3 rounded" />
+                <div className="bg-orange-100 h-3.5 w-24 rounded" />
+                <div className="bg-orange-100 h-5 w-3/4 rounded" />
+                <div className="bg-orange-50 h-3.5 w-1/3 rounded" />
               </div>
-              <div className="bg-stone-200 h-8 w-24 rounded-lg shrink-0" />
+              <div className="bg-orange-100 h-7 w-24 rounded-lg shrink-0" />
             </div>
-            <div className="bg-stone-100 h-10 w-full rounded-xl" />
+            <div className="bg-orange-50 h-8 w-full rounded-xl" />
           </div>
         ))}
       </div>
@@ -265,22 +265,28 @@ function parseBookingDate(dateStr?: string): Date | null {
   }
 
   return (
-    <div className="space-y-4 w-full">
+    <div className="space-y-3 max-w-4xl w-full mx-auto">
       {/* 2-Tab Segmented Control: Active Bookings (Left) vs My Hikes & Stats (Right) */}
-      <div className="flex items-center p-1 bg-[#EFEAE4]/80 rounded-2xl border border-[#E5E1DB] max-w-md mx-auto w-full shadow-2xs">
+      <div className="flex items-center p-1 bg-orange-50/90 rounded-xl border border-orange-200/80 w-full sm:w-fit mx-auto shadow-2xs gap-1">
         <button
           type="button"
           onClick={() => setActiveSubTab('active')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 sm:flex-initial py-1 px-3.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
             activeSubTab === 'active'
-              ? 'bg-white text-[#1F1F1F] shadow-xs font-black'
-              : 'text-[#6A645D] hover:text-[#1F1F1F]'
+              ? 'bg-gradient-to-r from-[#E08828] to-[#EA580C] text-white shadow-xs font-black'
+              : 'text-[#7C5338] hover:text-[#1F1F1F] hover:bg-orange-100/60'
           }`}
         >
-          <Compass className="w-3.5 h-3.5 text-[#E08828]" />
+          <Compass className={`w-3.5 h-3.5 ${activeSubTab === 'active' ? 'text-white' : 'text-[#E08828]'}`} />
           <span>Active Bookings</span>
           {activeBookings.length > 0 && (
-            <span className="px-1.5 py-0.2 bg-[#E08828] text-white text-[10px] font-black rounded-full">
+            <span
+              className={`px-1.5 py-0.2 text-[10px] font-black rounded-full ${
+                activeSubTab === 'active'
+                  ? 'bg-white/25 text-white'
+                  : 'bg-[#E08828] text-white'
+              }`}
+            >
               {activeBookings.length}
             </span>
           )}
@@ -289,16 +295,22 @@ function parseBookingDate(dateStr?: string): Date | null {
         <button
           type="button"
           onClick={() => setActiveSubTab('hikes')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 sm:flex-initial py-1 px-3.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
             activeSubTab === 'hikes'
-              ? 'bg-white text-[#1F5E20] shadow-xs font-black'
-              : 'text-[#6A645D] hover:text-[#1F1F1F]'
+              ? 'bg-gradient-to-r from-[#E08828] to-[#EA580C] text-white shadow-xs font-black'
+              : 'text-[#7C5338] hover:text-[#1F1F1F] hover:bg-orange-100/60'
           }`}
         >
-          <Footprints className="w-3.5 h-3.5 text-[#7ABA42]" />
+          <Footprints className={`w-3.5 h-3.5 ${activeSubTab === 'hikes' ? 'text-white' : 'text-[#E08828]'}`} />
           <span>My Hikes &amp; Stats</span>
           {completedCount > 0 && (
-            <span className="px-1.5 py-0.2 bg-[#7ABA42] text-white text-[10px] font-black rounded-full">
+            <span
+              className={`px-1.5 py-0.2 text-[10px] font-black rounded-full ${
+                activeSubTab === 'hikes'
+                  ? 'bg-white/25 text-white'
+                  : 'bg-[#E08828] text-white'
+              }`}
+            >
               {completedCount}
             </span>
           )}
@@ -307,19 +319,19 @@ function parseBookingDate(dateStr?: string): Date | null {
 
       {/* Sync Across Devices Notice for Unauthenticated Users */}
       {!user && (
-        <div className="p-3 sm:p-3.5 bg-gradient-to-r from-amber-50/90 via-orange-50/80 to-amber-50/90 border border-amber-200/90 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 shadow-xs">
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs">
-              <LogIn className="w-4 h-4" />
+        <div className="p-2.5 sm:px-3.5 sm:py-2.5 bg-gradient-to-r from-orange-50 via-[#FFF5EA] to-amber-50 border border-orange-200/90 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 shadow-xs">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="w-7 h-7 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-700 shrink-0 shadow-2xs">
+              <LogIn className="w-3.5 h-3.5" />
             </div>
-            <p className="text-xs text-amber-950 font-medium leading-snug">
+            <p className="text-xs text-orange-950 font-medium leading-snug">
               Sign in to view booking/profile across multiple devices.
             </p>
           </div>
           <button
             type="button"
             onClick={() => openAuthModal('Sign in to view booking/profile across multiple devices.')}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-[#E08828] hover:bg-[#c9741b] active:scale-95 text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] active:scale-95 text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
           >
             <LogIn className="w-3.5 h-3.5" />
             <span>Sign In</span>
@@ -330,20 +342,22 @@ function parseBookingDate(dateStr?: string): Date | null {
       {activeSubTab === 'hikes' ? (
         <MyHikesView userBookings={bookings} />
       ) : activeBookings.length === 0 ? (
-        <div className="space-y-4 max-w-md md:max-w-none w-full mx-auto my-4">
+        <div className="space-y-3 w-full mx-auto">
           {completedCount > 0 && (
-            <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 text-left space-y-2.5 shadow-xs">
-              <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-xs">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{completedCount} Hike{completedCount > 1 ? 's' : ''} Completed &amp; Reconciled</span>
+            <div className="p-3 sm:px-4 bg-gradient-to-r from-orange-50 via-amber-50/80 to-orange-50 rounded-xl border border-orange-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs">
+              <div className="space-y-0.5 min-w-0">
+                <div className="flex items-center gap-1.5 text-orange-900 font-extrabold text-xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
+                  <span>{completedCount} Hike{completedCount > 1 ? 's' : ''} Completed &amp; Reconciled</span>
+                </div>
+                <p className="text-[11px] text-orange-800/90 leading-snug">
+                  Verified and archived in your permanent community ledger. View your lifetime stats and KM badges.
+                </p>
               </div>
-              <p className="text-[11px] text-emerald-700 leading-relaxed">
-                Your completed hikes have been verified and archived to your permanent record in the community ledger! Check your lifetime stats, KM badges, and completed hike history.
-              </p>
               <button
                 type="button"
                 onClick={() => setActiveSubTab('hikes')}
-                className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 py-1.5 px-3.5 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] text-white text-xs font-bold rounded-lg transition-all shadow-2xs cursor-pointer active:scale-[0.99] shrink-0"
               >
                 <Footprints className="w-3.5 h-3.5" />
                 <span>View My Hikes &amp; Stats</span>
@@ -352,26 +366,28 @@ function parseBookingDate(dateStr?: string): Date | null {
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-[#F0EBE5] p-8 text-center shadow-xs">
-            <div className="w-14 h-14 bg-[#F9F7F5] rounded-2xl flex items-center justify-center mx-auto mb-3.5 border border-[#E5E1DB]">
-              <Compass className="w-7 h-7 text-[#E08828]" />
+          <div className="bg-gradient-to-b from-white to-orange-50/35 rounded-2xl border border-orange-200/80 p-5 sm:p-6 text-center shadow-xs">
+            <div className="w-11 h-11 bg-orange-50 rounded-xl flex items-center justify-center mx-auto mb-2.5 border border-orange-200 shadow-2xs">
+              <Compass className="w-5 h-5 text-[#E08828]" />
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F]">No Active Upcoming Bookings</h3>
-            <p className="text-xs text-[#8B8680] mt-1.5 leading-relaxed">
+            <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">No Active Upcoming Bookings</h3>
+            <p className="text-xs text-[#6A645D] mt-1 leading-relaxed max-w-md mx-auto">
               You don't have any pending or upcoming trek reservations. Browse upcoming hikes and claim your spot on the live roster!
             </p>
             <button
               type="button"
               onClick={onExploreTreks}
-              className="mt-5 w-full min-h-[44px] px-6 py-2.5 bg-[#7ABA42] hover:bg-[#6CA838] text-white text-xs font-bold rounded-xl transition-all shadow-xs active:scale-[0.99] cursor-pointer"
+              className="mt-3.5 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] text-white text-xs font-bold rounded-xl transition-all shadow-xs active:scale-[0.99] cursor-pointer"
             >
-              Explore Available Treks
+              <Compass className="w-3.5 h-3.5" />
+              <span>Explore Available Treks</span>
             </button>
           </div>
 
           {/* Attached Payment & Pricing Extension */}
-          <div className="bg-white rounded-2xl border border-[#E5E1DB] p-4 sm:p-6 shadow-xs mt-6">
+          <div className="bg-white rounded-2xl border border-orange-200/80 p-3.5 sm:p-4 shadow-xs">
             <PaymentAndPricingSection
+              compact
               onOpenVoucherUpload={
                 onUploadVoucher && bookings[0] ? () => onUploadVoucher(bookings[0]) : undefined
               }
@@ -379,11 +395,11 @@ function parseBookingDate(dateStr?: string): Date | null {
           </div>
         </div>
       ) : (
-        <div className="space-y-4 w-full">
+        <div className="space-y-3 w-full">
           {completedCount > 0 && (
-            <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-emerald-800">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div className="p-2.5 sm:px-3.5 bg-orange-50/90 border border-orange-200/90 rounded-xl flex items-center justify-between gap-2.5 text-xs shadow-2xs">
+              <div className="flex items-center gap-2 text-orange-900">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
                 <span>
                   <strong>{completedCount} completed hike{completedCount > 1 ? 's' : ''}</strong> moved to your lifetime record in <strong>My Hikes</strong>.
                 </span>
@@ -391,26 +407,29 @@ function parseBookingDate(dateStr?: string): Date | null {
               <button
                 type="button"
                 onClick={() => setActiveSubTab('hikes')}
-                className="shrink-0 px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
+                className="shrink-0 px-2.5 py-1 bg-white hover:bg-orange-100 border border-orange-300 text-orange-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
               >
                 View My Hikes →
               </button>
             </div>
           )}
 
-      <div className="flex items-center justify-between gap-3 px-1">
+      <div className="flex items-center justify-between gap-3 px-0.5">
         <div className="min-w-0">
-          <h2 className="text-base sm:text-xl font-bold text-[#1F1F1F] truncate">My Active Bookings</h2>
-          <p className="text-[11px] text-[#8B8680] truncate">
+          <h2 className="text-base sm:text-lg font-bold text-[#1F1F1F] truncate flex items-center gap-2">
+            <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-[#E08828] to-[#EA580C] shrink-0" />
+            <span className="truncate">My Active Bookings</span>
+          </h2>
+          <p className="text-[11px] text-[#7C5338]/80 truncate pl-3.5">
             Confirmed upcoming Himalayan rosters and team details
           </p>
         </div>
-        <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-white border border-[#E5E1DB] rounded-full text-xs font-bold text-[#5A5551] shadow-xs">
+        <span className="shrink-0 whitespace-nowrap px-2.5 py-0.5 bg-orange-50 border border-orange-200 rounded-full text-[11px] font-bold text-[#C85E12] shadow-2xs">
           {activeBookings.length} Active {activeBookings.length === 1 ? 'Trip' : 'Trips'}
         </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {activeBookings.map((booking) => {
           const isExpanded = expandedId === booking.id;
           const isConfirmingCancel = confirmCancelId === booking.id;
@@ -419,15 +438,18 @@ function parseBookingDate(dateStr?: string): Date | null {
           return (
             <div
               key={booking.id}
-              className="relative bg-white rounded-2xl border border-[#EFEAE4] shadow-xs overflow-hidden transition-all duration-200"
+              className="relative bg-white rounded-2xl border border-orange-200/80 hover:border-orange-300 shadow-xs overflow-hidden transition-all duration-200"
             >
+              {/* Subtle Orange Top Accent Bar */}
+              <div className="h-1 w-full bg-gradient-to-r from-[#E08828] via-[#EA580C] to-amber-400" />
+
               {/* Card Header (Tap to toggle) */}
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => setExpandedId(isExpanded ? null : booking.id)}
                 onKeyDown={(e) => e.key === 'Enter' && setExpandedId(isExpanded ? null : booking.id)}
-                className="p-3.5 sm:p-4 flex flex-col gap-2.5 cursor-pointer hover:bg-[#F9F7F5]/60 select-none active:bg-[#F3F1ED]"
+                className="p-3 flex flex-col gap-2 cursor-pointer hover:bg-orange-50/35 select-none active:bg-orange-50/60"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -438,7 +460,7 @@ function parseBookingDate(dateStr?: string): Date | null {
                     >
                       {booking.trek_difficulty || 'Standard'}
                     </span>
-                    <span className="text-[11px] text-[#8B8680] flex items-center gap-1">
+                    <span className="text-[11px] text-[#7C5338] font-medium flex items-center gap-1">
                       <Calendar className="w-3 h-3 text-[#E08828]" />
                       {formatDate(booking.trek_date)}
                     </span>
@@ -457,11 +479,11 @@ function parseBookingDate(dateStr?: string): Date | null {
                         <Clock className="w-3 h-3 text-amber-600" /> {booking.status}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#7ABA42] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3" /> {booking.status || 'Confirmed'}
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200">
+                        <CheckCircle2 className="w-3 h-3 text-[#E08828]" /> {booking.status || 'Confirmed'}
                       </span>
                     )}
-                    <div className="text-[#8B8680] p-1">
+                    <div className="text-[#E08828] p-1">
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </div>
                   </div>
@@ -485,20 +507,20 @@ function parseBookingDate(dateStr?: string): Date | null {
                   </h3>
                   <div className="flex items-center gap-3 text-xs text-[#5A5551] mt-1 flex-wrap">
                     <span className="flex items-center gap-1 font-medium">
-                      <User className="w-3.5 h-3.5 text-[#8B8680]" />
+                      <User className="w-3.5 h-3.5 text-[#E08828]" />
                       Lead: <strong className="text-[#1F1F1F]">{booking.full_name}</strong>
                     </span>
                     <span className="flex items-center gap-1 font-medium">
-                      <Users className="w-3.5 h-3.5 text-[#8B8680]" />
+                      <Users className="w-3.5 h-3.5 text-[#E08828]" />
                       Party: <strong className="text-[#1F1F1F]">{totalPeople}</strong>
                     </span>
                   </div>
                 </div>
 
                 {/* Live Admin Roster Status Bar: REG STATUS, PAYMENT STATUS, PAID (NPR), DUE (NPR), PICKUP POINT */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2.5 mt-0.5 border-t border-[#F0EBE5] text-left">
-                  <div className="bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
-                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-2 mt-0.5 border-t border-orange-100 text-left">
+                  <div className="bg-orange-50/50 px-2 py-1 rounded-lg border border-orange-200/60">
+                    <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                       Reg Status
                     </span>
                     <span
@@ -508,22 +530,22 @@ function parseBookingDate(dateStr?: string): Date | null {
                           : (booking.status || '').toLowerCase() === 'pending' ||
                             (booking.status || '').toLowerCase() === 'waitlisted'
                           ? 'text-amber-700'
-                          : 'text-emerald-700'
+                          : 'text-orange-700'
                       }`}
                     >
                       {booking.status || 'Confirmed'}
                     </span>
                   </div>
 
-                  <div className="bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
-                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                  <div className="bg-orange-50/50 px-2 py-1 rounded-lg border border-orange-200/60">
+                    <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                       Payment Status
                     </span>
                     <span
                       className={`text-[11px] font-extrabold mt-0.5 block truncate ${
                         (booking.payment_status || '').toLowerCase().includes('paid') &&
                         !(booking.payment_status || '').toLowerCase().includes('unpaid')
-                          ? 'text-emerald-700'
+                          ? 'text-orange-700'
                           : (booking.payment_status || '').toLowerCase().includes('partial') ||
                             (booking.payment_status || '').toLowerCase().includes('voucher')
                           ? 'text-amber-700'
@@ -534,17 +556,17 @@ function parseBookingDate(dateStr?: string): Date | null {
                     </span>
                   </div>
 
-                  <div className="bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
-                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                  <div className="bg-orange-50/50 px-2 py-1 rounded-lg border border-orange-200/60">
+                    <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                       Paid (NPR)
                     </span>
-                    <span className="text-[11px] font-extrabold text-emerald-700 mt-0.5 block truncate">
+                    <span className="text-[11px] font-extrabold text-orange-700 mt-0.5 block truncate">
                       NPR {Number(booking.paid_amount || 0).toLocaleString()}
                     </span>
                   </div>
 
-                  <div className="bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
-                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                  <div className="bg-orange-50/50 px-2 py-1 rounded-lg border border-orange-200/60">
+                    <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                       Due (NPR)
                     </span>
                     <span
@@ -556,8 +578,8 @@ function parseBookingDate(dateStr?: string): Date | null {
                     </span>
                   </div>
 
-                  <div className="col-span-2 sm:col-span-1 bg-[#F9F7F5] px-2.5 py-1.5 rounded-lg border border-[#EFEAE4]">
-                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                  <div className="col-span-2 sm:col-span-1 bg-orange-50/50 px-2 py-1 rounded-lg border border-orange-200/60">
+                    <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                       Pickup Point
                     </span>
                     <span className="text-[11px] font-extrabold text-[#1F1F1F] mt-0.5 block truncate">
@@ -566,10 +588,10 @@ function parseBookingDate(dateStr?: string): Date | null {
                   </div>
                 </div>
 
-                {/* Default Quick Actions: Pay, Forward Voucher, Rate & Review (Single Line) */}
+                {/* Default Quick Actions: Pay, Forward Voucher, Rate & Review (Compact) */}
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="pt-2.5 mt-0.5 border-t border-[#F0EBE5] flex items-center gap-1.5 sm:gap-2 flex-nowrap"
+                  className="pt-2 mt-0.5 border-t border-orange-100 flex items-center gap-1.5 flex-wrap"
                 >
                   {onOpenPaymentPage && (
                     <button
@@ -578,24 +600,24 @@ function parseBookingDate(dateStr?: string): Date | null {
                         e.stopPropagation();
                         onOpenPaymentPage();
                       }}
-                      className="h-8 sm:h-9 px-2.5 sm:px-3.5 bg-[#E08828] hover:bg-[#cc781f] text-white font-bold rounded-lg sm:rounded-xl text-[11px] sm:text-xs whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
+                      className="h-7 px-2.5 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] text-white font-bold rounded-lg text-[11px] whitespace-nowrap active:scale-[0.98] inline-flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer shrink-0"
                     >
-                      <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      <CreditCard className="w-3 h-3 shrink-0" />
                       <span>Pay</span>
                     </button>
                   )}
 
                   {onUploadVoucher && (
-                    <div className="inline-flex items-center rounded-lg sm:rounded-xl overflow-hidden shadow-xs shrink-0">
+                    <div className="inline-flex items-center rounded-lg overflow-hidden shadow-2xs shrink-0">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           onUploadVoucher(booking);
                         }}
-                        className="h-8 sm:h-9 px-2.5 sm:px-3.5 bg-[#2B6CB0] hover:bg-[#235896] text-white font-bold text-[11px] sm:text-xs whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer"
+                        className="h-7 px-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] whitespace-nowrap active:scale-[0.98] inline-flex items-center justify-center gap-1 transition-all cursor-pointer"
                       >
-                        <UploadCloud className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                        <UploadCloud className="w-3 h-3 shrink-0" />
                         <span>Forward Voucher</span>
                       </button>
 
@@ -607,7 +629,7 @@ function parseBookingDate(dateStr?: string): Date | null {
                             e.stopPropagation();
                             setViewingVoucherUrl(booking.payment_voucher_url || null);
                           }}
-                          className="h-8 sm:h-9 px-2 bg-[#1e4e8c] hover:bg-[#163b6b] border-l border-white/20 text-amber-300 hover:text-amber-200 inline-flex items-center justify-center transition-all cursor-pointer"
+                          className="h-7 px-2 bg-orange-800 hover:bg-orange-900 border-l border-white/20 text-amber-200 hover:text-white inline-flex items-center justify-center transition-all cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5 shrink-0" />
                         </button>
@@ -622,9 +644,9 @@ function parseBookingDate(dateStr?: string): Date | null {
                         e.stopPropagation();
                         onLeaveFeedback(booking);
                       }}
-                      className="h-8 sm:h-9 px-2.5 sm:px-3 bg-[#7ABA42]/15 hover:bg-[#7ABA42]/25 border border-[#7ABA42]/30 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold text-[#4c8c4a] hover:text-[#2e7d32] whitespace-nowrap active:scale-[0.99] inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0"
+                      className="h-7 px-2.5 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg text-[11px] font-bold text-orange-800 hover:text-orange-900 whitespace-nowrap active:scale-[0.98] inline-flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0"
                     >
-                      <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                      <Star className="w-3 h-3 text-[#E08828] fill-[#E08828] shrink-0" />
                       <span>Rate &amp; Review</span>
                     </button>
                   )}
@@ -633,10 +655,10 @@ function parseBookingDate(dateStr?: string): Date | null {
 
               {/* Expanded Details */}
               {isExpanded && (
-                <div className="p-3.5 sm:p-4 bg-[#F9F7F5] border-t border-[#F0EBE5] space-y-3 text-xs animate-in fade-in duration-150">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-white rounded-xl border border-[#E5E1DB]">
+                <div className="p-3 bg-orange-50/35 border-t border-orange-100 space-y-2.5 text-xs animate-in fade-in duration-150">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 bg-white rounded-xl border border-orange-200/70">
                     <div>
-                      <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                      <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                         Contact Phone
                       </span>
                       <span className="font-semibold text-[#1F1F1F] flex items-center gap-1 mt-0.5 truncate">
@@ -645,7 +667,7 @@ function parseBookingDate(dateStr?: string): Date | null {
                       </span>
                     </div>
                     <div>
-                      <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                      <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                         Gender & Age
                       </span>
                       <span className="font-semibold text-[#1F1F1F] mt-0.5 block truncate">
@@ -653,7 +675,7 @@ function parseBookingDate(dateStr?: string): Date | null {
                       </span>
                     </div>
                     <div className="col-span-2 sm:col-span-1">
-                      <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                      <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                         Registered At
                       </span>
                       <span className="font-semibold text-[#1F1F1F] mt-0.5 block">
@@ -665,18 +687,18 @@ function parseBookingDate(dateStr?: string): Date | null {
                   {/* Companions / Team Members */}
                   {booking.team_members && booking.team_members.length > 0 && (
                     <div>
-                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#5A5551] mb-1.5 flex items-center gap-1.5">
-                        <Users className="w-3 h-3 text-[#7ABA42]" />
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#7C5338] mb-1 flex items-center gap-1.5">
+                        <Users className="w-3 h-3 text-[#E08828]" />
                         Companions in this booking ({booking.team_members.length})
                       </h4>
-                      <div className="space-y-1.5">
+                      <div className="space-y-1">
                         {booking.team_members.map((tm, idx) => (
                           <div
                             key={idx}
-                            className="p-2 bg-white rounded-xl border border-[#E5E1DB] flex justify-between items-center text-xs"
+                            className="px-2.5 py-1.5 bg-white rounded-lg border border-orange-200/70 flex justify-between items-center text-xs"
                           >
                             <span className="font-semibold text-[#1F1F1F]">{tm.full_name}</span>
-                            <span className="text-[10px] text-[#8B8680]">
+                            <span className="text-[10px] text-[#8C6245]">
                               {formatGender(tm.gender)} • {tm.age_group || 'Age not specified'}
                             </span>
                           </div>
@@ -686,67 +708,67 @@ function parseBookingDate(dateStr?: string): Date | null {
                   )}
 
                   {/* Live Links from Cloudflare D1 (WhatsApp, Itinerary) */}
-                  <div className="p-3 bg-white rounded-xl border border-[#E5E1DB] space-y-2">
-                    <span className="text-[9px] font-bold text-[#8B8680] uppercase tracking-wider block">
+                  <div className="p-2.5 bg-white rounded-xl border border-orange-200/70 space-y-1.5">
+                    <span className="text-[9px] font-bold text-[#8C6245] uppercase tracking-wider block">
                       Trek Coordination & Itinerary
                     </span>
-                    <div className="flex flex-wrap gap-2 items-center justify-between">
-                      <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-wrap gap-1.5 items-center justify-between">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {onViewItinerary && (
                           <button
                             type="button"
                             onClick={() => onViewItinerary(booking)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-[#E08828] bg-[#E08828]/10 hover:bg-[#E08828]/20 border border-[#E08828]/20 rounded-lg transition-all cursor-pointer"
+                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-semibold text-[#C85E12] bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg transition-all cursor-pointer"
                           >
-                            <FileText className="w-3.5 h-3.5" />
+                            <FileText className="w-3 h-3" />
                             <span>View Route Itinerary</span>
                           </button>
                         )}
                       </div>
 
-                        {booking.whatsapp_link && (
-                          <a
-                            href={booking.whatsapp_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-[#25D366] hover:bg-[#20bd5a] rounded-lg transition-all shadow-xs"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                            <span>Join WhatsApp Group</span>
-                          </a>
-                        )}
-                      </div>
+                      {booking.whatsapp_link && (
+                        <a
+                          href={booking.whatsapp_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-bold text-white bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] rounded-lg transition-all shadow-2xs"
+                        >
+                          <MessageCircle className="w-3 h-3" />
+                          <span>Join WhatsApp Group</span>
+                        </a>
+                      )}
                     </div>
+                  </div>
 
                   {/* Secondary Actions (Share & Cancel) */}
-                  <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 border-t border-[#F0EBE5]">
-                    <div className="flex items-center gap-2 flex-wrap">
+                  <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-orange-100">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
                         onClick={() => onShare(booking)}
-                        className="min-h-[40px] px-3 bg-white border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#5A5551] hover:bg-[#F3F1ED] active:scale-[0.99] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        className="h-7 px-2.5 bg-white border border-orange-200 rounded-lg text-[11px] font-semibold text-[#7C5338] hover:bg-orange-50 active:scale-[0.98] inline-flex items-center justify-center gap-1 transition-all cursor-pointer"
                       >
-                        <Share2 className="w-3.5 h-3.5 text-[#E08828]" />
+                        <Share2 className="w-3 h-3 text-[#E08828]" />
                         <span>Share Booking</span>
                       </button>
                     </div>
 
                     {(booking.status || '').toLowerCase().includes('cancelled') ? (
-                      <span className="min-h-[36px] px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                      <span className="h-7 px-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-[11px] font-bold inline-flex items-center justify-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-rose-600" />
                         <span>{booking.status || 'Cancelled by User'}</span>
                       </span>
                     ) : isConfirmingCancel ? (
-                      <div className="flex items-center gap-2 bg-rose-50 p-2 rounded-xl border border-rose-200 justify-between">
+                      <div className="flex items-center gap-2 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 justify-between">
                         <span className="text-[11px] text-rose-700 font-semibold flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
                           Cancel registration?
                         </span>
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => setConfirmCancelId(null)}
-                            className="min-h-[36px] px-2.5 bg-white border border-neutral-300 rounded-lg text-xs font-semibold text-neutral-700 hover:bg-neutral-100"
+                            className="h-6 px-2 bg-white border border-neutral-300 rounded-md text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
                           >
                             Keep
                           </button>
@@ -754,7 +776,7 @@ function parseBookingDate(dateStr?: string): Date | null {
                             type="button"
                             disabled={cancelingId === booking.id}
                             onClick={() => handleCancelClick(booking.id)}
-                            className="min-h-[36px] px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+                            className="h-6 px-2 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
                           >
                             {cancelingId === booking.id ? 'Canceling...' : 'Confirm'}
                           </button>
@@ -764,9 +786,9 @@ function parseBookingDate(dateStr?: string): Date | null {
                       <button
                         type="button"
                         onClick={() => setConfirmCancelId(booking.id)}
-                        className="min-h-[44px] px-3 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+                        className="h-7 px-2.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-[11px] font-semibold inline-flex items-center justify-center gap-1 transition-all cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3" />
                         <span>Cancel Booking</span>
                       </button>
                     )}
@@ -779,8 +801,9 @@ function parseBookingDate(dateStr?: string): Date | null {
       </div>
 
       {/* Attached Payment & Pricing Extension */}
-      <div className="bg-white rounded-2xl border border-[#E5E1DB] p-4 sm:p-6 shadow-xs mt-6">
+      <div className="bg-white rounded-2xl border border-orange-200/80 p-3.5 sm:p-4 shadow-xs">
         <PaymentAndPricingSection
+          compact
           onOpenVoucherUpload={
             onUploadVoucher && activeBookings[0] ? () => onUploadVoucher(activeBookings[0]) : undefined
           }

@@ -333,57 +333,57 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 w-full">
+    <div className="space-y-3 w-full">
       {/* Google Sheet Sync Status Banner */}
       {matchedHikerStats.stats ? (
-        <div className="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/25 rounded-2xl flex items-center justify-between gap-2 shadow-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <CheckCircle2 className="w-5 h-5" />
+        <div className="p-2.5 bg-gradient-to-r from-orange-50 via-amber-50/70 to-orange-50 border border-orange-200 rounded-xl flex items-center justify-between gap-2 shadow-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#E08828] to-[#EA580C] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-black text-emerald-950 truncate">
+              <p className="text-xs font-black text-orange-950 truncate">
                 Community Ledger Synced
               </p>
-              <p className="text-[11px] text-emerald-800 font-medium">
+              <p className="text-[11px] text-orange-800 font-medium truncate">
                 Linked via {matchedHikerStats.matchSource} • #{matchedHikerStats.rank} on Leaderboard
               </p>
             </div>
           </div>
-          <span className="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-[10px] font-black shrink-0 tracking-wide uppercase shadow-2xs">
+          <span className="px-2 py-0.5 bg-[#E08828] text-white rounded-md text-[10px] font-black shrink-0 tracking-wide uppercase shadow-2xs">
             Verified
           </span>
         </div>
       ) : (
-        <div className="p-3.5 bg-[#FAF6F0] border border-[#EFEAE4] rounded-2xl space-y-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#E08828]" />
+        <div className="p-3 bg-orange-50/50 border border-orange-200/80 rounded-xl space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#E08828]" />
             <span className="text-xs font-black text-[#1F1F1F]">Auto-Sync Past Hikes &amp; KM</span>
           </div>
-          <p className="text-[11px] text-[#8B8680] leading-relaxed">
+          <p className="text-[11px] text-[#7C5338] leading-snug">
             Have you hiked with Walk Nepal Walk before? Enter the phone number used during registration to link your community record and badges!
           </p>
-          <form onSubmit={handleQuickPhoneSync} className="flex gap-2 pt-1">
-            <div className="relative flex-1">
-              <Phone className="w-3.5 h-3.5 text-[#8B8680] absolute left-3 top-3 pointer-events-none" />
+          <form onSubmit={handleQuickPhoneSync} className="flex flex-wrap sm:flex-nowrap gap-2 pt-0.5">
+            <div className="relative flex-1 min-w-[180px]">
+              <Phone className="w-3.5 h-3.5 text-[#E08828] absolute left-2.5 top-2 pointer-events-none" />
               <input
                 type="tel"
                 value={syncPhoneInput}
                 onChange={(e) => setSyncPhoneInput(e.target.value)}
                 placeholder="e.g. 9841234567"
-                className="w-full pl-8 pr-3 py-2 bg-white border border-[#E5E1DB] rounded-xl text-xs font-semibold text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#7ABA42]"
+                className="w-full pl-8 pr-3 py-1 bg-white border border-orange-200 rounded-lg text-xs font-semibold text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#E08828]"
               />
             </div>
             <button
               type="submit"
               disabled={saving || !syncPhoneInput.trim()}
-              className="px-4 py-2 bg-[#7ABA42] hover:bg-[#68A235] disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+              className="px-3 py-1 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] disabled:opacity-50 text-white font-black text-xs rounded-lg shadow-2xs transition-all cursor-pointer active:scale-95 inline-flex items-center justify-center gap-1 shrink-0"
             >
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Sync Record</span>}
             </button>
           </form>
           {syncSuccessMsg && (
-            <p className="text-[11px] font-bold text-emerald-600 animate-in fade-in flex items-center gap-1">
+            <p className="text-[11px] font-bold text-[#C85E12] animate-in fade-in flex items-center gap-1">
               <Check className="w-3 h-3" /> {syncSuccessMsg}
             </p>
           )}
@@ -391,63 +391,63 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
       )}
 
       {/* Lifetime Stats Card */}
-      <div className="bg-gradient-to-br from-[#1C201C] via-[#242923] to-[#181B18] rounded-2xl p-4 sm:p-5 text-white shadow-md relative overflow-hidden border border-emerald-950/40">
-        <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-44 h-44 bg-[#7ABA42]/10 rounded-full blur-2xl pointer-events-none" />
+      <div className="bg-gradient-to-br from-[#2B170A] via-[#3B200E] to-[#231207] rounded-2xl p-3.5 sm:p-4 text-white shadow-md relative overflow-hidden border border-orange-900/50">
+        <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-40 h-40 bg-[#E08828]/20 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="flex items-center justify-between mb-3.5 border-b border-white/10 pb-3 gap-2">
+        <div className="flex items-center justify-between mb-2.5 border-b border-white/10 pb-2 gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <Award className="w-4 h-4 text-[#7ABA42] shrink-0" />
-            <span className="text-[11px] sm:text-xs font-black tracking-wider uppercase text-stone-300 truncate">
+            <Award className="w-4 h-4 text-[#FB923C] shrink-0" />
+            <span className="text-[11px] sm:text-xs font-black tracking-wider uppercase text-orange-100/90 truncate">
               Lifetime Mountain Record
             </span>
           </div>
           {lifetimeDistance >= 500 ? (
-            <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+            <span className="shrink-0 whitespace-nowrap px-2 py-0.5 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
               <Crown className="w-3 h-3 text-amber-300 shrink-0" />
               <span>500KM Ultra Legend</span>
             </span>
           ) : lifetimeDistance >= 200 ? (
-            <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-sky-400/20 border border-sky-400/40 text-sky-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
-              <Gem className="w-3 h-3 text-sky-300 shrink-0" />
+            <span className="shrink-0 whitespace-nowrap px-2 py-0.5 bg-orange-400/20 border border-orange-400/40 text-orange-200 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+              <Gem className="w-3 h-3 text-orange-300 shrink-0" />
               <span>200KM Summit Club</span>
             </span>
           ) : lifetimeDistance >= 100 ? (
-            <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-emerald-300 shrink-0" />
+            <span className="shrink-0 whitespace-nowrap px-2 py-0.5 bg-orange-500/20 border border-orange-400/40 text-orange-200 text-[10px] font-black rounded-full shadow-2xs flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-orange-300 shrink-0" />
               <span>100KM Century Club</span>
             </span>
           ) : (
-            <span className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-stone-800 border border-stone-700 text-stone-300 text-[10px] font-bold rounded-full flex items-center gap-1">
-              <Compass className="w-3 h-3 text-stone-400 shrink-0" />
+            <span className="shrink-0 whitespace-nowrap px-2 py-0.5 bg-orange-950/70 border border-orange-700/60 text-orange-200 text-[10px] font-bold rounded-full flex items-center gap-1">
+              <Compass className="w-3 h-3 text-[#FB923C] shrink-0" />
               <span>Active Explorer</span>
             </span>
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-2.5 sm:gap-3 text-center">
-          <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-xs flex flex-col justify-center">
-            <span className="text-xl sm:text-2xl font-black text-[#8CE34A] block leading-tight truncate">
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="p-2.5 bg-white/5 rounded-xl border border-orange-200/15 backdrop-blur-xs flex flex-col justify-center">
+            <span className="text-lg sm:text-xl font-black text-[#FB923C] block leading-tight truncate">
               {formattedDistance}
             </span>
-            <span className="text-[10px] text-stone-400 font-black uppercase tracking-wider mt-0.5">
+            <span className="text-[10px] text-orange-200/75 font-black uppercase tracking-wider mt-0.5">
               KM Hiked
             </span>
           </div>
 
-          <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-xs flex flex-col justify-center">
-            <span className="text-xl sm:text-2xl font-black text-amber-400 block leading-tight truncate">
+          <div className="p-2.5 bg-white/5 rounded-xl border border-orange-200/15 backdrop-blur-xs flex flex-col justify-center">
+            <span className="text-lg sm:text-xl font-black text-amber-300 block leading-tight truncate">
               {lifetimeEventCount}
             </span>
-            <span className="text-[10px] text-stone-400 font-black uppercase tracking-wider mt-0.5">
+            <span className="text-[10px] text-orange-200/75 font-black uppercase tracking-wider mt-0.5">
               Events
             </span>
           </div>
 
-          <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-xs flex flex-col justify-center">
-            <span className="text-base sm:text-lg font-black text-emerald-300 block leading-tight truncate">
+          <div className="p-2.5 bg-white/5 rounded-xl border border-orange-200/15 backdrop-blur-xs flex flex-col justify-center">
+            <span className="text-sm sm:text-base font-black text-orange-200 block leading-tight truncate">
               {matchedHikerStats.stats?.t30d ? `${Math.round(matchedHikerStats.stats.t30d)} km` : (lifetimeEventCount > 0 ? 'Active' : 'Ready')}
             </span>
-            <span className="text-[10px] text-stone-400 font-black uppercase tracking-wider mt-0.5">
+            <span className="text-[10px] text-orange-200/75 font-black uppercase tracking-wider mt-0.5">
               {matchedHikerStats.stats?.t30d ? 'Last 30 Days' : 'Status'}
             </span>
           </div>
@@ -459,29 +459,29 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
           <div>
             <h4 className="text-xs font-black uppercase tracking-wider text-[#1F1F1F] flex items-center gap-1.5">
-              <Footprints className="w-4 h-4 text-[#7ABA42]" />
+              <Footprints className="w-4 h-4 text-[#E08828]" />
               <span>Completed Hikes Archive</span>
             </h4>
-            <p className="text-[11px] text-[#8B8680]">
+            <p className="text-[11px] text-[#7C5338]/80">
               Tabular register of all completed treks, dates, and recorded distances
             </p>
           </div>
-          <div className="flex items-center gap-1 text-[11px] font-bold text-stone-600 bg-stone-100 px-2.5 py-1 rounded-lg self-start sm:self-auto">
+          <div className="flex items-center gap-1 text-[11px] font-bold text-[#C85E12] bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg self-start sm:self-auto">
             <span>{userCompletedHikes.length} Recorded</span>
           </div>
         </div>
 
         {/* Filter and Search Controls Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#FAF8F5] p-2 rounded-xl border border-[#EFEAE4]">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-orange-50/50 p-2 rounded-xl border border-orange-200/70">
           {/* Search Input */}
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 text-[#8B8680] absolute left-3 top-2.5 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-[#E08828] absolute left-3 top-2.5 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search trek name, hike #, date..."
-              className="w-full pl-8 pr-3 py-1.5 bg-white border border-[#E5E1DB] rounded-lg text-xs font-semibold text-[#1F1F1F] placeholder:text-[#A8A29E] focus:outline-none focus:ring-1 focus:ring-[#7ABA42]"
+              className="w-full pl-8 pr-3 py-1.5 bg-white border border-orange-200/80 rounded-lg text-xs font-semibold text-[#1F1F1F] placeholder:text-[#A8A29E] focus:outline-none focus:ring-1 focus:ring-[#E08828]"
             />
             {searchQuery && (
               <button
@@ -508,8 +508,8 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shrink-0 ${
                   selectedCategory === cat.id
-                    ? 'bg-[#1B361D] text-white shadow-xs font-black'
-                    : 'bg-white text-[#5A5551] border border-[#E5E1DB] hover:border-[#C8C2B8]'
+                    ? 'bg-gradient-to-r from-[#E08828] to-[#EA580C] text-white shadow-xs font-black'
+                    : 'bg-white text-[#7C5338] border border-orange-200/80 hover:border-orange-300'
                 }`}
               >
                 {cat.label}
@@ -527,8 +527,8 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
               }}
               className={`px-2 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 cursor-pointer transition-colors ${
                 sortField === 'date'
-                  ? 'bg-[#FAF6F0] border-[#E08828] text-[#E08828] font-black'
-                  : 'bg-white border-[#E5E1DB] text-[#6A645D]'
+                  ? 'bg-orange-50 border-[#E08828] text-[#C85E12] font-black'
+                  : 'bg-white border-orange-200/80 text-[#7C5338]'
               }`}
             >
               <Calendar className="w-3 h-3" />
@@ -544,8 +544,8 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
               }}
               className={`px-2 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 cursor-pointer transition-colors ${
                 sortField === 'distance'
-                  ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-black'
-                  : 'bg-white border-[#E5E1DB] text-[#6A645D]'
+                  ? 'bg-orange-50 border-[#E08828] text-[#C85E12] font-black'
+                  : 'bg-white border-orange-200/80 text-[#7C5338]'
               }`}
             >
               <TrendingUp className="w-3 h-3" />
@@ -556,10 +556,10 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
         </div>
 
         {/* Tabular Ledger of Completed Hikes */}
-        <div className="border border-[#EFEAE4] rounded-2xl overflow-hidden bg-white shadow-xs">
+        <div className="border border-orange-200/80 rounded-2xl overflow-hidden bg-white shadow-xs">
           <div className="overflow-x-auto max-h-[460px] md:max-h-none scrollbar-thin">
             <table className="w-full text-left text-xs border-collapse table-fixed">
-              <thead className="bg-[#FAF8F5] text-[#78716C] uppercase text-[10px] font-black sticky top-0 z-10 border-b border-[#EFEAE4]">
+              <thead className="bg-orange-50/75 text-[#7C5338] uppercase text-[10px] font-black sticky top-0 z-10 border-b border-orange-200/70">
                 <tr>
                   <th className="py-2 px-2.5 sm:px-3.5 w-14 sm:w-18 whitespace-nowrap"># Hike</th>
                   <th className="py-2 px-2.5 sm:px-3.5 whitespace-nowrap">Trek Name</th>
@@ -567,11 +567,11 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                   <th className="py-2 px-2.5 sm:px-3.5 w-18 sm:w-24 whitespace-nowrap text-right">Distance</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#F5F2EC]">
+              <tbody className="divide-y divide-orange-100/70">
                 {userCompletedHikes.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-8 px-4 text-center text-[#8B8680]">
-                      <Mountain className="w-7 h-7 mx-auto mb-2 text-stone-300" />
+                      <Mountain className="w-7 h-7 mx-auto mb-2 text-orange-300" />
                       <p className="font-bold text-xs text-[#5A5551]">No completed hikes recorded for this account yet</p>
                       <p className="text-[11px] text-stone-400 mt-1 max-w-sm mx-auto leading-relaxed">
                         {matchedHikerStats.stats ? (
@@ -587,7 +587,7 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                 ) : filteredCompletedHikes.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-8 text-center text-[#8B8680]">
-                      <Mountain className="w-6 h-6 mx-auto mb-2 text-stone-300" />
+                      <Mountain className="w-6 h-6 mx-auto mb-2 text-orange-300" />
                       <p className="font-bold text-xs text-[#5A5551]">No completed hikes matched your search query</p>
                       <p className="text-[11px] text-stone-400 mt-0.5">Try changing keywords or clearing the category filter</p>
                     </td>
@@ -596,11 +596,11 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                   filteredCompletedHikes.map((hike, idx) => (
                     <tr
                       key={`${hike.hike_number}_${idx}`}
-                      className="hover:bg-[#FAF9F6] transition-colors cursor-default group"
+                      className="hover:bg-orange-50/40 transition-colors cursor-default group"
                     >
                       {/* Hike Number Column */}
                       <td className="py-2 sm:py-2.5 px-2.5 sm:px-3.5 whitespace-nowrap font-black">
-                        <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-[#7ABA42]/12 text-[#467B1E] border border-[#7ABA42]/20 font-black text-[10px] sm:text-[11px] tracking-tight inline-block">
+                        <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-orange-50 text-[#C85E12] border border-orange-200 font-black text-[10px] sm:text-[11px] tracking-tight inline-block">
                           #{hike.hike_number}
                         </span>
                       </td>
@@ -608,7 +608,7 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                       {/* Trek Name Column */}
                       <td className="py-2 sm:py-2.5 px-2.5 sm:px-3.5 whitespace-nowrap overflow-hidden">
                         <div
-                          className="font-extrabold text-[#1F1F1F] text-xs sm:text-[13px] truncate group-hover:text-[#1B5E20] transition-colors"
+                          className="font-extrabold text-[#1F1F1F] text-xs sm:text-[13px] truncate group-hover:text-[#C85E12] transition-colors"
                           title={hike.title}
                         >
                           {hike.title}
@@ -618,14 +618,14 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                       {/* Date Column */}
                       <td className="py-2 sm:py-2.5 px-2 sm:px-3 whitespace-nowrap text-[#5A5551] font-medium text-[10px] sm:text-[11px]">
                         <div className="flex items-center gap-1 truncate">
-                          <Calendar className="w-3 h-3 text-[#A8A29E] shrink-0 hidden sm:inline" />
+                          <Calendar className="w-3 h-3 text-[#E08828] shrink-0 hidden sm:inline" />
                           <span className="truncate">{hike.hike_date || 'Archived'}</span>
                         </div>
                       </td>
 
                       {/* Distance Column */}
                       <td className="py-2 sm:py-2.5 px-2.5 sm:px-3.5 whitespace-nowrap text-right">
-                        <span className="font-black text-[#1B5E20] text-[11px] sm:text-xs bg-emerald-50 border border-emerald-200/70 px-1.5 sm:px-2 py-0.5 rounded-md inline-block">
+                        <span className="font-black text-[#C85E12] text-[11px] sm:text-xs bg-orange-50 border border-orange-200/80 px-1.5 sm:px-2 py-0.5 rounded-md inline-block">
                           {hike.approx_distance}
                         </span>
                       </td>
@@ -637,16 +637,16 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
           </div>
 
           {/* Table Footer Summary */}
-          <div className="bg-[#FAF8F5] px-3 py-2 border-t border-[#EFEAE4] flex items-center justify-between text-[11px] text-[#78716C]">
+          <div className="bg-orange-50/60 px-3 py-2 border-t border-orange-200/70 flex items-center justify-between text-[11px] text-[#7C5338]">
             <span className="font-semibold">
               Showing {filteredCompletedHikes.length} of {userCompletedHikes.length} completed records
             </span>
             {matchedHikerStats.stats?.c ? (
-              <span className="font-bold text-emerald-700">
+              <span className="font-bold text-[#C85E12]">
                 {matchedHikerStats.stats.c} Total Events in Community Ledger
               </span>
             ) : (
-              <span className="font-bold text-[#1B5E20]">
+              <span className="font-bold text-[#C85E12]">
                 Personal Hike History
               </span>
             )}
