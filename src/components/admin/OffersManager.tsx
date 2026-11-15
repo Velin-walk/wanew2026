@@ -494,6 +494,20 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
         localStorage.setItem(ARCHIVED_OFFERS_STORAGE_KEY, JSON.stringify(updatedArchived));
       } catch {}
 
+      // Background backup to D1 OFFER_ARCHIVE for multi-device persistence
+      try {
+        await apiFetch('trek_photos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...archivedItem,
+            id: archivedItem.id.startsWith('archived_') ? archivedItem.id : `archived_${archivedItem.id}`,
+            trekId: 'OFFER_ARCHIVE',
+            trekName: 'Archived Offer',
+          }),
+        });
+      } catch {}
+
       // Delete from active list
       await apiFetch(`trek_photos/${encodeURIComponent(item.id)}`, {
         method: 'DELETE',

@@ -764,9 +764,12 @@ function MainApp() {
     if (!force && now - lastUserBookingsFetchRef.current < 2 * 60 * 1000 && bookings.length > 0) {
       return;
     }
+    const shouldShowSkeleton = lastUserBookingsFetchRef.current === 0 && bookings.length === 0;
     lastUserBookingsFetchRef.current = now;
 
-    setLoadingBookings(true);
+    if (shouldShowSkeleton) {
+      setLoadingBookings(true);
+    }
     try {
       const mergedMap = new Map<string, any>();
 

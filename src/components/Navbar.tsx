@@ -116,10 +116,10 @@ export const Navbar: React.FC<NavbarProps> = ({
       id="top-header"
       className="sticky top-0 z-[1010] bg-white/95 backdrop-blur-md border-b border-[#EFEAE4] w-full"
     >
-      <div className="w-full px-3.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4">
+      <div className="w-full px-3.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)] gap-4">
         {/* Brand / Screen Title */}
         {isMapMiners ? (
-          <div className="flex items-center gap-2.5 select-none">
+          <div className="flex items-center gap-2.5 select-none min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-transparent border border-[#E5E1DB] flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
               <img
                 src="/mapminers-logo.png"
@@ -136,11 +136,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               />
               <Compass className="w-5 h-5 text-[#7ABA42] hidden only:block" />
             </div>
-            <div>
-              <h1 className="font-extrabold text-sm sm:text-base tracking-tight text-[#1F1F1F] leading-tight">
+            <div className="min-w-0">
+              <h1 className="font-extrabold text-sm sm:text-base tracking-tight text-[#1F1F1F] leading-tight truncate">
                 Map Miners
               </h1>
-              <p className="text-[10px] text-[#8B8680] leading-none mt-0.5">
+              <p className="text-[10px] text-[#8B8680] leading-none mt-0.5 truncate">
                 Trails contributed by community
               </p>
             </div>
@@ -152,7 +152,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             tabIndex={0}
             onClick={() => onTabChange('treks')}
             onKeyDown={(e) => e.key === 'Enter' && onTabChange('treks')}
-            className="flex items-center gap-2.5 cursor-pointer select-none group"
+            className="flex items-center gap-2.5 cursor-pointer select-none group min-w-0"
             aria-label="Walk Nepal Walk - Go to Treks"
           >
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-transparent flex items-center justify-center shrink-0 overflow-hidden transition-transform group-hover:scale-105">
@@ -171,11 +171,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               />
               <Mountain className="w-5 h-5 text-[#E08828] hidden only:block" />
             </div>
-            <div>
-              <h1 className="font-extrabold text-sm sm:text-base tracking-tight text-[#1F1F1F] group-hover:text-[#E08828] transition-colors leading-tight">
+            <div className="min-w-0">
+              <h1 className="font-extrabold text-sm sm:text-base tracking-tight text-[#1F1F1F] group-hover:text-[#E08828] transition-colors leading-tight truncate">
                 Walk Nepal Walk
               </h1>
-              <p className="text-[10px] text-[#8B8680] leading-none mt-0.5">
+              <p className="text-[10px] text-[#8B8680] leading-none mt-0.5 truncate">
                 Fitness, Fun & Friendship with Treks & Hikes
               </p>
             </div>
@@ -185,7 +185,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Desktop Navigation Center */}
         <nav
           aria-label="Desktop Navigation"
-          className={`${currentTab === 'admin' ? 'flex' : 'hidden md:flex'} items-center gap-0.5 lg:gap-1 bg-[#F9F7F5] border border-[#EFEAE4] p-1 rounded-2xl`}
+          className={`${currentTab === 'admin' ? 'flex' : 'hidden md:flex'} items-center gap-0.5 lg:gap-1 bg-[#F9F7F5] border border-[#EFEAE4] p-1 rounded-2xl justify-self-center`}
         >
           <button
             type="button"
@@ -478,14 +478,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center justify-end justify-self-end gap-2 sm:gap-3 shrink-0">
           {/* In Map Miners view: Show Contribute Map button alongside profile */}
           {isMapMiners ? (
             <button
               type="button"
               id="header-contribute-map-btn"
               onClick={onOpenContribute}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7ABA42] hover:bg-[#6CA838] active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7ABA42] hover:bg-[#6CA838] active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap"
               aria-label="Contribute Map"
             >
               <Compass className="w-3.5 h-3.5" />

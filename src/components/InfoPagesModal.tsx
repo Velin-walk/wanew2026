@@ -65,9 +65,46 @@ export const PaymentAndPricingSection: React.FC<{
   onOpenVoucherUpload?: () => void;
   compact?: boolean;
 }> = ({ onOpenVoucherUpload, compact = false }) => {
+  const [qrZoomed, setQrZoomed] = useState(false);
+
+  const qrLightbox = qrZoomed && (
+    <div
+      className="fixed inset-0 z-[999999] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+      onClick={() => setQrZoomed(false)}
+    >
+      <div
+        className="relative max-w-lg w-full bg-white rounded-2xl p-4 sm:p-5 shadow-2xl border border-orange-200 flex flex-col items-center gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src="/paymentqr.png"
+          alt="Payment QR Codes Full View"
+          className="w-full max-h-[75vh] object-contain rounded-xl"
+        />
+        <div className="flex items-center justify-between w-full gap-2 pt-1">
+          <a
+            href="/paymentqr.png"
+            download="walk-nepal-walk-payment-qr.png"
+            className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-[#C85E12] border border-orange-200 rounded-xl text-xs font-bold transition-colors"
+          >
+            Save QR Image
+          </a>
+          <button
+            type="button"
+            onClick={() => setQrZoomed(false)}
+            className="px-4 py-2 bg-[#1F1F1F] hover:bg-black text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (compact) {
     return (
       <div className="space-y-3 animate-in fade-in duration-150">
+        {qrLightbox}
         <div className="border-b border-orange-100 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <div>
             <h3 className="text-sm sm:text-base font-extrabold text-[#1F1F1F]">
@@ -80,13 +117,19 @@ export const PaymentAndPricingSection: React.FC<{
         </div>
 
         <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-3.5">
-          <div className="flex justify-center items-center bg-orange-50/45 p-2 rounded-xl border border-orange-200/70 shrink-0 max-w-full">
+          <button
+            type="button"
+            onClick={() => setQrZoomed(true)}
+            title="Tap to enlarge Payment QR Code"
+            className="flex flex-col justify-center items-center bg-orange-50/45 hover:bg-orange-50 p-2 rounded-xl border border-orange-200/70 hover:border-orange-300 shrink-0 max-w-full cursor-pointer transition-colors group"
+          >
             <img
               src="/paymentqr.png"
               alt="Payment QR Codes"
-              className="w-[352px] max-w-full sm:w-96 h-auto rounded-lg object-contain shadow-2xs"
+              className="w-[352px] max-w-full sm:w-96 h-auto rounded-lg object-contain shadow-2xs group-hover:scale-[1.01] transition-transform"
             />
-          </div>
+            <span className="mt-1.5 text-[10px] font-bold text-[#C85E12]">Tap QR to enlarge or save</span>
+          </button>
 
           <div className="flex-1 w-full p-3.5 rounded-xl bg-orange-50/45 border border-orange-200/70 flex flex-col justify-between gap-3 text-xs">
             <div className="space-y-1.5">
@@ -103,7 +146,7 @@ export const PaymentAndPricingSection: React.FC<{
                 <button
                   type="button"
                   onClick={onOpenVoucherUpload}
-                  className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] text-white font-black text-xs rounded-lg inline-flex items-center justify-center gap-1.5 transition-all shadow-2xs shrink-0 cursor-pointer active:scale-95"
+                  className="w-full sm:w-auto px-4 py-2 bg-[#E08828] hover:bg-[#CC741A] text-white font-black text-xs rounded-lg inline-flex items-center justify-center gap-1.5 transition-all shadow-2xs shrink-0 cursor-pointer active:scale-95"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
                   <span>Forward Voucher</span>
@@ -118,14 +161,21 @@ export const PaymentAndPricingSection: React.FC<{
 
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
+      {qrLightbox}
       <div className="border-b border-[#F0EBE5] pb-3">
         <h3 className="text-lg font-extrabold text-[#1F1F1F]">Payment Methods &amp; Transparent Pricing</h3>
         <p className="text-xs text-[#8B8680] mt-0.5">Secure, community-backed transparent payment guidelines for all Himalayan treks.</p>
       </div>
 
-      <div className="flex justify-center bg-[#FAF8F5] p-3 rounded-2xl border border-[#E5E1DB]">
+      <button
+        type="button"
+        onClick={() => setQrZoomed(true)}
+        title="Tap to enlarge Payment QR Code"
+        className="w-full flex flex-col items-center justify-center bg-[#FAF8F5] hover:bg-[#F5F1EB] p-3 rounded-2xl border border-[#E5E1DB] hover:border-[#E08828]/50 cursor-pointer transition-colors"
+      >
         <img src="/paymentqr.png" alt="Payment QR Codes" className="max-w-xl w-full h-auto rounded-xl object-contain shadow-2xs" />
-      </div>
+        <span className="mt-2 text-[11px] font-bold text-[#C85E12]">Tap QR to enlarge or save</span>
+      </button>
 
       {/* Forward Voucher Button at the end of Payment & Pricing page */}
       <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF8F5] border border-[#E5E1DB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xs">

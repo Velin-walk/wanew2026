@@ -3,6 +3,8 @@ import {
   User,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -62,6 +64,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   useEffect(() => {
+    getRedirectResult(auth).catch((err) => {
+      console.warn('Google Sign-In redirect notice:', err?.code || err?.message || err);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
@@ -197,6 +203,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAuthModalOpen(false);
       return result.user;
     } catch (error: any) {
+      const isInAppBrowser =
+        typeof navigator !== 'undefined' &&
+        /FBAN|FBAV|Instagram/i.test(navigator.userAgent || '');
+      const shouldFallbackRedirect =
+        error?.code === 'auth/popup-blocked' ||
+        error?.code === 'auth/operation-not-supported-in-this-environment' ||
+        (isInAppBrowser && error?.code !== 'auth/popup-closed-by-user');
+
+      if (shouldFallbackRedirect) {
+        await signInWithRedirect(auth, googleProvider);
+        return null;
+      }
+
       console.warn('Google Sign-In notice:', error?.code || error?.message || error);
       throw error;
     }

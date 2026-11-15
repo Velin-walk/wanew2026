@@ -313,7 +313,10 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   return (
     <div className={`bg-white rounded-2xl border-2 ${borderClass} shadow-[0_6px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.11)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between w-full max-w-full overflow-hidden`}>
       {/* Card Image */}
-      <div className="relative h-40 sm:h-48 w-full overflow-hidden group">
+      <div
+        onClick={() => onViewItinerary?.(trek)}
+        className={`relative h-40 sm:h-48 w-full overflow-hidden group ${onViewItinerary ? 'cursor-pointer' : ''}`}
+      >
         <img
           src={resolveCardImageUrl()}
           alt={trek.name}
@@ -360,7 +363,10 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         {/* Favorite Button on Image */}
         <button
           type="button"
-          onClick={() => onToggleFavorite?.(trek.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite?.(trek.id);
+          }}
           className={`absolute top-3 right-3 p-2 rounded-xl transition-all active:scale-90 shadow-md ${
             isFavorited
               ? 'text-rose-500 bg-white border border-rose-200'
@@ -411,7 +417,12 @@ export const TrekCard: React.FC<TrekCardProps> = ({
               </div>
             )}
 
-            <h3 className="text-base sm:text-lg font-bold text-[#1F1F1F] leading-snug line-clamp-2 md:min-h-[3.25rem] flex items-start">
+            <h3
+              onClick={() => onViewItinerary?.(trek)}
+              className={`text-base sm:text-lg font-bold text-[#1F1F1F] leading-snug line-clamp-2 md:min-h-[3.25rem] flex items-start ${
+                onViewItinerary ? 'cursor-pointer hover:text-[#E08828] transition-colors' : ''
+              }`}
+            >
               {trek.name}
             </h3>
 

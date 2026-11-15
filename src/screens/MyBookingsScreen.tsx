@@ -244,7 +244,7 @@ function parseBookingDate(dateStr?: string): Date | null {
     }
   };
 
-  if (loading) {
+  if (loading && bookings.length === 0) {
     return (
       <div className="space-y-3 max-w-4xl w-full mx-auto my-2">
         {[1, 2].map((i) => (
@@ -273,7 +273,7 @@ function parseBookingDate(dateStr?: string): Date | null {
           onClick={() => setActiveSubTab('active')}
           className={`flex-1 sm:flex-initial py-1 px-3.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
             activeSubTab === 'active'
-              ? 'bg-gradient-to-r from-[#E08828] to-[#EA580C] text-white shadow-xs font-black'
+              ? 'bg-[#E08828] text-white shadow-xs font-black'
               : 'text-[#7C5338] hover:text-[#1F1F1F] hover:bg-orange-100/60'
           }`}
         >
@@ -297,7 +297,7 @@ function parseBookingDate(dateStr?: string): Date | null {
           onClick={() => setActiveSubTab('hikes')}
           className={`flex-1 sm:flex-initial py-1 px-3.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
             activeSubTab === 'hikes'
-              ? 'bg-gradient-to-r from-[#E08828] to-[#EA580C] text-white shadow-xs font-black'
+              ? 'bg-[#E08828] text-white shadow-xs font-black'
               : 'text-[#7C5338] hover:text-[#1F1F1F] hover:bg-orange-100/60'
           }`}
         >
@@ -331,7 +331,7 @@ function parseBookingDate(dateStr?: string): Date | null {
           <button
             type="button"
             onClick={() => openAuthModal('Sign in to view booking/profile across multiple devices.')}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] active:scale-95 text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-[#E08828] hover:bg-[#CC741A] active:scale-95 text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
           >
             <LogIn className="w-3.5 h-3.5" />
             <span>Sign In</span>
@@ -357,7 +357,7 @@ function parseBookingDate(dateStr?: string): Date | null {
               <button
                 type="button"
                 onClick={() => setActiveSubTab('hikes')}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 py-1.5 px-3.5 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] text-white text-xs font-bold rounded-lg transition-all shadow-2xs cursor-pointer active:scale-[0.99] shrink-0"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 py-1.5 px-3.5 bg-[#E08828] hover:bg-[#CC741A] text-white text-xs font-bold rounded-lg transition-all shadow-2xs cursor-pointer active:scale-[0.99] shrink-0"
               >
                 <Footprints className="w-3.5 h-3.5" />
                 <span>View My Hikes &amp; Stats</span>
@@ -377,7 +377,7 @@ function parseBookingDate(dateStr?: string): Date | null {
             <button
               type="button"
               onClick={onExploreTreks}
-              className="mt-3.5 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] text-white text-xs font-bold rounded-xl transition-all shadow-xs active:scale-[0.99] cursor-pointer"
+              className="mt-3.5 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2 bg-[#E08828] hover:bg-[#CC741A] text-white text-xs font-bold rounded-xl transition-all shadow-xs active:scale-[0.99] cursor-pointer"
             >
               <Compass className="w-3.5 h-3.5" />
               <span>Explore Available Treks</span>
@@ -600,7 +600,7 @@ function parseBookingDate(dateStr?: string): Date | null {
                         e.stopPropagation();
                         onOpenPaymentPage();
                       }}
-                      className="h-7 px-2.5 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] text-white font-bold rounded-lg text-[11px] whitespace-nowrap active:scale-[0.98] inline-flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer shrink-0"
+                      className="h-7 px-2.5 bg-[#E08828] hover:bg-[#CC741A] text-white font-bold rounded-lg text-[11px] whitespace-nowrap active:scale-[0.98] inline-flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer shrink-0"
                     >
                       <CreditCard className="w-3 h-3 shrink-0" />
                       <span>Pay</span>
@@ -731,7 +731,7 @@ function parseBookingDate(dateStr?: string): Date | null {
                           href={booking.whatsapp_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-bold text-white bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] rounded-lg transition-all shadow-2xs"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-bold text-white bg-[#E08828] hover:bg-[#CC741A] rounded-lg transition-all shadow-2xs"
                         >
                           <MessageCircle className="w-3 h-3" />
                           <span>Join WhatsApp Group</span>

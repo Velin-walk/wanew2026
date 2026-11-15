@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Tag,
-  Eye,
   MoreVertical,
   LayoutGrid,
   Grid,
@@ -59,6 +58,9 @@ interface GalleryPhoto {
   userUid: string;
   uploadedAt: string;
   caption?: string;
+  isOffer?: boolean;
+  isExpired?: boolean;
+  expiresAt?: string;
 }
 
 interface GalleryScreenProps {
@@ -280,26 +282,57 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const CLOUD_NAME = 'mx7cxnsf';
   const UPLOAD_PRESET = 'walknepalwalk';
 
-  // Fetch all community photos from Cloudflare D1
-  const fetchAllPhotos = async () => {
+  // Fetch all community photos & flashcards/offers from Cloudflare D1 (for both desktop and mobile)
+  const fetchAllPhotos = useCallback(async () => {
     setLoading(true);
-    let list: GalleryPhoto[] = [];
+    let regularList: GalleryPhoto[] = [];
+    let offerServerList: OfferItem[] = [];
     let fetchSucceeded = false;
 
-    try {
-      const res = await apiFetch('trek_photos');
-      if (res.ok) {
-        const json = await res.json();
+    const [allRes, offerActiveRes, offerArchiveRes] = await Promise.allSettled([
+      apiFetch('trek_photos'),
+      apiFetch(`trek_photos?trekId=${encodeURIComponent(OFFER_TREK_ID)}`),
+      apiFetch(`trek_photos?trekId=${encodeURIComponent('OFFER_ARCHIVE')}`),
+    ]);
+
+    if (allRes.status === 'fulfilled' && allRes.value.ok) {
+      try {
+        const json = await allRes.value.json();
         if (json && Array.isArray(json.data)) {
-          list = json.data;
+          regularList = json.data;
           fetchSucceeded = true;
         }
+      } catch (err) {
+        console.warn('Error parsing community gallery photos:', err);
       }
-    } catch (err) {
-      console.warn('Error fetching community gallery photos from Cloudflare:', err);
     }
 
-    // Merge local storage saved photos across all treks ONLY if live fetch failed
+    if (offerActiveRes.status === 'fulfilled' && offerActiveRes.value.ok) {
+      try {
+        const json = await offerActiveRes.value.json();
+        if (json && Array.isArray(json.data)) {
+          offerServerList.push(...json.data);
+        }
+      } catch {}
+    }
+
+    if (offerArchiveRes.status === 'fulfilled' && offerArchiveRes.value.ok) {
+      try {
+        const json = await offerArchiveRes.value.json();
+        if (json && Array.isArray(json.data)) {
+          offerServerList.push(...json.data);
+        }
+      } catch {}
+    }
+
+    const isOfferRecord = (p: any) =>
+      p && (p.trekId === OFFER_TREK_ID || p.trekId === 'OFFER_ARCHIVE');
+
+    // Collect any offer/flashcard items that came back inside the general trek_photos response
+    const offersFromAll = regularList.filter(isOfferRecord) as OfferItem[];
+    regularList = regularList.filter((p) => p && p.trekId !== 'HOMEPAGE_HERO' && !isOfferRecord(p));
+
+    // Merge local storage saved trek photos ONLY if live fetch failed
     if (!fetchSucceeded) {
       try {
         for (let i = 0; i < localStorage.length; i++) {
@@ -307,10 +340,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           if (key && key.startsWith('wnw_photos_')) {
             const localSaved = JSON.parse(localStorage.getItem(key) || '[]');
             if (Array.isArray(localSaved)) {
-              const existingIds = new Set(list.map((p) => p.id));
+              const existingIds = new Set(regularList.map((p) => p.id));
               for (const lp of localSaved) {
-                if (!existingIds.has(lp.id)) {
-                  list.push(lp);
+                if (lp && !isOfferRecord(lp) && lp.trekId !== 'HOMEPAGE_HERO' && !existingIds.has(lp.id)) {
+                  regularList.push(lp);
                 }
               }
             }
@@ -321,7 +354,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       // Keep local storage clean to prevent stale/deleted photos from being resurrected
       try {
         const photosByTrek: Record<string, GalleryPhoto[]> = {};
-        for (const p of list) {
+        for (const p of regularList) {
           if (!photosByTrek[p.trekId]) {
             photosByTrek[p.trekId] = [];
           }
@@ -343,93 +376,84 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       } catch (e) {}
     }
 
-    // Exclude system homepage hero banners & sort newest first
-    list = list.filter((p) => p && p.trekId !== 'HOMEPAGE_HERO');
-    list.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-    setPhotos(list);
-    setLoading(false);
-  };
-
-  // Special Offers & Flashcards state (preserves all flashcards and keeps them visible at top of gallery)
-  const [flashcardOffers, setFlashcardOffers] = useState<OfferItem[]>(() => {
+    // Merge server offers + local offer archives so both active & expired flashcards appear on timeline
+    let localOfferItems: OfferItem[] = [];
     try {
       const archiveRaw = localStorage.getItem('wnw_flashcards_gallery_archive');
+      const archivedListRaw = localStorage.getItem('wnw_archived_offers_list');
       const cacheRaw = localStorage.getItem('wnw_offers_cache');
       const archiveList: OfferItem[] = archiveRaw ? JSON.parse(archiveRaw) : [];
+      const archivedList: OfferItem[] = archivedListRaw ? JSON.parse(archivedListRaw) : [];
       const cacheList: OfferItem[] = cacheRaw ? JSON.parse(cacheRaw) : [];
-      const combined = [...archiveList, ...cacheList];
-      const map = new Map<string, OfferItem>();
-      combined.forEach((item) => {
-        if (item && item.url && !map.has(item.id || item.url)) {
-          const meta = parseOfferMetadata(item);
-          map.set(item.id || item.url, {
-            ...item,
-            color: meta.color,
-            expiresAt: meta.expiresAt || item.expiresAt,
-          });
-        }
+      localOfferItems = [...archiveList, ...archivedList, ...cacheList];
+    } catch {}
+
+    const combinedOffers = [...offerServerList, ...offersFromAll, ...localOfferItems];
+    const seenOfferIds = new Set<string>();
+    const seenOfferUrls = new Set<string>();
+    const normalizedOffers: GalleryPhoto[] = [];
+    const archiveToCache: OfferItem[] = [];
+
+    for (const rawItem of combinedOffers) {
+      if (!rawItem || !rawItem.url) continue;
+      const baseId = String(rawItem.id || '').replace(/^archived_/, '');
+      if (baseId && seenOfferIds.has(baseId)) continue;
+      if (seenOfferUrls.has(rawItem.url)) continue;
+
+      if (baseId) seenOfferIds.add(baseId);
+      seenOfferUrls.add(rawItem.url);
+
+      const meta = parseOfferMetadata(rawItem);
+      const expiresAt = meta.expiresAt || rawItem.expiresAt;
+      const expTime = expiresAt ? new Date(expiresAt).getTime() : NaN;
+      const isExpired = !Number.isNaN(expTime)
+        ? expTime < Date.now()
+        : rawItem.trekId === 'OFFER_ARCHIVE';
+      const cleanedCaption = cleanOfferCaption(rawItem.caption);
+
+      archiveToCache.push({
+        ...rawItem,
+        color: meta.color,
+        expiresAt,
       });
-      return Array.from(map.values()).sort(
-        (a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
-      );
-    } catch {
-      return [];
+
+      normalizedOffers.push({
+        id: rawItem.id || `offer_${normalizedOffers.length}`,
+        trekId: rawItem.trekId || OFFER_TREK_ID,
+        hikeNumber: '',
+        trekName: isExpired ? 'Flashcard Archive' : 'Special Offer',
+        url: rawItem.url,
+        uploadedBy: rawItem.uploadedBy || 'Walk Nepal Walk',
+        userUid: rawItem.userUid || 'admin',
+        uploadedAt: rawItem.uploadedAt || new Date().toISOString(),
+        caption: cleanedCaption || undefined,
+        isOffer: true,
+        isExpired,
+        expiresAt,
+      });
     }
-  });
 
-  const fetchFlashcards = React.useCallback(async () => {
-    try {
-      let serverList: OfferItem[] = [];
+    if (archiveToCache.length > 0) {
       try {
-        const res = await apiFetch(`trek_photos?trekId=${encodeURIComponent(OFFER_TREK_ID)}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json && Array.isArray(json.data)) {
-            serverList = json.data;
-          }
-        }
-      } catch (_) {}
-
-      const archiveRaw = localStorage.getItem('wnw_flashcards_gallery_archive');
-      const cacheRaw = localStorage.getItem('wnw_offers_cache');
-      const archiveList: OfferItem[] = archiveRaw ? JSON.parse(archiveRaw) : [];
-      const cacheList: OfferItem[] = cacheRaw ? JSON.parse(cacheRaw) : [];
-
-      const combined = [...serverList, ...archiveList, ...cacheList];
-      const map = new Map<string, OfferItem>();
-      combined.forEach((item) => {
-        if (item && item.url) {
-          const key = item.id || item.url;
-          if (!map.has(key)) {
-            const meta = parseOfferMetadata(item);
-            map.set(key, {
-              ...item,
-              color: meta.color,
-              expiresAt: meta.expiresAt || item.expiresAt,
-            });
-          }
-        }
-      });
-      const sorted = Array.from(map.values()).sort(
-        (a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
-      );
-      setFlashcardOffers(sorted);
-      try {
-        localStorage.setItem('wnw_flashcards_gallery_archive', JSON.stringify(sorted));
+        localStorage.setItem('wnw_flashcards_gallery_archive', JSON.stringify(archiveToCache));
       } catch {}
-    } catch (e) {
-      console.warn('Error loading flashcards for gallery:', e);
     }
+
+    const combinedTimeline = [...regularList, ...normalizedOffers];
+    combinedTimeline.sort(
+      (a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+    );
+    setPhotos(combinedTimeline);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
     markNotificationAsRead('gallery');
     fetchAllPhotos();
-    fetchFlashcards();
-    const handleOffersSync = () => fetchFlashcards();
+    const handleOffersSync = () => fetchAllPhotos();
     window.addEventListener('wnw-offers-updated', handleOffersSync);
     return () => window.removeEventListener('wnw-offers-updated', handleOffersSync);
-  }, [fetchFlashcards]);
+  }, [fetchAllPhotos]);
 
   // Pre-select first trek for upload modal if available
   useEffect(() => {
@@ -710,6 +734,13 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   // Enrich photos with matched trek metadata
   const enrichedPhotos = useMemo(() => {
     return photos.map((p) => {
+      if (p.isOffer) {
+        return {
+          ...p,
+          hikeNumber: '',
+          trekName: p.trekName || (p.isExpired ? 'Flashcard Archive' : 'Special Offer'),
+        };
+      }
       const matchedTrek = treks.find((t) => t.id === p.trekId);
       return {
         ...p,
@@ -731,32 +762,53 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       const matchesQuery =
         (photo.trekName || '').toLowerCase().includes(q) ||
         (photo.uploadedBy || '').toLowerCase().includes(q) ||
-        (photo.hikeNumber || '').toLowerCase().includes(q);
+        (photo.hikeNumber || '').toLowerCase().includes(q) ||
+        (photo.caption || '').toLowerCase().includes(q);
 
       return matchesFilter && matchesQuery;
     });
   }, [enrichedPhotos, selectedTrekFilter, searchQuery]);
 
-  // Group filtered photos into "Hike Boxes"
+  // Group filtered photos into "Hike Boxes" (and chronological offer cards)
   const groupedHikeBoxes = useMemo(() => {
     const map = new Map<
       string,
       {
+        groupKey: string;
         trekId: string;
         hikeNumber: string;
         trekName: string;
         trek?: Trek;
+        isOffer?: boolean;
+        isExpired?: boolean;
+        expiresAt?: string;
         photos: GalleryPhoto[];
       }
     >();
 
     for (const photo of filteredPhotos) {
+      if (photo.isOffer) {
+        const groupKey = `offer:${photo.id}`;
+        map.set(groupKey, {
+          groupKey,
+          trekId: photo.trekId,
+          hikeNumber: '',
+          trekName: photo.isExpired ? 'Flashcard Archive' : 'Special Offer',
+          isOffer: true,
+          isExpired: photo.isExpired,
+          expiresAt: photo.expiresAt,
+          photos: [photo],
+        });
+        continue;
+      }
+
       const trekObj = treks.find((t) => t.id === photo.trekId);
       const hikeNum = photo.hikeNumber || trekObj?.hike_number || '0';
       const name = photo.trekName || trekObj?.name || 'Walk Nepal Walk Hike';
 
       if (!map.has(photo.trekId)) {
         map.set(photo.trekId, {
+          groupKey: photo.trekId,
           trekId: photo.trekId,
           hikeNumber: hikeNum,
           trekName: name,
@@ -770,18 +822,23 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     const groups = Array.from(map.values());
 
     groups.sort((a, b) => {
-      const numA = parseInt(a.hikeNumber || '0', 10);
-      const numB = parseInt(b.hikeNumber || '0', 10);
+      const newestA = a.photos[0]?.uploadedAt ? new Date(a.photos[0].uploadedAt).getTime() : 0;
+      const newestB = b.photos[0]?.uploadedAt ? new Date(b.photos[0].uploadedAt).getTime() : 0;
 
-      if (sortBy === 'hike_desc') {
-        return numB - numA;
-      } else if (sortBy === 'hike_asc') {
-        return numA - numB;
-      } else {
-        const newestA = a.photos[0]?.uploadedAt ? new Date(a.photos[0].uploadedAt).getTime() : 0;
-        const newestB = b.photos[0]?.uploadedAt ? new Date(b.photos[0].uploadedAt).getTime() : 0;
-        return newestB - newestA;
+      if (sortBy === 'hike_desc' || sortBy === 'hike_asc') {
+        const numA = a.isOffer ? NaN : parseInt(a.hikeNumber || '', 10);
+        const numB = b.isOffer ? NaN : parseInt(b.hikeNumber || '', 10);
+        const hasNumA = !Number.isNaN(numA);
+        const hasNumB = !Number.isNaN(numB);
+        if (hasNumA && hasNumB) {
+          return sortBy === 'hike_desc' ? numB - numA : numA - numB;
+        }
+        if (hasNumA !== hasNumB) {
+          return hasNumA ? -1 : 1;
+        }
       }
+
+      return newestB - newestA;
     });
 
     return groups;
@@ -1025,120 +1082,6 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         </div>
       </div>
 
-      {/* Special Offers & Flashcards Section at Top of Gallery */}
-      {flashcardOffers.length > 0 && (
-        <div className="bg-white border border-[#E5E1DB] rounded-3xl p-5 sm:p-6 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#F0EBE5]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-                <Sparkles className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm sm:text-base font-black text-[#1F1F1F] tracking-tight">
-                    Special Offers &amp; Flashcards
-                  </h2>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
-                    {flashcardOffers.length} Card{flashcardOffers.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#8B8680] mt-0.5">
-                  Hike flashcards, announcements &amp; promotional offers from Walk Nepal Walk.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Flashcard Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {flashcardOffers.map((card, cardIdx) => {
-              const meta = parseOfferMetadata(card);
-              const cleanCaption = cleanOfferCaption(card.caption);
-              const isExpired = meta.expiresAt ? new Date(meta.expiresAt).getTime() < Date.now() : false;
-
-              return (
-                <div
-                  key={card.id || `flashcard-${cardIdx}`}
-                  className="rounded-2xl overflow-hidden border border-[#E5E1DB] bg-white shadow-2xs hover:shadow-md transition-all flex flex-col group cursor-pointer"
-                  onClick={() => {
-                    const photoObj: GalleryPhoto = {
-                      id: card.id,
-                      trekId: OFFER_TREK_ID,
-                      hikeNumber: 'OFFER',
-                      trekName: 'Special Offers & Flashcards',
-                      url: card.url,
-                      uploadedBy: card.uploadedBy || 'Walk Nepal Walk',
-                      userUid: card.userUid || 'admin',
-                      uploadedAt: card.uploadedAt,
-                      caption: cleanCaption,
-                    };
-                    handleOpenLightbox(photoObj, 0);
-                  }}
-                >
-                  {/* Card Visual / Image */}
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-900">
-                    <img
-                      src={card.url}
-                      alt={cleanCaption || 'Walk Nepal Walk Flashcard'}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
-
-                    {/* Badge */}
-                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs ${
-                        isExpired
-                          ? 'bg-stone-800/80 text-stone-300 border border-stone-600'
-                          : 'bg-amber-500/90 text-white border border-amber-300/40'
-                      }`}>
-                        {isExpired ? 'Flashcard Archive' : 'Special Offer'}
-                      </span>
-                    </div>
-
-                    <div className="absolute bottom-2.5 right-2.5">
-                      <button
-                        type="button"
-                        className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur-md transition-colors"
-                        title="View Full Resolution Flashcard"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Card Details */}
-                  <div className="p-3 flex-1 flex flex-col justify-between space-y-2 bg-[#FAF8F5]">
-                    <div>
-                      {cleanCaption ? (
-                        <p className="text-xs font-bold text-[#1F1F1F] line-clamp-2 leading-snug">
-                          {cleanCaption}
-                        </p>
-                      ) : (
-                        <p className="text-xs font-semibold text-[#8B8680] italic">
-                          Walk Nepal Walk Flashcard
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-[#8B8680] pt-1 border-t border-[#EFEAE4]">
-                      <span>
-                        {card.uploadedAt ? new Date(card.uploadedAt).toLocaleDateString() : 'Active'}
-                      </span>
-                      {meta.expiresAt && !isExpired && (
-                        <span className="text-amber-700 font-bold">
-                          Valid until {new Date(meta.expiresAt).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Main Gallery Grid */}
       {loading ? (
         <div className="space-y-6 animate-pulse">
@@ -1203,7 +1146,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         <div className="space-y-8">
           {groupedHikeBoxes.map((box) => (
             <div
-              key={box.trekId}
+              key={box.groupKey}
               className="bg-white border border-[#EFEAE4] rounded-3xl p-5 sm:p-6 shadow-xs space-y-4 hover:shadow-md transition-shadow"
             >
               {/* Hike Box Header */}
@@ -1211,36 +1154,57 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 <div className="flex items-start sm:items-center gap-3">
                   <div>
                     <h3 className="text-base sm:text-lg font-black text-[#1F1F1F] leading-tight flex flex-wrap items-center gap-x-2">
+                      {box.isOffer && (
+                        <Sparkles className={`w-4 h-4 shrink-0 ${box.isExpired ? 'text-stone-500' : 'text-amber-500'}`} />
+                      )}
                       <span>{box.trekName}</span>
-                      <span className="text-[#7ABA42]">#{box.hikeNumber}</span>
-                      {box.trek?.date && (
-                        <span className="text-[#8B8680] text-sm sm:text-base font-bold">({box.trek.date})</span>
+                      {!box.isOffer && box.hikeNumber && (
+                        <span className="text-[#7ABA42]">#{box.hikeNumber}</span>
+                      )}
+                      {box.isOffer ? (
+                        box.photos[0]?.uploadedAt && (
+                          <span className="text-[#8B8680] text-sm sm:text-base font-bold">
+                            ({new Date(box.photos[0].uploadedAt).toLocaleDateString()})
+                          </span>
+                        )
+                      ) : (
+                        box.trek?.date && (
+                          <span className="text-[#8B8680] text-sm sm:text-base font-bold">({box.trek.date})</span>
+                        )
                       )}
                     </h3>
                   </div>
                 </div>
 
                 {/* Quick Add Photos & Review Buttons for this Hike */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenUploadModalForTrek(box.trekId)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#166534] border border-[#DCFCE7] rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-none"
-                    title="Add Photos"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Photos</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFeedbackModalOpen(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-[#FFF7ED] hover:bg-[#FFEDD5] text-[#9A3412] border border-[#FFEDD5] rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-none"
-                    title="Rate & Review"
-                  >
-                    <MessageSquare className="w-3 h-3" />
-                    <span>Review</span>
-                  </button>
-                </div>
+                {!box.isOffer ? (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenUploadModalForTrek(box.trekId)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#166534] border border-[#DCFCE7] rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-none"
+                      title="Add Photos"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Photos</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackModalOpen(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-[#FFF7ED] hover:bg-[#FFEDD5] text-[#9A3412] border border-[#FFEDD5] rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-none"
+                      title="Rate & Review"
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      <span>Review</span>
+                    </button>
+                  </div>
+                ) : (
+                  box.expiresAt && !box.isExpired && (
+                    <span className="text-[11px] text-amber-700 font-bold shrink-0">
+                      Valid until {new Date(box.expiresAt).toLocaleDateString()}
+                    </span>
+                  )
+                )}
               </div>
 
               {/* Photos Grid inside Box */}
@@ -1266,6 +1230,20 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                           }
                         }}
                       />
+
+                      {photo.isOffer && (
+                        <div className="absolute top-2.5 left-2.5 z-10">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs ${
+                              photo.isExpired
+                                ? 'bg-stone-800/80 text-stone-200 border border-stone-600'
+                                : 'bg-amber-500/90 text-white border border-amber-300/40'
+                            }`}
+                          >
+                            {photo.isExpired ? 'Flashcard Archive' : 'Special Offer'}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Floating Like Button */}
                       <button
@@ -1365,10 +1343,25 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                   <span className="text-[10px] font-black">{likes.count}</span>
                 </button>
 
+                {/* Offer / Flashcard Badge (always visible on offer cards) */}
+                {photo.isOffer && (
+                  <div className="absolute top-2.5 left-2.5 z-10">
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs ${
+                        photo.isExpired
+                          ? 'bg-stone-800/80 text-stone-200 border border-stone-600'
+                          : 'bg-amber-500/90 text-white border border-amber-300/40'
+                      }`}
+                    >
+                      {photo.isExpired ? 'Flashcard Archive' : 'Special Offer'}
+                    </span>
+                  </div>
+                )}
+
                 {/* Gradient Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
                   <div className="flex justify-between items-start gap-1">
-                    {photo.hikeNumber && (
+                    {!photo.isOffer && photo.hikeNumber && (
                       <span className="px-2 py-0.5 bg-[#7ABA42] text-white text-[9px] font-black rounded-md shadow-xs">
                         #{photo.hikeNumber}
                       </span>

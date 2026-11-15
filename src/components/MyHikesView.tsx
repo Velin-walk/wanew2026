@@ -377,7 +377,7 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
             <button
               type="submit"
               disabled={saving || !syncPhoneInput.trim()}
-              className="px-3 py-1 bg-gradient-to-r from-[#E08828] to-[#EA580C] hover:from-[#CC741A] hover:to-[#D64B07] disabled:opacity-50 text-white font-black text-xs rounded-lg shadow-2xs transition-all cursor-pointer active:scale-95 inline-flex items-center justify-center gap-1 shrink-0"
+              className="px-3 py-1 bg-[#E08828] hover:bg-[#CC741A] disabled:opacity-50 text-white font-black text-xs rounded-lg shadow-2xs transition-all cursor-pointer active:scale-95 inline-flex items-center justify-center gap-1 shrink-0"
             >
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Sync Record</span>}
             </button>
@@ -508,7 +508,7 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shrink-0 ${
                   selectedCategory === cat.id
-                    ? 'bg-gradient-to-r from-[#E08828] to-[#EA580C] text-white shadow-xs font-black'
+                    ? 'bg-[#E08828] text-white shadow-xs font-black'
                     : 'bg-white text-[#7C5338] border border-orange-200/80 hover:border-orange-300'
                 }`}
               >
@@ -596,7 +596,7 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                   filteredCompletedHikes.map((hike, idx) => (
                     <tr
                       key={`${hike.hike_number}_${idx}`}
-                      className="hover:bg-orange-50/40 transition-colors cursor-default group"
+                      className="cursor-default"
                     >
                       {/* Hike Number Column */}
                       <td className="py-2 sm:py-2.5 px-2.5 sm:px-3.5 whitespace-nowrap font-black">
@@ -608,7 +608,7 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
                       {/* Trek Name Column */}
                       <td className="py-2 sm:py-2.5 px-2.5 sm:px-3.5 whitespace-nowrap overflow-hidden">
                         <div
-                          className="font-extrabold text-[#1F1F1F] text-xs sm:text-[13px] truncate group-hover:text-[#C85E12] transition-colors"
+                          className="font-extrabold text-[#1F1F1F] text-xs sm:text-[13px] truncate"
                           title={hike.title}
                         >
                           {hike.title}

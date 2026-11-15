@@ -76,6 +76,10 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
+    if (onViewItinerary) {
+      onViewItinerary(trek);
+    }
+
     setTimeout(() => {
       setHighlightedTrekId((curr) => (curr === targetId ? null : curr));
     }, 2500);
