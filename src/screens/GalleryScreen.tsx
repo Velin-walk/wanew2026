@@ -34,6 +34,7 @@ import { logUserActivity } from '../services/userActivityNotifier';
 import { markNotificationAsRead } from '../services/notificationService';
 import { PhotoCommentsSection } from '../components/PhotoCommentsSection';
 import { TrekFeedbackModal } from '../components/TrekFeedbackModal';
+import { isPhotoCommentHidden } from '../services/contentModerationService';
 import {
   OFFER_TREK_ID,
   OfferItem,
@@ -867,7 +868,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     setCaptionExpanded(false);
     setActiveCommentCount(null);
     fetchPhotoComments(photo.id).then((res) => {
-      setActiveCommentCount(res.length);
+      setActiveCommentCount(res.filter((c) => !isPhotoCommentHidden(c.id)).length);
     }).catch(() => {});
   };
 
@@ -893,7 +894,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       setActiveCommentCount(null);
       if (targetPhoto) {
         fetchPhotoComments(targetPhoto.id).then((res) => {
-          setActiveCommentCount(res.length);
+          setActiveCommentCount(res.filter((c) => !isPhotoCommentHidden(c.id)).length);
         }).catch(() => {});
       }
     }
@@ -912,7 +913,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       setActiveCommentCount(null);
       if (targetPhoto) {
         fetchPhotoComments(targetPhoto.id).then((res) => {
-          setActiveCommentCount(res.length);
+          setActiveCommentCount(res.filter((c) => !isPhotoCommentHidden(c.id)).length);
         }).catch(() => {});
       }
     }

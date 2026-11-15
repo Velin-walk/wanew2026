@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, MessageSquare, Sparkles, RotateCcw, Trash2 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 import { logUserActivity } from '../../services/userActivityNotifier';
+import { useContentModeration, isTrailCommentHidden } from '../../services/contentModerationService';
 
 const GLOBAL_CHAT_TRAIL_ID = 'global_trail_chat';
 
@@ -45,6 +46,7 @@ function mergeChatMessages(existing: ChatMessage[], incoming: ChatMessage[]): Ch
 }
 
 export default function MapChat({ currentUserEmail }: MapChatProps) {
+  const contentModeration = useContentModeration();
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem('wnw_mapchat_messages');
@@ -55,6 +57,7 @@ export default function MapChat({ currentUserEmail }: MapChatProps) {
     } catch {}
     return INITIAL_TRAIL_POSTS;
   });
+  const visibleMessages = messages.filter((m) => !isTrailCommentHidden(m.id, contentModeration));
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -131,7 +134,7 @@ export default function MapChat({ currentUserEmail }: MapChatProps) {
   // Auto scroll to bottom when message count changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+  }, [visibleMessages.length]);
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -252,7 +255,7 @@ export default function MapChat({ currentUserEmail }: MapChatProps) {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-neutral-400 font-bold">
-            {connectionStatus === 'online' ? `${messages.length} active logs` : 'offline cache'}
+            {connectionStatus === 'online' ? `${visibleMessages.length} active logs` : 'offline cache'}
           </span>
           <button
             type="button"
@@ -281,14 +284,14 @@ export default function MapChat({ currentUserEmail }: MapChatProps) {
             <div className="w-5 h-5 border-2 border-[#7ABA42] border-t-transparent rounded-full animate-spin" />
             <span className="text-[10px] text-neutral-400 font-bold">Connecting to radio frequency...</span>
           </div>
-        ) : messages.length === 0 ? (
+        ) : visibleMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-2 text-center h-full text-neutral-400">
             <MessageSquare className="w-8 h-8 text-neutral-300 animate-pulse" />
             <span className="text-xs font-bold text-neutral-500">Silence on the Trails</span>
             <span className="text-[10px] max-w-[200px]">Be the first to share live trail updates, conditions, or greet fellow hikers!</span>
           </div>
         ) : (
-          messages.map((msg) => {
+          visibleMessages.map((msg) => {
             const isMe = (currentUserEmail && msg.senderEmail === currentUserEmail) || 
                          (!currentUserEmail && (msg.guestSessionId === currentSessionId || (msg.senderName === guestName && guestName.trim() !== '')));
             const isAdminUser = currentUserEmail?.toLowerCase() === 'walknepalwalk@gmail.com';

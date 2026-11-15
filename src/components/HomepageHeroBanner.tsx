@@ -4,6 +4,7 @@ import { apiFetch } from '../services/api';
 import { HISTORIC_COMMUNITY_REVIEWS } from '../data/historicReviews';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import defaultHeroImg from '../assets/images/gallery_trail_hero_1790246900034.jpg';
+import { useContentModeration, isReviewHidden } from '../services/contentModerationService';
 
 export interface HeroBannerItem {
   id: string;
@@ -28,6 +29,7 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
   completedCount,
   onOpenReviews,
 }) => {
+  const contentModeration = useContentModeration();
   const [images, setImages] = useState<HeroBannerItem[]>(() => {
     try {
       const cached = localStorage.getItem(HERO_STORAGE_KEY);
@@ -64,7 +66,9 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
   }, []);
 
   const { avgRating, totalReviews } = useMemo(() => {
-    const combined = [...(liveReviews || []), ...HISTORIC_COMMUNITY_REVIEWS];
+    const combined = [...(liveReviews || []), ...HISTORIC_COMMUNITY_REVIEWS].filter(
+      (r: any) => !isReviewHidden(r, contentModeration)
+    );
     if (combined.length === 0) {
       return { avgRating: '5.0', totalReviews: 0 };
     }
@@ -77,7 +81,7 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
       avgRating: (sum / combined.length).toFixed(1),
       totalReviews: combined.length,
     };
-  }, [liveReviews]);
+  }, [liveReviews, contentModeration]);
 
   // Hero image rotation interval: 15 minutes (15 * 60 * 1000 ms)
   const ROTATION_INTERVAL_MS = 15 * 60 * 1000;
@@ -315,6 +319,7 @@ export const HeroStatsBar: React.FC<HeroStatsBarProps> = ({
   completedCount,
   onOpenReviews,
 }) => {
+  const contentModeration = useContentModeration();
   const [liveReviews, setLiveReviews] = useState<any[]>(() => {
     try {
       const local = localStorage.getItem('wnw_user_feedbacks');
@@ -338,7 +343,9 @@ export const HeroStatsBar: React.FC<HeroStatsBarProps> = ({
   }, []);
 
   const { avgRating, totalReviews } = useMemo(() => {
-    const combined = [...(liveReviews || []), ...HISTORIC_COMMUNITY_REVIEWS];
+    const combined = [...(liveReviews || []), ...HISTORIC_COMMUNITY_REVIEWS].filter(
+      (r: any) => !isReviewHidden(r, contentModeration)
+    );
     if (combined.length === 0) {
       return { avgRating: '5.0', totalReviews: 0 };
     }
@@ -351,7 +358,7 @@ export const HeroStatsBar: React.FC<HeroStatsBarProps> = ({
       avgRating: (sum / combined.length).toFixed(1),
       totalReviews: combined.length,
     };
-  }, [liveReviews]);
+  }, [liveReviews, contentModeration]);
 
   return (
     <div className="relative grid grid-cols-3 divide-x divide-[#EFEAE4] bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-[#E5E1DB] shadow-2xs overflow-hidden">

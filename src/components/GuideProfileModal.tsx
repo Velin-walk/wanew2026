@@ -23,6 +23,7 @@ import { HikerStats, HikerCompletedEvent } from '../types/leaderboard';
 import { Trek } from '../types';
 import { TrekFeedbackModal } from './TrekFeedbackModal';
 import { getGuidesSettings, DEFAULT_GUIDES } from '../services/guidesService';
+import { useContentModeration, isReviewHidden } from '../services/contentModerationService';
 
 interface GuideProfileModalProps {
   isOpen: boolean;
@@ -102,6 +103,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
   const [guideStats, setGuideStats] = useState<HikerStats | null>(null);
   const [searchHikeQuery, setSearchHikeQuery] = useState('');
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const contentModeration = useContentModeration();
 
   // Dummy trek object for guide feedback
   const guideTrek = useMemo(() => ({
@@ -251,7 +253,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
       }
 
       const rawGuideReviews = allReviews.filter((r: any) => {
-        if (!r) return false;
+        if (!r || isReviewHidden(r, contentModeration)) return false;
         const tn = String(r.trek_name || '').trim().toLowerCase();
         const rLeader = String(r.leader || r.guide_name || '').trim().toLowerCase();
         const rPhone = String(r.lead_guide_phone || r.guide_phone || '').trim().toLowerCase();
@@ -303,7 +305,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
     } catch {
       return [];
     }
-  }, [guideName, reviewsTick, customGuideSetting, guideStats, effectiveTreks]);
+  }, [guideName, reviewsTick, customGuideSetting, guideStats, effectiveTreks, contentModeration]);
 
   // Average of stars and count of ratings
   const guideRatingStats = useMemo(() => {

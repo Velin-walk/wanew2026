@@ -6,6 +6,7 @@ import { fetchPhotoComments, postPhotoComment, deletePhotoComment } from '../ser
 import { logUserActivity } from '../services/userActivityNotifier';
 import { PhotoComment } from '../types';
 import { getPublicDisplayName, useAnonymity } from '../utils/anonymity';
+import { useContentModeration, isPhotoCommentHidden } from '../services/contentModerationService';
 
 interface PhotoCommentsSectionProps {
   photoId: string;
@@ -20,6 +21,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
 }) => {
   useAnonymity();
   const { user, isAdmin, openAuthModal, userPhone } = useAuth();
+  const contentModeration = useContentModeration();
   const [comments, setComments] = useState<PhotoComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState('');
@@ -57,17 +59,22 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
     };
   }, [photoId]);
 
+  const visibleComments = React.useMemo(
+    () => comments.filter((c) => !isPhotoCommentHidden(c.id, contentModeration)),
+    [comments, contentModeration]
+  );
+
   // Notify parent of comment count changes safely inside an effect (never inside a state updater)
   useEffect(() => {
     if (!loading) {
-      onCommentCountChangeRef.current?.(comments.length);
+      onCommentCountChangeRef.current?.(visibleComments.length);
     }
-  }, [comments.length, loading]);
+  }, [visibleComments.length, loading]);
 
   // Scroll comments into view when new comment arrives
   useEffect(() => {
     commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [comments]);
+  }, [visibleComments.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,7 +174,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
         <div className="flex items-center gap-2">
           <MessageSquare className={`w-4 h-4 ${isDarkTheme ? 'text-[#7ABA42]' : 'text-[#629b35]'}`} />
           <h3 className={`text-xs font-black tracking-wider uppercase ${textPrimary}`}>
-            Discussion ({comments.length})
+            Discussion ({visibleComments.length})
           </h3>
         </div>
       </div>
@@ -189,7 +196,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
               </div>
             ))}
           </div>
-        ) : comments.length === 0 ? (
+        ) : visibleComments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center px-4">
             <MessageSquare className={`w-8 h-8 mb-2 opacity-20 ${textSecondary}`} />
             <p className={`text-xs font-bold ${textPrimary}`}>No comments yet</p>
@@ -198,7 +205,7 @@ export const PhotoCommentsSection: React.FC<PhotoCommentsSectionProps> = ({
         ) : (
           <div className="space-y-3">
             <AnimatePresence initial={false}>
-              {comments.map((comment) => {
+              {visibleComments.map((comment) => {
                 const canDelete = isAdmin || (user && user.uid === comment.userUid);
                 return (
                   <motion.div

@@ -4,6 +4,7 @@ import ElevationChart from './ElevationChart';
 import { routeToGPX } from './kmlParser';
 import { apiFetch } from '../../services/api';
 import { logUserActivity } from '../../services/userActivityNotifier';
+import { useContentModeration, isTrailCommentHidden } from '../../services/contentModerationService';
 
 interface RouteDetailProps {
   route: any;
@@ -159,10 +160,12 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
     }
   };
 
+  const contentModeration = useContentModeration();
   // Initialize comments from localStorage cache so UI is instantaneous and resilient
   const [comments, setComments] = useState<TrailComment[]>(() => {
     return route?.id ? getLocalComments(String(route.id)) : [];
   });
+  const visibleComments = comments.filter((c) => !isTrailCommentHidden(c.id, contentModeration));
   const [commentInput, setCommentInput] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
 
@@ -457,7 +460,7 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
                   : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50 hover:text-neutral-800'
               }`}
             >
-              <span>{tab === 'COMMENTS' ? `Comments (${comments.length})` : tab}</span>
+              <span>{tab === 'COMMENTS' ? `Comments (${visibleComments.length})` : tab}</span>
               {isCurrent && (
                 isExpanded ? (
                   <ChevronDown className="w-3 h-3 shrink-0" />
@@ -608,13 +611,13 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
                   <div className="text-center py-2 text-neutral-400 text-[8px] font-bold">
                     Syncing trail comments...
                   </div>
-                ) : comments.length === 0 ? (
+                ) : visibleComments.length === 0 ? (
                   <div className="text-center py-3 text-neutral-400 text-[8px] font-bold flex flex-col items-center justify-center gap-0.5">
                     <MessageSquare className="w-3.5 h-3.5 text-neutral-300" />
                     <span>No Comments Yet</span>
                   </div>
                 ) : (
-                  comments.map((comm) => {
+                  visibleComments.map((comm) => {
                     const isMyComment = (currentUserEmail && comm.authorEmail === currentUserEmail) ||
                                         (!currentUserEmail && comm.guestSessionId === currentSessionId);
                     const isAdmin = currentUserEmail === 'walknepalwalk@gmail.com';

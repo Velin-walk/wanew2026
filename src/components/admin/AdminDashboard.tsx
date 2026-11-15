@@ -69,6 +69,8 @@ import { AdminAccessManager } from './AdminAccessManager';
 import { OffersManager } from './OffersManager';
 import { GuidesManager } from './GuidesManager';
 import { AdminReportsDashboard } from './AdminReportsDashboard';
+import { CommentsReviewsModerationPanel } from './CommentsReviewsModerationPanel';
+import { useContentModeration } from '../../services/contentModerationService';
 import {
   fetchAllUserActivities,
   getAdminLastSeenTimestamp,
@@ -265,6 +267,12 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   const [previewTrail, setPreviewTrail] = useState<any | null>(null);
   const [previewRoute, setPreviewRoute] = useState<any | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [mapModerationSubTab, setMapModerationSubTab] = useState<'trails' | 'comments'>('trails');
+  const contentModeration = useContentModeration();
+  const hiddenContentCount =
+    contentModeration.hiddenPhotoCommentIds.length +
+    contentModeration.hiddenTrailCommentIds.length +
+    contentModeration.hiddenReviewKeys.length;
 
   // Cloudflare D1 Reliability State
   const [d1Status, setD1Status] = useState<'testing' | 'healthy' | 'error'>('healthy');
@@ -2380,42 +2388,93 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
         {activeTab === 'maps' && (
           <div className="w-full bg-white rounded-2xl shadow-sm border border-[#E5E1DB] p-6">
-            <div className="flex items-center gap-3 mb-6 border-b border-[#F0EBE5] pb-4">
-              <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-purple-600" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-[#F0EBE5] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center shrink-0">
+                  <MapPin className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-[#1F1F1F] tracking-tight">Community Map Moderation</h2>
+                  <p className="text-xs text-[#8B8680] mt-0.5">
+                    {mapModerationSubTab === 'trails'
+                      ? 'Review and approve trails submitted via MapMiners'
+                      : 'Hide or show public visibility of user comments and reviews'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-black text-[#1F1F1F] tracking-tight">Community Map Moderation</h2>
-                <p className="text-xs text-[#8B8680] mt-0.5">Review and approve trails submitted via MapMiners</p>
+
+              <div className="flex items-center gap-1.5 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setMapModerationSubTab('trails')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    mapModerationSubTab === 'trails'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-white'
+                  }`}
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>Trail Submissions ({trails.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapModerationSubTab('comments')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    mapModerationSubTab === 'comments'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-white'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Comments &amp; Reviews</span>
+                  {hiddenContentCount > 0 && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                        mapModerationSubTab === 'comments'
+                          ? 'bg-white text-purple-700'
+                          : 'bg-rose-100 text-rose-700'
+                      }`}
+                    >
+                      {hiddenContentCount} hidden
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
-            {moderationMessage && (
-              <div className={`mb-6 p-4 rounded-xl flex items-center justify-between gap-3 text-sm font-bold border animate-in fade-in slide-in-from-top-2 ${
-                moderationMessage.type === 'success'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : moderationMessage.type === 'error'
-                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                  : 'bg-amber-50 text-amber-700 border-amber-200'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {moderationMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                  <span>{moderationMessage.text}</span>
-                </div>
-                <button
-                  onClick={() => setModerationMessage(null)}
-                  className="text-xs hover:underline"
-                >
-                  Dismiss
-                </button>
-              </div>
-            )}
+            {mapModerationSubTab === 'comments' ? (
+              <CommentsReviewsModerationPanel
+                currentUserEmail={currentUserEmail}
+                trails={trails}
+              />
+            ) : (
+              <>
+                {moderationMessage && (
+                  <div className={`mb-6 p-4 rounded-xl flex items-center justify-between gap-3 text-sm font-bold border animate-in fade-in slide-in-from-top-2 ${
+                    moderationMessage.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : moderationMessage.type === 'error'
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      {moderationMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                      <span>{moderationMessage.text}</span>
+                    </div>
+                    <button
+                      onClick={() => setModerationMessage(null)}
+                      className="text-xs hover:underline"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
 
-            {loadingTrails ? (
-              <div className="flex justify-center items-center h-32">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
-              </div>
-            ) : trails.length === 0 ? (
+                {loadingTrails ? (
+                  <div className="flex justify-center items-center h-32">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                  </div>
+                ) : trails.length === 0 ? (
               <div className="text-center py-12 text-[#8B8680]">
                 <p>No trails pending review.</p>
               </div>
@@ -2480,6 +2539,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                   </div>
                 ))}
               </div>
+                )}
+              </>
             )}
           </div>
         )}

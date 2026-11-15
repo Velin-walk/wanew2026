@@ -47,6 +47,7 @@ import { GuideProfileModal } from './GuideProfileModal';
 import { Trek } from '../types';
 import { getGuidesSettings } from '../services/guidesService';
 import { getPublicDisplayName, useAnonymity } from '../utils/anonymity';
+import { useContentModeration, isReviewHidden } from '../services/contentModerationService';
 
 export type SubPageType = 'payment' | 'trek_tips' | 'creator_guide' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about' | 'notices' | 'trek_leaders';
 
@@ -209,6 +210,7 @@ export const HikerReviewsSection: React.FC<{
   initialVisibleCount?: number;
 }> = ({ onNavigateToBookings, onLeaveFeedback, initialVisibleCount = 20 }) => {
   useAnonymity();
+  const contentModeration = useContentModeration();
   const [liveReviews, setLiveReviews] = useState<any[]>(() => {
     try {
       const local = localStorage.getItem('wnw_user_feedbacks');
@@ -293,7 +295,9 @@ export const HikerReviewsSection: React.FC<{
       is_verified: true,
     }));
 
-    const combined = [...normalizedLive, ...HISTORIC_COMMUNITY_REVIEWS];
+    const combined = [...normalizedLive, ...HISTORIC_COMMUNITY_REVIEWS].filter(
+      (item) => !isReviewHidden(item, contentModeration)
+    );
 
     return combined.sort((a, b) => {
       const dateA = a.submitted_at || '';
@@ -304,7 +308,7 @@ export const HikerReviewsSection: React.FC<{
       if (!a.id.startsWith('live') && b.id.startsWith('live')) return 1;
       return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
     });
-  }, [liveReviews]);
+  }, [liveReviews, contentModeration]);
 
   const displayReviews = useMemo(() => {
     return allReviewsCombined.filter((item) => {
@@ -1121,6 +1125,7 @@ export const TrekLeadersSection: React.FC<{
   onSelectLeader: (name: string) => void;
   treks?: Trek[];
 }> = ({ onSelectLeader, treks = [] }) => {
+  const contentModeration = useContentModeration();
   const [filterGender, setFilterGender] = useState<'all' | 'Male' | 'Female'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [guideSettings, setGuideSettings] = useState(getGuidesSettings);
@@ -1166,7 +1171,7 @@ export const TrekLeadersSection: React.FC<{
       const allReviews = JSON.parse(localStorage.getItem('wnw_user_feedbacks') || '[]');
       const cleanTarget = guideName.trim().toLowerCase();
       const rawGuideReviews = allReviews.filter((r: any) => {
-        if (!r.trek_name) return false;
+        if (!r || !r.trek_name || isReviewHidden(r, contentModeration)) return false;
         const tn = String(r.trek_name).trim().toLowerCase();
         return tn === `guide_review:${cleanTarget}` || tn === `guide_review: ${cleanTarget}`;
       });
@@ -1343,6 +1348,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
   const [activeTab, setActiveTab] = useState<SubPageType>(initialPage);
   const [selectedGuide, setSelectedGuide] = useState<string | null>(null);
   const [guideSettings, setGuideSettings] = useState(getGuidesSettings);
+  const contentModeration = useContentModeration();
 
   useEffect(() => {
     const handleSync = () => setGuideSettings(getGuidesSettings());
@@ -1444,7 +1450,9 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
       is_verified: true,
     }));
 
-    const combined = [...normalizedLive, ...HISTORIC_COMMUNITY_REVIEWS];
+    const combined = [...normalizedLive, ...HISTORIC_COMMUNITY_REVIEWS].filter(
+      (item) => !isReviewHidden(item, contentModeration)
+    );
 
     // Sort descending by submission date so the most recent reviews appear first
     return combined.sort((a, b) => {
@@ -1456,7 +1464,7 @@ export const InfoPagesModal: React.FC<InfoPagesModalProps> = ({
       if (!a.id.startsWith('live') && b.id.startsWith('live')) return 1;
       return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
     });
-  }, [liveReviews]);
+  }, [liveReviews, contentModeration]);
 
   const reviewStats = useMemo(() => {
     const total = allReviewsCombined.length;

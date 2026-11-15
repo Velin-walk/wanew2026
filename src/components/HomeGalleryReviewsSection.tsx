@@ -6,6 +6,7 @@ import { HISTORIC_COMMUNITY_REVIEWS, StaticReview } from '../data/historicReview
 import { apiFetch } from '../services/api';
 import { triggerHaptic } from '../utils/haptics';
 import { getPublicDisplayName, useAnonymity } from '../utils/anonymity';
+import { useContentModeration, isReviewHidden } from '../services/contentModerationService';
 
 interface HomeGalleryReviewsSectionProps {
   treks: Trek[];
@@ -152,6 +153,7 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
   onOpenInfoPage,
 }) => {
   useAnonymity();
+  const contentModeration = useContentModeration();
   const [galleryPhotos, setGalleryPhotos] = useState<{ url: string; title: string; location: string }[]>(
     DEFAULT_ACTUAL_GALLERY_PHOTOS
   );
@@ -335,8 +337,11 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
       return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
     });
 
-    // Original filter from reviews page: exclude GUIDE_REVIEW: and require feedback text
+    // Original filter from reviews page: exclude GUIDE_REVIEW:, admin-hidden, and require feedback text
     const displayReviews = combined.filter((item) => {
+      if (isReviewHidden(item, contentModeration)) {
+        return false;
+      }
       if (item.trek_name && String(item.trek_name).toUpperCase().startsWith('GUIDE_REVIEW:')) {
         return false;
       }
@@ -348,7 +353,7 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
       previewReviews: displayReviews.slice(0, 6),
       totalReviewsCount: displayReviews.length,
     };
-  }, [refreshTrigger]);
+  }, [refreshTrigger, contentModeration]);
 
   const handleGalleryClick = (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
