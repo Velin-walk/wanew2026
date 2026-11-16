@@ -46,6 +46,7 @@ import { HikerStats } from '../types/leaderboard';
 import { MyBookingsScreen } from '../screens/MyBookingsScreen';
 import { isHikerAnonymous, setHikerAnonymity } from '../utils/anonymity';
 import { markNotificationAsRead } from '../services/notificationService';
+import { ReturningHikerMilestoneAwardsTable } from './ReturningHikerMilestoneAwardsTable';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -755,6 +756,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              <ReturningHikerMilestoneAwardsTable />
 
               {/* COMPLETED HIKES ARCHIVE - TABULAR FORMAT */}
               <div className="space-y-3">

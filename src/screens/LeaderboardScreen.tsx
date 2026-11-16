@@ -21,6 +21,7 @@ import { CommunityMilestoneCard } from '../components/CommunityMilestoneCard';
 import { HikerReviewsSection } from '../components/InfoPagesModal';
 import { MapContributionBoard } from '../components/MapContributionBoard';
 import { isHikerAnonymous, useAnonymity } from '../utils/anonymity';
+import { ReturningHikerMilestoneAwardsTable } from '../components/ReturningHikerMilestoneAwardsTable';
 
 
 type SortMetric = 'dist' | 'count';
@@ -773,6 +774,9 @@ export const LeaderboardScreen: React.FC<{ onNavigateToMapMiners?: () => void }>
             />
           </div>
         </div>
+
+        {/* Returning Hiker Milestone Awards */}
+        <ReturningHikerMilestoneAwardsTable />
 
         {/* Map Miners Community Contribution Board */}
         <MapContributionBoard onNavigateToMapMiners={onNavigateToMapMiners} />

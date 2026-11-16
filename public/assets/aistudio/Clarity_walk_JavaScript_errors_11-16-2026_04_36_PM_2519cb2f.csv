@@ -1,0 +1,11 @@
+﻿"Project name","walk"
+"Date range","11/14/2026 12:00 AM - 11/16/2026 11:59 PM"
+
+
+"Metric","JavaScript errors"
+"","Sessions with JavaScript errors"
+""," total JavaScript errors","40"
+"","","No. of sessions","% of sessions"
+"","error invoking postmessage: java object is gone","33","82.50%"
+"","script error.","5","12.50%"
+"","undefined is not an object (evaluating 'navigator.clipboard.writetext')","2","5%"

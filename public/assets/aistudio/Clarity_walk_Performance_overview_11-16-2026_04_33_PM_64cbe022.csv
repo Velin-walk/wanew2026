@@ -1,0 +1,12 @@
+﻿"Project name","walk"
+"Date range","11/14/2026 12:00 AM - 11/16/2026 11:59 PM"
+
+
+"JavaScript errors","error invoking postmessage: java object is gone"
+"Performance score","51-80"
+
+"Metric","Performance overview"
+"","Score","70.71428571428571"
+"","LCP (Largest Contentful Paint)","2.346s"
+"","INP (Interaction to Next Paint)","648ms"
+"","CLS (Cumulative Layout Shift)","0.0045s"

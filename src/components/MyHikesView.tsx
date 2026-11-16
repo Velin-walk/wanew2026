@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { HISTORICAL_TREKS, HistoricalTrekItem } from '../data/historicalTreks';
 import { fetchLeaderboardData } from '../services/api';
 import { HikerStats } from '../types/leaderboard';
+import { ReturningHikerMilestoneAwardsTable } from './ReturningHikerMilestoneAwardsTable';
 
 export interface MyHikesViewProps {
   userBookings?: any[];
@@ -453,6 +454,8 @@ export const MyHikesView: React.FC<MyHikesViewProps> = ({
           </div>
         </div>
       </div>
+
+      <ReturningHikerMilestoneAwardsTable />
 
       {/* Completed Hikes Archive - Tabular Format */}
       <div className="space-y-3">

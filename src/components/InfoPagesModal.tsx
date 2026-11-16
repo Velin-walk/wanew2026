@@ -48,6 +48,7 @@ import { Trek } from '../types';
 import { getGuidesSettings } from '../services/guidesService';
 import { getPublicDisplayName, useAnonymity } from '../utils/anonymity';
 import { useContentModeration, isReviewHidden } from '../services/contentModerationService';
+import { ReturningHikerMilestoneAwardsTable } from './ReturningHikerMilestoneAwardsTable';
 
 export type SubPageType = 'payment' | 'trek_tips' | 'creator_guide' | 'safety_policy' | 'reviews' | 'blogs' | 'request_private_trek' | 'contact' | 'about' | 'notices' | 'trek_leaders';
 
@@ -200,6 +201,8 @@ export const PaymentAndPricingSection: React.FC<{
           </button>
         )}
       </div>
+
+      <ReturningHikerMilestoneAwardsTable />
     </div>
   );
 };
