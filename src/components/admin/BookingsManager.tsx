@@ -80,6 +80,11 @@ export interface AdminRegistration {
   created_at?: string;
   user_email?: string;
   email_address?: string;
+  user_id?: string;
+  part_of_group?: string;
+  agreement?: string;
+  guide_mode?: string;
+  transport_mode?: string;
 }
 
 interface BookingsManagerProps {

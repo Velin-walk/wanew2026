@@ -1215,6 +1215,77 @@ const worker = {
         }, 200, privateHeaders);
       }
 
+      // GET /admin/user-identity - Read-only lookup of unified user + user_contacts for Admin/Coordinator profile view
+      if (method === 'GET' && path === '/admin/user-identity') {
+        if (!env.DB) return jsonResponse({ success: true, data: null });
+        const authUser = await getAuthUser(request);
+        if (!authUser) return errorResponse('Authentication required', 401);
+        const isStaff = Boolean(authUser.isAdmin || authUser.isCoordinator || (await isAuthorizedAdminOrCoordinator(authUser.email, env)));
+        if (!isStaff) return errorResponse('Forbidden', 403);
+
+        const privateHeaders = { 'Cache-Control': 'private, no-store' };
+        const qUserId = (url.searchParams.get('user_id') || '').trim();
+        const qEmail = (url.searchParams.get('email') || '').trim().toLowerCase();
+        const qPhoneRaw = (url.searchParams.get('phone') || '').trim();
+        const qPhoneE164 = qPhoneRaw ? normalizePhoneE164(qPhoneRaw) : null;
+        const qPhoneDigits = qPhoneRaw.replace(/\D/g, '');
+
+        try {
+          let resolvedId = qUserId || null;
+          if (!resolvedId && qEmail) {
+            const row = await env.DB.prepare(
+              "SELECT user_id FROM user_contacts WHERE type = 'email' AND value = ? LIMIT 1"
+            ).bind(qEmail).first();
+            if (row?.user_id) resolvedId = row.user_id;
+          }
+          if (!resolvedId && qPhoneE164) {
+            const row = await env.DB.prepare(
+              "SELECT user_id FROM user_contacts WHERE type = 'phone' AND value = ? LIMIT 1"
+            ).bind(qPhoneE164).first();
+            if (row?.user_id) resolvedId = row.user_id;
+          }
+          if (!resolvedId && qPhoneDigits.length >= 7) {
+            const row = await env.DB.prepare(
+              "SELECT user_id FROM user_contacts WHERE type = 'phone' AND value LIKE ? LIMIT 1"
+            ).bind(`%${qPhoneDigits.slice(-7)}`).first();
+            if (row?.user_id) resolvedId = row.user_id;
+          }
+
+          if (!resolvedId) {
+            return jsonResponse({ success: true, data: null }, 200, privateHeaders);
+          }
+
+          const [userRes, contactsRes] = await env.DB.batch([
+            env.DB.prepare('SELECT id, display_name, profile_json, created_at FROM users WHERE id = ?').bind(resolvedId),
+            env.DB.prepare('SELECT type, value FROM user_contacts WHERE user_id = ? ORDER BY type, value').bind(resolvedId),
+          ]);
+          const userRow = userRes?.results?.[0];
+          if (!userRow) {
+            return jsonResponse({ success: true, data: null }, 200, privateHeaders);
+          }
+
+          let profile = {};
+          try {
+            profile = userRow.profile_json ? JSON.parse(userRow.profile_json) : {};
+          } catch (_) {
+            profile = {};
+          }
+
+          return jsonResponse({
+            success: true,
+            data: {
+              id: userRow.id,
+              display_name: userRow.display_name || null,
+              profile,
+              contacts: contactsRes?.results || [],
+              created_at: userRow.created_at || null,
+            },
+          }, 200, privateHeaders);
+        } catch (_) {
+          return jsonResponse({ success: true, data: null }, 200, privateHeaders);
+        }
+      }
+
       // GET /images/:fileName - Serve R2 uploaded trek cover images
       if (method === 'GET' && path.startsWith('/images/')) {
         const fileName = decodeURIComponent(path.replace('/images/', ''));
