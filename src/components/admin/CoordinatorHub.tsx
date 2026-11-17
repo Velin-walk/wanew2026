@@ -22,10 +22,17 @@ import {
   CheckCircle2,
   FileText,
   X,
-  Eye
+  Eye,
+  Trophy
 } from 'lucide-react';
 import { Trek } from '../../types';
-import { AdminRegistration, doesRegistrationMatchTrek } from './BookingsManager';
+import {
+  AdminRegistration,
+  doesRegistrationMatchTrek,
+  normalizeGuideCompare,
+  resolveTrekGuides,
+  useResolvedGuideProfiles,
+} from './BookingsManager';
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { fetchLeaderboardData } from '../../services/api';
 import { HikerStats } from '../../types/leaderboard';
@@ -44,6 +51,7 @@ type SortCol =
   | 'name'
   | 'phone'
   | 'pickup'
+  | 'pax'
   | 'paid'
   | 'due'
   | 'gender'
@@ -52,6 +60,11 @@ type SortCol =
   | 'updates'
   | 'medical'
   | 'totalHikes';
+
+const getRegPax = (r: AdminRegistration): number => {
+  const p = Number(r.paxCount ?? (r as any).pax ?? 1);
+  return isNaN(p) || p <= 0 ? 1 : p;
+};
 
 const extractHikeNumber = (val?: string): string => {
   if (!val) return '';
@@ -381,9 +394,24 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return upcomingTreks.map((t) => {
       const matchedRegs = registrations.filter((r) => doesRegistrationMatchTrek(r, t));
       const fallbackParticipants = typeof t.participants === 'number' ? t.participants : (Number(t.participants) || 0);
+      let extraGuidesCount = 0;
+      if (matchedRegs.length > 0) {
+        const { leadName, asstNames } = resolveTrekGuides(t, matchedRegs);
+        const existingNames = new Set(
+          matchedRegs.map((r) => normalizeGuideCompare(r.full_name)).filter(Boolean)
+        );
+        if (leadName && !existingNames.has(normalizeGuideCompare(leadName))) {
+          extraGuidesCount++;
+        }
+        asstNames.forEach((a) => {
+          if (!existingNames.has(normalizeGuideCompare(a))) {
+            extraGuidesCount++;
+          }
+        });
+      }
       return {
         trek: t,
-        regsCount: matchedRegs.length > 0 ? matchedRegs.length : fallbackParticipants,
+        regsCount: matchedRegs.length > 0 ? matchedRegs.length + extraGuidesCount : fallbackParticipants,
       };
     });
   }, [upcomingTreks, registrations]);
@@ -414,6 +442,117 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     if (!currentTrek) return [];
     return registrations.filter((r) => doesRegistrationMatchTrek(r, currentTrek));
   }, [currentTrek, registrations]);
+
+  type CoordinatorRow = AdminRegistration & {
+    _guideRole?: 'leader' | 'assistant';
+    _isSyntheticGuide?: boolean;
+  };
+
+  const activeTrekGuideInfo = useMemo(() => {
+    if (!currentTrek) return { leadName: '', asstNames: [] as string[] };
+    return resolveTrekGuides(currentTrek, trekRegistrations);
+  }, [currentTrek, trekRegistrations]);
+
+  const activeTrekGuideNames = useMemo(() => {
+    return [activeTrekGuideInfo.leadName, ...activeTrekGuideInfo.asstNames].filter(Boolean);
+  }, [activeTrekGuideInfo]);
+
+  const resolvedGuideProfiles = useResolvedGuideProfiles(
+    activeTrekGuideNames,
+    rawRegistrations,
+    leaderboardHikers
+  );
+
+  const trekRosterWithGuides: CoordinatorRow[] = useMemo(() => {
+    if (!currentTrek) return [];
+    const { leadName, asstNames } = activeTrekGuideInfo;
+    const leadKey = normalizeGuideCompare(leadName);
+    const asstKeys = new Set(asstNames.map((a) => normalizeGuideCompare(a)));
+
+    const applyProfileFallback = (row: CoordinatorRow, guideName: string): CoordinatorRow => {
+      const profile = resolvedGuideProfiles.get(normalizeGuideCompare(guideName));
+      if (!profile) return row;
+      return {
+        ...row,
+        phone: row.phone || profile.phone || '',
+        whatsapp: row.whatsapp || profile.whatsapp || profile.phone || '',
+        email: row.email || profile.email || '',
+        gender: row.gender || profile.gender || '',
+        age_group: row.age_group || profile.age_group || '',
+      };
+    };
+
+    const flaggedRows: CoordinatorRow[] = trekRegistrations.map((r) => {
+      const nameKey = normalizeGuideCompare(r.full_name);
+      if (nameKey && leadKey && nameKey === leadKey) {
+        return applyProfileFallback({ ...r, _guideRole: 'leader' }, r.full_name);
+      }
+      if (nameKey && asstKeys.has(nameKey)) {
+        return applyProfileFallback({ ...r, _guideRole: 'assistant' }, r.full_name);
+      }
+      return r;
+    });
+
+    const existingNames = new Set(
+      flaggedRows.map((r) => normalizeGuideCompare(r.full_name)).filter(Boolean)
+    );
+    const guideRows: CoordinatorRow[] = [];
+    const buildGuideRow = (name: string, role: 'leader' | 'assistant', idx: number): CoordinatorRow => {
+      const profile = resolvedGuideProfiles.get(normalizeGuideCompare(name));
+      return {
+        id: `__coord_guide_${role}_${currentTrek.hike_number || currentTrek.id}_${idx}`,
+        trek_id: currentTrek.id,
+        hike_number: currentTrek.hike_number,
+        trek_name: currentTrek.name,
+        trek_date: currentTrek.date,
+        full_name: name,
+        phone: profile?.phone || '',
+        whatsapp: profile?.whatsapp || profile?.phone || '',
+        email: profile?.email || '',
+        gender: profile?.gender || '',
+        age_group: profile?.age_group || '',
+        paxCount: 1,
+        status: 'Confirmed',
+        payment_status: 'Fully Paid',
+        paid_amount: 0,
+        due_amount: 0,
+        _guideRole: role,
+        _isSyntheticGuide: true,
+      };
+    };
+
+    if (leadName && !existingNames.has(leadKey)) {
+      guideRows.push(buildGuideRow(leadName, 'leader', 0));
+    }
+    asstNames.forEach((asstName, idx) => {
+      if (!existingNames.has(normalizeGuideCompare(asstName))) {
+        guideRows.push(buildGuideRow(asstName, 'assistant', idx + 1));
+      }
+    });
+
+    return [...guideRows, ...flaggedRows];
+  }, [currentTrek, trekRegistrations, activeTrekGuideInfo, resolvedGuideProfiles]);
+
+  const getDuplicateNamePhoneKey = (r: AdminRegistration): string => {
+    const cleanName = (r.full_name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const rawDigits = (r.phone || r.whatsapp || (r as any).whatsapp_number || '').replace(/[^0-9]/g, '');
+    const cleanPhone = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
+    if (!cleanName || !cleanPhone) return '';
+    return `${cleanName}|${cleanPhone}`;
+  };
+
+  const duplicateNamePhoneKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    trekRegistrations.forEach((r) => {
+      const key = getDuplicateNamePhoneKey(r);
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    const dups = new Set<string>();
+    counts.forEach((count, key) => {
+      if (count > 1) dups.add(key);
+    });
+    return dups;
+  }, [trekRegistrations]);
 
   // Lifetime Leaderboard Phone & Name Map
   const leaderboardPhoneMap = useMemo(() => {
@@ -497,8 +636,12 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return 1;
   };
 
-  // Metrics Calculations (Option A: Unique confirmed roster entries)
-  const totalRegistered = trekRegistrations.length > 0 ? trekRegistrations.length : (Number(currentTrek?.participants) || 0);
+  // Metrics Calculations (Option A: Unique confirmed roster entries + assigned guides)
+  const hikerCount = trekRegistrations.length;
+  const totalRegistered =
+    trekRegistrations.length > 0
+      ? trekRosterWithGuides.length
+      : Number(currentTrek?.participants) || trekRosterWithGuides.length || 0;
   const paidCount = trekRegistrations.filter(
     (r) => r.payment_status?.toLowerCase() === 'fully paid' || (r.paid_amount || 0) > 0
   ).length;
@@ -508,7 +651,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   const returningCount = trekRegistrations.filter(
     (r) => getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name) > 1
   ).length;
-  const firstTimersCount = trekRegistrations.length - returningCount;
+  const firstTimersCount = hikerCount - returningCount;
 
   // Demographic Calculations
   const genderBreakdown = useMemo(() => {
@@ -547,23 +690,32 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
   // Table Filtering & Sorting
   const filteredAndSortedRegistrations = useMemo(() => {
-    let result = [...trekRegistrations];
+    let result = [...trekRosterWithGuides];
 
     // Apply Filter Chips
     if (tableFilter === 'paid') {
       result = result.filter(
-        (r) => r.payment_status?.toLowerCase() === 'fully paid' || r.paid_amount > 0
+        (r) => !r._isSyntheticGuide && (r.payment_status?.toLowerCase() === 'fully paid' || r.paid_amount > 0)
       );
     } else if (tableFilter === 'pending') {
       result = result.filter(
-        (r) => r.payment_status?.toLowerCase() !== 'fully paid' && r.paid_amount === 0
+        (r) => !r._isSyntheticGuide && r.payment_status?.toLowerCase() !== 'fully paid' && r.paid_amount === 0
       );
     } else if (tableFilter === 'due') {
-      result = result.filter((r) => r.due_amount > 0);
+      result = result.filter((r) => !r._isSyntheticGuide && r.due_amount > 0);
     }
 
     // Apply Sorting
     result.sort((a, b) => {
+      if (sortCol === 'name' && sortAsc) {
+        if (a._isSyntheticGuide && !b._isSyntheticGuide) return -1;
+        if (!a._isSyntheticGuide && b._isSyntheticGuide) return 1;
+        if (a._isSyntheticGuide && b._isSyntheticGuide) {
+          if (a._guideRole === 'leader' && b._guideRole !== 'leader') return -1;
+          if (a._guideRole !== 'leader' && b._guideRole === 'leader') return 1;
+        }
+      }
+
       let valA: any = '';
       let valB: any = '';
 
@@ -579,6 +731,10 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         case 'pickup':
           valA = (a.pickup_point || '').toLowerCase();
           valB = (b.pickup_point || '').toLowerCase();
+          break;
+        case 'pax':
+          valA = getRegPax(a);
+          valB = getRegPax(b);
           break;
         case 'paid':
           valA = a.paid_amount;
@@ -601,8 +757,12 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           valB = (b.admin_notes || '').toLowerCase();
           break;
         case 'totalHikes':
-          valA = getHikerPastCount(a.phone || a.whatsapp || (a as any).whatsapp_number || '', a.full_name);
-          valB = getHikerPastCount(b.phone || b.whatsapp || (b as any).whatsapp_number || '', b.full_name);
+          valA = a._isSyntheticGuide
+            ? -1
+            : getHikerPastCount(a.phone || a.whatsapp || (a as any).whatsapp_number || '', a.full_name);
+          valB = b._isSyntheticGuide
+            ? -1
+            : getHikerPastCount(b.phone || b.whatsapp || (b as any).whatsapp_number || '', b.full_name);
           break;
         default:
           valA = a.full_name.toLowerCase();
@@ -615,7 +775,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     });
 
     return result;
-  }, [trekRegistrations, tableFilter, sortCol, sortAsc, leaderboardPhoneMap]);
+  }, [trekRosterWithGuides, tableFilter, sortCol, sortAsc, leaderboardPhoneMap]);
 
   const totalRows = filteredAndSortedRegistrations.length;
   const totalPages = Math.ceil(totalRows / pageSize) || 1;
@@ -641,6 +801,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       'Full Name',
       'Phone',
       'Pickup Point',
+      'Pax',
       'Paid (NPR)',
       'Due (NPR)',
       'Gender',
@@ -651,11 +812,12 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       'Total Hikes'
     ];
 
-    const rows = trekRegistrations.map((r, i) => [
+    const rows = trekRosterWithGuides.map((r, i) => [
       i + 1,
-      `"${r.full_name.replace(/"/g, '""')}"`,
-      `"${r.phone}"`,
+      `"${(r._guideRole === 'leader' ? `${r.full_name} (Leader)` : r._guideRole === 'assistant' ? `${r.full_name} (Asst. Leader)` : r.full_name).replace(/"/g, '""')}"`,
+      `"${r.phone || '—'}"`,
       `"${r.pickup_point || '—'}"`,
+      getRegPax(r),
       r.paid_amount || 0,
       r.due_amount || 0,
       `"${r.gender || '—'}"`,
@@ -663,7 +825,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       `"${(r.suggestions || '').replace(/"/g, '""')}"`,
       `"${(r.admin_notes || '').replace(/"/g, '""')}"`,
       `"${(r.has_medical || '').replace(/"/g, '""')}"`,
-      getHikerPastCount(r.phone || '', r.full_name)
+      r._isSyntheticGuide ? '—' : getHikerPastCount(r.phone || '', r.full_name)
     ]);
 
     const csvContent =
@@ -677,6 +839,84 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleExportLeaderboardCsv = () => {
+    if (!currentTrek) return;
+
+    const escapeCsv = (val: string | number | undefined | null) =>
+      `"${String(val ?? '').replace(/"/g, '""')}"`;
+
+    // Format Trek Name as "Name (Weekday D Mon YYYY)" when a valid date is available
+    const baseName = (currentTrek.name || 'Trek').trim();
+    let formattedDate = '';
+    const parsedDt = parseTrekDate(currentTrek.date);
+    if (parsedDt) {
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      formattedDate = `${dayNames[parsedDt.getDay()]} ${parsedDt.getDate()} ${monthNames[parsedDt.getMonth()]} ${parsedDt.getFullYear()}`;
+    } else if (currentTrek.date && currentTrek.date.trim()) {
+      formattedDate = currentTrek.date.trim();
+    }
+
+    const alreadyHasParenDate = /\(\s*[^)]*\b20\d\d\b[^)]*\)\s*$/i.test(baseName);
+    const trekNameCol =
+      formattedDate && !alreadyHasParenDate && !baseName.includes(formattedDate)
+        ? `${baseName} (${formattedDate})`
+        : baseName;
+
+    const hikeNumberCol = getHikeNumberFromAny(currentTrek) || '';
+    const rawDist =
+      currentTrek.distance ||
+      currentTrek.data?.overview?.approxDistance ||
+      currentTrek.data?.approxDistance ||
+      currentTrek.data?.distance ||
+      '';
+    const distMatch = String(rawDist).match(/(\d+(?:\.\d+)?)/);
+    const distanceCol = distMatch ? distMatch[1] : '';
+
+    const headers = [
+      'Trek Name',
+      'Full Name',
+      'Phone',
+      'Email Address',
+      'Age group',
+      'Gender',
+      'Hike Number #',
+      'Distance'
+    ];
+
+    const rows = trekRosterWithGuides.map((r) => {
+      const phone = (r.phone || r.whatsapp || (r as any).whatsapp_number || '').trim();
+      const email = (r.email || (r as any).email_address || '').trim();
+      const ageGroup = (r.age_group || '').trim();
+      const gender = (r.gender || '').trim();
+      const rowHikeNum = hikeNumberCol || getHikeNumberFromAny(r) || '';
+
+      return [
+        escapeCsv(trekNameCol),
+        escapeCsv((r.full_name || '').trim()),
+        escapeCsv(phone),
+        escapeCsv(email),
+        escapeCsv(ageGroup),
+        escapeCsv(gender),
+        rowHikeNum || '',
+        distanceCol || ''
+      ];
+    });
+
+    const csvContent =
+      '\uFEFF' + [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${baseName}_Leaderboard.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handlePrintManifest = () => {
@@ -697,7 +937,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         </div>
 
         {/* Top Export Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleExportExcel}
@@ -705,6 +945,16 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             <span>Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportLeaderboardCsv}
+            title="Download CSV formatted for Leaderboard Google Sheet"
+            className="px-3.5 py-2 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Trophy className="w-4 h-4 text-amber-600" />
+            <span>Leaderboard CSV</span>
           </button>
 
           <button
@@ -857,7 +1107,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             PAID
           </div>
           <div className="text-xs font-semibold text-stone-600 mt-1">
-            {totalRegistered > 0 ? Math.round((paidCount / totalRegistered) * 100) : 0}% conversion
+            {hikerCount > 0 ? Math.round((paidCount / hikerCount) * 100) : 0}% conversion
           </div>
         </div>
 
@@ -906,13 +1156,13 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
           <div className="h-8 w-full bg-stone-100 rounded-lg overflow-hidden flex text-white text-[11px] font-extrabold">
             <div
-              style={{ width: `${totalRegistered > 0 ? (firstTimersCount / totalRegistered) * 100 : 50}%` }}
+              style={{ width: `${hikerCount > 0 ? (firstTimersCount / hikerCount) * 100 : 50}%` }}
               className="bg-[#2563EB] h-full flex items-center justify-center"
             >
               {firstTimersCount} new
             </div>
             <div
-              style={{ width: `${totalRegistered > 0 ? (returningCount / totalRegistered) * 100 : 50}%` }}
+              style={{ width: `${hikerCount > 0 ? (returningCount / hikerCount) * 100 : 50}%` }}
               className="bg-[#16A34A] h-full flex items-center justify-center"
             >
               {returningCount} ret.
@@ -920,8 +1170,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           </div>
 
           <div className="flex items-center justify-between text-[11px] font-semibold text-stone-400">
-            <span>{firstTimersCount} new hikers ({totalRegistered > 0 ? Math.round((firstTimersCount / totalRegistered) * 100) : 50}%)</span>
-            <span>{returningCount} returning ({totalRegistered > 0 ? Math.round((returningCount / totalRegistered) * 100) : 50}%)</span>
+            <span>{firstTimersCount} new hikers ({hikerCount > 0 ? Math.round((firstTimersCount / hikerCount) * 100) : 50}%)</span>
+            <span>{returningCount} returning ({hikerCount > 0 ? Math.round((returningCount / hikerCount) * 100) : 50}%)</span>
           </div>
         </div>
 
@@ -1073,6 +1323,12 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                   PICKUP {sortCol === 'pickup' ? (sortAsc ? '▲' : '▼') : '⇅'}
                 </th>
                 <th
+                  onClick={() => handleSort('pax')}
+                  className="py-2 px-2.5 text-center cursor-pointer hover:text-stone-700 select-none"
+                >
+                  PAX {sortCol === 'pax' ? (sortAsc ? '▲' : '▼') : '⇅'}
+                </th>
+                <th
                   onClick={() => handleSort('paid')}
                   className="py-2 px-2.5 cursor-pointer hover:text-stone-700 select-none"
                 >
@@ -1116,7 +1372,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
             <tbody className="divide-y divide-stone-100">
               {paginatedRegistrations.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-6 text-center text-stone-400 font-semibold text-xs">
+                  <td colSpan={13} className="py-6 text-center text-stone-400 font-semibold text-xs">
                     No registered hikers found matching criteria
                   </td>
                 </tr>
@@ -1126,7 +1382,9 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                     (r.gender || '').toLowerCase().includes('female') ||
                     (r.gender || '').toLowerCase() === 'f';
 
-                  const pastHikes = getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name);
+                  const pastHikes = r._isSyntheticGuide
+                    ? null
+                    : getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name);
 
                   const sn = (currentPage - 1) * pageSize + index + 1;
 
@@ -1134,7 +1392,13 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                     <tr
                       key={r.id}
                       className={`transition-colors ${
-                        isFemale ? 'bg-pink-50/50 hover:bg-pink-100/50' : 'hover:bg-stone-50/80'
+                        r._guideRole === 'leader'
+                          ? 'bg-amber-50/40 hover:bg-amber-100/40'
+                          : r._guideRole === 'assistant'
+                          ? 'bg-sky-50/35 hover:bg-sky-100/35'
+                          : isFemale
+                          ? 'bg-pink-50/50 hover:bg-pink-100/50'
+                          : 'hover:bg-stone-50/80'
                       }`}
                     >
                       {/* S.N. */}
@@ -1159,9 +1423,28 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                           >
                             {r.full_name}
                           </button>
+                          {r._guideRole === 'leader' && (
+                            <span className="inline-flex items-center font-bold text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                              Leader
+                            </span>
+                          )}
+                          {r._guideRole === 'assistant' && (
+                            <span className="inline-flex items-center font-bold text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-sky-100 text-sky-900 border border-sky-300">
+                              Asst. Leader
+                            </span>
+                          )}
                           {r.paxCount && Number(r.paxCount) > 1 && (
                             <span className="font-bold text-purple-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.2 rounded text-[9.5px]">
                               {r.paxCount} Pax
+                            </span>
+                          )}
+                          {!r._isSyntheticGuide && duplicateNamePhoneKeys.has(getDuplicateNamePhoneKey(r)) && (
+                            <span
+                              className="inline-flex items-center gap-0.5 font-bold text-red-700 bg-red-100 border border-red-300 px-1.5 py-0.2 rounded text-[9.5px]"
+                              title="Duplicate warning: same participant name and phone appears more than once in this event"
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5 text-red-600 shrink-0" />
+                              <span>Duplicate</span>
                             </span>
                           )}
                         </div>
@@ -1177,8 +1460,16 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                         {r.pickup_point || '—'}
                       </td>
 
+                      {/* PAX */}
+                      <td className="py-2 px-2.5 text-center font-bold text-stone-700 text-xs">
+                        {getRegPax(r)}
+                      </td>
+
                       {/* PAID */}
                       <td className="py-2 px-2.5">
+                        {r._isSyntheticGuide ? (
+                          <span className="text-stone-400 text-xs">—</span>
+                        ) : (
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {r.paid_amount > 0 ? (
                             <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10.5px] font-bold">
@@ -1211,6 +1502,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                             </button>
                           )}
                         </div>
+                        )}
                       </td>
 
                       {/* DUE */}
@@ -1258,7 +1550,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
                       {/* TOTAL HIKES */}
                       <td className="py-2 px-2.5 text-center font-bold text-stone-700 text-xs">
-                        {pastHikes}
+                        {pastHikes === null ? '—' : pastHikes}
                       </td>
                     </tr>
                   );
@@ -1269,6 +1561,9 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
               <tr>
                 <td colSpan={4} className="py-2.5 px-2.5 text-right uppercase text-[9px] tracking-wider text-stone-500">
                   Total
+                </td>
+                <td className="py-2.5 px-2.5 text-center text-stone-800 font-black text-xs">
+                  {filteredAndSortedRegistrations.reduce((acc, r) => acc + getRegPax(r), 0)}
                 </td>
                 <td className="py-2.5 px-2.5 text-emerald-700 font-black text-xs">
                   Rs {filteredAndSortedRegistrations.reduce((acc, r) => acc + (r.paid_amount || 0), 0).toLocaleString()}

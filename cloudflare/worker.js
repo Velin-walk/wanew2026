@@ -992,6 +992,44 @@ function ensureDbIndexes(env, ctx) {
   }
 }
 
+let regGuideColsEnsured = false;
+function isMissingGuideColumnError(err) {
+  const msg = String(err && err.message ? err.message : err || '');
+  return /no such column.*(lead_guide|assistant_guides)|has no column named (lead_guide|assistant_guides)/i.test(msg);
+}
+async function ensureRegistrationGuideColumns(env) {
+  if (regGuideColsEnsured || !env || !env.DB) return;
+  try {
+    await Promise.all([
+      env.DB.prepare('ALTER TABLE registrations ADD COLUMN lead_guide TEXT').run().catch(() => {}),
+      env.DB.prepare('ALTER TABLE registrations ADD COLUMN assistant_guides TEXT').run().catch(() => {}),
+      env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN lead_guide TEXT').run().catch(() => {}),
+      env.DB.prepare('ALTER TABLE bookings_roster ADD COLUMN assistant_guides TEXT').run().catch(() => {}),
+    ]);
+    regGuideColsEnsured = true;
+  } catch (_) {}
+}
+
+function normalizeAssistantGuidesList(val) {
+  if (Array.isArray(val)) {
+    return Array.from(new Set(val.map((s) => String(s || '').trim()).filter(Boolean)));
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return Array.from(new Set(parsed.map((s) => String(s || '').trim()).filter(Boolean)));
+        }
+      } catch (_) {}
+    }
+    return Array.from(new Set(trimmed.split(',').map((s) => s.trim()).filter(Boolean)));
+  }
+  return [];
+}
+
 let blogsTableEnsured = false;
 async function ensureBlogsTable(env) {
   if (blogsTableEnsured || !env || !env.DB) return;
@@ -1493,11 +1531,21 @@ const worker = {
         const execLeader = (row.exec_assigned_leader && String(row.exec_assigned_leader).trim())
           ? String(row.exec_assigned_leader).trim()
           : null;
-        const resolvedLeader = execLeader || (row.team_leader || 'Walk Nepal Walk Guide');
+        const resolvedLeader =
+          execLeader ||
+          (row.team_leader && String(row.team_leader).trim()) ||
+          'Walk Nepal Walk Guide';
+        const resolvedAssistantGuides = normalizeAssistantGuidesList(
+          parsedData.assistantGuides ?? parsedData.assistantGuide
+        );
 
         if (parsedData && typeof parsedData === 'object') {
           parsedData.maxCapacity = resolvedMaxCap;
           if (execLeader) parsedData.teamLeader = execLeader;
+          if (resolvedAssistantGuides.length > 0 && (!Array.isArray(parsedData.assistantGuides) || parsedData.assistantGuides.length === 0)) {
+            parsedData.assistantGuides = resolvedAssistantGuides;
+            parsedData.assistantGuide = resolvedAssistantGuides.join(', ');
+          }
           if (row.exec_is_cancelled !== null && row.exec_is_cancelled !== undefined) {
             parsedData.is_cancelled = row.exec_is_cancelled === 1;
           }
@@ -1515,6 +1563,9 @@ const worker = {
           capacity: resolvedMaxCap,
           team_leader: resolvedLeader,
           leader: resolvedLeader,
+          lead_guide: resolvedLeader,
+          assistant_guides: resolvedAssistantGuides,
+          assistant_guide: resolvedAssistantGuides.join(', '),
           hikeNumber: row.hike_number,
           hike_number: row.hike_number,
           participants: total_pax,
@@ -1533,6 +1584,8 @@ const worker = {
           data: trekObj,
           trek: trekObj,
           roster: sanitizedRoster,
+          lead_guide: resolvedLeader,
+          assistant_guides: resolvedAssistantGuides,
           total_pax,
         }, 200, {
           'Cache-Control': 'public, max-age=300, s-maxage=300',
@@ -2331,7 +2384,9 @@ const worker = {
             b.email AS roster_email,
             b.whatsapp AS roster_whatsapp,
             b.trek_name AS roster_trek_name,
-            b.hike_number AS roster_hike_number
+            b.hike_number AS roster_hike_number,
+            b.lead_guide AS roster_lead_guide,
+            b.assistant_guides AS roster_assistant_guides
           FROM registrations r
           LEFT JOIN bookings_roster b ON b.registration_id = CAST(r.id AS TEXT)
         `;
@@ -2373,8 +2428,20 @@ const worker = {
           const { results } = regParams.length > 0 ? await stmt.bind(...regParams).all() : await stmt.all();
           rawRows = results || [];
         } catch (err) {
-          console.error('Error fetching registrations with LEFT JOIN from D1:', err);
-          return errorResponse('Failed to fetch registrations', 500);
+          if (isMissingGuideColumnError(err)) {
+            await ensureRegistrationGuideColumns(env);
+            try {
+              const retryStmt = env.DB.prepare(regSql);
+              const { results } = regParams.length > 0 ? await retryStmt.bind(...regParams).all() : await retryStmt.all();
+              rawRows = results || [];
+            } catch (retryErr) {
+              console.error('Error fetching registrations with LEFT JOIN from D1:', retryErr);
+              return errorResponse('Failed to fetch registrations', 500);
+            }
+          } else {
+            console.error('Error fetching registrations with LEFT JOIN from D1:', err);
+            return errorResponse('Failed to fetch registrations', 500);
+          }
         }
 
         const mapped = rawRows.map((r) => ({
@@ -2394,6 +2461,8 @@ const worker = {
           due_amount: r.roster_due_amount !== undefined ? Number(r.roster_due_amount) : 0,
           admin_notes: r.roster_admin_notes || r.admin_notes || '',
           pickup_point: r.roster_pickup_point || r.pickup_point || '',
+          lead_guide: r.roster_lead_guide || r.lead_guide || '',
+          assistant_guides: normalizeAssistantGuidesList(r.roster_assistant_guides || r.assistant_guides),
         }));
 
         const responseHeaders = {
@@ -2442,57 +2511,72 @@ const worker = {
         const targetRowId = regRow && regRow.id !== undefined ? regRow.id : resolvedRegId;
 
         // Update active registrations table with all modified fields
+        const runRegUpdate = () => env.DB.prepare(`
+          UPDATE registrations SET
+            full_name = COALESCE(?, full_name),
+            email_address = COALESCE(?, email_address),
+            phone = COALESCE(?, phone),
+            whatsapp_number = COALESCE(?, whatsapp_number),
+            emergency_backup_contact = COALESCE(?, emergency_backup_contact),
+            profession = COALESCE(?, profession),
+            part_of_group = COALESCE(?, part_of_group),
+            pax = COALESCE(?, pax),
+            age_group = COALESCE(?, age_group),
+            gender = COALESCE(?, gender),
+            fitness = COALESCE(?, fitness),
+            medical_condition = COALESCE(?, medical_condition),
+            recent_hikes = COALESCE(?, recent_hikes),
+            guide_mode = COALESCE(?, guide_mode),
+            transport_mode = COALESCE(?, transport_mode),
+            suggestions = COALESCE(?, suggestions),
+            list_name = COALESCE(?, list_name),
+            trek_name = COALESCE(?, trek_name),
+            hike_number = COALESCE(?, hike_number),
+            lead_guide = COALESCE(?, lead_guide),
+            assistant_guides = COALESCE(?, assistant_guides),
+            status = COALESCE(?, status)
+          WHERE id = ? OR id = ? OR id = ?
+        `).bind(
+          body.full_name !== undefined ? body.full_name : null,
+          body.email_address !== undefined ? body.email_address : (body.email !== undefined ? body.email : null),
+          body.phone !== undefined ? body.phone : null,
+          body.whatsapp_number !== undefined ? body.whatsapp_number : (body.whatsapp !== undefined ? body.whatsapp : null),
+          body.emergency_backup_contact !== undefined ? body.emergency_backup_contact : (body.emergency_contact !== undefined ? body.emergency_contact : null),
+          body.profession !== undefined ? body.profession : null,
+          body.part_of_group !== undefined ? body.part_of_group : (body.is_group !== undefined ? body.is_group : null),
+          body.pax !== undefined ? Number(body.pax) : (body.paxCount !== undefined ? Number(body.paxCount) : null),
+          body.age_group !== undefined ? body.age_group : null,
+          body.gender !== undefined ? body.gender : null,
+          body.fitness !== undefined ? body.fitness : null,
+          body.medical_condition !== undefined ? body.medical_condition : (body.specify_medical !== undefined ? body.specify_medical : null),
+          body.recent_hikes !== undefined ? body.recent_hikes : null,
+          body.guide_mode !== undefined ? body.guide_mode : (body.guide_preference !== undefined ? body.guide_preference : null),
+          body.transport_mode !== undefined ? body.transport_mode : (body.transport_preference !== undefined ? body.transport_preference : null),
+          body.suggestions !== undefined ? body.suggestions : null,
+          body.list_name !== undefined ? body.list_name : (body.person_remarks !== undefined ? body.person_remarks : null),
+          body.trek_name !== undefined ? body.trek_name : null,
+          body.hike_number !== undefined ? String(body.hike_number).replace(/^#/, '').trim() : null,
+          body.lead_guide !== undefined ? String(body.lead_guide || '').trim() : null,
+          body.assistant_guides !== undefined ? JSON.stringify(normalizeAssistantGuidesList(body.assistant_guides)) : null,
+          body.status !== undefined ? body.status : null,
+          targetRowId,
+          resolvedRegId,
+          cleanRegId
+        ).run();
+
         try {
-          await env.DB.prepare(`
-            UPDATE registrations SET
-              full_name = COALESCE(?, full_name),
-              email_address = COALESCE(?, email_address),
-              phone = COALESCE(?, phone),
-              whatsapp_number = COALESCE(?, whatsapp_number),
-              emergency_backup_contact = COALESCE(?, emergency_backup_contact),
-              profession = COALESCE(?, profession),
-              part_of_group = COALESCE(?, part_of_group),
-              pax = COALESCE(?, pax),
-              age_group = COALESCE(?, age_group),
-              gender = COALESCE(?, gender),
-              fitness = COALESCE(?, fitness),
-              medical_condition = COALESCE(?, medical_condition),
-              recent_hikes = COALESCE(?, recent_hikes),
-              guide_mode = COALESCE(?, guide_mode),
-              transport_mode = COALESCE(?, transport_mode),
-              suggestions = COALESCE(?, suggestions),
-              list_name = COALESCE(?, list_name),
-              trek_name = COALESCE(?, trek_name),
-              hike_number = COALESCE(?, hike_number),
-              status = COALESCE(?, status)
-            WHERE id = ? OR id = ? OR id = ?
-          `).bind(
-            body.full_name !== undefined ? body.full_name : null,
-            body.email_address !== undefined ? body.email_address : (body.email !== undefined ? body.email : null),
-            body.phone !== undefined ? body.phone : null,
-            body.whatsapp_number !== undefined ? body.whatsapp_number : (body.whatsapp !== undefined ? body.whatsapp : null),
-            body.emergency_backup_contact !== undefined ? body.emergency_backup_contact : (body.emergency_contact !== undefined ? body.emergency_contact : null),
-            body.profession !== undefined ? body.profession : null,
-            body.part_of_group !== undefined ? body.part_of_group : (body.is_group !== undefined ? body.is_group : null),
-            body.pax !== undefined ? Number(body.pax) : (body.paxCount !== undefined ? Number(body.paxCount) : null),
-            body.age_group !== undefined ? body.age_group : null,
-            body.gender !== undefined ? body.gender : null,
-            body.fitness !== undefined ? body.fitness : null,
-            body.medical_condition !== undefined ? body.medical_condition : (body.specify_medical !== undefined ? body.specify_medical : null),
-            body.recent_hikes !== undefined ? body.recent_hikes : null,
-            body.guide_mode !== undefined ? body.guide_mode : (body.guide_preference !== undefined ? body.guide_preference : null),
-            body.transport_mode !== undefined ? body.transport_mode : (body.transport_preference !== undefined ? body.transport_preference : null),
-            body.suggestions !== undefined ? body.suggestions : null,
-            body.list_name !== undefined ? body.list_name : (body.person_remarks !== undefined ? body.person_remarks : null),
-            body.trek_name !== undefined ? body.trek_name : null,
-            body.hike_number !== undefined ? String(body.hike_number).replace(/^#/, '').trim() : null,
-            body.status !== undefined ? body.status : null,
-            targetRowId,
-            resolvedRegId,
-            cleanRegId
-          ).run();
+          await runRegUpdate();
         } catch (regUpdateErr) {
-          console.warn('Could not update active registrations table:', regUpdateErr);
+          if (isMissingGuideColumnError(regUpdateErr)) {
+            await ensureRegistrationGuideColumns(env);
+            try {
+              await runRegUpdate();
+            } catch (retryErr) {
+              console.warn('Could not update active registrations table:', retryErr);
+            }
+          } else {
+            console.warn('Could not update active registrations table:', regUpdateErr);
+          }
         }
 
         // Persist payment_voucher_url and payment_voucher_submitted_at on registrations when provided
@@ -2511,7 +2595,7 @@ const worker = {
         }
 
         // 3. Upsert into bookings_roster table
-        try {
+        const runRosterUpsert = async () => {
           if (existingRoster) {
             await env.DB.prepare(`
               UPDATE bookings_roster SET
@@ -2530,6 +2614,8 @@ const worker = {
                 pickup_point = ?,
                 gender = COALESCE(?, gender),
                 age_group = COALESCE(?, age_group),
+                lead_guide = COALESCE(?, lead_guide),
+                assistant_guides = COALESCE(?, assistant_guides),
                 updated_at = CURRENT_TIMESTAMP
               WHERE registration_id = ? OR registration_id = ? OR registration_id = ?
             `).bind(
@@ -2548,6 +2634,8 @@ const worker = {
               pickup_point,
               body.gender !== undefined ? body.gender : null,
               body.age_group !== undefined ? body.age_group : null,
+              body.lead_guide !== undefined ? String(body.lead_guide || '').trim() : null,
+              body.assistant_guides !== undefined ? JSON.stringify(normalizeAssistantGuidesList(body.assistant_guides)) : null,
               cleanRegId,
               String(resolvedRegId),
               String(targetRowId)
@@ -2557,8 +2645,8 @@ const worker = {
               INSERT INTO bookings_roster (
                 registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
                 registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point,
-                gender, age_group, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                gender, age_group, lead_guide, assistant_guides, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `).bind(
               cleanRegId,
               body.hike_number ? String(body.hike_number).replace(/^#/, '').trim() : (regRow ? String(regRow.hike_number || '').replace(/^#/, '').trim() : ''),
@@ -2575,12 +2663,28 @@ const worker = {
               updates,
               pickup_point,
               body.gender || regRow?.gender || '',
-              body.age_group || regRow?.age_group || ''
+              body.age_group || regRow?.age_group || '',
+              body.lead_guide !== undefined ? String(body.lead_guide || '').trim() : (regRow?.lead_guide || ''),
+              body.assistant_guides !== undefined ? JSON.stringify(normalizeAssistantGuidesList(body.assistant_guides)) : (regRow?.assistant_guides || '[]')
             ).run();
           }
+        };
+
+        try {
+          await runRosterUpsert();
         } catch (rosterErr) {
-          console.error('Error syncing bookings_roster table:', rosterErr);
-          return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
+          if (isMissingGuideColumnError(rosterErr)) {
+            await ensureRegistrationGuideColumns(env);
+            try {
+              await runRosterUpsert();
+            } catch (retryErr) {
+              console.error('Error syncing bookings_roster table:', retryErr);
+              return errorResponse(`D1 Bookings update error: ${retryErr.message}`, 500);
+            }
+          } else {
+            console.error('Error syncing bookings_roster table:', rosterErr);
+            return errorResponse(`D1 Bookings update error: ${rosterErr.message}`, 500);
+          }
         }
 
         // Only status/pax/gender/hike changes affect public counts
@@ -2648,6 +2752,73 @@ const worker = {
         }
       }
 
+async function sendRegistrationEmail(env, body) {
+  if (!body || (!body.email_address && !body.email)) return;
+  const emailTo = (body.email_address || body.email || '').trim();
+  if (!emailTo) return;
+
+  const fullName = body.full_name || 'Hiker';
+  const trekName = body.trek_name || 'Himalayan Trek';
+  const hikeNum = body.hike_number || 'TBD';
+  const trekDate = body.trek_date || 'Upcoming';
+  const meetingPoint = body.pickup_point || body.meeting_point || 'Kathmandu (Check app)';
+  
+  const isGroup = (body.part_of_group === 'Group') || (Number(body.pax) > 1) || (Array.isArray(body.team_members) && body.team_members.length > 0);
+  const companionCount = Array.isArray(body.team_members) ? body.team_members.length : Math.max(0, Number(body.pax) - 1);
+
+  let emailText = '';
+  if (isGroup && companionCount > 0) {
+    emailText = `Namaste ${fullName} & Team!
+We’ve safely received your registration form! Your spot on the trail is officially secured, and our team is thrilled to have you join us.
+Here are your quick trip details:
+Trek / Expedition: ${trekName} (Hike #${hikeNum})
+Date: ${trekDate}
+Registered Group: ${fullName} + ${companionCount} companion(s)
+Meeting Point / Time: ${meetingPoint}
+Please go through our Trek Tips for better preparation via our Website.
+You shall soon be added to our WhatsApp group to coordinate rides and updates with fellow hikers.
+See you at the trailhead!
+— The Walk Nepal Walk Team`;
+  } else {
+    emailText = `Namaste ${fullName}!
+We’ve safely received your registration form! Your spot on the trail is officially secured, and our team is thrilled to have you join us.
+Here are your quick trip details:
+Trek / Expedition: ${trekName} (Hike #${hikeNum})
+Date: ${trekDate}
+Meeting Point / Time: ${meetingPoint} (Check your app for exact logistics)
+Please go through our Trek Tips for better preparation via our Website.
+You shall soon be added to our WhatsApp group to coordinate rides and updates with fellow hikers.
+See you at the trailhead!
+— The Walk Nepal Walk Team`;
+  }
+
+  const subject = `Registration Confirmed: ${trekName} (${trekDate})`;
+  const apiKey = env.RESEND_API_KEY || env.EMAIL_API_KEY;
+
+  if (apiKey) {
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'Walk Nepal Walk <walknepalwalk@gmail.com>',
+          to: [emailTo],
+          subject: subject,
+          text: emailText
+        })
+      });
+      return;
+    } catch (err) {
+      console.warn('Resend email error:', err);
+    }
+  }
+
+  console.log(`[Email from walknepalwalk@gmail.com to ${emailTo}]:\n${subject}\n\n${emailText}`);
+}
+
       // POST /registrations - Create registration
       if (method === 'POST' && path === '/registrations') {
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
@@ -2657,19 +2828,22 @@ const worker = {
         const whatsappVal = body.whatsapp_number || body.whatsapp || '';
         const emailVal = String(body.email_address || body.email || '').trim().toLowerCase();
         const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const leadGuideVal = String(body.lead_guide || body.leader || body.team_leader || '').trim();
+        const assistantGuidesArr = normalizeAssistantGuidesList(body.assistant_guides ?? body.assistant_guide);
+        const assistantGuidesJson = JSON.stringify(assistantGuidesArr);
 
         // Map list_name value dynamically as requested
         const finalListName = body.person_remarks || body.list_name || 'Solo registration';
         const authUser = await getAuthUser(request);
         const userId = authUser ? await resolveUser(env, authUser) : null;
 
-        const regResult = await env.DB.prepare(`
+        const runInsertRegistration = () => env.DB.prepare(`
           INSERT INTO registrations (
             hike_number, trek_name, full_name, email_address, phone, whatsapp_number,
             emergency_backup_contact, profession, part_of_group, pax, age_group, gender,
             fitness, medical_condition, recent_hikes, agreement, suggestions, guide_mode,
-            transport_mode, list_name, timestamp, user_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            transport_mode, list_name, timestamp, user_id, lead_guide, assistant_guides
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           cleanHikeNum,
           body.trek_name || '',
@@ -2692,8 +2866,22 @@ const worker = {
           body.transport_mode || 'Bus',
           finalListName,
           body.timestamp || currentTimestamp,
-          userId
+          userId,
+          leadGuideVal,
+          assistantGuidesJson
         ).run();
+
+        let regResult;
+        try {
+          regResult = await runInsertRegistration();
+        } catch (regErr) {
+          if (isMissingGuideColumnError(regErr)) {
+            await ensureRegistrationGuideColumns(env);
+            regResult = await runInsertRegistration();
+          } else {
+            throw regErr;
+          }
+        }
 
         const insertedId = regResult?.meta?.last_row_id || regResult?.lastRowId;
         if (insertedId) {
@@ -2705,43 +2893,56 @@ const worker = {
             } catch (_) {}
           }
 
-          try {
-            const paid = Number(body.paid_amount) || 0;
-            const due = Number(body.due_amount) || 0;
-            let payStatus = body.payment_status;
-            if (!payStatus) {
-              if (paid > 0 && due === 0) payStatus = 'Paid';
-              else if (paid > 0 && due > 0) payStatus = 'Partial';
-              else if (due > 0 && paid === 0) payStatus = 'Due';
-              else payStatus = 'Unpaid';
-            }
+          const paid = Number(body.paid_amount) || 0;
+          const due = Number(body.due_amount) || 0;
+          let payStatus = body.payment_status;
+          if (!payStatus) {
+            if (paid > 0 && due === 0) payStatus = 'Paid';
+            else if (paid > 0 && due > 0) payStatus = 'Partial';
+            else if (due > 0 && paid === 0) payStatus = 'Due';
+            else payStatus = 'Unpaid';
+          }
 
-            await env.DB.prepare(`
-              INSERT INTO bookings_roster (
-                registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
-                registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point,
-                gender, age_group, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            `).bind(
-              String(insertedId),
-              cleanHikeNum,
-              body.trek_name || '',
-              body.trek_date || body.timestamp || currentTimestamp,
-              body.full_name || 'Anonymous Hiker',
-              body.phone || '',
-              emailVal,
-              whatsappVal,
-              body.registration_status || 'Confirmed',
-              payStatus,
-              paid,
-              due,
-              body.admin_notes || '',
-              body.pickup_point || body.pickupPoint || body.pickup || '',
-              body.gender || '',
-              body.age_group || ''
-            ).run();
+          const runInsertRoster = () => env.DB.prepare(`
+            INSERT INTO bookings_roster (
+              registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
+              registration_status, payment_status, paid_amount, due_amount, admin_notes, pickup_point,
+              gender, age_group, lead_guide, assistant_guides, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `).bind(
+            String(insertedId),
+            cleanHikeNum,
+            body.trek_name || '',
+            body.trek_date || body.timestamp || currentTimestamp,
+            body.full_name || 'Anonymous Hiker',
+            body.phone || '',
+            emailVal,
+            whatsappVal,
+            body.registration_status || 'Confirmed',
+            payStatus,
+            paid,
+            due,
+            body.admin_notes || '',
+            body.pickup_point || body.pickupPoint || body.pickup || '',
+            body.gender || '',
+            body.age_group || '',
+            leadGuideVal,
+            assistantGuidesJson
+          ).run();
+
+          try {
+            await runInsertRoster();
           } catch (rErr) {
-            console.warn('Error auto-populating bookings_roster from registration:', rErr);
+            if (isMissingGuideColumnError(rErr)) {
+              await ensureRegistrationGuideColumns(env);
+              try {
+                await runInsertRoster();
+              } catch (retryErr) {
+                console.warn('Error auto-populating bookings_roster from registration:', retryErr);
+              }
+            } else {
+              console.warn('Error auto-populating bookings_roster from registration:', rErr);
+            }
           }
         }
 
@@ -2749,10 +2950,19 @@ const worker = {
           await updateTrekParticipantSummary(env, cleanHikeNum);
         }
 
+        // Send confirmation email in background using walknepalwalk@gmail.com
+        bg(ctx, sendRegistrationEmail(env, body));
+
         // Rebuild treks snapshot in background
         bg(ctx, rebuildTreksSnapshot(env));
 
-        return jsonResponse({ success: true, message: 'Registration saved successfully', id: insertedId });
+        return jsonResponse({
+          success: true,
+          message: 'Registration saved successfully',
+          id: insertedId,
+          lead_guide: leadGuideVal,
+          assistant_guides: assistantGuidesArr,
+        });
       }
 
       // POST /registrations/batch - Bulk create registrations & roster entries efficiently in D1 batch transactions
@@ -2812,6 +3022,8 @@ const worker = {
             if (email) affectedEmails.add(email);
 
             const insertedRegId = item.id || 0; // Simple fix to capture ID
+            const leadGuide = String(item.lead_guide || item.leader || item.team_leader || '').trim();
+            const assistantGuidesJson = JSON.stringify(normalizeAssistantGuidesList(item.assistant_guides ?? item.assistant_guide));
 
             stmts.push(
               env.DB.prepare(`
@@ -2819,13 +3031,13 @@ const worker = {
                   hike_number, trek_name, full_name, email_address, phone, whatsapp_number,
                   emergency_backup_contact, profession, part_of_group, pax, age_group, gender,
                   fitness, medical_condition, recent_hikes, agreement, suggestions, guide_mode,
-                  transport_mode, list_name, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  transport_mode, list_name, timestamp, lead_guide, assistant_guides
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               `).bind(
                 hikeNum, trekName, fullName, email, phone, whatsapp,
                 backupContact, profession, partOfGroup, pax, ageGroup, gender,
                 fitness, medicalCondition, recentHikes, agreement, suggestions, guideMode,
-                transportMode, listName, regTimestamp
+                transportMode, listName, regTimestamp, leadGuide, assistantGuidesJson
               )
             );
 
@@ -2834,17 +3046,26 @@ const worker = {
                 INSERT INTO bookings_roster (
                   registration_id, hike_number, trek_name, trek_date, full_name, phone, email, whatsapp,
                   registration_status, payment_status, paid_amount, due_amount, pickup_point,
-                  gender, age_group, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                  gender, age_group, lead_guide, assistant_guides, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `).bind(
                 insertedRegId, hikeNum, trekName, regTimestamp, fullName, phone, email, whatsapp,
-                payStatus, paid, due, pickupPoint, gender, ageGroup
+                payStatus, paid, due, pickupPoint, gender, ageGroup, leadGuide, assistantGuidesJson
               )
             );
           }
 
           if (stmts.length > 0) {
-            await env.DB.batch(stmts);
+            try {
+              await env.DB.batch(stmts);
+            } catch (batchErr) {
+              if (isMissingGuideColumnError(batchErr)) {
+                await ensureRegistrationGuideColumns(env);
+                await env.DB.batch(stmts);
+              } else {
+                throw batchErr;
+              }
+            }
           }
         }
 

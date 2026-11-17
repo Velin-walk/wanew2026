@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS registrations (
   guide_mode TEXT,
   transport_mode TEXT,
   hike_number TEXT,
+  lead_guide TEXT,
+  assistant_guides TEXT,
   payment_voucher_url TEXT,
   payment_voucher_submitted_at TEXT
 );
@@ -105,6 +107,8 @@ CREATE TABLE IF NOT EXISTS bookings_roster (
   due_amount REAL,
   admin_notes TEXT,
   pickup_point TEXT,
+  lead_guide TEXT,
+  assistant_guides TEXT,
   created_at DATETIME,
   updated_at DATETIME
 );

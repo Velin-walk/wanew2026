@@ -524,6 +524,26 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               payment_voucher_url: r.payment_voucher_url || '',
               payment_voucher_submitted_at: r.payment_voucher_submitted_at || '',
               user_id: r.user_id || '',
+              lead_guide: r.lead_guide || r.roster_lead_guide || '',
+              assistant_guides: (() => {
+                const raw = r.assistant_guides ?? r.roster_assistant_guides;
+                if (Array.isArray(raw)) {
+                  return Array.from(new Set(raw.map((s: any) => String(s || '').trim()).filter(Boolean)));
+                }
+                if (typeof raw === 'string' && raw.trim()) {
+                  const trimmed = raw.trim();
+                  if (trimmed.startsWith('[')) {
+                    try {
+                      const parsed = JSON.parse(trimmed);
+                      if (Array.isArray(parsed)) {
+                        return Array.from(new Set(parsed.map((s: any) => String(s || '').trim()).filter(Boolean)));
+                      }
+                    } catch {}
+                  }
+                  return Array.from(new Set(trimmed.split(',').map((s) => s.trim()).filter(Boolean)));
+                }
+                return [];
+              })(),
               created_at: r.created_at || r.registeredAt || r.timestamp || new Date().toISOString(),
             };
           });

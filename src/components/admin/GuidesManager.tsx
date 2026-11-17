@@ -366,25 +366,28 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
       {/* Top Banner */}
-      <div className="p-5 rounded-2xl bg-gradient-to-r from-[#1F1F1F] via-[#2D2D2D] to-[#141414] text-white shadow-md border border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-[#7ABA42] text-xs font-bold uppercase tracking-wider mb-1">
-            <UserCheck className="w-4 h-4" />
+      <div className="relative overflow-hidden p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-indigo-600 via-teal-600 to-emerald-600 text-white shadow-lg border border-teal-400/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-amber-300/20 blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-12 left-1/3 w-44 h-44 rounded-full bg-sky-300/15 blur-2xl pointer-events-none" />
+
+        <div className="relative z-10">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-xs border border-white/25 text-amber-200 text-[11px] font-extrabold uppercase tracking-wider mb-2">
+            <UserCheck className="w-3.5 h-3.5 text-amber-300" />
             <span>Guide Management &amp; Intros</span>
           </div>
-          <h2 className="text-xl font-black text-white tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
             Trek Leaders Intros &amp; Display Toggles
           </h2>
-          <p className="text-xs text-neutral-300 mt-1 max-w-2xl leading-relaxed">
+          <p className="text-xs text-teal-50/90 mt-1 max-w-2xl leading-relaxed">
             Customize guide roles, bios, and specialties, and toggle individual guide visibility or the entire Trek Leaders Resources tab on the public website.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <div className="relative z-10 flex items-center gap-2 flex-wrap shrink-0">
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-[#E08828] hover:bg-[#c9741d] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+            className="px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>Add New Guide</span>
@@ -392,7 +395,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
           <button
             type="button"
             onClick={handleResetToDefaults}
-            className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            className="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 border border-white/30 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 backdrop-blur-xs"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset Defaults</span>
@@ -401,33 +404,49 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
       </div>
 
       {saveSuccess && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md text-xs font-bold flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
           <span>Guide intro changes &amp; display toggles saved successfully! Updates are live on the public site.</span>
         </div>
       )}
 
       {/* Master Tab Visibility Toggle Card */}
-      <div className="p-4 rounded-2xl bg-white border border-[#E5E1DB] shadow-2xs flex items-center justify-between gap-4">
-        <div>
-          <h4 className="text-sm font-extrabold text-[#1F1F1F] flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#E08828]" />
-            <span>Site-Wide "Trek Leaders" Resources Tab</span>
-          </h4>
-          <p className="text-xs text-[#8B8680] mt-0.5">
-            {settings.show_trek_leaders_tab
-              ? 'The "Trek Leaders" tab is currently VISIBLE under Resources on the public website.'
-              : 'The "Trek Leaders" tab is currently HIDDEN from Resources on the public website.'}
-          </p>
+      <div
+        className={`p-4 rounded-2xl border-2 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
+          settings.show_trek_leaders_tab
+            ? 'bg-gradient-to-r from-emerald-50 via-teal-50/80 to-sky-50 border-emerald-300'
+            : 'bg-gradient-to-r from-rose-50 via-amber-50/80 to-orange-50 border-rose-300'
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+              settings.show_trek_leaders_tab
+                ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white'
+                : 'bg-gradient-to-br from-rose-500 to-amber-500 text-white'
+            }`}
+          >
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-extrabold text-[#1F1F1F] flex items-center gap-2">
+              <span>Site-Wide "Trek Leaders" Resources Tab</span>
+            </h4>
+            <p className="text-xs text-slate-600 mt-0.5">
+              {settings.show_trek_leaders_tab
+                ? 'The "Trek Leaders" tab is currently VISIBLE under Resources on the public website.'
+                : 'The "Trek Leaders" tab is currently HIDDEN from Resources on the public website.'}
+            </p>
+          </div>
         </div>
 
         <button
           type="button"
           onClick={handleToggleMasterTab}
-          className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-3xs active:scale-95 shrink-0 ${
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 shrink-0 ${
             settings.show_trek_leaders_tab
-              ? 'bg-[#7ABA42] text-white hover:bg-[#6ba637]'
-              : 'bg-neutral-200 text-neutral-700 hover:bg-neutral-300'
+              ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700'
+              : 'bg-gradient-to-r from-rose-500 to-orange-500 text-white hover:from-rose-600 hover:to-orange-600'
           }`}
         >
           {settings.show_trek_leaders_tab ? (
@@ -445,15 +464,15 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
       </div>
 
       {/* Filters & Search */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-[#E5E1DB]">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-gradient-to-r from-sky-50/80 via-white to-violet-50/80 p-3.5 rounded-2xl border border-sky-200/80 shadow-xs">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-[#8B8680] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-indigo-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter guides by name, role, specialty, or bio..."
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-indigo-200 bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 text-[#1F1F1F]"
           />
         </div>
 
@@ -461,10 +480,10 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
           <button
             type="button"
             onClick={() => setFilterGender('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               filterGender === 'all'
-                ? 'bg-[#1F1F1F] text-white'
-                : 'bg-[#FAF8F5] text-[#5A5551] hover:bg-[#F3F0EC] border border-[#E5E1DB]'
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm'
+                : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
             }`}
           >
             All ({settings.custom_guides.length})
@@ -472,10 +491,10 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
           <button
             type="button"
             onClick={() => setFilterGender('Male')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               filterGender === 'Male'
-                ? 'bg-sky-600 text-white'
-                : 'bg-[#FAF8F5] text-[#5A5551] hover:bg-[#F3F0EC] border border-[#E5E1DB]'
+                ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-sm'
+                : 'bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200'
             }`}
           >
             Male
@@ -483,10 +502,10 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
           <button
             type="button"
             onClick={() => setFilterGender('Female')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               filterGender === 'Female'
-                ? 'bg-rose-600 text-white'
-                : 'bg-[#FAF8F5] text-[#5A5551] hover:bg-[#F3F0EC] border border-[#E5E1DB]'
+                ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-sm'
+                : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
             }`}
           >
             Female
@@ -495,68 +514,157 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
       </div>
 
       {/* Guides Table */}
-      <div className="bg-white rounded-2xl border border-[#E5E1DB] overflow-x-auto shadow-2xs">
+      <div className="bg-white rounded-2xl border-2 border-indigo-200/80 overflow-x-auto shadow-md">
         <table className="w-full text-xs text-left border-collapse">
           <thead>
-            <tr className="bg-[#FAF8F5] border-b border-[#EFEAE4] text-[#8B8680] font-extrabold uppercase tracking-wider">
-              <th className="p-3 w-[10%]">Name</th>
-              <th className="p-3 w-[10%]">Phone Number</th>
+            <tr className="bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 text-white font-extrabold uppercase tracking-wider">
+              <th className="p-3 text-center w-12">SN</th>
+              <th className="p-3 w-[12%]">Name</th>
+              <th className="p-3 w-[11%]">Phone Number</th>
               <th className="p-3">Role</th>
               <th className="p-3">Badge</th>
-              <th className="p-3 w-[40%]">Intro</th>
+              <th className="p-3 w-[36%]">Intro</th>
               <th className="p-3 text-center">Visible</th>
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#EFEAE4]">
+          <tbody className="divide-y divide-indigo-100/80">
             {filteredGuides.map((guide, idx) => {
               const draft = rowDrafts[guide.id] || {};
               const isDirty = Object.keys(draft).length > 0;
+              const isFemale = guide.gender === 'Female';
 
               return (
-                <tr key={`${guide.id || guide.name}_${idx}`} className={!guide.is_visible ? "bg-neutral-50/50 text-neutral-500" : "text-[#1F1F1F]"}>
-                  <td className="p-3 w-[10%]">
-                    <input type="text" value={draft.name ?? guide.name} onChange={(e) => handleRowChange(guide.id, 'name', e.target.value)} className="w-full p-1 border rounded bg-transparent font-bold" />
+                <tr
+                  key={`${guide.id || guide.name}_${idx}`}
+                  className={`transition-colors border-l-4 ${
+                    isDirty
+                      ? 'bg-amber-50/70 border-l-amber-500 text-[#1F1F1F]'
+                      : !guide.is_visible
+                      ? 'bg-rose-50/35 border-l-neutral-300 text-neutral-500'
+                      : idx % 2 === 0
+                      ? `bg-white hover:bg-amber-50/50 text-[#1F1F1F] ${isFemale ? 'border-l-rose-400' : 'border-l-sky-400'}`
+                      : `bg-sky-50/35 hover:bg-amber-50/50 text-[#1F1F1F] ${isFemale ? 'border-l-rose-400' : 'border-l-teal-400'}`
+                  }`}
+                >
+                  <td className="p-3 text-center align-middle">
+                    <span
+                      className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-black shadow-2xs ${
+                        !guide.is_visible
+                          ? 'bg-neutral-200 text-neutral-600'
+                          : isFemale
+                          ? 'bg-gradient-to-br from-rose-500 to-pink-500 text-white'
+                          : 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white'
+                      }`}
+                    >
+                      {idx + 1}
+                    </span>
                   </td>
-                  <td className="p-3 w-[10%]">
-                    <input type="tel" value={draft.phone ?? (guide.phone || '')} onChange={(e) => handleRowChange(guide.id, 'phone', e.target.value)} className="w-full p-1 border rounded bg-transparent" />
+                  <td className="p-3 w-[12%]">
+                    <input
+                      type="text"
+                      value={draft.name ?? guide.name}
+                      onChange={(e) => handleRowChange(guide.id, 'name', e.target.value)}
+                      className={`w-full px-2 py-1.5 border rounded-lg font-bold transition-colors focus:outline-none ${
+                        draft.name !== undefined
+                          ? 'border-amber-400 bg-amber-50 text-[#1F1F1F]'
+                          : 'border-indigo-200/80 bg-white/80 focus:border-indigo-500 focus:bg-white'
+                      }`}
+                    />
+                  </td>
+                  <td className="p-3 w-[11%]">
+                    <input
+                      type="tel"
+                      value={draft.phone ?? (guide.phone || '')}
+                      onChange={(e) => handleRowChange(guide.id, 'phone', e.target.value)}
+                      className={`w-full px-2 py-1.5 border rounded-lg transition-colors focus:outline-none ${
+                        draft.phone !== undefined
+                          ? 'border-amber-400 bg-amber-50 text-[#1F1F1F]'
+                          : 'border-sky-200/80 bg-white/80 focus:border-sky-500 focus:bg-white'
+                      }`}
+                    />
                   </td>
                   <td className="p-3">
-                    <input type="text" value={draft.role ?? guide.role} onChange={(e) => handleRowChange(guide.id, 'role', e.target.value)} className="w-full p-1 border rounded bg-transparent" />
+                    <input
+                      type="text"
+                      value={draft.role ?? guide.role}
+                      onChange={(e) => handleRowChange(guide.id, 'role', e.target.value)}
+                      className={`w-full px-2 py-1.5 border rounded-lg transition-colors focus:outline-none ${
+                        draft.role !== undefined
+                          ? 'border-amber-400 bg-amber-50 text-[#1F1F1F]'
+                          : 'border-teal-200/80 bg-white/80 focus:border-teal-500 focus:bg-white'
+                      }`}
+                    />
                   </td>
                   <td className="p-3">
-                    <input type="text" value={draft.badge ?? (guide.badge || '')} onChange={(e) => handleRowChange(guide.id, 'badge', e.target.value)} className="w-full p-1 border rounded bg-transparent" />
+                    <input
+                      type="text"
+                      value={draft.badge ?? (guide.badge || '')}
+                      onChange={(e) => handleRowChange(guide.id, 'badge', e.target.value)}
+                      className={`w-full px-2 py-1.5 border rounded-lg font-semibold transition-colors focus:outline-none ${
+                        draft.badge !== undefined
+                          ? 'border-amber-400 bg-amber-50 text-[#1F1F1F]'
+                          : 'border-violet-200 bg-violet-50/70 text-violet-800 focus:border-violet-500 focus:bg-white'
+                      }`}
+                    />
                   </td>
-                  <td className="p-3 w-[40%]">
-                    <textarea value={draft.bio ?? guide.bio} onChange={(e) => handleRowChange(guide.id, 'bio', e.target.value)} className="w-full p-1 border rounded bg-transparent text-[10px]" rows={2} />
+                  <td className="p-3 w-[36%]">
+                    <textarea
+                      value={draft.bio ?? guide.bio}
+                      onChange={(e) => handleRowChange(guide.id, 'bio', e.target.value)}
+                      className={`w-full px-2 py-1.5 border rounded-lg text-[11px] leading-relaxed transition-colors focus:outline-none ${
+                        draft.bio !== undefined
+                          ? 'border-amber-400 bg-amber-50 text-[#1F1F1F]'
+                          : 'border-slate-200 bg-white/80 focus:border-teal-500 focus:bg-white'
+                      }`}
+                      rows={2}
+                    />
                   </td>
                   <td className="p-3 text-center">
                     <button
                       type="button"
                       onClick={() => handleToggleGuideVisibility(guide.id, guide.name)}
-                      className="cursor-pointer"
+                      className={`px-2.5 py-1 rounded-full inline-flex items-center gap-1 text-[11px] font-extrabold cursor-pointer transition-all active:scale-95 ${
+                        guide.is_visible
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-xs hover:from-emerald-600 hover:to-teal-600'
+                          : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
+                      }`}
                       title={guide.is_visible ? 'Click to hide' : 'Click to show'}
                     >
                       {guide.is_visible ? (
-                        <Eye className="w-4 h-4 text-emerald-600" />
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>On</span>
+                        </>
                       ) : (
-                        <EyeOff className="w-4 h-4 text-neutral-400" />
+                        <>
+                          <EyeOff className="w-3.5 h-3.5" />
+                          <span>Off</span>
+                        </>
                       )}
                     </button>
                   </td>
-                  <td className="p-3 text-right flex items-center justify-end gap-2">
-                    {isDirty && (
-                      <button type="button" onClick={() => handleSaveRow(guide.id)} className="text-[#E08828] font-bold hover:underline cursor-pointer mr-2">
-                        Save
+                  <td className="p-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {isDirty && (
+                        <button
+                          type="button"
+                          onClick={() => handleSaveRow(guide.id)}
+                          className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-[11px] shadow-xs inline-flex items-center gap-1 cursor-pointer active:scale-95"
+                        >
+                          <Save className="w-3 h-3" />
+                          <span>Save</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteGuide(guide.id, guide.name)}
+                        className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-500 font-bold text-[11px] transition-colors inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteGuide(guide.id, guide.name)}
-                      className="text-rose-600 hover:underline cursor-pointer"
-                    >
-                      Delete
-                    </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -568,24 +676,24 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
       {/* Edit Guide Intro Modal */}
       {editingGuide && (
         <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-[#E5E1DB] space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#F0EBE5]">
+          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-amber-200">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white">
               <div className="flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-[#E08828]" />
-                <h3 className="text-base font-extrabold text-[#1F1F1F]">
+                <Edit3 className="w-5 h-5 text-white" />
+                <h3 className="text-base font-extrabold text-white">
                   Edit Intro for {editingGuide.name}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingGuide(null)}
-                className="p-1.5 text-neutral-400 hover:text-black rounded-xl cursor-pointer"
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/15 rounded-xl cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditedGuide} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSaveEditedGuide} className="p-5 sm:p-6 space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold text-[#1F1F1F] mb-1">Guide Full Name</label>
                 <input
@@ -593,7 +701,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   required
                   value={editingGuide.name}
                   onChange={(e) => setEditingGuide({ ...editingGuide, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] font-semibold text-[#1F1F1F]"
+                  className="w-full px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50/30 focus:bg-white focus:outline-none focus:border-indigo-500 font-semibold text-[#1F1F1F]"
                 />
               </div>
 
@@ -605,7 +713,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                     required
                     value={editingGuide.role}
                     onChange={(e) => setEditingGuide({ ...editingGuide, role: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                    className="w-full px-3 py-2 rounded-xl border border-teal-200 bg-teal-50/30 focus:bg-white focus:outline-none focus:border-teal-500 text-[#1F1F1F]"
                   />
                 </div>
 
@@ -614,7 +722,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   <select
                     value={editingGuide.gender}
                     onChange={(e) => setEditingGuide({ ...editingGuide, gender: e.target.value as 'Male' | 'Female' })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                    className="w-full px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/30 focus:bg-white focus:outline-none focus:border-sky-500 text-[#1F1F1F]"
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -629,7 +737,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   value={editingGuide.phone || ''}
                   onChange={(e) => setEditingGuide({ ...editingGuide, phone: e.target.value })}
                   placeholder="e.g. +977 98xxxxxxxx"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                  className="w-full px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/30 focus:bg-white focus:outline-none focus:border-sky-500 text-[#1F1F1F]"
                 />
               </div>
 
@@ -641,7 +749,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   required
                   value={editingGuide.bio}
                   onChange={(e) => setEditingGuide({ ...editingGuide, bio: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F] leading-relaxed"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/40 focus:bg-white focus:outline-none focus:border-amber-500 text-[#1F1F1F] leading-relaxed"
                 />
               </div>
 
@@ -653,7 +761,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                     value={editingGuide.badge || ''}
                     onChange={(e) => setEditingGuide({ ...editingGuide, badge: e.target.value })}
                     placeholder="e.g. Senior Guide"
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                    className="w-full px-3 py-2 rounded-xl border border-violet-200 bg-violet-50/30 focus:bg-white focus:outline-none focus:border-violet-500 text-[#1F1F1F]"
                   />
                 </div>
 
@@ -664,7 +772,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                     value={editingGuide.specialty || ''}
                     onChange={(e) => setEditingGuide({ ...editingGuide, specialty: e.target.value })}
                     placeholder="e.g. High-altitude passes"
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                    className="w-full px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50/30 focus:bg-white focus:outline-none focus:border-emerald-500 text-[#1F1F1F]"
                   />
                 </div>
               </div>
@@ -673,13 +781,13 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingGuide(null)}
-                  className="px-4 py-2 rounded-xl border border-[#E5E1DB] text-neutral-700 hover:bg-neutral-100 font-bold cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-neutral-700 hover:bg-slate-100 font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#E08828] hover:bg-[#c9741d] text-white font-black rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95"
+                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5 active:scale-95"
                 >
                   <Save className="w-4 h-4" />
                   <span>Save Intro Changes</span>
@@ -697,26 +805,26 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
           onClick={() => setShowAddModal(false)}
         >
           <div
-            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-[#E5E1DB] space-y-4"
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-teal-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-[#F0EBE5]">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-indigo-600 via-teal-600 to-emerald-600 text-white sticky top-0 z-10">
               <div className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#E08828]" />
-                <h3 className="text-base font-extrabold text-[#1F1F1F]">
+                <Plus className="w-5 h-5 text-amber-300" />
+                <h3 className="text-base font-extrabold text-white">
                   Add New Trek Leader or Coordinator
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="p-1.5 text-neutral-400 hover:text-black rounded-xl cursor-pointer"
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/15 rounded-xl cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateNewGuide} className="space-y-3.5 text-xs">
+            <form onSubmit={handleCreateNewGuide} className="p-5 sm:p-6 space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold text-[#1F1F1F] mb-1">Full Name *</label>
                 <input
@@ -725,7 +833,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   placeholder="e.g. Pasang Sherpa"
                   value={newGuide.name}
                   onChange={(e) => setNewGuide({ ...newGuide, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                  className="w-full px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50/30 focus:bg-white focus:outline-none focus:border-indigo-500 text-[#1F1F1F]"
                 />
               </div>
 
@@ -737,7 +845,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                     placeholder="e.g. Senior Mountain Guide"
                     value={newGuide.role}
                     onChange={(e) => setNewGuide({ ...newGuide, role: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                    className="w-full px-3 py-2 rounded-xl border border-teal-200 bg-teal-50/30 focus:bg-white focus:outline-none focus:border-teal-500 text-[#1F1F1F]"
                   />
                 </div>
 
@@ -746,7 +854,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   <select
                     value={newGuide.gender}
                     onChange={(e) => setNewGuide({ ...newGuide, gender: e.target.value as 'Male' | 'Female' })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                    className="w-full px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/30 focus:bg-white focus:outline-none focus:border-sky-500 text-[#1F1F1F]"
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -761,7 +869,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   value={newGuide.phone}
                   onChange={(e) => setNewGuide({ ...newGuide, phone: e.target.value })}
                   placeholder="e.g. +977 98xxxxxxxx"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                  className="w-full px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/30 focus:bg-white focus:outline-none focus:border-sky-500 text-[#1F1F1F]"
                 />
               </div>
 
@@ -772,7 +880,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   placeholder="Short introductory bio about mountain experience and trail expertise..."
                   value={newGuide.bio}
                   onChange={(e) => setNewGuide({ ...newGuide, bio: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/40 focus:bg-white focus:outline-none focus:border-teal-500 text-[#1F1F1F]"
                 />
               </div>
 
@@ -784,7 +892,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                     placeholder="e.g. Trek Leader"
                     value={newGuide.badge}
                     onChange={(e) => setNewGuide({ ...newGuide, badge: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                    className="w-full px-3 py-2 rounded-xl border border-violet-200 bg-violet-50/30 focus:bg-white focus:outline-none focus:border-violet-500 text-[#1F1F1F]"
                   />
                 </div>
 
@@ -795,7 +903,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                     placeholder="e.g. High altitude ridges"
                     value={newGuide.specialty}
                     onChange={(e) => setNewGuide({ ...newGuide, specialty: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E1DB] bg-[#FAF8F5] focus:bg-white focus:outline-none focus:border-[#E08828] text-[#1F1F1F]"
+                    className="w-full px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50/30 focus:bg-white focus:outline-none focus:border-emerald-500 text-[#1F1F1F]"
                   />
                 </div>
               </div>
@@ -804,13 +912,13 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl border border-[#E5E1DB] text-neutral-700 hover:bg-neutral-100 font-bold cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-neutral-700 hover:bg-slate-100 font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#E08828] hover:bg-[#c9741d] text-white font-black rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95"
+                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5 active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Trek Leader</span>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Users,
   Search,
@@ -34,10 +34,16 @@ import {
   Pencil,
 } from 'lucide-react';
 import { Trek, BookingFormData } from '../../types';
+import { HikerStats } from '../../types/leaderboard';
 import { AdminHikerProfileModal } from './AdminHikerProfileModal';
 import { AdminEditApplicationModal } from './AdminEditApplicationModal';
 import { RegistrationModal } from '../RegistrationModal';
-import { apiFetch } from '../../services/api';
+import { apiFetch, fetchLeaderboardData } from '../../services/api';
+import {
+  CustomGuideData,
+  EVENT_NAME as GUIDES_UPDATED_EVENT,
+  getGuidesSettings,
+} from '../../services/guidesService';
 
 export interface AdminRegistration {
   id: string;
@@ -85,6 +91,8 @@ export interface AdminRegistration {
   agreement?: string;
   guide_mode?: string;
   transport_mode?: string;
+  lead_guide?: string;
+  assistant_guides?: string[] | string;
 }
 
 interface BookingsManagerProps {
@@ -212,6 +220,344 @@ export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boole
   }
 
   return false;
+};
+
+export const normalizeGuideCompare = (name?: string): string =>
+  String(name || '')
+    .replace(/\s*\((?:lead\s+|assistant\s+|asst\.?\s+)?(?:guide|leader)\)/i, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+export const resolveTrekGuides = (
+  trekObj?: Trek,
+  regs?: AdminRegistration[]
+): { leadName: string; asstNames: string[] } => {
+  const regLead = regs?.find((r) => r.lead_guide && String(r.lead_guide).trim())?.lead_guide;
+  const rawLead = String(
+    trekObj?.leader ||
+      trekObj?.team_leader ||
+      trekObj?.data?.teamLeader ||
+      regLead ||
+      ''
+  ).trim();
+  const leadLower = rawLead.toLowerCase();
+  const leadName =
+    rawLead && leadLower !== 'walk nepal walk guide' && leadLower !== 'tbd' ? rawLead : '';
+
+  const parseRawAssts = (rawAsstSource: any): string[] => {
+    if (Array.isArray(rawAsstSource)) {
+      return rawAsstSource.map((s: any) => String(s || '').trim()).filter(Boolean);
+    }
+    if (typeof rawAsstSource === 'string' && rawAsstSource.trim()) {
+      const trimmed = rawAsstSource.trim();
+      if (trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            return parsed.map((s: any) => String(s || '').trim()).filter(Boolean);
+          }
+        } catch {}
+      }
+      return trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  let parsedAssts: string[] = [];
+  if (Array.isArray(trekObj?.assistant_guides) && trekObj.assistant_guides.length > 0) {
+    parsedAssts = parseRawAssts(trekObj.assistant_guides);
+  } else if (Array.isArray(trekObj?.data?.assistantGuides) && trekObj.data.assistantGuides.length > 0) {
+    parsedAssts = parseRawAssts(trekObj.data.assistantGuides);
+  } else if (trekObj?.assistant_guide && String(trekObj.assistant_guide).trim()) {
+    parsedAssts = parseRawAssts(trekObj.assistant_guide);
+  } else if (trekObj?.data?.assistantGuide && String(trekObj.data.assistantGuide).trim()) {
+    parsedAssts = parseRawAssts(trekObj.data.assistantGuide);
+  } else if (regs && regs.length > 0) {
+    for (const r of regs) {
+      const fromReg = parseRawAssts(r.assistant_guides);
+      if (fromReg.length > 0) {
+        parsedAssts.push(...fromReg);
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  if (leadName) seen.add(normalizeGuideCompare(leadName));
+  const asstNames: string[] = [];
+  for (const a of parsedAssts) {
+    const key = normalizeGuideCompare(a);
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      asstNames.push(a);
+    }
+  }
+  return { leadName, asstNames };
+};
+
+export interface ResolvedGuideProfile {
+  phone: string;
+  whatsapp: string;
+  email: string;
+  gender: string;
+  age_group: string;
+  user_id: string;
+}
+
+const cleanGuidePhoneDigits = (val?: string): string => String(val || '').replace(/\D/g, '');
+
+const guidePhonesMatch = (p1?: string, p2?: string): boolean => {
+  const d1 = cleanGuidePhoneDigits(p1);
+  const d2 = cleanGuidePhoneDigits(p2);
+  if (!d1 || !d2 || d1.length < 7 || d2.length < 7) return false;
+  return d1 === d2 || d1.endsWith(d2) || d2.endsWith(d1);
+};
+
+const guideNamesMatch = (candidateName?: string, guideName?: string): boolean => {
+  const c = normalizeGuideCompare(candidateName);
+  const g = normalizeGuideCompare(guideName);
+  if (!c || !g) return false;
+  if (c === g) return true;
+
+  const cParts = c.split(' ').filter(Boolean);
+  const gParts = g.split(' ').filter(Boolean);
+  if (cParts.length >= 2 && gParts.length >= 2) {
+    if (cParts[0] !== gParts[0]) return false;
+    const cLast = cParts[cParts.length - 1];
+    const gLast = gParts[gParts.length - 1];
+    if (cLast === gLast) return true;
+    if (cLast.startsWith('th') && gLast.startsWith('th')) return true;
+    return cLast.length >= 4 && gLast.length >= 4 && (cLast.includes(gLast) || gLast.includes(cLast));
+  }
+  return false;
+};
+
+export const useResolvedGuideProfiles = (
+  guideNames: string[],
+  allRegistrations: AdminRegistration[],
+  externalLeaderboardHikers?: HikerStats[]
+): Map<string, ResolvedGuideProfile> => {
+  const [customGuides, setCustomGuides] = useState<CustomGuideData[]>(() => {
+    try {
+      return getGuidesSettings().custom_guides || [];
+    } catch {
+      return [];
+    }
+  });
+  const [internalLeaderboard, setInternalLeaderboard] = useState<HikerStats[]>([]);
+  const [identityMap, setIdentityMap] = useState<
+    Record<string, { phone?: string; gender?: string; age_group?: string }>
+  >({});
+  const queriedKeysRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const handleGuidesUpdated = () => {
+      try {
+        setCustomGuides(getGuidesSettings().custom_guides || []);
+      } catch {}
+    };
+    window.addEventListener(GUIDES_UPDATED_EVENT, handleGuidesUpdated);
+    return () => window.removeEventListener(GUIDES_UPDATED_EVENT, handleGuidesUpdated);
+  }, []);
+
+  useEffect(() => {
+    if (externalLeaderboardHikers !== undefined) return;
+    let isMounted = true;
+    fetchLeaderboardData(false)
+      .then((res: any) => {
+        if (isMounted && res && Array.isArray(res.hikers)) {
+          setInternalLeaderboard(res.hikers);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [externalLeaderboardHikers]);
+
+  const effectiveLeaderboard = externalLeaderboardHikers ?? internalLeaderboard;
+
+  const sortedRegistrationsNewestFirst = useMemo(() => {
+    return [...allRegistrations].sort((a, b) => {
+      const ta = new Date(a.created_at || a.trek_date || 0).getTime() || 0;
+      const tb = new Date(b.created_at || b.trek_date || 0).getTime() || 0;
+      return tb - ta;
+    });
+  }, [allRegistrations]);
+
+  const baseProfiles = useMemo(() => {
+    const map = new Map<
+      string,
+      ResolvedGuideProfile & { regGender: string; guideGender: string }
+    >();
+    const uniqueNames = Array.from(
+      new Set(guideNames.map((n) => String(n || '').trim()).filter(Boolean))
+    );
+
+    for (const name of uniqueNames) {
+      const key = normalizeGuideCompare(name);
+      if (!key || map.has(key)) continue;
+
+      const guideSetting = customGuides.find((g) => guideNamesMatch(g.name, name));
+      const guidePhone = String(guideSetting?.phone || '').trim();
+      const guideGender = guideSetting?.gender || '';
+
+      let regPhone = '';
+      let regWhatsapp = '';
+      let regEmail = '';
+      let regGender = '';
+      let regAgeGroup = '';
+      let regUserId = '';
+
+      for (const r of sortedRegistrationsNewestFirst) {
+        const candidatePhone = String(r.phone || r.whatsapp || r.whatsapp_number || '').trim();
+        const isMatch =
+          (guidePhone && guidePhonesMatch(candidatePhone, guidePhone)) ||
+          guideNamesMatch(r.full_name, name);
+
+        if (isMatch) {
+          if (!regPhone && r.phone) regPhone = String(r.phone).trim();
+          if (!regWhatsapp && (r.whatsapp || r.whatsapp_number)) {
+            regWhatsapp = String(r.whatsapp || r.whatsapp_number).trim();
+          }
+          if (!regEmail && (r.email || r.email_address || r.user_email)) {
+            regEmail = String(r.email || r.email_address || r.user_email).trim();
+          }
+          if (!regGender && r.gender) regGender = String(r.gender).trim();
+          if (!regAgeGroup && r.age_group) regAgeGroup = String(r.age_group).trim();
+          if (!regUserId && r.user_id) regUserId = String(r.user_id).trim();
+        } else if (Array.isArray(r.team_members) && r.team_members.length > 0) {
+          for (const tm of r.team_members) {
+            const tmPhone = String((tm as any).phone || '').trim();
+            const tmMatch =
+              (guidePhone && guidePhonesMatch(tmPhone, guidePhone)) ||
+              guideNamesMatch(tm.full_name, name);
+            if (tmMatch) {
+              if (!regPhone && tmPhone) regPhone = tmPhone;
+              if (!regGender && tm.gender) regGender = String(tm.gender).trim();
+              if (!regAgeGroup && (tm as any).age_group) {
+                regAgeGroup = String((tm as any).age_group).trim();
+              }
+            }
+          }
+        }
+
+        if (regPhone && regGender && regAgeGroup && regEmail && regUserId) break;
+      }
+
+      const knownPhoneForLb = guidePhone || regPhone || regWhatsapp;
+      const lbMatch = effectiveLeaderboard.find((h) => {
+        const hp = h.phone || h.p;
+        if (knownPhoneForLb && hp && guidePhonesMatch(hp, knownPhoneForLb)) return true;
+        return guideNamesMatch(h.n, name);
+      });
+      const lbPhone = String(lbMatch?.phone || lbMatch?.p || '').trim();
+      const lbEmail = String(lbMatch?.e || '').trim();
+
+      const resolvedPhone = guidePhone || regPhone || regWhatsapp || lbPhone || '';
+      const resolvedWhatsapp = regWhatsapp || resolvedPhone || '';
+      const resolvedEmail = regEmail || lbEmail || '';
+
+      map.set(key, {
+        phone: resolvedPhone,
+        whatsapp: resolvedWhatsapp,
+        email: resolvedEmail,
+        gender: regGender || guideGender || '',
+        age_group: regAgeGroup || '',
+        user_id: regUserId || '',
+        regGender,
+        guideGender,
+      });
+    }
+
+    return map;
+  }, [guideNames, customGuides, sortedRegistrationsNewestFirst, effectiveLeaderboard]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const toFetch: Array<{ key: string; queryKey: string; params: URLSearchParams }> = [];
+
+    baseProfiles.forEach((base, key) => {
+      if (!base.phone && !base.email && !base.user_id) return;
+      if (base.phone && base.regGender && base.age_group) return;
+
+      const queryKey = `${key}|${base.user_id}|${base.email.toLowerCase()}|${cleanGuidePhoneDigits(base.phone)}`;
+      if (queriedKeysRef.current.has(queryKey)) return;
+      queriedKeysRef.current.add(queryKey);
+
+      const params = new URLSearchParams();
+      if (base.user_id) params.set('user_id', base.user_id);
+      if (base.email) params.set('email', base.email.toLowerCase());
+      if (base.phone) params.set('phone', base.phone);
+      toFetch.push({ key, queryKey, params });
+    });
+
+    if (toFetch.length === 0) return;
+
+    Promise.all(
+      toFetch.map(async ({ key, params }) => {
+        try {
+          const res = await apiFetch(`admin/user-identity?${params.toString()}`);
+          if (!res.ok) return null;
+          const json = await res.json();
+          const data = json?.data;
+          if (!data) return null;
+          const profile = data.profile || {};
+          const contacts: Array<{ type: string; value: string }> = Array.isArray(data.contacts)
+            ? data.contacts
+            : [];
+          const contactPhone =
+            profile.whatsapp_number ||
+            contacts.find((c) => c.type === 'phone' && c.value)?.value ||
+            '';
+          return {
+            key,
+            phone: String(contactPhone || '').trim(),
+            gender: String(profile.gender || '').trim(),
+            age_group: String(profile.age_group || '').trim(),
+          };
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const updates: Record<string, { phone?: string; gender?: string; age_group?: string }> = {};
+      for (const item of results) {
+        if (item && (item.phone || item.gender || item.age_group)) {
+          updates[item.key] = {
+            phone: item.phone || undefined,
+            gender: item.gender || undefined,
+            age_group: item.age_group || undefined,
+          };
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        setIdentityMap((prev) => ({ ...prev, ...updates }));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseProfiles]);
+
+  return useMemo(() => {
+    const finalMap = new Map<string, ResolvedGuideProfile>();
+    baseProfiles.forEach((base, key) => {
+      const idData = identityMap[key];
+      const phone = base.phone || idData?.phone || '';
+      finalMap.set(key, {
+        phone,
+        whatsapp: base.whatsapp || phone || '',
+        email: base.email,
+        gender: base.regGender || idData?.gender || base.guideGender || '',
+        age_group: base.age_group || idData?.age_group || '',
+        user_id: base.user_id,
+      });
+    });
+    return finalMap;
+  }, [baseProfiles, identityMap]);
 };
 
 export const BookingsManager: React.FC<BookingsManagerProps> = ({
@@ -379,7 +725,23 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         return doesRegistrationMatchTrek(r, t);
       });
 
-      const tRegsCount = matchedActiveRegs.length;
+      let extraGuidesCount = 0;
+      if (matchedActiveRegs.length > 0) {
+        const { leadName, asstNames } = resolveTrekGuides(t, matchedActiveRegs);
+        const existingNames = new Set(
+          matchedActiveRegs.map((r) => normalizeGuideCompare(r.full_name)).filter(Boolean)
+        );
+        if (leadName && !existingNames.has(normalizeGuideCompare(leadName))) {
+          extraGuidesCount++;
+        }
+        asstNames.forEach((a) => {
+          if (!existingNames.has(normalizeGuideCompare(a))) {
+            extraGuidesCount++;
+          }
+        });
+      }
+
+      const tRegsCount = matchedActiveRegs.length + extraGuidesCount;
 
       return {
         trek: t,
@@ -494,6 +856,23 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         ? `${trekWithDateLabel} • Admin manual entry: Primary contact with ${formData.team_members.length} companion(s): ${formData.team_members.map((m) => m.full_name).join(', ')}`
         : `${trekWithDateLabel} • Admin manual entry: Solo participant`;
 
+    const resolvedLeadGuide = String(
+      targetTrek?.leader || targetTrek?.team_leader || targetTrek?.data?.teamLeader || ''
+    ).trim();
+    const resolvedAssistantGuides: string[] = (() => {
+      const rawArr = Array.isArray(targetTrek?.assistant_guides)
+        ? targetTrek.assistant_guides
+        : Array.isArray(targetTrek?.data?.assistantGuides)
+        ? targetTrek.data.assistantGuides
+        : null;
+      if (rawArr) {
+        return Array.from(new Set(rawArr.map((s: any) => String(s || '').trim()).filter(Boolean)));
+      }
+      const rawStr = String(targetTrek?.assistant_guide || targetTrek?.data?.assistantGuide || '').trim();
+      if (!rawStr) return [];
+      return Array.from(new Set(rawStr.split(',').map((s) => s.trim()).filter(Boolean)));
+    })();
+
     const primaryPayload = {
       trek_id: targetTrek?.id || formData.trek_id,
       hike_number: resolvedHikeNumber,
@@ -527,6 +906,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       difficulty: targetTrek?.difficulty || '',
       season: targetTrek?.season || '',
       type_of_trail: targetTrek?.type_of_trail || '',
+      lead_guide: resolvedLeadGuide,
+      assistant_guides: resolvedAssistantGuides,
       source: 'admin_manual',
       status: 'Confirmed',
     };
@@ -575,6 +956,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               difficulty: targetTrek?.difficulty || '',
               season: targetTrek?.season || '',
               type_of_trail: targetTrek?.type_of_trail || '',
+              lead_guide: resolvedLeadGuide,
+              assistant_guides: resolvedAssistantGuides,
               source: 'admin_manual',
               status: 'Confirmed',
             };
@@ -593,6 +976,45 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       throw err;
     }
   };
+
+  const getDuplicateNamePhoneKey = (reg: AdminRegistration): string => {
+    const cleanName = (reg.full_name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const rawDigits = (reg.phone || reg.whatsapp || (reg as any).whatsapp_number || '').replace(/[^0-9]/g, '');
+    const cleanPhone = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
+    if (!cleanName || !cleanPhone) return '';
+
+    const isPriv = reg.hike_number === 'PRIVATE' || reg.trek_name?.toLowerCase().includes('private');
+    const matched = !isPriv ? treks.find((t) => doesRegistrationMatchTrek(reg, t)) : undefined;
+    const hDigits = extractDigits(
+      matched?.hike_number && matched.hike_number !== 'TBD' ? matched.hike_number : reg.hike_number
+    );
+    const eventKey = isPriv
+      ? `private:${normStr(reg.trek_name)}`
+      : hDigits
+      ? `hike:${hDigits}`
+      : matched?.id
+      ? `trek:${matched.id}`
+      : `name:${normStr(reg.trek_name)}`;
+
+    return `${eventKey}|${cleanName}|${cleanPhone}`;
+  };
+
+  const duplicateNamePhoneKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    registrations.forEach((r) => {
+      const st = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
+      if (st.includes('cancel') || st === 'waitlisted' || st === 'duplicate' || st === 'double registration') {
+        return;
+      }
+      const key = getDuplicateNamePhoneKey(r);
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    const dups = new Set<string>();
+    counts.forEach((count, key) => {
+      if (count > 1) dups.add(key);
+    });
+    return dups;
+  }, [registrations, treks, rowDrafts]);
 
   // Private vs Public counts
   const privateCount = registrations.filter(
@@ -712,14 +1134,152 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     });
   }, [filteredRegistrations, sortField, sortOrder, rowDrafts]);
 
-  // Calculate totals
-  const totalPax = filteredRegistrations.reduce((acc, r) => {
-    const main = 1;
-    const team = Array.isArray(r.team_members) ? r.team_members.length : 0;
-    return acc + main + team;
-  }, 0);
+  type RosterRow = AdminRegistration & {
+    _guideRole?: 'leader' | 'assistant';
+    _isSyntheticGuide?: boolean;
+  };
 
-  const confirmedCount = filteredRegistrations.filter((r) => (r.status || 'Confirmed') === 'Confirmed').length;
+  const activeGuideNamesForLookup = useMemo(() => {
+    const names = new Set<string>();
+    if (selectedTrekFilter !== 'all' && selectedTrekFilter !== 'PRIVATE' && bookingTypeFilter !== 'private') {
+      const selectedTrekObj = treks.find(
+        (t) =>
+          t.id === selectedTrekFilter ||
+          (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === selectedTrekFilter)
+      );
+      const { leadName, asstNames } = resolveTrekGuides(selectedTrekObj, sortedRegistrations);
+      if (leadName) names.add(leadName);
+      asstNames.forEach((a) => names.add(a));
+    }
+    sortedRegistrations.forEach((r) => {
+      if (r.lead_guide) names.add(r.lead_guide);
+      if (Array.isArray(r.assistant_guides)) {
+        r.assistant_guides.forEach((a) => a && names.add(a));
+      }
+    });
+    return Array.from(names);
+  }, [selectedTrekFilter, bookingTypeFilter, treks, sortedRegistrations]);
+
+  const resolvedGuideProfiles = useResolvedGuideProfiles(activeGuideNamesForLookup, registrations);
+
+  const displayRegistrations: RosterRow[] = useMemo(() => {
+    const applyProfileFallback = (row: RosterRow, guideName: string): RosterRow => {
+      const profile = resolvedGuideProfiles.get(normalizeGuideCompare(guideName));
+      if (!profile) return row;
+      return {
+        ...row,
+        phone: row.phone || profile.phone || '',
+        whatsapp: row.whatsapp || profile.whatsapp || profile.phone || '',
+        email: row.email || profile.email || '',
+        gender: row.gender || profile.gender || '',
+        age_group: row.age_group || profile.age_group || '',
+      };
+    };
+
+    const flaggedRows: RosterRow[] = sortedRegistrations.map((reg) => {
+      const isPriv = reg.hike_number === 'PRIVATE' || reg.trek_name?.toLowerCase().includes('private');
+      const mTrek = !isPriv ? treks.find((t) => doesRegistrationMatchTrek(reg, t)) : undefined;
+      const { leadName, asstNames } = resolveTrekGuides(mTrek, [reg]);
+      const regNameKey = normalizeGuideCompare(reg.full_name);
+      if (regNameKey && leadName && regNameKey === normalizeGuideCompare(leadName)) {
+        return applyProfileFallback({ ...reg, _guideRole: 'leader' }, reg.full_name);
+      }
+      if (regNameKey && asstNames.some((a) => normalizeGuideCompare(a) === regNameKey)) {
+        return applyProfileFallback({ ...reg, _guideRole: 'assistant' }, reg.full_name);
+      }
+      return reg;
+    });
+
+    if (selectedTrekFilter === 'all' || selectedTrekFilter === 'PRIVATE' || bookingTypeFilter === 'private') {
+      return flaggedRows;
+    }
+
+    const statusLower = statusFilter.toLowerCase();
+    const allowGuideByStatus = statusFilter === 'all' || statusLower === 'confirmed';
+    const allowGuideByPayment = paymentStatusFilter === 'all';
+    if (!allowGuideByStatus || !allowGuideByPayment) {
+      return flaggedRows;
+    }
+
+    const selectedTrekObj = treks.find(
+      (t) =>
+        t.id === selectedTrekFilter ||
+        (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === selectedTrekFilter)
+    );
+    const { leadName, asstNames } = resolveTrekGuides(selectedTrekObj, sortedRegistrations);
+    if (!leadName && asstNames.length === 0) {
+      return flaggedRows;
+    }
+
+    const sampleReg = sortedRegistrations[0];
+    const existingNames = new Set(flaggedRows.map((r) => normalizeGuideCompare(r.full_name)).filter(Boolean));
+    const q = searchTerm.toLowerCase().trim();
+    const trekId = selectedTrekObj?.id || sampleReg?.trek_id || selectedTrekFilter;
+    const hikeNumber =
+      (selectedTrekObj?.hike_number && selectedTrekObj.hike_number !== 'TBD'
+        ? selectedTrekObj.hike_number
+        : sampleReg?.hike_number) || '';
+    const trekName = selectedTrekObj?.name || sampleReg?.trek_name || 'Himalayan Trek';
+    const trekDate = selectedTrekObj?.date || sampleReg?.trek_date || '';
+
+    const guideRows: RosterRow[] = [];
+    const buildGuideRow = (name: string, role: 'leader' | 'assistant', idx: number): RosterRow => {
+      const profile = resolvedGuideProfiles.get(normalizeGuideCompare(name));
+      return {
+        id: `__guide_${role}_${hikeNumber || trekId}_${idx}`,
+        trek_id: trekId,
+        hike_number: hikeNumber,
+        trek_name: trekName,
+        trek_date: trekDate,
+        full_name: name,
+        phone: profile?.phone || '',
+        whatsapp: profile?.whatsapp || profile?.phone || '',
+        email: profile?.email || '',
+        gender: profile?.gender || '',
+        age_group: profile?.age_group || '',
+        paxCount: 1,
+        status: 'Confirmed',
+        payment_status: 'Fully Paid',
+        paid_amount: 0,
+        due_amount: 0,
+        _guideRole: role,
+        _isSyntheticGuide: true,
+      };
+    };
+
+    if (leadName && !existingNames.has(normalizeGuideCompare(leadName))) {
+      if (!q || leadName.toLowerCase().includes(q) || trekName.toLowerCase().includes(q) || hikeNumber.toLowerCase().includes(q)) {
+        guideRows.push(buildGuideRow(leadName, 'leader', 0));
+      }
+    }
+
+    asstNames.forEach((asstName, idx) => {
+      if (!existingNames.has(normalizeGuideCompare(asstName))) {
+        if (!q || asstName.toLowerCase().includes(q) || trekName.toLowerCase().includes(q) || hikeNumber.toLowerCase().includes(q)) {
+          guideRows.push(buildGuideRow(asstName, 'assistant', idx + 1));
+        }
+      }
+    });
+
+    return [...guideRows, ...flaggedRows];
+  }, [sortedRegistrations, treks, selectedTrekFilter, bookingTypeFilter, statusFilter, paymentStatusFilter, searchTerm, resolvedGuideProfiles]);
+
+  const syntheticGuideCount = useMemo(
+    () => displayRegistrations.filter((r) => r._isSyntheticGuide).length,
+    [displayRegistrations]
+  );
+
+  // Calculate totals
+  const totalPax =
+    filteredRegistrations.reduce((acc, r) => {
+      const main = 1;
+      const team = Array.isArray(r.team_members) ? r.team_members.length : 0;
+      return acc + main + team;
+    }, 0) + syntheticGuideCount;
+
+  const confirmedCount =
+    filteredRegistrations.filter((r) => (r.status || 'Confirmed') === 'Confirmed').length +
+    syntheticGuideCount;
 
   // Status counts across current search/trek selection
   const statusCounts = useMemo(() => {
@@ -767,6 +1327,30 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       else if (st === 'waitlisted') waitlisted++;
       else if (st.includes('cancel')) cancelled++;
     });
+
+    if (selectedTrekFilter !== 'all' && selectedTrekFilter !== 'PRIVATE' && bookingTypeFilter !== 'private') {
+      const matchedForTrek = registrations.filter((reg) =>
+        selectedTrekObj
+          ? doesRegistrationMatchTrek(reg, selectedTrekObj)
+          : (reg.trek_id === selectedTrekFilter || (reg.hike_number && reg.hike_number !== 'TBD' && reg.hike_number === selectedTrekFilter))
+      );
+      const { leadName, asstNames } = resolveTrekGuides(selectedTrekObj, matchedForTrek);
+      const existingNames = new Set(matchedForTrek.map((r) => normalizeGuideCompare(r.full_name)).filter(Boolean));
+      const tName = selectedTrekObj?.name || matchedForTrek[0]?.trek_name || '';
+      const hNum = selectedTrekObj?.hike_number || matchedForTrek[0]?.hike_number || '';
+      if (leadName && !existingNames.has(normalizeGuideCompare(leadName))) {
+        if (!q || leadName.toLowerCase().includes(q) || tName.toLowerCase().includes(q) || hNum.toLowerCase().includes(q)) {
+          confirmed++;
+        }
+      }
+      asstNames.forEach((asstName) => {
+        if (!existingNames.has(normalizeGuideCompare(asstName))) {
+          if (!q || asstName.toLowerCase().includes(q) || tName.toLowerCase().includes(q) || hNum.toLowerCase().includes(q)) {
+            confirmed++;
+          }
+        }
+      });
+    }
 
     return { confirmed, doubleRegistration, pending: doubleRegistration, waitlisted, cancelled };
   }, [registrations, selectedTrekFilter, bookingTypeFilter, searchTerm, treks]);
@@ -1040,7 +1624,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           </div>
 
           <div className="text-[11px] font-semibold text-[#8B8680]">
-            Showing <span className="font-extrabold text-[#1F1F1F]">{filteredRegistrations.length}</span> record(s)
+            Showing <span className="font-extrabold text-[#1F1F1F]">{displayRegistrations.length}</span> record(s)
           </div>
         </div>
 
@@ -1261,7 +1845,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           <div>
             <h3 className="text-xs font-bold text-[#1F1F1F] tracking-tight">Hiker Applications Roster</h3>
             <p className="text-[10px] text-[#8B8680] mt-0.5">
-              Showing {filteredRegistrations.length} application(s) • Inline status, payment &amp; notes controls
+              Showing {displayRegistrations.length} application(s) • Inline status, payment &amp; notes controls
             </p>
           </div>
 
@@ -1499,7 +2083,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
           <div className="flex justify-center items-center py-16">
             <RefreshCw className="w-6 h-6 animate-spin text-[#E08828]" />
           </div>
-        ) : filteredRegistrations.length === 0 ? (
+        ) : displayRegistrations.length === 0 ? (
           <div className="text-center py-12 px-4">
             <UserX className="w-10 h-10 text-[#D8D2C9] mx-auto mb-2" />
             <p className="text-xs font-bold text-[#5A5551]">No hiker applications found</p>
@@ -1510,6 +2094,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
             <table className="w-full text-left border-collapse text-[11px]">
               <thead>
                 <tr className="bg-[#FAF8F5] border-b border-[#F0EBE5] text-[10px] font-semibold uppercase text-[#6B6560] tracking-wider">
+                  <th className="py-1.5 px-2.5 text-center w-[40px]">S.N.</th>
                   <th className="py-1.5 px-2.5 w-[34px] text-center">
                     <input
                       type="checkbox"
@@ -1691,7 +2276,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0EBE5]">
-                {sortedRegistrations.map((reg) => {
+                {displayRegistrations.map((reg, index) => {
+                  const isSyntheticGuide = Boolean(reg._isSyntheticGuide);
                   const draft = rowDrafts[reg.id] || {};
                   const curPhoneCall = draft.phone_call !== undefined ? Boolean(draft.phone_call) : Boolean(reg.phone_call);
                   const curWhatsAppGroup = draft.whatsapp_group !== undefined ? Boolean(draft.whatsapp_group) : Boolean(reg.whatsapp_group);
@@ -1706,7 +2292,6 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   const isDirty = Object.keys(draft).length > 0;
                   const isSavingThisRow = !!savingRowIds[reg.id];
                   const isRowJustSaved = !!justSavedRowIds[reg.id];
-                  const isDeleting = deletingId === reg.id;
 
                   const isPrivate = reg.hike_number === 'PRIVATE' || reg.trek_name?.toLowerCase().includes('private');
                   const isExpanded = expandedDetailsId === reg.id;
@@ -1717,21 +2302,38 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
                   return (
                     <React.Fragment key={reg.id}>
-                      <tr className={`transition-colors hover:bg-[#FF6600]/15 cursor-pointer ${isPrivate ? 'bg-purple-50/25' : ''}`}>
+                      <tr className={`transition-colors hover:bg-[#FF6600]/15 cursor-pointer ${
+                        isPrivate
+                          ? 'bg-purple-50/25'
+                          : reg._guideRole === 'leader'
+                          ? 'bg-amber-50/40'
+                          : reg._guideRole === 'assistant'
+                          ? 'bg-sky-50/35'
+                          : ''
+                      }`}>
+                        {/* S.N. */}
+                        <td className="py-1.5 px-2.5 text-center font-bold text-stone-600 text-xs">
+                          {index + 1}
+                        </td>
+
                         {/* Batch Selection Checkbox */}
                         <td className="py-1.5 px-2.5 text-center align-middle w-[34px]">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(reg.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedIds(prev => [...prev, reg.id]);
-                              } else {
-                                setSelectedIds(prev => prev.filter(id => id !== reg.id));
-                              }
-                            }}
-                            className="rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer animate-none"
-                          />
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] text-[#8B8680]">—</span>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(reg.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedIds(prev => [...prev, reg.id]);
+                                } else {
+                                  setSelectedIds(prev => prev.filter(id => id !== reg.id));
+                                }
+                              }}
+                              className="rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer animate-none"
+                            />
+                          )}
                         </td>
                         {/* Participant & Trek Info */}
                         <td className="py-1.5 px-2.5 align-middle">
@@ -1751,12 +2353,38 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                               >
                                 {reg.full_name}
                               </button>
+
+                              {reg._guideRole === 'leader' && (
+                                <span className="inline-flex items-center font-bold text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                  Leader
+                                </span>
+                              )}
+
+                              {reg._guideRole === 'assistant' && (
+                                <span className="inline-flex items-center font-bold text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-sky-100 text-sky-900 border border-sky-300">
+                                  Asst. Leader
+                                </span>
+                              )}
                               
                               {/* Distinctive Purple/Blue Private Trek Badge */}
                               {isPrivate && (
                                 <span className="inline-flex items-center gap-0.5 font-medium text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
                                   <Sparkles className="w-2.5 h-2.5 text-purple-600 shrink-0" />
                                   <span>Private</span>
+                                </span>
+                              )}
+
+                              {!isSyntheticGuide && (() => {
+                                const st = String(draft.status ?? reg.status ?? 'Confirmed').toLowerCase().trim();
+                                const isActiveRow = !st.includes('cancel') && st !== 'waitlisted' && st !== 'duplicate' && st !== 'double registration';
+                                return isActiveRow && duplicateNamePhoneKeys.has(getDuplicateNamePhoneKey(reg));
+                              })() && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 font-bold text-red-700 bg-red-100 border border-red-300 px-1.5 py-0.2 rounded text-[9px]"
+                                  title="Duplicate warning: same participant name and phone appears more than once in this event"
+                                >
+                                  <AlertTriangle className="w-2.5 h-2.5 text-red-600 shrink-0" />
+                                  <span>Duplicate</span>
                                 </span>
                               )}
 
@@ -1808,190 +2436,233 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                                 </span>
                               )}
                             </div>
+
                           </div>
                         </td>
 
                         {/* 1 - Phone call */}
                         <td className="py-1.5 px-1.5 align-middle text-center w-[75px]">
-                          <label className="inline-flex items-center justify-center cursor-pointer p-1 rounded hover:bg-stone-100 transition-colors" title={`Phone call: ${curPhoneCall ? 'Yes' : 'No'}`}>
-                            <input
-                              type="checkbox"
-                              checked={curPhoneCall}
-                              onChange={(e) => {
-                                const nextVal = e.target.checked;
-                                handleRowChange(reg.id, 'phone_call', nextVal);
-                                onUpdateRegistration(reg.id, { phone_call: nextVal }).catch(() => {});
-                              }}
-                              className="w-4 h-4 rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer"
-                            />
-                          </label>
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] text-[#8B8680]">—</span>
+                          ) : (
+                            <label className="inline-flex items-center justify-center cursor-pointer p-1 rounded hover:bg-stone-100 transition-colors" title={`Phone call: ${curPhoneCall ? 'Yes' : 'No'}`}>
+                              <input
+                                type="checkbox"
+                                checked={curPhoneCall}
+                                onChange={(e) => {
+                                  const nextVal = e.target.checked;
+                                  handleRowChange(reg.id, 'phone_call', nextVal);
+                                  onUpdateRegistration(reg.id, { phone_call: nextVal }).catch(() => {});
+                                }}
+                                className="w-4 h-4 rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer"
+                              />
+                            </label>
+                          )}
                         </td>
 
                         {/* 2 - WhatsApp Group */}
                         <td className="py-1.5 px-1.5 align-middle text-center w-[95px]">
-                          <label className="inline-flex items-center justify-center cursor-pointer p-1 rounded hover:bg-stone-100 transition-colors" title={`WhatsApp Group: ${curWhatsAppGroup ? 'Yes' : 'No'}`}>
-                            <input
-                              type="checkbox"
-                              checked={curWhatsAppGroup}
-                              onChange={(e) => {
-                                const nextVal = e.target.checked;
-                                handleRowChange(reg.id, 'whatsapp_group', nextVal);
-                                onUpdateRegistration(reg.id, { whatsapp_group: nextVal }).catch(() => {});
-                              }}
-                              className="w-4 h-4 rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer"
-                            />
-                          </label>
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] text-[#8B8680]">—</span>
+                          ) : (
+                            <label className="inline-flex items-center justify-center cursor-pointer p-1 rounded hover:bg-stone-100 transition-colors" title={`WhatsApp Group: ${curWhatsAppGroup ? 'Yes' : 'No'}`}>
+                              <input
+                                type="checkbox"
+                                checked={curWhatsAppGroup}
+                                onChange={(e) => {
+                                  const nextVal = e.target.checked;
+                                  handleRowChange(reg.id, 'whatsapp_group', nextVal);
+                                  onUpdateRegistration(reg.id, { whatsapp_group: nextVal }).catch(() => {});
+                                }}
+                                className="w-4 h-4 rounded border-[#E5E1DB] text-[#7ABA42] focus:ring-[#7ABA42] cursor-pointer"
+                              />
+                            </label>
+                          )}
                         </td>
 
                         {/* Pax Count (Directly editable like admin notes) */}
                         <td className="py-1.5 px-1.5 align-middle w-[65px]">
-                          <input
-                            type="text"
-                            value={curPax}
-                            onChange={(e) => handleRowChange(reg.id, 'paxCount', e.target.value)}
-                            placeholder="1"
-                            title="Pax count"
-                            className="w-full py-1 px-1 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-semibold text-center text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
-                          />
+                          {isSyntheticGuide ? (
+                            <div className="text-center text-[11px] font-semibold text-[#5A5551]">1</div>
+                          ) : (
+                            <input
+                              type="text"
+                              value={curPax}
+                              onChange={(e) => handleRowChange(reg.id, 'paxCount', e.target.value)}
+                              placeholder="1"
+                              title="Pax count"
+                              className="w-full py-1 px-1 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-semibold text-center text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
+                            />
+                          )}
                         </td>
 
                         {/* Registration Status */}
                         <td className="py-1.5 px-2 align-middle">
-                          <select
-                            value={curStatus}
-                            onChange={(e: any) => handleRowChange(reg.id, 'status', e.target.value)}
-                            className={`w-full py-1 px-1.5 rounded-lg text-[11px] font-medium border focus:outline-none cursor-pointer ${
-                              curStatus === 'Confirmed'
-                                ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                                : curStatus === 'Duplicate' || curStatus === 'Double Registration' || curStatus === 'Pending'
-                                ? 'bg-amber-50 border-amber-300 text-amber-900'
-                                : 'bg-rose-50 border-rose-300 text-rose-900'
-                            }`}
-                          >
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="Duplicate">Duplicate</option>
-                            <option value="Waitlisted">Waitlisted</option>
-                            <option value="Cancelled">Cancelled</option>
-                            <option value="Cancelled by User">Cancelled by User</option>
-                          </select>
+                          {isSyntheticGuide ? (
+                            <span className="inline-block px-2 py-0.5 rounded-lg text-[10px] font-medium bg-emerald-50 border border-emerald-200 text-emerald-900">
+                              Confirmed
+                            </span>
+                          ) : (
+                            <select
+                              value={curStatus}
+                              onChange={(e: any) => handleRowChange(reg.id, 'status', e.target.value)}
+                              className={`w-full py-1 px-1.5 rounded-lg text-[11px] font-medium border focus:outline-none cursor-pointer ${
+                                curStatus === 'Confirmed'
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                                  : curStatus === 'Duplicate' || curStatus === 'Double Registration' || curStatus === 'Pending'
+                                  ? 'bg-amber-50 border-amber-300 text-amber-900'
+                                  : 'bg-rose-50 border-rose-300 text-rose-900'
+                              }`}
+                            >
+                              <option value="Confirmed">Confirmed</option>
+                              <option value="Duplicate">Duplicate</option>
+                              <option value="Waitlisted">Waitlisted</option>
+                              <option value="Cancelled">Cancelled</option>
+                              <option value="Cancelled by User">Cancelled by User</option>
+                            </select>
+                          )}
                         </td>
 
                         {/* Payment Status */}
                         <td className="py-1.5 px-2 align-middle">
-                          <select
-                            value={curPayment}
-                            onChange={(e: any) => handleRowChange(reg.id, 'payment_status', e.target.value)}
-                            className={`w-full py-1 px-1.5 rounded-lg text-[11px] font-medium border focus:outline-none cursor-pointer ${
-                              curPayment === 'Fully Paid'
-                                ? 'bg-blue-50 border-blue-300 text-blue-900'
-                                : curPayment === 'Deposit Paid'
-                                ? 'bg-purple-50 border-purple-300 text-purple-900'
-                                : 'bg-[#F9F7F5] border-[#E5E1DB] text-[#1F1F1F]'
-                            }`}
-                          >
-                            <option value="Unpaid">Unpaid</option>
-                            <option value="Deposit Paid">Deposit Paid</option>
-                            <option value="Fully Paid">Fully Paid</option>
-                            <option value="Refunded">Refunded</option>
-                          </select>
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] font-medium text-[#8B8680]">Staff / Guide</span>
+                          ) : (
+                            <select
+                              value={curPayment}
+                              onChange={(e: any) => handleRowChange(reg.id, 'payment_status', e.target.value)}
+                              className={`w-full py-1 px-1.5 rounded-lg text-[11px] font-medium border focus:outline-none cursor-pointer ${
+                                curPayment === 'Fully Paid'
+                                  ? 'bg-blue-50 border-blue-300 text-blue-900'
+                                  : curPayment === 'Deposit Paid'
+                                  ? 'bg-purple-50 border-purple-300 text-purple-900'
+                                  : 'bg-[#F9F7F5] border-[#E5E1DB] text-[#1F1F1F]'
+                              }`}
+                            >
+                              <option value="Unpaid">Unpaid</option>
+                              <option value="Deposit Paid">Deposit Paid</option>
+                              <option value="Fully Paid">Fully Paid</option>
+                              <option value="Refunded">Refunded</option>
+                            </select>
+                          )}
                         </td>
 
                         {/* Paid Amount */}
                         <td className="py-1.5 px-2 align-middle">
-                          <input
-                            type="number"
-                            value={curPaidAmount}
-                            onChange={(e) =>
-                              handleRowChange(
-                                reg.id,
-                                'paid_amount',
-                                e.target.value === '' ? '' : Number(e.target.value)
-                              )
-                            }
-                            placeholder="Paid"
-                            className="w-full py-1 px-1.5 bg-emerald-50/60 border border-emerald-300 rounded-lg text-[11px] font-medium text-emerald-950 placeholder-emerald-400 focus:bg-white focus:outline-none focus:border-emerald-600"
-                          />
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] text-[#8B8680]">—</span>
+                          ) : (
+                            <input
+                              type="number"
+                              value={curPaidAmount}
+                              onChange={(e) =>
+                                handleRowChange(
+                                  reg.id,
+                                  'paid_amount',
+                                  e.target.value === '' ? '' : Number(e.target.value)
+                                )
+                              }
+                              placeholder="Paid"
+                              className="w-full py-1 px-1.5 bg-emerald-50/60 border border-emerald-300 rounded-lg text-[11px] font-medium text-emerald-950 placeholder-emerald-400 focus:bg-white focus:outline-none focus:border-emerald-600"
+                            />
+                          )}
                         </td>
 
                         {/* Due Amount */}
                         <td className="py-1.5 px-2 align-middle">
-                          <input
-                            type="number"
-                            value={curDueAmount}
-                            onChange={(e) =>
-                              handleRowChange(
-                                reg.id,
-                                'due_amount',
-                                e.target.value === '' ? '' : Number(e.target.value)
-                              )
-                            }
-                            placeholder="Due"
-                            className="w-full py-1 px-1.5 bg-amber-50/60 border border-amber-300 rounded-lg text-[11px] font-medium text-amber-950 placeholder-amber-400 focus:bg-white focus:outline-none focus:border-amber-600"
-                          />
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] text-[#8B8680]">—</span>
+                          ) : (
+                            <input
+                              type="number"
+                              value={curDueAmount}
+                              onChange={(e) =>
+                                handleRowChange(
+                                  reg.id,
+                                  'due_amount',
+                                  e.target.value === '' ? '' : Number(e.target.value)
+                                )
+                              }
+                              placeholder="Due"
+                              className="w-full py-1 px-1.5 bg-amber-50/60 border border-amber-300 rounded-lg text-[11px] font-medium text-amber-950 placeholder-amber-400 focus:bg-white focus:outline-none focus:border-amber-600"
+                            />
+                          )}
                         </td>
 
                         {/* Pickup Point */}
                         <td className="py-1.5 px-2 align-middle">
-                          <input
-                            type="text"
-                            value={curPickup}
-                            onChange={(e) => handleRowChange(reg.id, 'pickup_point', e.target.value)}
-                            placeholder="Pickup Point"
-                            className="w-full py-1 px-1.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-normal text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
-                          />
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] text-[#8B8680]">—</span>
+                          ) : (
+                            <input
+                              type="text"
+                              value={curPickup}
+                              onChange={(e) => handleRowChange(reg.id, 'pickup_point', e.target.value)}
+                              placeholder="Pickup Point"
+                              className="w-full py-1 px-1.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-normal text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
+                            />
+                          )}
                         </td>
 
                         {/* Internal Admin Notes */}
                         <td className="py-1.5 px-2.5 align-middle">
-                          <input
-                            type="text"
-                            value={curNotes}
-                            onChange={(e) => handleRowChange(reg.id, 'admin_notes', e.target.value)}
-                            placeholder="Edit admin notes..."
-                            className="w-full py-1 px-1.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-normal text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
-                          />
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] text-[#8B8680]">—</span>
+                          ) : (
+                            <input
+                              type="text"
+                              value={curNotes}
+                              onChange={(e) => handleRowChange(reg.id, 'admin_notes', e.target.value)}
+                              placeholder="Edit admin notes..."
+                              className="w-full py-1 px-1.5 bg-[#F9F7F5] border border-[#E5E1DB] rounded-lg text-[11px] font-normal text-[#1F1F1F] placeholder-[#8B8680] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#7ABA42] focus:border-[#7ABA42] transition-colors"
+                            />
+                          )}
                         </td>
 
                         {/* Actions */}
                         <td className="py-1.5 px-2.5 align-middle text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleSaveRow(reg)}
-                              disabled={isSavingThisRow}
-                              className={`px-2 py-1 text-[10px] font-medium rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
-                                isDirty
-                                   ? 'bg-[#E08828] hover:bg-[#D07717] text-white animate-pulse'
-                                   : isRowJustSaved
-                                   ? 'bg-emerald-600 text-white'
-                                   : 'bg-[#F9F7F5] hover:bg-[#EFEAE4] text-[#1F1F1F] border border-[#E5E1DB]'
-                              }`}
-                              title="Save Row Changes"
-                            >
-                              {isSavingThisRow ? (
-                                <RefreshCw className="w-3 h-3 animate-spin" />
-                              ) : isRowJustSaved ? (
-                                <>
-                                  <Check className="w-3 h-3 text-white" />
-                                  <span>Saved</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Save className="w-3 h-3" />
-                                  <span>Save</span>
-                                </>
-                              )}
-                            </button>
+                          {isSyntheticGuide ? (
+                            <span className="text-[10px] font-medium text-[#8B8680]">Auto-added</span>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveRow(reg)}
+                                disabled={isSavingThisRow}
+                                className={`px-2 py-1 text-[10px] font-medium rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
+                                  isDirty
+                                     ? 'bg-[#E08828] hover:bg-[#D07717] text-white animate-pulse'
+                                     : isRowJustSaved
+                                     ? 'bg-emerald-600 text-white'
+                                     : 'bg-[#F9F7F5] hover:bg-[#EFEAE4] text-[#1F1F1F] border border-[#E5E1DB]'
+                                }`}
+                                title="Save Row Changes"
+                              >
+                                {isSavingThisRow ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                ) : isRowJustSaved ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-white" />
+                                    <span>Saved</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-3 h-3" />
+                                    <span>Save</span>
+                                  </>
+                                )}
+                              </button>
 
-                            <button
-                              type="button"
-                              onClick={() => setEditingRegistration(reg)}
-                              className="p-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg transition-colors cursor-pointer"
-                              title="Edit Original Application (Columnar Format)"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          </div>
+                              <button
+                                type="button"
+                                onClick={() => setEditingRegistration(reg)}
+                                className="p-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Original Application (Columnar Format)"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
 
@@ -2072,7 +2743,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
               </tbody>
               <tfoot className="bg-[#FAF8F5] border-t-2 border-[#E5E1DB] font-bold text-[#1F1F1F]">
                 <tr>
-                  <td colSpan={7} className="py-2.5 px-2.5 text-right uppercase text-[9px] tracking-wider text-[#6B6560]">
+                  <td colSpan={8} className="py-2.5 px-2.5 text-right uppercase text-[9px] tracking-wider text-[#6B6560]">
                     Total
                   </td>
                   <td className="py-2.5 px-2 text-emerald-700 font-black text-xs">
@@ -2091,7 +2762,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         {/* Bottom of List of Participants */}
         <div className="p-4 border-t border-[#F0EBE5] bg-[#FAF8F5] flex items-center justify-between flex-wrap gap-3">
           <div className="text-[11px] font-semibold text-[#8B8680]">
-            Showing <strong className="text-[#1F1F1F]">{filteredRegistrations.length}</strong> participant(s) in roster
+            Showing <strong className="text-[#1F1F1F]">{displayRegistrations.length}</strong> participant(s) in roster
           </div>
           <div className="flex items-center gap-2">
             {pendingDraftCount > 0 && (

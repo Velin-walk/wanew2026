@@ -543,9 +543,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         (curTrekName && bTrekName && curTrekName === bTrekName);
       if (!sameTrek) continue;
 
-      const bDate = normAlnum(b.trek_date);
-      if (curDate && bDate && curDate !== bDate) continue;
-
       if (norm(b.full_name || b.hikerName || b.name) !== curName) continue;
 
       const bPhone = normPhone(b.phone || b.phoneNumber);
@@ -555,55 +552,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         (bWhatsapp ? bWhatsapp === curWhatsapp : true) &&
         Boolean((bPhone && bPhone === curPhone) || (bWhatsapp && bWhatsapp === curWhatsapp));
       if (!hasPhoneMatch) continue;
-
-      const bEmail = norm(b.email || b.user_email || b.email_address);
-      if (bEmail !== curEmail) continue;
-
-      const bEmergency = norm(b.emergency_contact || b.emergency_backup_contact);
-      if (bEmergency !== curEmergency) continue;
-
-      if (norm(b.profession) !== curProfession) continue;
-
-      const bIsGroup = norm(b.is_group || b.part_of_group || 'Solo');
-      if (bIsGroup !== curIsGroup) continue;
-
-      if (norm(b.age_group || b.ageGroup) !== curAgeGroup) continue;
-      if (norm(b.gender) !== curGender) continue;
-
-      const bMed = normMedical(b.has_medical || b.medical_condition, b.specify_medical || b.medical_condition);
-      if (bMed !== curMed) continue;
-
-      if (norm(b.recent_hikes) !== curRecentHikes) continue;
-      if (norm(b.suggestions) !== curSuggestions) continue;
-
-      if (isOvernight2D1N) {
-        const bGuide = norm(b.guide_preference || b.guide_mode || 'Guided');
-        const bTransport = norm(b.transport_preference || b.transport_mode || 'Bus');
-        if (bGuide !== curGuide || bTransport !== curTransport) continue;
-      }
-
-      const bMembers = Array.isArray(b.team_members) ? b.team_members : [];
-      const bPax = Number(b.pax) > 0 ? Number(b.pax) : 1 + bMembers.length;
-      if (bPax !== curPax) continue;
-
-      if (curMembers.length > 0 && bMembers.length > 0) {
-        if (curMembers.length !== bMembers.length) continue;
-        let membersMatch = true;
-        for (let i = 0; i < curMembers.length; i++) {
-          const cm = curMembers[i];
-          const bm = bMembers[i];
-          if (
-            norm(cm.full_name) !== norm(bm.full_name) ||
-            normPhone(cm.phone) !== normPhone(bm.phone) ||
-            norm(cm.age_group || '20-30') !== norm(bm.age_group || '20-30') ||
-            norm(cm.gender) !== norm(bm.gender)
-          ) {
-            membersMatch = false;
-            break;
-          }
-        }
-        if (!membersMatch) continue;
-      }
 
       return true;
     }

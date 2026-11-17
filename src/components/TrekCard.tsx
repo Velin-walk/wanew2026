@@ -182,7 +182,11 @@ export const TrekCard: React.FC<TrekCardProps> = ({
   const badge = getDifficultyBadge(effectiveDifficulty);
   const rawRecent = syncedRoster?.recentParticipants ?? (trek.recent_participants || []);
   const rosterList = rawRecent.length > 0
-    ? enrichWithGuide(rawRecent, trek.leader || trek.team_leader)
+    ? enrichWithGuide(
+        rawRecent,
+        trek.leader || trek.team_leader,
+        trek.assistant_guides || trek.assistant_guide
+      )
     : [];
 
   const pg = syncedRoster ?? trek.participants_by_gender;
@@ -505,6 +509,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
           hikeNumber={trek.hike_number}
           trekId={trek.id}
           guideName={trek.leader || trek.team_leader}
+          assistantGuides={trek.assistant_guides || trek.assistant_guide}
           onRosterSynced={setSyncedRoster}
         />
 

@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
   SavedHikeRecord,
-  TrekItineraryData
+  TrekItineraryData,
+  getEventPhotos
 } from '../../data/defaultItineraryTemplate';
 import {
   Plus,
@@ -135,6 +136,33 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
     const raw = String(h.hikeNumber || h.data?.hikeNumber || '').trim();
     const match = raw.match(/\d+/);
     return match ? parseInt(match[0], 10) : -1;
+  };
+
+  // Resolve primary cover image URL (supports JSON photo arrays from ItineraryBuilder)
+  const resolveHikeCoverUrl = (hike: SavedHikeRecord): string => {
+    const rawCandidates = [
+      hike.data?.coverImageUrl,
+      (hike as any).coverImageUrl,
+      (hike as any).cover_image_url,
+      (hike as any).featured_image,
+      hike.data?.cardImageUrl,
+      (hike as any).cardImageUrl,
+    ];
+
+    for (const raw of rawCandidates) {
+      if (!raw || typeof raw !== 'string' || !raw.trim()) continue;
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('[')) {
+        const photos = getEventPhotos(trimmed);
+        if (photos.length > 0 && photos[0].url) {
+          return photos[0].url;
+        }
+      } else if (!trimmed.startsWith('{') && (trimmed.startsWith('http') || trimmed.startsWith('/') || trimmed.startsWith('data:'))) {
+        return trimmed;
+      }
+    }
+
+    return 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80';
   };
 
   // Filter and sort hikes: highest hike number at top, lowest at bottom by default
@@ -506,9 +534,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                       ? Math.max(...priceTiers.map((t) => t.price))
                       : null;
 
-                  const coverImg =
-                    hike.data?.coverImageUrl ||
-                    'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80';
+                  const coverImg = resolveHikeCoverUrl(hike);
 
                   return (
                     <tr key={`${hike.id}-${index}`} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
@@ -696,9 +722,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                 ? Math.max(...priceTiers.map((t) => t.price))
                 : null;
 
-            const coverImg =
-              hike.data?.coverImageUrl ||
-              'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80';
+            const coverImg = resolveHikeCoverUrl(hike);
 
             return (
               <div

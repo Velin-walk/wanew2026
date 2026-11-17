@@ -905,6 +905,37 @@ function MainApp() {
           due_amount: Number(b.roster_due_amount ?? b.due_amount) || 0,
           pickup_point: b.roster_pickup_point || b.pickup_point || b.pickupPoint || '',
           admin_notes: b.roster_admin_notes || b.admin_notes || '',
+          lead_guide:
+            b.roster_lead_guide ||
+            b.lead_guide ||
+            matchedTrek?.leader ||
+            matchedTrek?.team_leader ||
+            '',
+          assistant_guides: (() => {
+            const raw = b.roster_assistant_guides ?? b.assistant_guides;
+            if (Array.isArray(raw) && raw.length > 0) {
+              return Array.from(new Set(raw.map((s: any) => String(s || '').trim()).filter(Boolean)));
+            }
+            if (typeof raw === 'string' && raw.trim()) {
+              const trimmed = raw.trim();
+              if (trimmed.startsWith('[')) {
+                try {
+                  const parsed = JSON.parse(trimmed);
+                  if (Array.isArray(parsed)) {
+                    return Array.from(new Set(parsed.map((s: any) => String(s || '').trim()).filter(Boolean)));
+                  }
+                } catch {}
+              }
+              return Array.from(new Set(trimmed.split(',').map((s) => s.trim()).filter(Boolean)));
+            }
+            if (Array.isArray(matchedTrek?.assistant_guides)) {
+              return matchedTrek.assistant_guides;
+            }
+            if (typeof matchedTrek?.assistant_guide === 'string' && matchedTrek.assistant_guide.trim()) {
+              return matchedTrek.assistant_guide.split(',').map((s) => s.trim()).filter(Boolean);
+            }
+            return [];
+          })(),
         } as Booking;
       });
 
@@ -1278,6 +1309,23 @@ function MainApp() {
         ? `${trekWithDateLabel} • Primary contact with ${formData.team_members.length} companion(s): ${formData.team_members.map((m) => m.full_name).join(', ')}`
         : `${trekWithDateLabel} • Solo registration`;
 
+    const resolvedLeadGuide = String(
+      trek.leader || trek.team_leader || trek.data?.teamLeader || ''
+    ).trim();
+    const resolvedAssistantGuides: string[] = (() => {
+      const rawArr = Array.isArray(trek.assistant_guides)
+        ? trek.assistant_guides
+        : Array.isArray(trek.data?.assistantGuides)
+        ? trek.data.assistantGuides
+        : null;
+      if (rawArr) {
+        return Array.from(new Set(rawArr.map((s: any) => String(s || '').trim()).filter(Boolean)));
+      }
+      const rawStr = String(trek.assistant_guide || trek.data?.assistantGuide || '').trim();
+      if (!rawStr) return [];
+      return Array.from(new Set(rawStr.split(',').map((s) => s.trim()).filter(Boolean)));
+    })();
+
     const totalNewPeople = 1 + (Array.isArray(formData.team_members) ? formData.team_members.length : 0);
     const primaryPayload = {
       trek_id: trek.id,
@@ -1311,7 +1359,9 @@ function MainApp() {
       distance: trek.distance || '',
       difficulty: trek.difficulty || '',
       season: trek.season || '',
-      type_of_trail: trek.type_of_trail || ''
+      type_of_trail: trek.type_of_trail || '',
+      lead_guide: resolvedLeadGuide,
+      assistant_guides: resolvedAssistantGuides
     };
 
     let primaryId = `reg-${Date.now()}`;
@@ -1371,7 +1421,9 @@ function MainApp() {
             distance: trek.distance || '',
             difficulty: trek.difficulty || '',
             season: trek.season || '',
-            type_of_trail: trek.type_of_trail || ''
+            type_of_trail: trek.type_of_trail || '',
+            lead_guide: resolvedLeadGuide,
+            assistant_guides: resolvedAssistantGuides
           };
 
           let companionId = `reg-companion-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -1440,6 +1492,8 @@ function MainApp() {
       due_amount: 0,
       pickup_point: '',
       admin_notes: '',
+      lead_guide: resolvedLeadGuide,
+      assistant_guides: resolvedAssistantGuides,
     };
 
     // Save to localStorage for seamless auto-prefill on next registration & instant bookings view

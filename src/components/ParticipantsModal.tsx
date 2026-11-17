@@ -11,6 +11,7 @@ export interface ParticipantItem {
   gender: 'm' | 'f';
   pax?: number;
   isGuide?: boolean;
+  guideRole?: 'lead' | 'assistant';
 }
 
 interface ParticipantsModalProps {
@@ -23,6 +24,7 @@ interface ParticipantsModalProps {
   participantsCount?: ParticipantCount;
   recentParticipants?: ParticipantItem[];
   guideName?: string;
+  assistantGuides?: string[] | string;
   onRosterSynced?: (synced: {
     total: number;
     male: number;
@@ -53,21 +55,76 @@ export function formatNameWithLastInitial(rawName: string): string {
   return `${firstName} ${cleanLast.charAt(0).toUpperCase()}.`;
 }
 
-export const enrichWithGuide = (items: ParticipantItem[], guide?: string): ParticipantItem[] => {
+const normalizeAssistantGuidesProp = (assistantGuides?: string[] | string): string[] => {
+  if (Array.isArray(assistantGuides)) {
+    return Array.from(new Set(assistantGuides.map((s) => String(s || '').trim()).filter(Boolean)));
+  }
+  if (typeof assistantGuides === 'string' && assistantGuides.trim()) {
+    const trimmed = assistantGuides.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return Array.from(new Set(parsed.map((s: any) => String(s || '').trim()).filter(Boolean)));
+        }
+      } catch (_) {}
+    }
+    return Array.from(new Set(trimmed.split(',').map((s) => s.trim()).filter(Boolean)));
+  }
+  return [];
+};
+
+const stripGuideSuffix = (name: string): string =>
+  name.replace(/\s*\((?:lead\s+|assistant\s+|asst\.?\s+)?(?:guide|leader)\)/i, '').trim();
+
+export const enrichWithGuide = (
+  items: ParticipantItem[],
+  guide?: string,
+  assistantGuides?: string[] | string
+): ParticipantItem[] => {
   const list = [...items];
-  if (guide && guide.trim()) {
-    const cleanGuide = guide.replace(/\s*\((?:lead\s+)?(?:guide|leader)\)/i, '').trim();
-    if (!cleanGuide) return list;
-    const existingIndex = list.findIndex(p => {
-      const pClean = p.name.replace(/\s*\((?:lead\s+)?(?:guide|leader)\)/i, '').trim().toLowerCase();
-      return pClean === cleanGuide.toLowerCase() || p.isGuide;
+  let insertOffset = 0;
+
+  const cleanGuide = guide && guide.trim() ? stripGuideSuffix(guide) : '';
+  if (cleanGuide) {
+    const existingIndex = list.findIndex((p) => {
+      const pClean = stripGuideSuffix(p.name).toLowerCase();
+      return pClean === cleanGuide.toLowerCase() || (p.isGuide && p.guideRole !== 'assistant');
     });
     if (existingIndex >= 0) {
-      list[existingIndex] = { ...list[existingIndex], name: cleanGuide, isGuide: true };
+      list[existingIndex] = { ...list[existingIndex], name: cleanGuide, isGuide: true, guideRole: 'lead' };
+      insertOffset = existingIndex + 1;
     } else {
-      list.unshift({ name: cleanGuide, gender: 'm', isGuide: true });
+      list.unshift({ name: cleanGuide, gender: 'm', isGuide: true, guideRole: 'lead' });
+      insertOffset = 1;
     }
   }
+
+  const asstNames = normalizeAssistantGuidesProp(assistantGuides);
+  for (const rawAsst of asstNames) {
+    const cleanAsst = stripGuideSuffix(rawAsst);
+    if (!cleanAsst) continue;
+    if (cleanGuide && cleanAsst.toLowerCase() === cleanGuide.toLowerCase()) continue;
+
+    const existingIndex = list.findIndex((p) => stripGuideSuffix(p.name).toLowerCase() === cleanAsst.toLowerCase());
+    if (existingIndex >= 0) {
+      list[existingIndex] = {
+        ...list[existingIndex],
+        name: cleanAsst,
+        isGuide: true,
+        guideRole: list[existingIndex].guideRole || 'assistant',
+      };
+    } else {
+      list.splice(insertOffset, 0, {
+        name: cleanAsst,
+        gender: 'm',
+        isGuide: true,
+        guideRole: 'assistant',
+      });
+      insertOffset++;
+    }
+  }
+
   return list;
 };
 
@@ -81,17 +138,21 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
   participantsCount = { total: 0, male: 0, female: 0 },
   recentParticipants = [],
   guideName,
+  assistantGuides,
   onRosterSynced,
 }) => {
   const { user, openAuthModal } = useAuth();
   useAnonymity();
-  const [roster, setRoster] = useState<ParticipantItem[]>(() => enrichWithGuide(recentParticipants, guideName));
+  const normalizedPropAssistants = normalizeAssistantGuidesProp(assistantGuides);
+  const [roster, setRoster] = useState<ParticipantItem[]>(() =>
+    enrichWithGuide(recentParticipants, guideName, normalizedPropAssistants)
+  );
   const [loading, setLoading] = useState(false);
 
-  // Sync initial list when recentParticipants or guideName changes
+  // Sync initial list when recentParticipants, guideName, or assistantGuides changes
   useEffect(() => {
-    setRoster(enrichWithGuide(recentParticipants || [], guideName));
-  }, [recentParticipants, guideName]);
+    setRoster(enrichWithGuide(recentParticipants || [], guideName, assistantGuides));
+  }, [recentParticipants, guideName, assistantGuides]);
 
   // Fetch full roster from server if modal is open and hike/trek ID exists
   useEffect(() => {
@@ -108,6 +169,25 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
         if (res.ok && isMounted) {
           const json = await res.json();
           const serverRoster = json.roster || json.data?.roster;
+          const serverGuide =
+            guideName ||
+            json.lead_guide ||
+            json.trek?.lead_guide ||
+            json.trek?.leader ||
+            json.trek?.team_leader ||
+            json.data?.lead_guide ||
+            json.data?.leader;
+          const serverAssistants =
+            normalizedPropAssistants.length > 0
+              ? normalizedPropAssistants
+              : normalizeAssistantGuidesProp(
+                  json.assistant_guides ??
+                    json.trek?.assistant_guides ??
+                    json.trek?.assistant_guide ??
+                    json.data?.assistant_guides ??
+                    json.data?.assistant_guide
+                );
+
           if (Array.isArray(serverRoster)) {
             const mapped: ParticipantItem[] = serverRoster
               .filter((r: any) => {
@@ -120,8 +200,8 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                 pax: Number(r.pax || 1),
               }));
             const enrichedList =
-              mapped.length > 0 || (guideName && guideName.trim())
-                ? enrichWithGuide(mapped, guideName)
+              mapped.length > 0 || (serverGuide && serverGuide.trim()) || serverAssistants.length > 0
+                ? enrichWithGuide(mapped, serverGuide, serverAssistants)
                 : [];
             if (enrichedList.length > 0) {
               setRoster(enrichedList);
@@ -333,12 +413,20 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
               {roster.map((p, idx) => {
+                const rawCleanName = stripGuideSuffix(p.name);
+                const cleanLeadLower = guideName ? stripGuideSuffix(guideName).toLowerCase() : '';
+                const isAssistantGuide = Boolean(
+                  p.guideRole === 'assistant' ||
+                  (!p.guideRole &&
+                    normalizedPropAssistants.some((ag) => stripGuideSuffix(ag).toLowerCase() === rawCleanName.toLowerCase()) &&
+                    (!cleanLeadLower || rawCleanName.toLowerCase() !== cleanLeadLower))
+                );
                 const isGuide = Boolean(
                   p.isGuide ||
-                  (guideName && p.name.toLowerCase().includes(guideName.toLowerCase().trim())) ||
-                  /\((?:lead\s+)?(?:guide|leader)\)/i.test(p.name)
+                  isAssistantGuide ||
+                  (cleanLeadLower && rawCleanName.toLowerCase().includes(cleanLeadLower)) ||
+                  /\((?:lead\s+|assistant\s+|asst\.?\s+)?(?:guide|leader)\)/i.test(p.name)
                 );
-                const rawCleanName = p.name.replace(/\s*\((?:lead\s+)?(?:guide|leader)\)/i, '').trim();
                 const formatted = isGuide ? rawCleanName : formatNameWithLastInitial(p.name);
                 const firstInitial = (rawCleanName || 'H').charAt(0).toUpperCase();
                 const isFemale = p.gender === 'f';
@@ -361,7 +449,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                           ? 'bg-gradient-to-br from-rose-100 to-rose-200 text-rose-700 shadow-[2px_2px_4px_#d1d8e3,-2px_-2px_4px_#ffffff]'
                           : 'bg-gradient-to-br from-sky-100 to-sky-200 text-sky-800 shadow-[2px_2px_4px_#d1d8e3,-2px_-2px_4px_#ffffff]'
                       }`}
-                      title={isGuide ? 'Leader' : isFemale ? 'Female' : 'Male'}
+                      title={isAssistantGuide ? 'Assistant Guide' : isGuide ? 'Leader' : isFemale ? 'Female' : 'Male'}
                     >
                       {firstInitial}
                     </div>
@@ -376,7 +464,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                       </span>
                       {isGuide && (
                         <span className="text-[8px] sm:text-[9px] font-extrabold uppercase tracking-wide text-[#B45309] bg-amber-100/90 px-1 py-0.5 rounded shadow-[1px_1px_2px_#d1d8e3,-1px_-1px_2px_#ffffff] border border-amber-300/80 shrink-0 leading-none">
-                          Leader
+                          {isAssistantGuide ? 'Asst. Guide' : 'Leader'}
                         </span>
                       )}
                     </div>

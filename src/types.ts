@@ -114,6 +114,8 @@ export interface Booking {
   due_amount?: number;
   pickup_point?: string;
   admin_notes?: string;
+  lead_guide?: string;
+  assistant_guides?: string[];
   payment_voucher_url?: string;
   payment_voucher_submitted_at?: string;
 }

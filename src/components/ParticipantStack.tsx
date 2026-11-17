@@ -10,6 +10,7 @@ interface ParticipantStackProps {
   hikeNumber?: string;
   trekId?: string;
   guideName?: string;
+  assistantGuides?: string[] | string;
   onRosterSynced?: (synced: {
     total: number;
     male: number;
@@ -26,6 +27,7 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
   hikeNumber,
   trekId,
   guideName,
+  assistantGuides,
   onRosterSynced,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -155,6 +157,7 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
         participantsCount={participantsCount}
         recentParticipants={recentParticipants}
         guideName={guideName}
+        assistantGuides={assistantGuides}
         onRosterSynced={onRosterSynced}
       />
     </>
