@@ -2754,69 +2754,45 @@ const worker = {
 
 async function sendRegistrationEmail(env, body) {
   if (!body || (!body.email_address && !body.email)) return;
+  // If this is an auto-generated companion record, skip to avoid duplicate emails to the primary user
+  if (body.person_remarks && typeof body.person_remarks === 'string' && body.person_remarks.includes('• Companion of')) {
+    return;
+  }
   const emailTo = (body.email_address || body.email || '').trim();
   if (!emailTo) return;
 
-  const fullName = body.full_name || 'Hiker';
-  const trekName = body.trek_name || 'Himalayan Trek';
-  const hikeNum = body.hike_number || 'TBD';
-  const trekDate = body.trek_date || 'Upcoming';
-  const meetingPoint = body.pickup_point || body.meeting_point || 'Kathmandu (Check app)';
-  
-  const isGroup = (body.part_of_group === 'Group') || (Number(body.pax) > 1) || (Array.isArray(body.team_members) && body.team_members.length > 0);
-  const companionCount = Array.isArray(body.team_members) ? body.team_members.length : Math.max(0, Number(body.pax) - 1);
+  const GAS_EMAIL_URL =
+    env.GAS_EMAIL_URL ||
+    'https://script.google.com/macros/s/AKfycbxyE3af_8R8NXQ4typfEouRELh13I0k2J03ecgPhwoCvPbYk_0uAVkthwd-aqhbhmI-4Q/exec';
 
-  let emailText = '';
-  if (isGroup && companionCount > 0) {
-    emailText = `Namaste ${fullName} & Team!
-We’ve safely received your registration form! Your spot on the trail is officially secured, and our team is thrilled to have you join us.
-Here are your quick trip details:
-Trek / Expedition: ${trekName} (Hike #${hikeNum})
-Date: ${trekDate}
-Registered Group: ${fullName} + ${companionCount} companion(s)
-Meeting Point / Time: ${meetingPoint}
-Please go through our Trek Tips for better preparation via our Website.
-You shall soon be added to our WhatsApp group to coordinate rides and updates with fellow hikers.
-See you at the trailhead!
-— The Walk Nepal Walk Team`;
-  } else {
-    emailText = `Namaste ${fullName}!
-We’ve safely received your registration form! Your spot on the trail is officially secured, and our team is thrilled to have you join us.
-Here are your quick trip details:
-Trek / Expedition: ${trekName} (Hike #${hikeNum})
-Date: ${trekDate}
-Meeting Point / Time: ${meetingPoint} (Check your app for exact logistics)
-Please go through our Trek Tips for better preparation via our Website.
-You shall soon be added to our WhatsApp group to coordinate rides and updates with fellow hikers.
-See you at the trailhead!
-— The Walk Nepal Walk Team`;
-  }
+  const payload = {
+    email_address: emailTo,
+    email: emailTo,
+    full_name: body.full_name || 'Hiker',
+    trek_name: body.trek_name || 'Himalayan Trek',
+    hike_number: body.hike_number || 'TBD',
+    trek_date: body.trek_date || 'Upcoming',
+    pickup_point: body.pickup_point || body.meeting_point || 'Kathmandu (Check app for exact logistics)',
+    part_of_group: body.part_of_group || 'Solo',
+    pax: Number(body.pax) || 1,
+    team_members: Array.isArray(body.team_members) ? body.team_members : []
+  };
 
-  const subject = `Registration Confirmed: ${trekName} (${trekDate})`;
-  const apiKey = env.RESEND_API_KEY || env.EMAIL_API_KEY;
-
-  if (apiKey) {
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: 'Walk Nepal Walk <walknepalwalk@gmail.com>',
-          to: [emailTo],
-          subject: subject,
-          text: emailText
-        })
-      });
-      return;
-    } catch (err) {
-      console.warn('Resend email error:', err);
+  try {
+    const res = await fetch(GAS_EMAIL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow'
+    });
+    if (!res.ok) {
+      console.warn('[sendRegistrationEmail] GAS response status:', res.status);
     }
+  } catch (err) {
+    console.warn('[sendRegistrationEmail] GAS email delivery error:', err);
   }
-
-  console.log(`[Email from walknepalwalk@gmail.com to ${emailTo}]:\n${subject}\n\n${emailText}`);
 }
 
       // POST /registrations - Create registration
