@@ -1085,16 +1085,16 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
       : now;
 
     return metrics.perEventList.filter((ev) => {
-      // 1. Text Search Filter
+      // 1. Text Search Filter (matches across all events regardless of timeframe cutoff)
       if (eventSearchTerm.trim()) {
         const term = eventSearchTerm.toLowerCase().trim();
-        const match =
+        return (
           safeLower(ev.title).includes(term) ||
           safeLower(ev.hikeNumber).includes(term) ||
           safeLower(ev.category).includes(term) ||
           safeLower(ev.date).includes(term) ||
-          safeLower(ev.leadGuide).includes(term);
-        if (!match) return false;
+          safeLower(ev.leadGuide).includes(term)
+        );
       }
 
       // Check if event is upcoming
@@ -1114,12 +1114,11 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
         return isUpcoming;
       }
 
-      // For month filters (1, 2, 3, 4, 6, 12): show past events only
-      if (isUpcoming) {
-        return false;
-      }
-
+      // For month filters (1, 2, 3, 4, 6, 12): include scheduled upcoming events and past events within window
       if (ev.timestamp !== null) {
+        if (ev.timestamp > now) {
+          return true;
+        }
         const windowMs = Number(filterMonths) * 30 * 24 * 60 * 60 * 1000;
         const diff = anchorTs - ev.timestamp;
         return diff >= 0 && diff <= windowMs;

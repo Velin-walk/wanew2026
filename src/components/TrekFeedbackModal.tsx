@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Star, X, CheckCircle2, User, MessageSquare, Heart, Award, Shield, Mail } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Star, X, CheckCircle2, User, MessageSquare, Heart, Award, Shield, Mail, Loader2, AlertCircle } from 'lucide-react';
 import { Trek, Booking } from '../types';
 import { apiFetch } from '../services/api';
 import { logUserActivity } from '../services/userActivityNotifier';
@@ -97,11 +97,22 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
   const [overallFeedback, setOverallFeedback] = useState<string>('');
 
   const [submitting, setSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState(0);
+  const [submitStatusText, setSubmitStatusText] = useState('Preparing your review...');
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const progressTimersRef = useRef<number[]>([]);
+
+  const clearProgressTimers = () => {
+    progressTimersRef.current.forEach((id) => window.clearTimeout(id));
+    progressTimersRef.current = [];
+  };
+
   useEffect(() => {
     if (isOpen) {
+      clearProgressTimers();
       setHikerName(resolveInitialName());
       setHikerEmail(resolveInitialEmail());
       setSelectedKey('');
@@ -111,15 +122,31 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
       setOverallRating(5);
       setHoverOverallRating(0);
       setOverallFeedback('');
+      setSubmitting(false);
+      setSubmitProgress(0);
+      setSubmitStatusText('Preparing your review...');
       setIsSuccess(false);
       setErrorMessage(null);
     }
-  }, [isOpen, currentUser, booking]);
+    return () => {
+      clearProgressTimers();
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || submitting || isSuccess) return;
+    const nextName = resolveInitialName();
+    const nextEmail = resolveInitialEmail();
+    if (nextName) setHikerName((prev) => prev || nextName);
+    if (nextEmail) setHikerEmail((prev) => prev || nextEmail);
+  }, [isOpen, currentUser?.name, currentUser?.email, booking?.full_name, booking?.user_email, booking?.email]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+
     const trimmedName = hikerName.trim();
     const trimmedEmail = hikerEmail.trim();
 
@@ -133,8 +160,26 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
       return;
     }
 
+    clearProgressTimers();
     setSubmitting(true);
     setErrorMessage(null);
+    setSubmitProgress(22);
+    setSubmitStatusText('Preparing your review...');
+
+    if (bodyRef.current) {
+      bodyRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    progressTimersRef.current.push(
+      window.setTimeout(() => {
+        setSubmitProgress((prev) => (prev < 58 ? 58 : prev));
+        setSubmitStatusText('Saving your ratings & feedback...');
+      }, 220),
+      window.setTimeout(() => {
+        setSubmitProgress((prev) => (prev < 84 ? 84 : prev));
+        setSubmitStatusText('Publishing to community reviews...');
+      }, 650)
+    );
 
     try {
       localStorage.setItem('wnw_user_name', trimmedName);
@@ -170,6 +215,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
     };
 
     try {
+      const startedAt = Date.now();
       const res = await apiFetch('/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,7 +223,14 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
       });
 
       if (!res.ok) {
-        throw new Error('Failed to submit feedback. Please try again.');
+        let serverMsg = 'Failed to submit feedback. Please try again.';
+        try {
+          const errJson = await res.json();
+          if (errJson?.error || errJson?.message) {
+            serverMsg = errJson.error || errJson.message;
+          }
+        } catch {}
+        throw new Error(serverMsg);
       }
 
       // Persist locally so it stays static and immediately visible without recurring D1 queries
@@ -201,7 +254,6 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
         // Ignore storage errors
       }
 
-      setIsSuccess(true);
       logUserActivity({
         type: 'feedback_submitted',
         title: 'Hiker Review / Feedback Submitted',
@@ -217,19 +269,30 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
           Review: payload.overallFeedback || payload.teamFeedback || undefined,
         },
       });
+
+      // Ensure a smooth visual transition to 100% before showing completion state
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < 450) {
+        await new Promise((resolve) => setTimeout(resolve, 450 - elapsed));
+      }
+
+      clearProgressTimers();
+      setSubmitProgress(100);
+      setSubmitStatusText('Review saved!');
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      setSubmitting(false);
+      setIsSuccess(true);
       if (onSubmitSuccess) onSubmitSuccess();
-      setTimeout(() => {
-        onClose();
-      }, 2000);
     } catch (err: any) {
       console.error('Feedback submit error:', err);
-      // Even if network fails, provide graceful fallback
-      setIsSuccess(true);
-      setTimeout(() => {
-        onClose();
-      }, 2000);
-    } finally {
+      clearProgressTimers();
       setSubmitting(false);
+      setSubmitProgress(0);
+      setErrorMessage(
+        err?.message || 'Could not submit your review right now. Please check your connection and try again.'
+      );
     }
   };
 
@@ -255,7 +318,7 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
       id="feedback-modal-overlay"
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !submitting) onClose();
       }}
     >
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-neutral-100 overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
@@ -264,7 +327,9 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            disabled={submitting}
+            aria-label="Close feedback modal"
+            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <X className="w-4 h-4" />
           </button>
@@ -286,16 +351,91 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
+        <div ref={bodyRef} className="p-5 sm:p-6 overflow-y-auto space-y-5">
           {isSuccess ? (
-            <div className="text-center py-8 space-y-3 animate-in zoom-in-95">
+            <div className="text-center py-6 space-y-4 animate-in fade-in zoom-in-95 duration-300">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
                 <CheckCircle2 className="w-9 h-9" />
               </div>
-              <h4 className="text-lg font-bold text-neutral-800">Thank You for Your Feedback!</h4>
-              <p className="text-xs text-neutral-600 max-w-sm mx-auto leading-relaxed">
-                Your thoughts and rating have been recorded. This helps us continue making Walk Nepal Walk events safe, fun, and memorable for everyone.
-              </p>
+
+              <div className="space-y-1.5">
+                <h4 className="text-lg sm:text-xl font-bold text-neutral-900">
+                  Thank You for Your Valuable Review!
+                </h4>
+                <p className="text-xs text-neutral-600 max-w-sm mx-auto leading-relaxed">
+                  Your review has been submitted successfully. Thank you for helping us keep Walk Nepal Walk hikes safe, welcoming, and memorable for everyone.
+                </p>
+              </div>
+
+              <div className="bg-[#FAF8F5] border border-[#EAE4DC] rounded-xl p-3.5 max-w-sm mx-auto text-left space-y-1.5">
+                <div className="text-[11px] font-bold text-[#1F1F1F] truncate">
+                  {trekName}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#5A5551]">
+                  <span className="inline-flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    Coordinator: <strong className="text-[#1F1F1F]">{teamRating}/5</strong>
+                  </span>
+                  {!isGuideReview && (
+                    <span className="inline-flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      Overall: <strong className="text-[#1F1F1F]">{overallRating}/5</strong>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full sm:w-auto min-w-[160px] min-h-[42px] px-6 py-2.5 bg-[#7ABA42] hover:bg-[#6CA838] active:scale-[0.99] text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : submitting ? (
+            <div className="py-10 px-2 text-center space-y-5 animate-in fade-in duration-200">
+              <div className="w-14 h-14 bg-[#7ABA42]/15 text-[#7ABA42] rounded-full flex items-center justify-center mx-auto">
+                <Loader2 className="w-7 h-7 animate-spin" />
+              </div>
+
+              <div className="space-y-1">
+                <h4 className="text-base sm:text-lg font-bold text-neutral-900">
+                  Submitting Your Review
+                </h4>
+                <p className="text-xs font-medium text-neutral-500">
+                  {submitStatusText}
+                </p>
+              </div>
+
+              <div className="max-w-sm mx-auto space-y-2">
+                <div className="w-full h-2.5 bg-neutral-100 rounded-full overflow-hidden border border-neutral-200/70">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#7ABA42] to-emerald-500 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${submitProgress}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500">
+                  <span>Please wait a moment</span>
+                  <span className="text-[#5C962D] font-bold">{submitProgress}%</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-[11px] text-neutral-500 pt-1">
+                <span className={submitProgress >= 20 ? 'text-[#5C962D] font-semibold' : ''}>
+                  1. Validating
+                </span>
+                <span>•</span>
+                <span className={submitProgress >= 55 ? 'text-[#5C962D] font-semibold' : ''}>
+                  2. Saving
+                </span>
+                <span>•</span>
+                <span className={submitProgress >= 100 ? 'text-[#5C962D] font-semibold' : ''}>
+                  3. Complete
+                </span>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -470,9 +610,10 @@ export const TrekFeedbackModal: React.FC<TrekFeedbackModalProps> = ({
               )}
 
               {errorMessage && (
-                <p className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
-                  {errorMessage}
-                </p>
+                <div className="text-xs text-rose-700 bg-rose-50 p-3 rounded-xl border border-rose-200 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{errorMessage}</span>
+                </div>
               )}
 
               {/* Submit Button */}
