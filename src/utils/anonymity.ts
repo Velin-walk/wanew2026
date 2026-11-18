@@ -1,6 +1,7 @@
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { useState, useEffect } from 'react';
+import { matchesPhone, normalizePhoneLast10 } from './matchingUtils';
 
 const STORAGE_KEY = 'wnw_anonymized_hikers';
 const FIRESTORE_DOC_PATH = 'pwa_metrics';
@@ -23,14 +24,10 @@ const defaultRegistry: AnonymizedRegistry = {
 
 const normalizeStr = (s?: string | null): string => {
   if (!s) return '';
-  return s.toLowerCase().trim();
+  return s.toLowerCase().trim().replace(/\s+/g, ' ');
 };
 
-const normalizePhone = (p?: string | null): string => {
-  if (!p) return '';
-  const digits = p.replace(/\D/g, '');
-  return digits.length > 10 ? digits.slice(-10) : digits;
-};
+const normalizePhone = (p?: string | null): string => normalizePhoneLast10(p);
 
 // Memory cache
 let registryCache: AnonymizedRegistry = (() => {
@@ -136,7 +133,11 @@ export const isHikerAnonymous = (params: {
 
   if (phone) {
     const pNorm = normalizePhone(phone);
-    if (pNorm && pNorm.length >= 7 && registryCache.phones.includes(pNorm)) {
+    if (
+      pNorm &&
+      pNorm.length >= 7 &&
+      (registryCache.phones.includes(pNorm) || registryCache.phones.some((rp) => matchesPhone(phone, rp)))
+    ) {
       return true;
     }
   }
@@ -146,12 +147,6 @@ export const isHikerAnonymous = (params: {
     if (nNorm && nNorm !== 'anonymous hiker' && nNorm !== 'hiker') {
       if (registryCache.names.includes(nNorm)) {
         return true;
-      }
-      // Check partial match for names
-      for (const regName of registryCache.names) {
-        if (regName.length >= 3 && (nNorm === regName || nNorm.includes(regName) || regName.includes(nNorm))) {
-          return true;
-        }
       }
     }
   }
@@ -185,8 +180,8 @@ export const setHikerAnonymity = async (
   } else {
     if (uid) current.uids = current.uids.filter((x) => x !== uid);
     if (email) current.emails = current.emails.filter((x) => x !== email);
-    if (phone) current.phones = current.phones.filter((x) => x !== phone);
-    if (name) current.names = current.names.filter((x) => x !== name && !x.includes(name) && !name.includes(x));
+    if (phone) current.phones = current.phones.filter((x) => x !== phone && !matchesPhone(x, phone));
+    if (name) current.names = current.names.filter((x) => x !== name);
   }
 
   saveRegistry(current, true);

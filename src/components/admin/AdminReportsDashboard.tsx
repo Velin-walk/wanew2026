@@ -41,9 +41,17 @@ import {
   ArrowDown
 } from 'lucide-react';
 import { Trek } from '../../types';
-import { AdminRegistration, doesRegistrationMatchTrek } from './BookingsManager';
+import { AdminRegistration } from './BookingsManager';
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { fetchLeaderboardData } from '../../services/api';
+import { DEFAULT_GUIDES, getGuidesSettings } from '../../services/guidesService';
+import {
+  cleanPhoneDigits,
+  doesRegistrationMatchTrek,
+  extractHikeNumber,
+  matchesPhone,
+  normalizePhoneLast10,
+} from '../../utils/matchingUtils';
 
 interface AdminReportsDashboardProps {
   treks: Trek[];
@@ -241,27 +249,7 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
     return s1 === s2 || (s1.length > 5 && s2.length > 5 && (s1.includes(s2) || s2.includes(s1)));
   };
 
-  const getHikeNumberFromAny = (obj: any): string => {
-    if (!obj) return '';
-    if (typeof obj === 'string' || typeof obj === 'number') {
-      const m = String(obj).match(/\d+/);
-      return m ? m[0] : '';
-    }
-    const fields = [
-      obj.hike_number,
-      obj.hikeNumber,
-      obj.trek_id,
-      obj.hike_id,
-      obj.id,
-    ];
-    for (const f of fields) {
-      if (f !== undefined && f !== null) {
-        const m = String(f).match(/\d+/);
-        if (m && parseInt(m[0], 10) > 0) return m[0];
-      }
-    }
-    return '';
-  };
+  const getHikeNumberFromAny = extractHikeNumber;
 
   const isGenericTitle = (name?: string): boolean => {
     if (!name) return true;
@@ -401,16 +389,25 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
     return { phoneMap, nameMap };
   }, [leaderboardHikers]);
 
-  // Lifetime Hike Count Map from local registrations (excluding duplicate applications)
+  // Lifetime Hike Count Map from local registrations (excluding duplicate/cancelled applications)
   const hikerPastHikesMap = useMemo(() => {
     const map = new Map<string, number>();
     registrations.forEach((r) => {
       const st = safeTrimLower(r.status || (r as any).registration_status);
-      if (st.includes('duplicate') || st.includes('double')) return;
-      const ph = (r.phone || r.whatsapp || (r as any).whatsapp_number || '').trim();
+      if (
+        st.includes('duplicate') ||
+        st.includes('double') ||
+        st.includes('cancel') ||
+        st === 'waitlisted' ||
+        st === 'rejected'
+      ) {
+        return;
+      }
+      const rawPh = r.phone || r.whatsapp || (r as any).whatsapp_number || '';
+      const phKey = cleanPhoneDigits(rawPh).length >= 7 ? normalizePhoneLast10(rawPh) : '';
       const nameKey = (r.full_name || '').toLowerCase().trim();
-      if (ph) {
-        map.set(ph, (map.get(ph) || 0) + 1);
+      if (phKey) {
+        map.set(phKey, (map.get(phKey) || 0) + 1);
       }
       if (nameKey) {
         map.set(`name:${nameKey}`, (map.get(`name:${nameKey}`) || 0) + 1);
@@ -420,8 +417,8 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
   }, [registrations]);
 
   const getHikerPastCount = (phone: string, name: string): number => {
-    const cleanPh = phone.replace(/[^0-9]/g, '');
-    const last10 = cleanPh.length >= 10 ? cleanPh.slice(-10) : cleanPh;
+    const cleanPh = cleanPhoneDigits(phone);
+    const last10 = normalizePhoneLast10(phone);
     const cleanName = (name || '').toLowerCase().trim();
 
     // 1. Primary: Match by phone number in Leaderboard (lifetime master data)
@@ -433,7 +430,7 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
         return leaderboardPhoneMap.phoneMap.get(last10)!;
       }
       for (const [key, count] of leaderboardPhoneMap.phoneMap.entries()) {
-        if (cleanPh.endsWith(key) || key.endsWith(cleanPh) || (last10.length >= 8 && key.endsWith(last10))) {
+        if (matchesPhone(cleanPh, key)) {
           return count;
         }
       }
@@ -444,11 +441,10 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
       return leaderboardPhoneMap.nameMap.get(cleanName)!;
     }
 
-    // 3. Fallback: Local registrations count
-    const ph = phone.trim();
+    // 3. Fallback: Local registrations count (normalized phone key)
     const nameKey = `name:${cleanName}`;
-    if (ph && hikerPastHikesMap.has(ph)) {
-      return hikerPastHikesMap.get(ph) || 1;
+    if (last10.length >= 7 && hikerPastHikesMap.has(last10)) {
+      return hikerPastHikesMap.get(last10) || 1;
     }
     if (nameKey && hikerPastHikesMap.has(nameKey)) {
       return hikerPastHikesMap.get(nameKey) || 1;
@@ -496,8 +492,8 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
     let liveProjectedRevenueNPR = 0;
 
     registrations.forEach((r) => {
-      const matchedTrek = treks.find(
-        (t) => String(t.hike_number || t.id) === String(r.trek_id || r.hike_number) || t.title === r.trek_name
+      const matchedTrek = treks.find((t) =>
+        doesRegistrationMatchTrek(r, t, { includeInactiveStatuses: true })
       );
       const ticketPrice = parsePrice(r.paid_amount) || parsePrice(matchedTrek?.price) || 1500;
       liveProjectedRevenueNPR += parsePrice(matchedTrek?.price) || ticketPrice;
@@ -567,20 +563,68 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
     const npsScorePct = totalReviews > 0 ? Math.round((highRatingCount / totalReviews) * 100) : 0;
 
     // G. Guide / Leader Analysis from Historical Growth Data
+    const knownGuidesList = (() => {
+      try {
+        return [...DEFAULT_GUIDES, ...(getGuidesSettings().custom_guides || [])];
+      } catch {
+        return DEFAULT_GUIDES;
+      }
+    })();
+    const knownGuideFirstNames = new Set<string>(
+      knownGuidesList
+        .map((g) => String(g.name || '').trim().toLowerCase().split(/\s+/)[0])
+        .filter((w) => w.length > 2)
+    );
+    const fullGuideCanonical = new Map<string, string>();
+    knownGuidesList.forEach((g) => {
+      const n = String(g.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      if (n) fullGuideCanonical.set(n, g.name.trim());
+    });
+    fullGuideCanonical.set('biraj theeng', 'Biraj Thing');
+
+    const titleCaseWords = (raw: string) =>
+      raw
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+
+    const extractGuideLeaders = (rawLeader: string): string[] => {
+      const cleaned = rawLeader
+        .replace(/\((?:lead\s+|assistant\s+|asst\.?\s+)?(?:guide|leader)\)/gi, ' ')
+        .replace(/\b(?:team|subs|sat)\b/gi, ' ');
+      const segments = cleaned
+        .split(/\s*(?:&|\+|\/|,|\band\b)\s*/i)
+        .map((s) => s.trim().replace(/\s+/g, ' '))
+        .filter(Boolean);
+
+      const resolved = new Set<string>();
+      for (const seg of segments) {
+        const segLower = seg.toLowerCase();
+        if (fullGuideCanonical.has(segLower)) {
+          resolved.add(fullGuideCanonical.get(segLower)!);
+          continue;
+        }
+        const words = seg.split(/\s+/).filter((w) => w.length > 2);
+        if (words.length === 0) continue;
+        if (words.length > 1 && words.every((w) => knownGuideFirstNames.has(w.toLowerCase()))) {
+          words.forEach((w) => resolved.add(titleCaseWords(w)));
+        } else {
+          resolved.add(titleCaseWords(words.join(' ')));
+        }
+      }
+      return Array.from(resolved);
+    };
+
     const guideMap: Record<string, { hikesCount: number; totalKm: number }> = {};
     (leaderboard?.growthCurve || []).forEach((h: any) => {
       const leader = String(h.team_leader || h.leader || '');
       if (!leader) return;
 
-      const names = leader
-        .replace(/&|Team|\+|\/|Subs|Sat/gi, ' ')
-        .split(/\s+/)
-        .filter((w) => w.length > 2);
-
+      const names = extractGuideLeaders(leader);
       const dist = parseDistanceKm(h.approx_distance || h.distance);
 
-      names.forEach((name) => {
-        const cleanName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+      names.forEach((cleanName) => {
         if (!guideMap[cleanName]) {
           guideMap[cleanName] = { hikesCount: 0, totalKm: 0 };
         }
@@ -726,18 +770,7 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
       const cancelledRegs = registrations.filter((r) => {
         const st = safeTrimLower(r.status || (r as any).registration_status);
         if (!st.includes('cancel') && st !== 'rejected') return false;
-
-        const rHike = getHikeNumberFromAny(r);
-        if (tHikeNum !== 'TBD' && rHike) return tHikeNum === rHike;
-        if (t.id && (r.trek_id === t.id || r.hike_number === t.id)) return true;
-
-        const tName = normStr(t.title || t.name);
-        const rName = normStr(r.trek_name);
-        if (tName && rName && tName === rName) {
-          const rDate = r.trek_date || (r as any).date;
-          return datesMatch(trekDate, rDate);
-        }
-        return false;
+        return doesRegistrationMatchTrek(r, t, { includeInactiveStatuses: true });
       });
 
       // Calculate revenue collected (matching CoordinatorHub exactly: sum of paid_amount)

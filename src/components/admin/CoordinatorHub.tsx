@@ -37,6 +37,13 @@ import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { fetchLeaderboardData } from '../../services/api';
 import { HikerStats } from '../../types/leaderboard';
 import { AdminHikerProfileModal } from './AdminHikerProfileModal';
+import { parseTrekDate } from '../../adminUtils';
+import {
+  cleanPhoneDigits,
+  extractHikeNumber,
+  matchesPhone,
+  normalizePhoneLast10,
+} from '../../utils/matchingUtils';
 
 interface CoordinatorHubProps {
   treks: Trek[];
@@ -66,10 +73,10 @@ const getRegPax = (r: AdminRegistration): number => {
   return isNaN(p) || p <= 0 ? 1 : p;
 };
 
-const extractHikeNumber = (val?: string): string => {
-  if (!val) return '';
-  const match = String(val).match(/\d+/);
-  return match ? match[0] : '';
+const getRegPaxDisplay = (r: AdminRegistration): string | number => {
+  const raw = r.paxCount !== undefined && r.paxCount !== '' ? r.paxCount : (r as any).pax;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return 1;
+  return raw;
 };
 
 const isGenericTitle = (name?: string): boolean => {
@@ -88,34 +95,7 @@ const isGenericTitle = (name?: string): boolean => {
   );
 };
 
-const extractDigits = (val?: string): string => {
-  if (!val) return '';
-  const s = String(val).trim();
-  if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
-  const m = s.match(/\d{1,4}/);
-  return m ? m[0] : '';
-};
-
-export const getHikeNumberFromAny = (obj: any): string => {
-  if (!obj) return '';
-  if (typeof obj === 'string' || typeof obj === 'number') {
-    return extractDigits(String(obj));
-  }
-  const fields = [
-    obj.hike_number,
-    obj.hikeNumber,
-    obj.trek_id,
-    obj.hike_id,
-    obj.id,
-  ];
-  for (const f of fields) {
-    if (f !== undefined && f !== null) {
-      const d = extractDigits(String(f));
-      if (d && parseInt(d, 10) > 0) return d;
-    }
-  }
-  return '';
-};
+export const getHikeNumberFromAny = extractHikeNumber;
 
 const getTrekNameForHike = (hikeNum: string, fallbackName?: string): string => {
   if (fallbackName && !isGenericTitle(fallbackName)) {
@@ -242,56 +222,6 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return [...enrichedTreksList, ...virtualTreks];
   }, [treks, registrations]);
 
-  const parseTrekDate = (dateStr?: string): Date | null => {
-    if (!dateStr) return null;
-    const trimmed = dateStr.trim();
-
-    if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
-      const delimiter = trimmed.includes('-') ? '-' : '.';
-      const parts = trimmed.split(delimiter);
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d;
-
-    try {
-      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-      const year = yearMatch ? yearMatch[1] : '';
-      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-      const parts = cleanRange.split(/[–—\-]/);
-      if (parts.length > 1 && year) {
-        const firstPart = parts[0]
-          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
-          .trim();
-        const rangeDate = new Date(`${firstPart} ${year}`);
-        if (!isNaN(rangeDate.getTime())) return rangeDate;
-      }
-    } catch {}
-
-    return null;
-  };
 
   // 2. Filter for upcoming events + events in last 1 month
   const upcomingTreks = useMemo(() => {
@@ -409,9 +339,10 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           }
         });
       }
+      const matchedPaxSum = matchedRegs.reduce((sum, r) => sum + getRegPax(r), 0);
       return {
         trek: t,
-        regsCount: matchedRegs.length > 0 ? matchedRegs.length + extraGuidesCount : fallbackParticipants,
+        regsCount: matchedRegs.length > 0 ? matchedPaxSum + extraGuidesCount : fallbackParticipants,
       };
     });
   }, [upcomingTreks, registrations]);
@@ -581,16 +512,17 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return { phoneMap, nameMap };
   }, [leaderboardHikers]);
 
-  // Lifetime Hike Count Map from local registrations (excluding duplicate applications)
+  // Lifetime Hike Count Map from local registrations (excluding duplicate/cancelled applications)
   const hikerPastHikesMap = useMemo(() => {
     const map = new Map<string, number>();
     registrations.forEach((r) => {
       const st = String(r.status || (r as any).registration_status || '').trim().toLowerCase();
-      if (st.includes('duplicate') || st.includes('double')) return;
-      const ph = (r.phone || r.whatsapp || (r as any).whatsapp_number || '').trim();
+      if (st.includes('duplicate') || st.includes('double') || st.includes('cancel') || st === 'waitlisted') return;
+      const rawPh = r.phone || r.whatsapp || (r as any).whatsapp_number || '';
+      const phKey = cleanPhoneDigits(rawPh).length >= 7 ? normalizePhoneLast10(rawPh) : '';
       const nameKey = (r.full_name || '').toLowerCase().trim();
-      if (ph) {
-        map.set(ph, (map.get(ph) || 0) + 1);
+      if (phKey) {
+        map.set(phKey, (map.get(phKey) || 0) + 1);
       }
       if (nameKey) {
         map.set(`name:${nameKey}`, (map.get(`name:${nameKey}`) || 0) + 1);
@@ -600,8 +532,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   }, [registrations]);
 
   const getHikerPastCount = (phone: string, name: string): number => {
-    const cleanPh = phone.replace(/[^0-9]/g, '');
-    const last10 = cleanPh.length >= 10 ? cleanPh.slice(-10) : cleanPh;
+    const cleanPh = cleanPhoneDigits(phone);
+    const last10 = normalizePhoneLast10(phone);
     const cleanName = (name || '').toLowerCase().trim();
 
     // 1. Primary: Match by phone number in Leaderboard (lifetime master data)
@@ -613,7 +545,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         return leaderboardPhoneMap.phoneMap.get(last10)!;
       }
       for (const [key, count] of leaderboardPhoneMap.phoneMap.entries()) {
-        if (cleanPh.endsWith(key) || key.endsWith(cleanPh) || (last10.length >= 8 && key.endsWith(last10))) {
+        if (matchesPhone(cleanPh, key)) {
           return count;
         }
       }
@@ -624,11 +556,10 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       return leaderboardPhoneMap.nameMap.get(cleanName)!;
     }
 
-    // 3. Fallback: Local registrations count
-    const ph = phone.trim();
+    // 3. Fallback: Local registrations count (normalized phone key)
     const nameKey = `name:${cleanName}`;
-    if (ph && hikerPastHikesMap.has(ph)) {
-      return hikerPastHikesMap.get(ph) || 1;
+    if (last10.length >= 7 && hikerPastHikesMap.has(last10)) {
+      return hikerPastHikesMap.get(last10) || 1;
     }
     if (nameKey && hikerPastHikesMap.has(nameKey)) {
       return hikerPastHikesMap.get(nameKey) || 1;
@@ -636,21 +567,21 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return 1;
   };
 
-  // Metrics Calculations (Option A: Unique confirmed roster entries + assigned guides)
-  const hikerCount = trekRegistrations.length;
+  // Metrics Calculations (Confirmed pax from roster + assigned guides)
+  const hikerCount = trekRegistrations.reduce((acc, r) => acc + getRegPax(r), 0);
   const totalRegistered =
     trekRegistrations.length > 0
-      ? trekRosterWithGuides.length
-      : Number(currentTrek?.participants) || trekRosterWithGuides.length || 0;
-  const paidCount = trekRegistrations.filter(
-    (r) => r.payment_status?.toLowerCase() === 'fully paid' || (r.paid_amount || 0) > 0
-  ).length;
+      ? trekRosterWithGuides.reduce((acc, r) => acc + getRegPax(r), 0)
+      : Number(currentTrek?.participants) || trekRosterWithGuides.reduce((acc, r) => acc + getRegPax(r), 0) || 0;
+  const paidCount = trekRegistrations
+    .filter((r) => r.payment_status?.toLowerCase() === 'fully paid' || (r.paid_amount || 0) > 0)
+    .reduce((acc, r) => acc + getRegPax(r), 0);
   const totalRevenue = trekRegistrations.reduce((acc, r) => acc + (r.paid_amount || 0), 0);
   const dueCount = trekRegistrations.filter((r) => r.due_amount > 0).length;
 
-  const returningCount = trekRegistrations.filter(
-    (r) => getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name) > 1
-  ).length;
+  const returningCount = trekRegistrations
+    .filter((r) => getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name) > 1)
+    .reduce((acc, r) => acc + getRegPax(r), 0);
   const firstTimersCount = hikerCount - returningCount;
 
   // Demographic Calculations
@@ -659,12 +590,13 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     let male = 0;
     let other = 0;
     trekRegistrations.forEach((r) => {
+      const pax = getRegPax(r);
       const g = (r.gender || '').toLowerCase().trim();
-      if (g.includes('female') || g === 'f') female++;
-      else if (g.includes('male') || g === 'm') male++;
-      else other++;
+      if (g.includes('female') || g === 'f') female += pax;
+      else if (g.includes('male') || g === 'm') male += pax;
+      else other += pax;
     });
-    const total = trekRegistrations.length || 1;
+    const total = female + male + other || 1;
     return {
       female,
       male,
@@ -676,15 +608,18 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
   const ageBreakdown = useMemo(() => {
     const groups: Record<string, number> = {};
+    let total = 0;
     trekRegistrations.forEach((r) => {
+      const pax = getRegPax(r);
       const a = (r.age_group || 'Unspecified').trim();
-      groups[a] = (groups[a] || 0) + 1;
+      groups[a] = (groups[a] || 0) + pax;
+      total += pax;
     });
-    const total = trekRegistrations.length || 1;
+    const denom = total || 1;
     return Object.entries(groups).map(([group, count]) => ({
       group,
       count,
-      pct: Math.round((count / total) * 100),
+      pct: Math.round((count / denom) * 100),
     }));
   }, [trekRegistrations]);
 
@@ -733,8 +668,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           valB = (b.pickup_point || '').toLowerCase();
           break;
         case 'pax':
-          valA = getRegPax(a);
-          valB = getRegPax(b);
+          valA = String(getRegPaxDisplay(a)).toLowerCase();
+          valB = String(getRegPaxDisplay(b)).toLowerCase();
           break;
         case 'paid':
           valA = a.paid_amount;
@@ -817,7 +752,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       `"${(r._guideRole === 'leader' ? `${r.full_name} (Leader)` : r._guideRole === 'assistant' ? `${r.full_name} (Asst. Leader)` : r.full_name).replace(/"/g, '""')}"`,
       `"${r.phone || '—'}"`,
       `"${r.pickup_point || '—'}"`,
-      getRegPax(r),
+      `"${String(getRegPaxDisplay(r)).replace(/"/g, '""')}"`,
       r.paid_amount || 0,
       r.due_amount || 0,
       `"${r.gender || '—'}"`,
@@ -1462,7 +1397,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
                       {/* PAX */}
                       <td className="py-2 px-2.5 text-center font-bold text-stone-700 text-xs">
-                        {getRegPax(r)}
+                        {getRegPaxDisplay(r)}
                       </td>
 
                       {/* PAID */}

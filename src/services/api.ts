@@ -2,6 +2,7 @@ import { Trek, PhotoComment } from "../types";
 import { auth, db } from "../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { isAdminEmail, isFullAdminEmail, getAdminDeviceMetadata } from "../adminUtils";
+import { doesRegistrationMatchTrek } from "../utils/matchingUtils";
 
 export const CLOUDFLARE_WORKER_URL =
   ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
@@ -621,53 +622,8 @@ export function enrichTreksWithRegistrations(treks: Trek[], registrations: any[]
   if (!Array.isArray(treks)) return [];
   if (!Array.isArray(registrations) || registrations.length === 0) return treks;
 
-  const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const extractValidHikeDigits = (s?: string) => {
-    const raw = String(s || '').trim();
-    if (!raw || raw.toLowerCase() === 'tbd' || raw.toLowerCase() === 'private') return '';
-    if (raw.length > 20) return '';
-    const m = raw.match(/^hike-(\d{1,4})$/i) || raw.match(/^#?(\d{1,4})$/) || raw.match(/\b(\d{1,4})\b/);
-    return m ? m[1] || m[0] : '';
-  };
-  const extractParenDate = (s?: string) => {
-    const m = String(s || '').match(/\(([^)]+)\)/);
-    return m ? m[1].trim() : '';
-  };
-
   return treks.map((trek) => {
-    const tDigits = extractValidHikeDigits(trek.hike_number) || extractValidHikeDigits(trek.id);
-    const tNum = String(trek.hike_number || trek.id || '').trim().toLowerCase();
-    const tName = norm(trek.name);
-    const tDateNorm = norm(trek.date);
-    const isGenericTName = !tName || tName === 'himalayantrek' || tName === 'hikeevent' || tName === 'untitledhike';
-
-    const matched = registrations.filter((r) => {
-      const regStatus = String(r.roster_registration_status || r.registration_status || r.status || 'Confirmed').toLowerCase().trim();
-      if (regStatus.includes('cancel') || regStatus === 'waitlisted' || regStatus === 'double registration' || regStatus === 'duplicate') {
-        return false;
-      }
-
-      const rDigits = extractValidHikeDigits(r.hike_number || r.trek_id);
-      const rNum = String(r.hike_number || r.trek_id || '').trim().toLowerCase();
-
-      // 1. If both have valid hike digits, compare hike numbers strictly
-      if (tDigits && rDigits) {
-        return tDigits === rDigits;
-      }
-
-      // 2. Direct string ID match (excluding generic 'tbd')
-      if (rNum && tNum && rNum !== 'tbd' && rNum === tNum) return true;
-
-      // 3. Name match only if not generic
-      if (!isGenericTName) {
-        const rTrekName = norm(r.trek_name);
-        if (rTrekName && rTrekName !== 'himalayantrek' && (rTrekName === tName || rTrekName.includes(tName) || tName.includes(rTrekName))) {
-          return true;
-        }
-      }
-
-      return false;
-    });
+    const matched = registrations.filter((r) => doesRegistrationMatchTrek(r, trek));
 
     let totalPax = 0;
     let maleCount = 0;

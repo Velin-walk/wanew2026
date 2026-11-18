@@ -184,7 +184,13 @@ export const AdminEditApplicationModal: React.FC<AdminEditApplicationModalProps>
     setSaving(true);
 
     try {
-      const totalPax = 1 + (isGroup === 'Group' ? teamMembers.length : 0);
+      const existingPax = Math.max(1, Number(registration.paxCount ?? (registration as any).pax ?? 1) || 1);
+      const totalPax =
+        teamMembers.length > 0
+          ? 1 + teamMembers.length
+          : isGroup === 'Group'
+          ? existingPax
+          : 1;
       const groupRemarks =
         isGroup === 'Group' && teamMembers.length > 0
           ? `${selectedTrekName} (${selectedDate}) • Primary contact with ${teamMembers.length} companion(s): ${teamMembers

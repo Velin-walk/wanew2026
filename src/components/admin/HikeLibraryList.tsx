@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { ShareHikeModal } from './ShareHikeModal';
 import { apiFetch } from '../../services/api';
+import { parseEventDate } from '../../adminUtils';
 
 interface HikeLibraryListProps {
   hikes: SavedHikeRecord[];
@@ -78,58 +79,6 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
     setTimeout(() => setActionFeedback(null), 3000);
   };
 
-  // Helper to parse event date safely
-  const parseEventDate = (dateStr?: string): Date | null => {
-    if (!dateStr) return null;
-    const trimmed = dateStr.trim();
-    if (!trimmed || trimmed.toLowerCase() === 'tbd' || trimmed.toLowerCase() === 'flexible') return null;
-
-    if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
-      const delimiter = trimmed.includes('-') ? '-' : '.';
-      const parts = trimmed.split(delimiter);
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d;
-
-    try {
-      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-      const year = yearMatch ? yearMatch[1] : '';
-      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-      const parts = cleanRange.split(/[–—\-]/);
-      if (parts.length > 1 && year) {
-        const firstPart = parts[0]
-          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
-          .trim();
-        const rangeDate = new Date(`${firstPart} ${year}`);
-        if (!isNaN(rangeDate.getTime())) return rangeDate;
-      }
-    } catch {}
-
-    return null;
-  };
 
   // Helper to extract numeric hike number from string (e.g., "253", "Hike 192", "#108")
   const parseHikeNum = (h: SavedHikeRecord): number => {

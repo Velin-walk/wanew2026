@@ -44,6 +44,18 @@ import {
   EVENT_NAME as GUIDES_UPDATED_EVENT,
   getGuidesSettings,
 } from '../../services/guidesService';
+import { parseTrekDate } from '../../adminUtils';
+import {
+  cleanPhoneDigits,
+  doesRegistrationMatchTrek,
+  extractHikeNumber,
+  guideNamesMatch,
+  matchesPhone,
+  normalizeGuideCompare,
+  normalizePhoneLast10,
+} from '../../utils/matchingUtils';
+
+export { doesRegistrationMatchTrek, normalizeGuideCompare };
 
 export interface AdminRegistration {
   id: string;
@@ -106,128 +118,6 @@ interface BookingsManagerProps {
 }
 
 const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-const extractDigits = (val?: string): string => {
-  if (!val) return '';
-  const s = String(val).trim();
-  if (!s || s.toLowerCase() === 'tbd' || s.toLowerCase() === 'private') return '';
-  const m = s.match(/\d{1,4}/);
-  return m ? m[0] : '';
-};
-
-const parseDayMonth = (d?: string): { day: number; month: string } | null => {
-  if (!d) return null;
-  const str = String(d).toLowerCase().trim();
-  const m1 = str.match(/(\d{1,2})\s*(?:st|nd|rd|th)?\s+([a-z]{3,9})/);
-  if (m1) return { day: parseInt(m1[1], 10), month: m1[2].slice(0, 3) };
-  const m2 = str.match(/([a-z]{3,9})\s+(\d{1,2})/);
-  if (m2) return { day: parseInt(m2[2], 10), month: m2[1].slice(0, 3) };
-  const mIso = str.match(/\d{4}-(\d{2})-(\d{2})/);
-  if (mIso) {
-    const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-    const mIdx = parseInt(mIso[1], 10) - 1;
-    return { day: parseInt(mIso[2], 10), month: monthNames[mIdx] || '' };
-  }
-  return null;
-};
-
-const datesMatch = (d1?: string, d2?: string): boolean => {
-  if (!d1 || !d2) return false;
-  const p1 = parseDayMonth(d1);
-  const p2 = parseDayMonth(d2);
-  if (p1 && p2) {
-    return p1.day === p2.day && p1.month === p2.month;
-  }
-  const s1 = normStr(d1);
-  const s2 = normStr(d2);
-  return s1 === s2 || (s1.length > 5 && s2.length > 5 && (s1.includes(s2) || s2.includes(s1)));
-};
-
-const datesConflict = (d1?: string, d2?: string): boolean => {
-  if (!d1 || !d2) return false;
-  const p1 = parseDayMonth(d1);
-  const p2 = parseDayMonth(d2);
-  if (p1 && p2) {
-    return p1.day !== p2.day || p1.month !== p2.month;
-  }
-  return false;
-};
-
-const isGenericTitle = (title?: string): boolean => {
-  if (!title) return true;
-  const lower = title.toLowerCase().trim();
-  return /himalayan hike|day hike|overnight bus hike|upcoming trek|hike|trek/.test(lower) && lower.length < 25;
-};
-
-export const doesRegistrationMatchTrek = (r: AdminRegistration, t?: Trek): boolean => {
-  if (!t || !r) return false;
-
-  const regStatus = String(r.status || (r as any).registration_status || 'Confirmed').toLowerCase().trim();
-  if (regStatus.includes('cancel') || regStatus === 'waitlisted' || regStatus === 'double registration' || regStatus === 'duplicate') {
-    return false;
-  }
-
-  const tId = (t.id || '').toLowerCase().trim();
-  const tHikeNum = (t.hike_number || '').toLowerCase().trim();
-  const rTrekId = (r.trek_id || '').toLowerCase().trim();
-  const rHikeNum = (r.hike_number || '').toLowerCase().trim();
-
-  // 1. Direct Hike Number or ID match
-  if (tId && (rTrekId === tId || rHikeNum === tId)) return true;
-  if (tHikeNum && tHikeNum !== 'tbd' && tHikeNum !== 'undefined') {
-    if (rHikeNum && rHikeNum !== 'tbd' && rHikeNum !== 'undefined') {
-      if (rHikeNum === tHikeNum || rTrekId === tHikeNum) return true;
-      // Explicit hike number mismatch: registration belongs to a different hike number
-      return false;
-    }
-  }
-
-  const tNameNorm = normStr(t.name);
-  const rNameNorm = normStr(r.trek_name);
-
-  // 2. Substring / Name overlap match
-  if (tNameNorm && rNameNorm) {
-    if (tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm)) {
-      return true;
-    }
-    // If both have explicit different names (e.g. "Pachpokhari" vs "North ABC"), do NOT match them
-    if (tNameNorm.length > 3 && rNameNorm.length > 3 && tNameNorm !== rNameNorm) {
-      return false;
-    }
-  }
-
-  const tDate = t.date || (t.data as any)?.hikeDate || (t.data as any)?.date;
-  const rDate = r.trek_date || (r as any).date;
-
-  // 3. Strict date conflict check
-  if (datesConflict(tDate, rDate)) {
-    return false;
-  }
-
-  // 4. If trek has a specific hike number (e.g. #308) and registration has no hike number, do NOT match different named treks on the same date
-  if (tHikeNum && tHikeNum !== 'tbd' && !rHikeNum) {
-    if (tNameNorm && rNameNorm && tNameNorm !== rNameNorm) {
-      return false;
-    }
-  }
-
-  // 5. Exact date match ONLY if names are compatible or generic
-  if (datesMatch(tDate, rDate)) {
-    if (!rNameNorm || isGenericTitle(r.trek_name) || !tNameNorm || isGenericTitle(t.name)) {
-      return true;
-    }
-    return tNameNorm === rNameNorm || tNameNorm.includes(rNameNorm) || rNameNorm.includes(tNameNorm);
-  }
-
-  return false;
-};
-
-export const normalizeGuideCompare = (name?: string): string =>
-  String(name || '')
-    .replace(/\s*\((?:lead\s+|assistant\s+|asst\.?\s+)?(?:guide|leader)\)/i, '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
 
 export const resolveTrekGuides = (
   trekObj?: Trek,
@@ -303,34 +193,6 @@ export interface ResolvedGuideProfile {
   age_group: string;
   user_id: string;
 }
-
-const cleanGuidePhoneDigits = (val?: string): string => String(val || '').replace(/\D/g, '');
-
-const guidePhonesMatch = (p1?: string, p2?: string): boolean => {
-  const d1 = cleanGuidePhoneDigits(p1);
-  const d2 = cleanGuidePhoneDigits(p2);
-  if (!d1 || !d2 || d1.length < 7 || d2.length < 7) return false;
-  return d1 === d2 || d1.endsWith(d2) || d2.endsWith(d1);
-};
-
-const guideNamesMatch = (candidateName?: string, guideName?: string): boolean => {
-  const c = normalizeGuideCompare(candidateName);
-  const g = normalizeGuideCompare(guideName);
-  if (!c || !g) return false;
-  if (c === g) return true;
-
-  const cParts = c.split(' ').filter(Boolean);
-  const gParts = g.split(' ').filter(Boolean);
-  if (cParts.length >= 2 && gParts.length >= 2) {
-    if (cParts[0] !== gParts[0]) return false;
-    const cLast = cParts[cParts.length - 1];
-    const gLast = gParts[gParts.length - 1];
-    if (cLast === gLast) return true;
-    if (cLast.startsWith('th') && gLast.startsWith('th')) return true;
-    return cLast.length >= 4 && gLast.length >= 4 && (cLast.includes(gLast) || gLast.includes(cLast));
-  }
-  return false;
-};
 
 export const useResolvedGuideProfiles = (
   guideNames: string[],
@@ -412,7 +274,7 @@ export const useResolvedGuideProfiles = (
       for (const r of sortedRegistrationsNewestFirst) {
         const candidatePhone = String(r.phone || r.whatsapp || r.whatsapp_number || '').trim();
         const isMatch =
-          (guidePhone && guidePhonesMatch(candidatePhone, guidePhone)) ||
+          (guidePhone && matchesPhone(candidatePhone, guidePhone)) ||
           guideNamesMatch(r.full_name, name);
 
         if (isMatch) {
@@ -430,7 +292,7 @@ export const useResolvedGuideProfiles = (
           for (const tm of r.team_members) {
             const tmPhone = String((tm as any).phone || '').trim();
             const tmMatch =
-              (guidePhone && guidePhonesMatch(tmPhone, guidePhone)) ||
+              (guidePhone && matchesPhone(tmPhone, guidePhone)) ||
               guideNamesMatch(tm.full_name, name);
             if (tmMatch) {
               if (!regPhone && tmPhone) regPhone = tmPhone;
@@ -448,7 +310,7 @@ export const useResolvedGuideProfiles = (
       const knownPhoneForLb = guidePhone || regPhone || regWhatsapp;
       const lbMatch = effectiveLeaderboard.find((h) => {
         const hp = h.phone || h.p;
-        if (knownPhoneForLb && hp && guidePhonesMatch(hp, knownPhoneForLb)) return true;
+        if (knownPhoneForLb && hp && matchesPhone(hp, knownPhoneForLb)) return true;
         return guideNamesMatch(h.n, name);
       });
       const lbPhone = String(lbMatch?.phone || lbMatch?.p || '').trim();
@@ -481,7 +343,7 @@ export const useResolvedGuideProfiles = (
       if (!base.phone && !base.email && !base.user_id) return;
       if (base.phone && base.regGender && base.age_group) return;
 
-      const queryKey = `${key}|${base.user_id}|${base.email.toLowerCase()}|${cleanGuidePhoneDigits(base.phone)}`;
+      const queryKey = `${key}|${base.user_id}|${base.email.toLowerCase()}|${cleanPhoneDigits(base.phone)}`;
       if (queriedKeysRef.current.has(queryKey)) return;
       queriedKeysRef.current.add(queryKey);
 
@@ -574,11 +436,28 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
   const [bookingTypeFilter, setBookingTypeFilter] = useState<'all' | 'public' | 'private'>('all');
-  const [sortField, setSortField] = useState<'participant' | 'phone_call' | 'whatsapp_group' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | null>(null);
+  const [sortField, setSortField] = useState<'participant' | 'phone_call' | 'whatsapp_group' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | 'phone' | 'age_group' | 'gender' | 'total_hikes' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showZeroParticipants, setShowZeroParticipants] = useState(false);
+  const [extendedView, setExtendedView] = useState(false);
+  const [leaderboardHikers, setLeaderboardHikers] = useState<HikerStats[]>([]);
 
-  const handleSort = (field: 'participant' | 'phone_call' | 'whatsapp_group' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point') => {
+  React.useEffect(() => {
+    if (!extendedView || leaderboardHikers.length > 0) return;
+    let isMounted = true;
+    fetchLeaderboardData(false)
+      .then((res) => {
+        if (isMounted && res && Array.isArray(res.hikers)) {
+          setLeaderboardHikers(res.hikers);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [extendedView, leaderboardHikers.length]);
+
+  const handleSort = (field: 'participant' | 'phone_call' | 'whatsapp_group' | 'pax' | 'status' | 'payment_status' | 'paid_amount' | 'due_amount' | 'pickup_point' | 'phone' | 'age_group' | 'gender' | 'total_hikes') => {
     if (sortField === field) {
       if (sortOrder === 'asc') {
         setSortOrder('desc');
@@ -609,56 +488,6 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   const [activeProfileHiker, setActiveProfileHiker] = useState<{ name: string; phone?: string; email?: string } | null>(null);
   const [editingRegistration, setEditingRegistration] = useState<AdminRegistration | null>(null);
 
-  const parseTrekDate = (dateStr?: string): Date | null => {
-    if (!dateStr) return null;
-    const trimmed = dateStr.trim();
-
-    if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
-      const delimiter = trimmed.includes('-') ? '-' : '.';
-      const parts = trimmed.split(delimiter);
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d;
-
-    try {
-      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-      const year = yearMatch ? yearMatch[1] : '';
-      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-      const parts = cleanRange.split(/[–—\-]/);
-      if (parts.length > 1 && year) {
-        const firstPart = parts[0]
-          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
-          .trim();
-        const rangeDate = new Date(`${firstPart} ${year}`);
-        if (!isNaN(rangeDate.getTime())) return rangeDate;
-      }
-    } catch {}
-
-    return null;
-  };
 
   // Filter for upcoming events + last 1 month hikes in Bookings & Roster
   // Ordered with upcoming events first (closest upcoming first), then recent past events (most recent first)
@@ -741,7 +570,12 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         });
       }
 
-      const tRegsCount = matchedActiveRegs.length + extraGuidesCount;
+      const regPaxSum = matchedActiveRegs.reduce((sum, r) => {
+        const rawPax = rowDrafts[r.id]?.paxCount !== undefined ? rowDrafts[r.id]?.paxCount : (r.paxCount ?? (r as any).pax ?? 1);
+        const p = Number(rawPax);
+        return sum + (isNaN(p) || p <= 0 ? 1 : p);
+      }, 0);
+      const tRegsCount = regPaxSum + extraGuidesCount;
 
       return {
         trek: t,
@@ -828,6 +662,76 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     }
     return upcomingTreks[0] || treks[0] || null;
   }, [selectedTrekFilter, treks, upcomingTreks]);
+
+  const selectedExecutionSummary = useMemo(() => {
+    if (selectedTrekFilter === 'all' || selectedTrekFilter === 'PRIVATE' || bookingTypeFilter === 'private') {
+      return null;
+    }
+    const execTrek = treks.find(
+      (t) =>
+        t.id === selectedTrekFilter ||
+        (t.hike_number && t.hike_number !== 'TBD' && t.hike_number === selectedTrekFilter)
+    );
+    if (!execTrek) return null;
+
+    const matchedActiveRegs = registrations.filter((r) => {
+      const effStatus = String(rowDrafts[r.id]?.status ?? r.status ?? 'Confirmed').toLowerCase().trim();
+      if (effStatus.includes('cancelled') || effStatus === 'waitlisted') {
+        return false;
+      }
+      return doesRegistrationMatchTrek(r, execTrek);
+    });
+
+    const { leadName, asstNames } = resolveTrekGuides(execTrek, matchedActiveRegs);
+    let extraGuidesCount = 0;
+    if (matchedActiveRegs.length > 0) {
+      const existingNames = new Set(
+        matchedActiveRegs.map((r) => normalizeGuideCompare(r.full_name)).filter(Boolean)
+      );
+      if (leadName && !existingNames.has(normalizeGuideCompare(leadName))) {
+        extraGuidesCount++;
+      }
+      asstNames.forEach((a) => {
+        if (!existingNames.has(normalizeGuideCompare(a))) {
+          extraGuidesCount++;
+        }
+      });
+    }
+
+    const regPaxSum = matchedActiveRegs.reduce((sum, r) => {
+      const rawPax = rowDrafts[r.id]?.paxCount !== undefined ? rowDrafts[r.id]?.paxCount : (r.paxCount ?? (r as any).pax ?? 1);
+      const p = Number(rawPax);
+      return sum + (isNaN(p) || p <= 0 ? 1 : p);
+    }, 0);
+
+    const participantsCount =
+      matchedActiveRegs.length > 0 ? regPaxSum + extraGuidesCount : Number(execTrek.participants || 0);
+
+    const capacity = Number(execTrek.capacity || 25);
+    const savedStatus = execTrek.data?.execution_status;
+    let status: 'Active' | 'Registration Closed' | 'Completed' | 'Cancelled' = 'Active';
+    if (savedStatus === 'Cancelled' || execTrek.data?.is_cancelled || execTrek.is_cancelled) {
+      status = 'Cancelled';
+    } else if (savedStatus === 'Completed') {
+      status = 'Completed';
+    } else if (savedStatus === 'Registration Closed' || participantsCount >= capacity) {
+      status = 'Registration Closed';
+    }
+
+    const cancellationReason = String(
+      execTrek.data?.cancellation_reason || execTrek.cancellation_reason || ''
+    ).trim();
+
+    return {
+      trek: execTrek,
+      participants: participantsCount,
+      status,
+      capacity,
+      leadName: leadName || execTrek.leader || '',
+      asstNames,
+      cancellationReason,
+    };
+  }, [selectedTrekFilter, bookingTypeFilter, treks, registrations, rowDrafts]);
 
   const handleAdminSubmitRegistration = async (formData: BookingFormData) => {
     const targetTrek =
@@ -985,7 +889,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
     const isPriv = reg.hike_number === 'PRIVATE' || reg.trek_name?.toLowerCase().includes('private');
     const matched = !isPriv ? treks.find((t) => doesRegistrationMatchTrek(reg, t)) : undefined;
-    const hDigits = extractDigits(
+    const hDigits = extractHikeNumber(
       matched?.hike_number && matched.hike_number !== 'TBD' ? matched.hike_number : reg.hike_number
     );
     const eventKey = isPriv
@@ -1077,6 +981,83 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
     return matchesSearch && matchesTrek && matchesStatus && matchesPayment;
   });
 
+  const leaderboardPhoneMap = useMemo(() => {
+    const phoneMap = new Map<string, number>();
+    const nameMap = new Map<string, number>();
+
+    leaderboardHikers.forEach((h) => {
+      const rawPhone = (h.phone || h.p || '').replace(/[^0-9]/g, '');
+      const count = Number(h.c || (Array.isArray(h.hikes) ? h.hikes.length : 0)) || 0;
+      if (count <= 0) return;
+
+      if (rawPhone.length >= 7) {
+        phoneMap.set(rawPhone, Math.max(phoneMap.get(rawPhone) || 0, count));
+        if (rawPhone.length > 10) {
+          const last10 = rawPhone.slice(-10);
+          phoneMap.set(last10, Math.max(phoneMap.get(last10) || 0, count));
+        }
+      }
+
+      const cleanName = (h.n || '').toLowerCase().trim();
+      if (cleanName.length >= 3) {
+        nameMap.set(cleanName, Math.max(nameMap.get(cleanName) || 0, count));
+      }
+    });
+
+    return { phoneMap, nameMap };
+  }, [leaderboardHikers]);
+
+  const hikerPastHikesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    registrations.forEach((r) => {
+      const st = String(r.status || (r as any).registration_status || '').trim().toLowerCase();
+      if (st.includes('duplicate') || st.includes('double') || st.includes('cancel') || st === 'waitlisted') return;
+      const rawPh = r.phone || r.whatsapp || (r as any).whatsapp_number || '';
+      const phKey = cleanPhoneDigits(rawPh).length >= 7 ? normalizePhoneLast10(rawPh) : '';
+      const nameKey = (r.full_name || '').toLowerCase().trim();
+      if (phKey) {
+        map.set(phKey, (map.get(phKey) || 0) + 1);
+      }
+      if (nameKey) {
+        map.set(`name:${nameKey}`, (map.get(`name:${nameKey}`) || 0) + 1);
+      }
+    });
+    return map;
+  }, [registrations]);
+
+  const getHikerPastCount = React.useCallback((phone: string, name: string): number => {
+    const cleanPh = cleanPhoneDigits(phone);
+    const last10 = normalizePhoneLast10(phone);
+    const cleanName = (name || '').toLowerCase().trim();
+
+    if (cleanPh.length >= 7) {
+      if (leaderboardPhoneMap.phoneMap.has(cleanPh)) {
+        return leaderboardPhoneMap.phoneMap.get(cleanPh)!;
+      }
+      if (last10.length >= 7 && leaderboardPhoneMap.phoneMap.has(last10)) {
+        return leaderboardPhoneMap.phoneMap.get(last10)!;
+      }
+      for (const [key, count] of leaderboardPhoneMap.phoneMap.entries()) {
+        if (matchesPhone(cleanPh, key)) {
+          return count;
+        }
+      }
+    }
+
+    if (cleanName && leaderboardPhoneMap.nameMap.has(cleanName)) {
+      return leaderboardPhoneMap.nameMap.get(cleanName)!;
+    }
+
+    const nameKey = `name:${cleanName}`;
+    if (last10.length >= 7 && hikerPastHikesMap.has(last10)) {
+      return hikerPastHikesMap.get(last10) || 1;
+    }
+    if (nameKey && hikerPastHikesMap.has(nameKey)) {
+      return hikerPastHikesMap.get(nameKey) || 1;
+    }
+    return 1;
+  }, [leaderboardPhoneMap, hikerPastHikesMap]);
+
   // Sort registrations according to active column sort
   const sortedRegistrations = useMemo(() => {
     if (!sortField) return filteredRegistrations;
@@ -1123,6 +1104,18 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       } else if (sortField === 'pickup_point') {
         valA = String(draftA.pickup_point !== undefined ? draftA.pickup_point : (a.pickup_point ?? '')).toLowerCase();
         valB = String(draftB.pickup_point !== undefined ? draftB.pickup_point : (b.pickup_point ?? '')).toLowerCase();
+      } else if (sortField === 'phone') {
+        valA = (a.phone || a.whatsapp || '').toLowerCase();
+        valB = (b.phone || b.whatsapp || '').toLowerCase();
+      } else if (sortField === 'age_group') {
+        valA = (a.age_group || '').toLowerCase();
+        valB = (b.age_group || '').toLowerCase();
+      } else if (sortField === 'gender') {
+        valA = (a.gender || '').toLowerCase();
+        valB = (b.gender || '').toLowerCase();
+      } else if (sortField === 'total_hikes') {
+        valA = getHikerPastCount(a.phone || a.whatsapp || (a as any).whatsapp_number || '', a.full_name);
+        valB = getHikerPastCount(b.phone || b.whatsapp || (b as any).whatsapp_number || '', b.full_name);
       }
 
       if (typeof valA === 'number' && typeof valB === 'number') {
@@ -1132,7 +1125,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       const cmp = String(valA).localeCompare(String(valB));
       return sortOrder === 'asc' ? cmp : -cmp;
     });
-  }, [filteredRegistrations, sortField, sortOrder, rowDrafts]);
+  }, [filteredRegistrations, sortField, sortOrder, rowDrafts, getHikerPastCount]);
 
   type RosterRow = AdminRegistration & {
     _guideRole?: 'leader' | 'assistant';
@@ -1272,9 +1265,11 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   // Calculate totals
   const totalPax =
     filteredRegistrations.reduce((acc, r) => {
-      const main = 1;
-      const team = Array.isArray(r.team_members) ? r.team_members.length : 0;
-      return acc + main + team;
+      const rawPax = rowDrafts[r.id]?.paxCount !== undefined ? rowDrafts[r.id]?.paxCount : (r.paxCount ?? (r as any).pax ?? 1);
+      const p = Number(rawPax);
+      const paxVal = isNaN(p) || p <= 0 ? 1 : p;
+      const team = 1 + (Array.isArray(r.team_members) ? r.team_members.length : 0);
+      return acc + Math.max(paxVal, team);
     }, 0) + syntheticGuideCount;
 
   const confirmedCount =
@@ -1841,12 +1836,82 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
       {/* Registrations List / Table */}
       <div className="bg-white rounded-2xl border border-[#E5E1DB] shadow-2xs overflow-hidden">
+        {/* Compact Read-Only Event Execution Strip (Single Public Event Only) */}
+        {selectedExecutionSummary && (
+          <div className="px-3 sm:px-4 py-2 bg-[#FAF8F5] border-b border-[#F0EBE5] flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px]">
+            <span className="font-bold text-[#1F1F1F] flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-[#E08828] shrink-0" />
+              <span>
+                #{selectedExecutionSummary.trek.hike_number || selectedExecutionSummary.trek.id} {selectedExecutionSummary.trek.name}
+              </span>
+            </span>
+
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                selectedExecutionSummary.status === 'Active'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : selectedExecutionSummary.status === 'Registration Closed'
+                  ? 'bg-purple-50 border-purple-200 text-purple-800'
+                  : selectedExecutionSummary.status === 'Completed'
+                  ? 'bg-blue-50 border-blue-200 text-blue-800'
+                  : 'bg-rose-50 border-rose-200 text-rose-800'
+              }`}
+            >
+              {selectedExecutionSummary.status === 'Registration Closed' ? 'Reg Closed' : selectedExecutionSummary.status}
+            </span>
+
+            <span className="text-[#5A5551] font-medium">
+              Seats:{' '}
+              <strong className="text-[#1F1F1F]">
+                {selectedExecutionSummary.participants} / {selectedExecutionSummary.capacity}
+              </strong>
+            </span>
+
+            <span className="text-[#5A5551] font-medium">
+              Lead:{' '}
+              <strong className="text-[#1F1F1F]">
+                {selectedExecutionSummary.leadName || '—'}
+              </strong>
+            </span>
+
+            <span className="text-[#5A5551] font-medium">
+              Asst:{' '}
+              <strong className="text-[#1F1F1F]">
+                {selectedExecutionSummary.asstNames.length > 0
+                  ? selectedExecutionSummary.asstNames.join(', ')
+                  : '—'}
+              </strong>
+            </span>
+
+            {selectedExecutionSummary.status === 'Cancelled' && selectedExecutionSummary.cancellationReason && (
+              <span className="text-rose-700 font-semibold">
+                Reason: {selectedExecutionSummary.cancellationReason}
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="p-3 sm:p-4 border-b border-[#F0EBE5] flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
-          <div>
-            <h3 className="text-xs font-bold text-[#1F1F1F] tracking-tight">Hiker Applications Roster</h3>
-            <p className="text-[10px] text-[#8B8680] mt-0.5">
-              Showing {displayRegistrations.length} application(s) • Inline status, payment &amp; notes controls
-            </p>
+          <div className="flex items-center justify-between sm:justify-start gap-3">
+            <div>
+              <h3 className="text-xs font-bold text-[#1F1F1F] tracking-tight">Hiker Applications Roster</h3>
+              <p className="text-[10px] text-[#8B8680] mt-0.5">
+                Showing {displayRegistrations.length} application(s) • Inline status, payment &amp; notes controls
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setExtendedView((prev) => !prev)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs shrink-0 ${
+                extendedView
+                  ? 'bg-[#16A34A] border-[#15803d] text-white shadow-xs'
+                  : 'bg-[#F9F7F5] hover:bg-[#EFEAE4] border-[#E5E1DB] text-[#1F1F1F]'
+              }`}
+              title="Toggle extra Coordinator Hub columns (Phone, Age Group, Gender, Suggestions, Medical, Total Hikes)"
+            >
+              <Eye className="w-3.5 h-3.5 shrink-0" />
+              <span>{extendedView ? 'Standard View' : 'Extended View'}</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -2272,6 +2337,68 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                     </div>
                   </th>
                   <th className="py-1.5 px-2.5 min-w-[160px]">Internal Admin Notes</th>
+                  {extendedView && (
+                    <>
+                      <th
+                        onClick={() => handleSort('phone')}
+                        className="py-1.5 px-2 cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group whitespace-nowrap"
+                        title="Click to sort by Phone"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Phone</span>
+                          {sortField === 'phone' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0" /> : <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-stone-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('age_group')}
+                        className="py-1.5 px-2 cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group whitespace-nowrap"
+                        title="Click to sort by Age Group"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Age Group</span>
+                          {sortField === 'age_group' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0" /> : <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-stone-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('gender')}
+                        className="py-1.5 px-2 cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group whitespace-nowrap"
+                        title="Click to sort by Gender"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Gender</span>
+                          {sortField === 'gender' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0" /> : <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-stone-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                          )}
+                        </div>
+                      </th>
+                      <th className="py-1.5 px-2 min-w-[140px]">Suggestions</th>
+                      <th className="py-1.5 px-2 whitespace-nowrap">Medical</th>
+                      <th
+                        onClick={() => handleSort('total_hikes')}
+                        className="py-1.5 px-2 cursor-pointer hover:bg-[#F2ECE4] transition-colors select-none group text-center whitespace-nowrap"
+                        title="Click to sort by Total Hikes"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Total Hikes</span>
+                          {sortField === 'total_hikes' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#16A34A] shrink-0" /> : <ArrowDown className="w-3 h-3 text-[#16A34A] shrink-0" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-stone-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                          )}
+                        </div>
+                      </th>
+                    </>
+                  )}
                   <th className="py-1.5 px-2.5 w-[95px] text-right">Actions</th>
                 </tr>
               </thead>
@@ -2423,19 +2550,21 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                             </div>
 
                             {/* Trek Name */}
-                            <div className="flex flex-wrap items-center gap-x-1.5 text-[10px]">
-                              {isPrivate ? (
-                                <span className="font-medium text-purple-900 flex items-center gap-1">
-                                  <Compass className="w-2.5 h-2.5 text-purple-600 shrink-0" />
-                                  <span>{reg.trek_name || 'Bespoke Private Trek'}</span>
-                                </span>
-                              ) : (
-                                <span className="font-medium text-[#E08828]">
-                                  {displayHikeNum ? `#${displayHikeNum} - ` : ''}
-                                  {reg.trek_name || 'Himalayan Trek'}
-                                </span>
-                              )}
-                            </div>
+                            {(selectedTrekFilter === 'all' || selectedTrekFilter === 'PRIVATE') && (
+                              <div className="flex flex-wrap items-center gap-x-1.5 text-[10px]">
+                                {isPrivate ? (
+                                  <span className="font-medium text-purple-900 flex items-center gap-1">
+                                    <Compass className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                                    <span>{reg.trek_name || 'Bespoke Private Trek'}</span>
+                                  </span>
+                                ) : (
+                                  <span className="font-medium text-[#E08828]">
+                                    {displayHikeNum ? `#${displayHikeNum} - ` : ''}
+                                    {reg.trek_name || 'Himalayan Trek'}
+                                  </span>
+                                )}
+                              </div>
+                            )}
 
                           </div>
                         </td>
@@ -2619,6 +2748,47 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                           )}
                         </td>
 
+                        {extendedView && (
+                          <>
+                            {/* Phone */}
+                            <td className="py-1.5 px-2 align-middle text-[11px] font-medium text-stone-600 whitespace-nowrap">
+                              {reg.phone || '—'}
+                            </td>
+
+                            {/* Age Group */}
+                            <td className="py-1.5 px-2 align-middle text-[11px] font-medium text-stone-700 whitespace-nowrap">
+                              {reg.age_group || '—'}
+                            </td>
+
+                            {/* Gender */}
+                            <td className="py-1.5 px-2 align-middle text-[11px] font-medium text-stone-700 whitespace-nowrap">
+                              {reg.gender || '—'}
+                            </td>
+
+                            {/* Suggestions */}
+                            <td className="py-1.5 px-2 align-middle text-[11px] text-stone-500 max-w-[150px] truncate" title={reg.suggestions}>
+                              {reg.suggestions || '—'}
+                            </td>
+
+                            {/* Medical */}
+                            <td className="py-1.5 px-2 align-middle text-[11px] font-medium whitespace-nowrap">
+                              {reg.has_medical && reg.has_medical.toLowerCase() !== 'no' && reg.has_medical.toLowerCase() !== 'none' ? (
+                                <span className="text-rose-600 font-bold flex items-center gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                  <span>{reg.specify_medical || reg.has_medical}</span>
+                                </span>
+                              ) : (
+                                <span className="text-stone-400">None</span>
+                              )}
+                            </td>
+
+                            {/* Total Hikes */}
+                            <td className="py-1.5 px-2 align-middle text-center font-bold text-stone-700 text-[11px]">
+                              {isSyntheticGuide ? '—' : getHikerPastCount(reg.phone || reg.whatsapp || (reg as any).whatsapp_number || '', reg.full_name)}
+                            </td>
+                          </>
+                        )}
+
                         {/* Actions */}
                         <td className="py-1.5 px-2.5 align-middle text-right whitespace-nowrap">
                           {isSyntheticGuide ? (
@@ -2669,7 +2839,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                       {/* Expandable Specifications and Notes Drawer */}
                       {isExpanded && (
                         <tr className="bg-purple-50/50 border-b border-purple-200">
-                          <td colSpan={12} className="p-4">
+                          <td colSpan={extendedView ? 19 : 13} className="p-4">
                             <div className="bg-white rounded-xl border border-purple-200 p-4 shadow-xs space-y-3">
                               <div className="flex items-center justify-between border-b border-purple-100 pb-2">
                                 <div className="flex items-center gap-2">
@@ -2752,7 +2922,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                   <td className="py-2.5 px-2 text-amber-700 font-black text-xs">
                     NPR {totalDueBalance.toLocaleString()}
                   </td>
-                  <td colSpan={3} className="py-2.5 px-2.5"></td>
+                  <td colSpan={extendedView ? 9 : 3} className="py-2.5 px-2.5"></td>
                 </tr>
               </tfoot>
             </table>
@@ -2762,7 +2932,16 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         {/* Bottom of List of Participants */}
         <div className="p-4 border-t border-[#F0EBE5] bg-[#FAF8F5] flex items-center justify-between flex-wrap gap-3">
           <div className="text-[11px] font-semibold text-[#8B8680]">
-            Showing <strong className="text-[#1F1F1F]">{displayRegistrations.length}</strong> participant(s) in roster
+            Showing <strong className="text-[#1F1F1F]">{displayRegistrations.length}</strong> participant row(s) •{' '}
+            <strong className="text-[#1F1F1F]">
+              {displayRegistrations.reduce((acc, r) => {
+                if (r._isSyntheticGuide) return acc + 1;
+                const rawPax = rowDrafts[r.id]?.paxCount !== undefined ? rowDrafts[r.id]?.paxCount : (r.paxCount ?? (r as any).pax ?? 1);
+                const p = Number(rawPax);
+                return acc + (isNaN(p) || p <= 0 ? 1 : p);
+              }, 0)}
+            </strong>{' '}
+            total pax
           </div>
           <div className="flex items-center gap-2">
             {pendingDraftCount > 0 && (

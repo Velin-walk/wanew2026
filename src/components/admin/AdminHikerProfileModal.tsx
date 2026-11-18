@@ -30,19 +30,20 @@ import { AdminRegistration } from './BookingsManager';
 import { Trek } from '../../types';
 import { HikerStats, HikerCompletedEvent } from '../../types/leaderboard';
 import { apiFetch, fetchLeaderboardData } from '../../services/api';
+import { cleanPhoneDigits, matchesPhone } from '../../utils/matchingUtils';
 
 /**
- * Exact matching function from public trek card (GuideProfileModal.tsx)
+ * Match a hiker/guide name to their Leaderboard record without loose substring collisions
  */
 function findLeaderboardGuide(guideName: string, hikers: HikerStats[]): HikerStats | null {
   if (!guideName || !hikers || hikers.length === 0) return null;
 
-  const clean = guideName.trim().toLowerCase();
-  const parts = clean.split(/\s+/).filter(Boolean);
+  const clean = guideName.trim().toLowerCase().replace(/\s+/g, ' ');
+  const parts = clean.split(' ').filter(Boolean);
   if (parts.length === 0) return null;
 
-  // 1. Exact match
-  const exact = hikers.find((h) => (h.n || '').toLowerCase().trim() === clean);
+  // 1. Exact normalized match
+  const exact = hikers.find((h) => (h.n || '').toLowerCase().trim().replace(/\s+/g, ' ') === clean);
   if (exact) return exact;
 
   // 2. Both first and last name match or phonetics (e.g. "biraj thing" <-> "biraj theeng")
@@ -51,8 +52,8 @@ function findLeaderboardGuide(guideName: string, hikers: HikerStats[]): HikerSta
     const last = parts[parts.length - 1];
 
     const match = hikers.find((h) => {
-      const hn = (h.n || '').toLowerCase().trim();
-      const hParts = hn.split(/\s+/).filter(Boolean);
+      const hn = (h.n || '').toLowerCase().trim().replace(/\s+/g, ' ');
+      const hParts = hn.split(' ').filter(Boolean);
       if (hParts.length < 2) return false;
       const hFirst = hParts[0];
       const hLast = hParts[hParts.length - 1];
@@ -60,29 +61,29 @@ function findLeaderboardGuide(guideName: string, hikers: HikerStats[]): HikerSta
       if (hFirst !== first) return false;
       if (hLast === last) return true;
       if (last.startsWith('th') && hLast.startsWith('th')) return true;
-      return hLast.includes(last) || last.includes(hLast);
+      return hLast.length >= 4 && last.length >= 4 && (hLast.includes(last) || last.includes(hLast));
     });
 
     if (match) return match;
   }
 
-  // 3. Single name match (e.g. "Salina")
-  if (parts.length === 1) {
+  // 3. Single name match ONLY for distinct >= 3-char first-word boundaries (e.g. "Salina")
+  if (parts.length === 1 && parts[0].length >= 3) {
     const first = parts[0];
-    const candidates = hikers.filter((h) => (h.n || '').toLowerCase().startsWith(first + ' '));
-    if (candidates.length > 0) {
+    const candidates = hikers.filter((h) => {
+      const hn = (h.n || '').toLowerCase().trim();
+      return hn === first || hn.startsWith(first + ' ');
+    });
+    if (candidates.length === 1) {
+      return candidates[0];
+    }
+    if (candidates.length > 1) {
       candidates.sort((a, b) => (b.d || 0) - (a.d || 0));
       return candidates[0];
     }
   }
 
-  // 4. Substring fallback
-  const fallback = hikers.find((h) => {
-    const hn = (h.n || '').toLowerCase().trim();
-    return hn.includes(clean) || clean.includes(hn);
-  });
-
-  return fallback || null;
+  return null;
 }
 
 interface UserIdentityData {
@@ -115,14 +116,7 @@ interface AdminHikerProfileModalProps {
   onViewVoucher?: (voucherUrl: string, reg: AdminRegistration) => void;
 }
 
-const cleanPhoneDigits = (num?: string) => (num || '').replace(/\D/g, '');
-
-const isPhoneMatch = (p1?: string, p2?: string) => {
-  const d1 = cleanPhoneDigits(p1);
-  const d2 = cleanPhoneDigits(p2);
-  if (!d1 || !d2 || d1.length < 7 || d2.length < 7) return false;
-  return d1 === d2 || d1.endsWith(d2) || d2.endsWith(d1);
-};
+const isPhoneMatch = matchesPhone;
 
 const isEmptyOrNo = (val?: string | null) => {
   const s = (val || '').trim().toLowerCase();
@@ -203,31 +197,39 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
   // Match all registrations across the platform
   const hikerRegistrations = useMemo(() => {
     if (!normTargetName && !hikerPhone && !normTargetEmail) return [];
+    const targetCleanName = normTargetName.replace(/\s+/g, ' ');
+    const targetPhoneDigits = cleanPhoneDigits(hikerPhone);
 
     return allRegistrations
       .filter((reg) => {
-        const regPhone = reg.phone || reg.whatsapp || reg.whatsapp_number;
+        const regPhones = [reg.phone, reg.whatsapp, reg.whatsapp_number].filter(Boolean);
         const regEmail = (reg.email || reg.email_address || reg.user_email || '').toLowerCase().trim();
-        const regName = (reg.full_name || '').toLowerCase().trim();
+        const regName = (reg.full_name || '').toLowerCase().trim().replace(/\s+/g, ' ');
 
-        if (hikerPhone && regPhone && isPhoneMatch(hikerPhone, regPhone)) return true;
+        if (hikerPhone && regPhones.some((rp) => isPhoneMatch(hikerPhone, rp))) return true;
         if (normTargetEmail && regEmail && normTargetEmail === regEmail) return true;
-        if (
-          normTargetName &&
-          regName &&
-          (normTargetName === regName || normTargetName.includes(regName) || regName.includes(normTargetName))
-        ) {
-          return true;
+
+        // Strict exact normalized full-name fallback, guarded against conflicting phones/emails
+        if (targetCleanName && regName && targetCleanName === regName) {
+          const hasConflictingPhone =
+            targetPhoneDigits.length >= 7 &&
+            regPhones.some((rp) => cleanPhoneDigits(rp).length >= 7) &&
+            !regPhones.some((rp) => isPhoneMatch(hikerPhone, rp));
+          const hasConflictingEmail =
+            normTargetEmail && regEmail && normTargetEmail !== regEmail;
+          if (!hasConflictingPhone && !hasConflictingEmail) {
+            return true;
+          }
         }
 
-        // Check team members
+        // Check team members (phone or exact full name match)
         if (Array.isArray(reg.team_members)) {
           return reg.team_members.some((m) => {
-            const mName = (m.full_name || '').toLowerCase().trim();
+            const mName = (m.full_name || '').toLowerCase().trim().replace(/\s+/g, ' ');
             const mPhone = (m as any).phone;
             return (
               (mPhone && isPhoneMatch(hikerPhone, mPhone)) ||
-              (mName && (mName === normTargetName || normTargetName.includes(mName)))
+              (targetCleanName && mName && mName === targetCleanName)
             );
           });
         }
@@ -563,16 +565,13 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
     };
   }, [userIdentity, hikerRegistrations]);
 
-  // Match hiker with Leaderboard stats using EXACT public trek card logic
+  // Match hiker with Leaderboard stats using shared phone & strict name fallback
   const matchedHiker: HikerStats | null = useMemo(() => {
     if (!leaderboardData.length) return null;
 
-    const cleanPh = cleanPhoneDigits(hikerPhone || primaryPhone);
-    if (cleanPh.length >= 7) {
-      const byPhone = leaderboardData.find((h) => {
-        const hp = cleanPhoneDigits(h.phone || h.p);
-        return hp.length >= 7 && (hp.endsWith(cleanPh) || cleanPh.endsWith(hp));
-      });
+    const targetPh = hikerPhone || primaryPhone;
+    if (cleanPhoneDigits(targetPh).length >= 7) {
+      const byPhone = leaderboardData.find((h) => matchesPhone(h.phone || h.p, targetPh));
       if (byPhone) return byPhone;
     }
 

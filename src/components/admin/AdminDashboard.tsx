@@ -497,7 +497,12 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               phone: r.phone || r.contact || r.phoneNumber || '',
               whatsapp: r.whatsapp || r.whatsapp_number || r.phone || r.contact || '',
               email: r.email_address || r.email || r.user_email || '',
-              paxCount: Number(r.pax || r.paxCount || r.pax_count || 1),
+              paxCount: (() => {
+                const raw = r.pax ?? r.paxCount ?? r.pax_count;
+                if (raw === undefined || raw === null || String(raw).trim() === '') return 1;
+                const num = Number(raw);
+                return !isNaN(num) && num > 0 ? num : String(raw).trim();
+              })(),
               emergency_contact: r.emergency_contact || r.emergencyContact || r.emergency_backup_contact || '',
               profession: r.profession || '',
               fitness: r.fitness || r.fitness_level || '',
@@ -642,10 +647,20 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
   const handleUpdateRegistration = async (id: string, updates: Partial<AdminRegistration>) => {
     const activeDevice = getAdminDeviceMetadata();
+    const rawUpdatedPax = updates.paxCount !== undefined ? updates.paxCount : (updates as any).pax;
+    const normalizedUpdatedPax =
+      rawUpdatedPax !== undefined
+        ? Math.max(1, parseInt(String(rawUpdatedPax), 10) || 1)
+        : undefined;
+    const displayUpdatedPax =
+      rawUpdatedPax !== undefined
+        ? (typeof rawUpdatedPax === 'string' && rawUpdatedPax.trim() !== '' && isNaN(Number(rawUpdatedPax))
+            ? rawUpdatedPax.trim()
+            : normalizedUpdatedPax)
+        : undefined;
     const normalizedUpdates: any = {
       ...updates,
-      pax: updates.paxCount !== undefined ? updates.paxCount : (updates as any).pax,
-      paxCount: updates.paxCount !== undefined ? updates.paxCount : (updates as any).pax,
+      ...(normalizedUpdatedPax !== undefined ? { pax: normalizedUpdatedPax, paxCount: displayUpdatedPax } : {}),
       email: updates.email || updates.email_address,
       email_address: updates.email_address || updates.email,
       phone: updates.phone,
@@ -2359,6 +2374,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         {activeTab === 'execution' && (
           <EventExecutionManager
             treks={enrichedTreks}
+            registrations={registrations}
             loading={loadingHikes}
             onRefresh={fetchItineraries}
             onUpdateTrekExecution={handleUpdateTrekExecution}

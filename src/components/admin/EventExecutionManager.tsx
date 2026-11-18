@@ -16,9 +16,17 @@ import {
 } from 'lucide-react';
 import { Trek } from '../../types';
 import { getGuidesSettings, DEFAULT_GUIDES } from '../../services/guidesService';
+import { parseEventDate } from '../../adminUtils';
+import {
+  AdminRegistration,
+  doesRegistrationMatchTrek,
+  normalizeGuideCompare,
+  resolveTrekGuides,
+} from './BookingsManager';
 
 interface EventExecutionManagerProps {
   treks: Trek[];
+  registrations?: AdminRegistration[];
   loading: boolean;
   onRefresh: () => void;
   onUpdateTrekExecution: (trekId: string, updates: Partial<Trek> & { is_cancelled?: boolean; cancellation_reason?: string }) => Promise<void>;
@@ -27,6 +35,7 @@ interface EventExecutionManagerProps {
 
 export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
   treks,
+  registrations = [],
   loading,
   onRefresh,
   onUpdateTrekExecution,
@@ -67,58 +76,6 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
     }
   }, []);
 
-  // Helper to parse event date safely
-  const parseEventDate = (dateStr?: string): Date | null => {
-    if (!dateStr) return null;
-    const trimmed = dateStr.trim();
-    if (!trimmed || trimmed.toLowerCase() === 'tbd' || trimmed.toLowerCase() === 'flexible') return null;
-
-    if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
-      const delimiter = trimmed.includes('-') ? '-' : '.';
-      const parts = trimmed.split(delimiter);
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d;
-
-    try {
-      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-      const year = yearMatch ? yearMatch[1] : '';
-      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-      const parts = cleanRange.split(/[–—\-]/);
-      if (parts.length > 1 && year) {
-        const firstPart = parts[0]
-          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
-          .trim();
-        const rangeDate = new Date(`${firstPart} ${year}`);
-        if (!isNaN(rangeDate.getTime())) return rangeDate;
-      }
-    } catch {}
-
-    return null;
-  };
 
   const getHikeNum = (t: Trek) => {
     const m = String(t.hike_number || t.id || '').match(/\d+/);
@@ -179,23 +136,68 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
 
   const hasMorePastEvents = !searchTerm && pastTreks.length > 5;
 
+  const getEffectiveParticipants = useMemo(() => {
+    const cache = new Map<string, number>();
+    return (t: Trek): number => {
+      if (cache.has(t.id)) return cache.get(t.id)!;
+      if (!registrations || registrations.length === 0) {
+        const val = Number(t.participants || 0);
+        cache.set(t.id, val);
+        return val;
+      }
+      const matchedActiveRegs = registrations.filter((r) => {
+        const effStatus = String(r.status || 'Confirmed').toLowerCase().trim();
+        if (effStatus.includes('cancelled') || effStatus === 'waitlisted') {
+          return false;
+        }
+        return doesRegistrationMatchTrek(r, t);
+      });
+      if (matchedActiveRegs.length === 0) {
+        const val = Number(t.participants || 0);
+        cache.set(t.id, val);
+        return val;
+      }
+      const { leadName, asstNames } = resolveTrekGuides(t, matchedActiveRegs);
+      const existingNames = new Set(
+        matchedActiveRegs.map((r) => normalizeGuideCompare(r.full_name)).filter(Boolean)
+      );
+      let extraGuidesCount = 0;
+      if (leadName && !existingNames.has(normalizeGuideCompare(leadName))) {
+        extraGuidesCount++;
+      }
+      asstNames.forEach((a) => {
+        if (!existingNames.has(normalizeGuideCompare(a))) {
+          extraGuidesCount++;
+        }
+      });
+      const regPaxSum = matchedActiveRegs.reduce((sum, r) => {
+        const p = Number(r.paxCount ?? (r as any).pax ?? 1);
+        return sum + (isNaN(p) || p <= 0 ? 1 : p);
+      }, 0);
+      const total = regPaxSum + extraGuidesCount;
+      cache.set(t.id, total);
+      return total;
+    };
+  }, [registrations]);
+
   const resolveTrekExecStatus = (
     t: Trek,
     overrideCapacity?: number
   ): 'Active' | 'Registration Closed' | 'Completed' | 'Cancelled' => {
     const cap = overrideCapacity !== undefined ? Number(overrideCapacity) : Number(t.capacity || 25);
+    const participantsCount = getEffectiveParticipants(t);
 
     const savedStatus = t.data?.execution_status;
     if (savedStatus === 'Cancelled' || t.data?.is_cancelled || t.is_cancelled) return 'Cancelled';
     if (savedStatus === 'Completed') return 'Completed';
     if (savedStatus === 'Registration Closed') {
       // If admin increased capacity above current participants, allow it to reopen unless manually kept closed
-      if (overrideCapacity !== undefined && cap > (t.capacity || 25) && t.participants < cap) {
+      if (overrideCapacity !== undefined && cap > (t.capacity || 25) && participantsCount < cap) {
         return 'Active';
       }
       return 'Registration Closed';
     }
-    if (t.participants >= cap) return 'Registration Closed';
+    if (participantsCount >= cap) return 'Registration Closed';
     return 'Active';
   };
 
@@ -427,7 +429,8 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                   const curReason = draft.cancellation_reason !== undefined ? draft.cancellation_reason : t.data?.cancellation_reason || '';
 
                   const isCancelled = curStatus === 'Cancelled';
-                  const pct = Math.min(Math.round((t.participants / (Number(curCapacity) || 1)) * 100), 100);
+                  const effectiveParticipants = getEffectiveParticipants(t);
+                  const pct = Math.min(Math.round((effectiveParticipants / (Number(curCapacity) || 1)) * 100), 100);
 
                   const isDirty = Object.keys(draft).length > 0;
                   const isSavingThisRow = !!savingRowIds[t.id];
@@ -487,7 +490,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                       <td className="py-3 px-3 align-middle">
                         <div className="space-y-1.5 min-w-[150px]">
                           <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F1F1F]">
-                            <span className="text-[#5A5551]">{t.participants} /</span>
+                            <span className="text-[#5A5551]">{effectiveParticipants} /</span>
                             <input
                               type="number"
                               value={curCapacity}
@@ -623,7 +626,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                             title="View Hike Roster"
                           >
                             <Users className="w-3.5 h-3.5 text-[#E08828]" />
-                            <span>Roster ({t.participants})</span>
+                            <span>Roster ({effectiveParticipants})</span>
                           </button>
 
                           <button

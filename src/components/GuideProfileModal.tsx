@@ -24,6 +24,7 @@ import { Trek } from '../types';
 import { TrekFeedbackModal } from './TrekFeedbackModal';
 import { getGuidesSettings, DEFAULT_GUIDES } from '../services/guidesService';
 import { useContentModeration, isReviewHidden } from '../services/contentModerationService';
+import { extractHikeNumber, guideNamesMatch, matchesPhone } from '../utils/matchingUtils';
 
 interface GuideProfileModalProps {
   isOpen: boolean;
@@ -78,15 +79,30 @@ const KNOWN_GUIDES: Record<string, KnownGuideInfo> = {
 };
 
 /**
- * Intelligent matching function that maps a guide name to their verified Leaderboard record
+ * Intelligent matching function that maps a guide phone/name to their verified Leaderboard record
  */
-function findLeaderboardGuide(guidePhone: string | undefined, hikers: HikerStats[]): HikerStats | null {
+function findLeaderboardGuide(
+  guidePhone: string | undefined,
+  guideName: string | undefined,
+  hikers: HikerStats[]
+): HikerStats | null {
   if (!hikers || hikers.length === 0) return null;
 
-  // 1. Phone match
+  // 1. Normalized phone match (strips formatting, matches suffix/+977/last-10)
   if (guidePhone) {
-    const phoneMatch = hikers.find((h) => (h.phone || h.p) === guidePhone);
+    const phoneMatch = hikers.find((h) => matchesPhone(h.phone || h.p, guidePhone));
     if (phoneMatch) return phoneMatch;
+  }
+
+  // 2. Fallback to strict/phonetic guide name matching when phone is unavailable
+  if (guideName) {
+    const cleanName = guideName.trim();
+    if (cleanName) {
+      const exactOrNameMatch = hikers.find((h) =>
+        guideNamesMatch(h.n, cleanName, { allowSingleWordFirstName: true })
+      );
+      if (exactOrNameMatch) return exactOrNameMatch;
+    }
   }
 
   return null;
@@ -143,7 +159,7 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
         setLoading(true);
         const data = await fetchLeaderboardData(false);
         if (isMounted && data && Array.isArray(data.hikers)) {
-          const matched = findLeaderboardGuide(customGuideSetting?.phone, data.hikers);
+          const matched = findLeaderboardGuide(customGuideSetting?.phone, guideName, data.hikers);
           setGuideStats(matched);
         }
       } catch (err) {
@@ -203,9 +219,11 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
       } catch {}
     }
     if (currentTrek) {
+      const curHikeNum = extractHikeNumber(currentTrek);
       const alreadyInList = list.some(
-        (t) => (t.id && currentTrek.id && t.id === currentTrek.id) ||
-               (t.hike_number && currentTrek.hike_number && String(t.hike_number) === String(currentTrek.hike_number))
+        (t) =>
+          (t.id && currentTrek.id && t.id === currentTrek.id) ||
+          (curHikeNum && extractHikeNumber(t) === curHikeNum)
       );
       if (!alreadyInList) {
         list.push(currentTrek);
@@ -240,14 +258,18 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
       const guideHikeNumbers = new Set<string>();
       if (guideStats && Array.isArray(guideStats.hikes)) {
         guideStats.hikes.forEach((h: any) => {
-          if (h.no) guideHikeNumbers.add(String(h.no).trim().toLowerCase());
+          const hNo = extractHikeNumber(h.no);
+          if (hNo) guideHikeNumbers.add(hNo);
+          else if (h.no) guideHikeNumbers.add(String(h.no).trim().toLowerCase());
         });
       }
       if (effectiveTreks) {
         effectiveTreks.forEach((t: any) => {
-          const tLeader = String(t.leader || t.team_leader || '').trim().toLowerCase();
-          if (tLeader && (tLeader === cleanGuideTarget || tLeader.includes(cleanGuideTarget) || cleanGuideTarget.includes(tLeader))) {
-            if (t.hike_number) guideHikeNumbers.add(String(t.hike_number).trim().toLowerCase());
+          const tLeader = String(t.leader || t.team_leader || '').trim();
+          if (tLeader && guideNamesMatch(tLeader, guideName, { allowSingleWordFirstName: true })) {
+            const tNo = extractHikeNumber(t);
+            if (tNo) guideHikeNumbers.add(tNo);
+            else if (t.hike_number) guideHikeNumbers.add(String(t.hike_number).trim().toLowerCase());
           }
         });
       }
@@ -255,25 +277,26 @@ export const GuideProfileModal: React.FC<GuideProfileModalProps> = ({
       const rawGuideReviews = allReviews.filter((r: any) => {
         if (!r || isReviewHidden(r, contentModeration)) return false;
         const tn = String(r.trek_name || '').trim().toLowerCase();
-        const rLeader = String(r.leader || r.guide_name || '').trim().toLowerCase();
-        const rPhone = String(r.lead_guide_phone || r.guide_phone || '').trim().toLowerCase();
-        const rHikeNo = String(r.hike_number || r.hikeNumber || '').trim().toLowerCase();
+        const rLeader = String(r.leader || r.guide_name || '').trim();
+        const rLeaderLower = rLeader.toLowerCase();
+        const rPhone = String(r.lead_guide_phone || r.guide_phone || '').trim();
+        const rHikeNo = extractHikeNumber(r) || String(r.hike_number || r.hikeNumber || '').trim().toLowerCase();
         const rText = (r.team_feedback || r.teamFeedback || r.overall_feedback || r.overallFeedback || '').trim().toLowerCase();
 
         // 1. Explicitly exclude if review mentions other guides
         const mentionsOther = allGuideNames.some(name => 
             name !== cleanGuideTarget && 
             !cleanGuideTarget.includes(name) && 
-            (rLeader.includes(name) || rText.includes(name))
+            (rLeaderLower.includes(name) || rText.includes(name))
         );
         if (mentionsOther) return false;
 
         // 2. Match explicit guide review tag
         if (tn === `guide_review:${cleanGuideTarget}` || tn === `guide_review: ${cleanGuideTarget}`) return true;
-        // 3. Match lead guide phone number
-        if (guidePhone && rPhone && rPhone === guidePhone) return true;
+        // 3. Match lead guide phone number (normalized digits)
+        if (guidePhone && rPhone && matchesPhone(guidePhone, rPhone)) return true;
         // 4. Match guide name / leader name
-        if (rLeader && (rLeader === cleanGuideTarget || rLeader.includes(cleanGuideTarget) || cleanGuideTarget.includes(rLeader))) return true;
+        if (rLeader && guideNamesMatch(rLeader, guideName, { allowSingleWordFirstName: true })) return true;
         // 5. Match hike number led by this guide
         if (rHikeNo && guideHikeNumbers.has(rHikeNo)) return true;
 

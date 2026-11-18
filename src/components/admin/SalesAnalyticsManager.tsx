@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { Trek } from '../../types';
 import { AdminRegistration } from './BookingsManager';
+import { parseEventDate } from '../../adminUtils';
+import { doesRegistrationMatchTrek, extractHikeNumber } from '../../utils/matchingUtils';
 
 interface SalesAnalyticsManagerProps {
   treks: Trek[];
@@ -29,62 +31,10 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
 }) => {
   const [showAllEvents, setShowAllEvents] = useState(false);
 
-  // Helper to parse event date safely
-  const parseEventDate = (dateStr?: string): Date | null => {
-    if (!dateStr) return null;
-    const trimmed = dateStr.trim();
-    if (!trimmed || trimmed.toLowerCase() === 'tbd' || trimmed.toLowerCase() === 'flexible') return null;
-
-    if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
-      const delimiter = trimmed.includes('-') ? '-' : '.';
-      const parts = trimmed.split(delimiter);
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(d.getTime())) return d;
-        } else if (parts[0].length === 4) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d;
-
-    try {
-      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-      const year = yearMatch ? yearMatch[1] : '';
-      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-      const parts = cleanRange.split(/[–—\-]/);
-      if (parts.length > 1 && year) {
-        const firstPart = parts[0]
-          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
-          .trim();
-        const rangeDate = new Date(`${firstPart} ${year}`);
-        if (!isNaN(rangeDate.getTime())) return rangeDate;
-      }
-    } catch {}
-
-    return null;
-  };
 
   const getHikeNum = (t: Trek) => {
-    const m = String(t.hike_number || t.id || '').match(/\d+/);
-    return m ? parseInt(m[0], 10) : 0;
+    const hNum = extractHikeNumber(t);
+    return hNum ? parseInt(hNum, 10) : 0;
   };
 
   // Split treks into upcoming + past
@@ -142,8 +92,6 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
   let totalCollectedRevenue = 0;
   let totalConfirmedPax = 0;
 
-  const normStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
   // Map of trek ID to revenue, pax counts, and application ratio metrics
   const trekSalesMap: Record<
     string,
@@ -161,28 +109,16 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
 
   registrations.forEach((reg) => {
     const regStatus = (reg.status || 'Confirmed').toLowerCase().trim();
-
-    const regDateNorm = normStr(reg.trek_date);
-    const regNameNorm = normStr(reg.trek_name);
-    const regHikeNum = (reg.hike_number || '').trim();
+    const regHikeNum = extractHikeNumber(reg) || (reg.hike_number || '').trim();
     const regTrekId = (reg.trek_id || '').trim();
 
-    const matchingTrek =
-      treks.find((t) => {
-        const tDateNorm = normStr(t.date);
-        if (tDateNorm && regDateNorm && tDateNorm !== regDateNorm) return false;
-        if (regTrekId && t.id === regTrekId) return true;
-        if (regHikeNum && regHikeNum !== 'TBD' && t.hike_number === regHikeNum) return true;
-        if (regNameNorm && normStr(t.name) === regNameNorm) return true;
-        return false;
-      }) ||
-      treks.find(
-        (t) =>
-          (regHikeNum && regHikeNum !== 'TBD' && t.hike_number === regHikeNum) ||
-          (regTrekId && t.id === regTrekId)
-      );
+    const matchingTrek = treks.find((t) =>
+      doesRegistrationMatchTrek(reg, t, { includeInactiveStatuses: true })
+    );
 
-    const key = matchingTrek?.id || (regHikeNum && regHikeNum !== 'TBD' ? regHikeNum : regTrekId || reg.trek_name || 'unknown');
+    const key =
+      matchingTrek?.id ||
+      (regHikeNum && regHikeNum !== 'TBD' ? regHikeNum : regTrekId || reg.trek_name || 'unknown');
     if (!trekSalesMap[key]) {
       trekSalesMap[key] = {
         projectedRev: 0,
@@ -360,7 +296,11 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
             <tbody className="divide-y divide-[#F0EBE5]">
               {displayedTreks.map((t) => {
                 const priceStr = typeof t.price === 'string' ? t.price : String(t.price || '1500');
-                const metrics = trekSalesMap[t.id] || (t.hike_number && t.hike_number !== 'TBD' ? trekSalesMap[t.hike_number] : undefined) || {
+                const tHikeNum = extractHikeNumber(t);
+                const metrics =
+                  trekSalesMap[t.id] ||
+                  (tHikeNum ? trekSalesMap[tHikeNum] : undefined) ||
+                  (t.hike_number && t.hike_number !== 'TBD' ? trekSalesMap[t.hike_number] : undefined) || {
                   projectedRev: (t.participants || 0) * parsePrice(priceStr),
                   collectedRev: 0,
                   confirmedPax: t.participants || 0,
