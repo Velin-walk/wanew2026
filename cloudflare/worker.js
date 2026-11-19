@@ -406,6 +406,19 @@ async function purgeEdgeCache(urlList, ctx) {
 
 const memLogsCount = new Map();
 
+function buildAuditChanges(beforeObj = {}, afterObj = {}) {
+  const changes = {};
+  const keys = new Set([...Object.keys(beforeObj || {}), ...Object.keys(afterObj || {})]);
+  for (const key of keys) {
+    const beforeVal = beforeObj[key] === undefined ? null : beforeObj[key];
+    const afterVal = afterObj[key] === undefined ? null : afterObj[key];
+    if (JSON.stringify(beforeVal) !== JSON.stringify(afterVal)) {
+      changes[key] = { before: beforeVal, after: afterVal };
+    }
+  }
+  return changes;
+}
+
 async function logAdminActivity(env, request, actionType, description, metadata = {}) {
   if (!env || !env.DB) return;
   try {
@@ -1623,11 +1636,24 @@ const worker = {
         const body = await request.json();
         const newStatus = body.status || 'published';
 
+        let prevStatus = null;
+        try {
+          const prevRow = await env.DB.prepare(
+            'SELECT status FROM treks WHERE id = ? OR hike_number = ?'
+          ).bind(idOrNum, idOrNum).first();
+          if (prevRow) prevStatus = prevRow.status ?? null;
+        } catch (_) {}
+
         await env.DB.prepare(
           'UPDATE treks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? OR hike_number = ?'
         ).bind(newStatus, idOrNum, idOrNum).run();
 
-        await logAdminActivity(env, request, 'UPDATE_TREK_STATUS', `Updated trek ${idOrNum} status to '${newStatus}'`, { trekId: idOrNum, status: newStatus });
+        const statusChanges = buildAuditChanges({ status: prevStatus }, { status: newStatus });
+        await logAdminActivity(env, request, 'UPDATE_TREK_STATUS', `Updated trek ${idOrNum} status to '${newStatus}'`, {
+          trekId: idOrNum,
+          status: newStatus,
+          ...(Object.keys(statusChanges).length > 0 ? { changes: statusChanges } : {}),
+        });
 
         // Invalidate edge cache and rebuild snapshot so status updates instantly
         await purgeEdgeCache([
@@ -1732,6 +1758,7 @@ const worker = {
           const rawData = row.data_json || row.data || '{}';
           parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
         } catch (e) {}
+        const prevStatus = row.status || parsedData.status || null;
         parsedData.status = newStatus;
 
         await env.DB.prepare(`
@@ -1747,9 +1774,11 @@ const worker = {
           row.hike_number
         ).run();
 
+        const patchStatusChanges = buildAuditChanges({ status: prevStatus }, { status: newStatus });
         await logAdminActivity(env, request, 'UPDATE_TREK_STATUS', `Changed status of '${row.title || 'Trek'}' (#${row.hike_number || idOrNum}) to ${newStatus}`, {
           hike_number: row.hike_number || idOrNum,
-          newStatus
+          newStatus,
+          ...(Object.keys(patchStatusChanges).length > 0 ? { changes: patchStatusChanges } : {}),
         });
 
         // Invalidate Cloudflare Edge Cache immediately
@@ -1845,6 +1874,15 @@ const worker = {
           const rawData = row.data_json || row.data || '{}';
           parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
         } catch (e) {}
+
+        const prevExecSnapshot = {
+          execution_status: parsedData.execution_status || (parsedData.is_cancelled ? 'Cancelled' : 'Active'),
+          is_cancelled: Boolean(parsedData.is_cancelled),
+          cancellation_reason: parsedData.cancellation_reason || '',
+          assigned_leader: row.team_leader || parsedData.teamLeader || '',
+          capacity: Number(row.max_capacity ?? parsedData.maxCapacity ?? 0) || null,
+          status: row.status || 'published',
+        };
 
         // Merge incoming Event Execution updates strictly
         const maxCapacity = body.capacity !== undefined ? Number(body.capacity) : row.max_capacity;
@@ -1963,11 +2001,22 @@ const worker = {
           console.warn('Error syncing event_executions table, proceeding:', execErr);
         }
 
+        const nextExecSnapshot = {
+          execution_status: body.data?.execution_status || (body.data?.is_cancelled ? 'Cancelled' : 'Active'),
+          is_cancelled: Boolean(body.data?.is_cancelled),
+          cancellation_reason: body.data?.cancellation_reason || '',
+          assigned_leader: teamLeader || '',
+          capacity: Number(maxCapacity) || null,
+          status: newStatus || 'published',
+        };
+        const execChanges = buildAuditChanges(prevExecSnapshot, nextExecSnapshot);
+
         await logAdminActivity(env, request, 'UPDATE_EVENT_EXECUTION', `Updated event execution for trek '${row.title}' (#${row.hike_number || idOrNum})`, {
           hike_number: row.hike_number || idOrNum,
-          execution_status: body.data?.execution_status || (body.data?.is_cancelled ? 'Cancelled' : 'Active'),
+          execution_status: nextExecSnapshot.execution_status,
           assigned_leader: teamLeader,
-          capacity: maxCapacity
+          capacity: maxCapacity,
+          ...(Object.keys(execChanges).length > 0 ? { changes: execChanges } : {}),
         });
 
         // Purge edge cache and rebuild treks snapshot synchronously so immediate refreshes reflect the update
@@ -2156,10 +2205,14 @@ const worker = {
         // Check if existing record exists safely by ID or unique hike_number
         let existing = null;
         if (trekId) {
-          existing = await env.DB.prepare('SELECT id, hike_number FROM treks WHERE id = ?').bind(trekId).first();
+          existing = await env.DB.prepare(
+            'SELECT id, hike_number, title, category, status, hike_date, min_price, max_price, meeting_point, expected_duration, difficulty, team_leader, max_capacity FROM treks WHERE id = ?'
+          ).bind(trekId).first();
         }
         if (!existing && hikeNum && hikeNum !== 'TBD') {
-          existing = await env.DB.prepare('SELECT id, hike_number FROM treks WHERE hike_number = ?').bind(hikeNum).first();
+          existing = await env.DB.prepare(
+            'SELECT id, hike_number, title, category, status, hike_date, min_price, max_price, meeting_point, expected_duration, difficulty, team_leader, max_capacity FROM treks WHERE hike_number = ?'
+          ).bind(hikeNum).first();
         }
 
         const priceTiers = dataObj.priceTiers || [];
@@ -2257,10 +2310,43 @@ const worker = {
           ).run();
         }
 
+        const nextTrekSnapshot = {
+          hike_number: hikeNum,
+          title,
+          category: body.category || dataObj.category || 'Overnight Bus Hikes',
+          status: body.status || dataObj.status || 'published',
+          hike_date: body.hike_date || body.date || dataObj.hikeDate || dataObj.hike_date || '',
+          min_price: Number(body.min_price) || calculatedMinPrice,
+          max_price: Number(body.max_price) || calculatedMaxPrice,
+          meeting_point: body.meeting_point || body.start_location || dataObj.overview?.meetingPoint || dataObj.meetingPoint || '',
+          expected_duration: body.expected_duration || body.days || dataObj.overview?.expectedDuration || '',
+          difficulty: body.difficulty || dataObj.overview?.difficulty || 'Moderate',
+          team_leader: body.team_leader || body.leader || dataObj.teamLeader || '',
+          max_capacity: Number(body.max_capacity || body.capacity || dataObj.maxCapacity) || 25,
+        };
+        const prevTrekSnapshot = existing
+          ? {
+              hike_number: existing.hike_number ?? '',
+              title: existing.title ?? '',
+              category: existing.category ?? '',
+              status: existing.status ?? '',
+              hike_date: existing.hike_date ?? '',
+              min_price: Number(existing.min_price) || 0,
+              max_price: Number(existing.max_price) || 0,
+              meeting_point: existing.meeting_point ?? '',
+              expected_duration: existing.expected_duration ?? '',
+              difficulty: existing.difficulty ?? '',
+              team_leader: existing.team_leader ?? '',
+              max_capacity: Number(existing.max_capacity) || 25,
+            }
+          : {};
+        const trekChanges = buildAuditChanges(prevTrekSnapshot, nextTrekSnapshot);
+
         await logAdminActivity(env, request, 'UPSERT_TREK', `Upserted trek '${title || 'Trek'}' (#${hikeNum})`, {
           trekId,
           hike_number: hikeNum,
-          title
+          title,
+          ...(Object.keys(trekChanges).length > 0 ? { changes: trekChanges } : {}),
         });
 
         // Invalidate Cloudflare Edge Cache immediately
@@ -2296,11 +2382,32 @@ const worker = {
         const idOrNum = decodeURIComponent(path.replace(/^\/(treks|admin\/itineraries)\//, ''));
         if (!env.DB) return errorResponse('Database binding DB missing', 500);
 
+        let prevDeletedTrek = null;
+        try {
+          prevDeletedTrek = await env.DB.prepare(
+            'SELECT id, hike_number, title, status FROM treks WHERE hike_number = ? OR id = ?'
+          ).bind(idOrNum, idOrNum).first();
+        } catch (_) {}
+
         await env.DB.prepare(
           'DELETE FROM treks WHERE hike_number = ? OR id = ?'
         ).bind(idOrNum, idOrNum).run();
 
-        await logAdminActivity(env, request, 'DELETE_TREK', `Deleted trek '${idOrNum}'`, { trekId: idOrNum });
+        const deleteTrekChanges = prevDeletedTrek
+          ? buildAuditChanges(
+              {
+                title: prevDeletedTrek.title || idOrNum,
+                hike_number: prevDeletedTrek.hike_number || '',
+                status: prevDeletedTrek.status || '',
+              },
+              { title: null, hike_number: null, status: null }
+            )
+          : {};
+
+        await logAdminActivity(env, request, 'DELETE_TREK', `Deleted trek '${idOrNum}'`, {
+          trekId: idOrNum,
+          ...(Object.keys(deleteTrekChanges).length > 0 ? { changes: deleteTrekChanges } : {}),
+        });
 
         // Invalidate Cloudflare Edge Cache immediately
         await purgeEdgeCache([
@@ -2695,6 +2802,32 @@ const worker = {
           bg(ctx, rebuildTreksSnapshot(env));
         }
 
+        const prevBookingSnapshot = {
+          status: existingRoster?.registration_status ?? regRow?.status ?? null,
+          payment_status: existingRoster?.payment_status ?? null,
+          paid_amount: existingRoster?.paid_amount !== undefined ? Number(existingRoster.paid_amount) : null,
+          due_amount: existingRoster?.due_amount !== undefined ? Number(existingRoster.due_amount) : null,
+          admin_notes: existingRoster?.admin_notes ?? '',
+          pickup_point: existingRoster?.pickup_point ?? regRow?.pickup_point ?? '',
+          lead_guide: existingRoster?.lead_guide ?? regRow?.lead_guide ?? '',
+          hike_number: existingRoster?.hike_number ?? regRow?.hike_number ?? '',
+          full_name: existingRoster?.full_name ?? regRow?.full_name ?? '',
+          phone: existingRoster?.phone ?? regRow?.phone ?? '',
+        };
+        const nextBookingSnapshot = {
+          status,
+          payment_status,
+          paid_amount: paid,
+          due_amount: due,
+          admin_notes: updates,
+          pickup_point,
+          lead_guide: body.lead_guide !== undefined ? String(body.lead_guide || '').trim() : prevBookingSnapshot.lead_guide,
+          hike_number: body.hike_number ? String(body.hike_number).replace(/^#/, '').trim() : prevBookingSnapshot.hike_number,
+          full_name: body.full_name || prevBookingSnapshot.full_name,
+          phone: body.phone || prevBookingSnapshot.phone,
+        };
+        const bookingChanges = buildAuditChanges(prevBookingSnapshot, nextBookingSnapshot);
+
         await logAdminActivity(env, request, 'UPDATE_BOOKING', `Updated booking/roster for '${regRow?.full_name || 'Hiker'}' (#${regRow?.hike_number || ''})`, {
           registration_id: id,
           status,
@@ -2702,7 +2835,8 @@ const worker = {
           paid_amount: paid,
           due_amount: due,
           admin_notes: updates,
-          pickup_point
+          pickup_point,
+          ...(Object.keys(bookingChanges).length > 0 ? { changes: bookingChanges } : {}),
         });
 
         return jsonResponse({
@@ -2717,10 +2851,23 @@ const worker = {
         const id = decodeURIComponent(path.replace('/registrations/', ''));
 
         let regHikeNum = null;
+        let prevRegSnapshot = null;
         try {
-          const rRow = await env.DB.prepare('SELECT hike_number FROM registrations WHERE id = ?').bind(id).first();
-          if (rRow && rRow.hike_number) regHikeNum = rRow.hike_number;
+          const rRow = await env.DB.prepare('SELECT hike_number, full_name, status, trek_name FROM registrations WHERE id = ?').bind(id).first();
+          if (rRow) {
+            if (rRow.hike_number) regHikeNum = rRow.hike_number;
+            prevRegSnapshot = {
+              full_name: rRow.full_name || null,
+              trek_name: rRow.trek_name || null,
+              hike_number: rRow.hike_number || null,
+              status: rRow.status || null,
+            };
+          }
         } catch (_) {}
+
+        const deleteRegChanges = prevRegSnapshot
+          ? buildAuditChanges(prevRegSnapshot, { full_name: null, trek_name: null, hike_number: null, status: null })
+          : {};
 
         try {
           await env.DB.prepare('DELETE FROM registrations WHERE id = ?').bind(id).run();
@@ -2731,7 +2878,10 @@ const worker = {
           } else {
             rebuildTreksSnapshot(env).catch(() => {});
           }
-          await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, { registration_id: id });
+          await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, {
+            registration_id: id,
+            ...(Object.keys(deleteRegChanges).length > 0 ? { changes: deleteRegChanges } : {}),
+          });
           return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully' });
         } catch (dbErr) {
           console.error('Failed to delete registration from D1:', dbErr);
@@ -2744,7 +2894,10 @@ const worker = {
             } else {
               rebuildTreksSnapshot(env).catch(() => {});
             }
-            await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, { registration_id: id });
+            await logAdminActivity(env, request, 'DELETE_REGISTRATION', `Deleted registration ID ${id}`, {
+              registration_id: id,
+              ...(Object.keys(deleteRegChanges).length > 0 ? { changes: deleteRegChanges } : {}),
+            });
             return jsonResponse({ success: true, message: 'Registration deleted from D1 successfully (fallback ID type)' });
           } catch (fallbackErr) {
             return errorResponse(`D1 delete error: ${fallbackErr.message}`, 500);

@@ -486,7 +486,7 @@ export const HikeLibraryList: React.FC<HikeLibraryListProps> = ({
                   const coverImg = resolveHikeCoverUrl(hike);
 
                   return (
-                    <tr key={`${hike.id}-${index}`} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
+                    <tr key={`${hike.id}-${index}`} className={`${index % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-[#FF6600]/15 transition-colors cursor-pointer`}>
                       {/* Hike # & Title */}
                       <td className="py-3 px-4 align-middle">
                         <div className="flex items-center gap-3">

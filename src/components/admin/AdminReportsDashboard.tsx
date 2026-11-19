@@ -1895,8 +1895,8 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                   </td>
                 </tr>
               ) : (
-                sortedEventList.map((item) => (
-                  <tr key={item.hikeNumber} className="hover:bg-[#FAF8F5] transition-colors">
+                sortedEventList.map((item, idx) => (
+                  <tr key={item.hikeNumber} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-[#EFEAE4]/60 transition-colors`}>
                     {/* 1. Hike Number */}
                     <td className="py-3 px-3">
                       <span className="px-2 py-0.5 rounded-md bg-stone-900 text-white font-mono text-[10px] font-extrabold inline-block">

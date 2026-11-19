@@ -465,12 +465,12 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EBE5]">
-              {t1Rows.map((row) => {
+              {t1Rows.map((row, idx) => {
                 const baseLink = row.path.startsWith('http') ? row.path : `${baseURL}${row.path.startsWith('/') ? '' : '/'}${row.path}`;
                 const fullLink = row.isCustom ? baseLink : `${baseLink} Namaste! Here is the ${row.name} link please.`;
 
                 return (
-                  <tr key={row.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
+                  <tr key={row.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-[#FF6600]/15 transition-colors cursor-pointer`}>
                     {/* Page Name */}
                     <td className="py-1.5 px-2 font-semibold align-top">
                       {row.isCustom ? (
@@ -619,9 +619,9 @@ export const AdminLinkLibrary: React.FC<{ baseURL: string; treks: any[] }> = ({ 
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EBE5]">
-              {allT2Rows.map((row) => {
+              {allT2Rows.map((row, idx) => {
                 return (
-                  <tr key={row.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
+                  <tr key={row.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-[#FF6600]/15 transition-colors cursor-pointer`}>
                     {/* Hike Name & Number */}
                     <td className="py-1.5 px-2 font-semibold align-top">
                       {row.isCustom ? (

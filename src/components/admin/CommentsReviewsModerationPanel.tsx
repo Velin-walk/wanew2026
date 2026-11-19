@@ -332,6 +332,9 @@ export const CommentsReviewsModerationPanel: React.FC<CommentsReviewsModerationP
           target: item.targetTitle,
           author: item.authorName,
           hidden: nextHidden,
+          changes: {
+            hidden: { before: item.isHidden, after: nextHidden },
+          },
         },
         adminEmail: currentUserEmail,
       });

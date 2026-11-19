@@ -2418,7 +2418,9 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                           ? 'bg-amber-50/40'
                           : reg._guideRole === 'assistant'
                           ? 'bg-sky-50/35'
-                          : ''
+                          : index % 2 === 0
+                          ? 'bg-white'
+                          : 'bg-[#FAF8F5]'
                       }`}>
                         {/* S.N. */}
                         <td className="py-1.5 px-2.5 text-center font-bold text-stone-600 text-xs">

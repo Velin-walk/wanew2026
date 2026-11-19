@@ -455,12 +455,12 @@ export const PWAInstallStats: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {logs.map((log) => {
+                {logs.map((log, idx) => {
                   const isIOS = log.deviceType === 'ios' || /iphone|ipad/i.test(log.userAgent || '');
                   const isAndroid = log.deviceType === 'android' || /android/i.test(log.userAgent || '');
 
                   return (
-                    <tr key={log.id} className="hover:bg-stone-50/60 transition-colors">
+                    <tr key={log.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-stone-100/60 transition-colors`}>
                       <td className="py-3 px-4 whitespace-nowrap text-stone-700 font-medium">
                         {formatRelativeTime(log.installedAt)}
                       </td>

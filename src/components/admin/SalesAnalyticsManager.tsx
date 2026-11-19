@@ -293,7 +293,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EBE5]">
-              {displayedTreks.map((t) => {
+              {displayedTreks.map((t, idx) => {
                 const priceStr = typeof t.price === 'string' ? t.price : String(t.price || '1500');
                 const tHikeNum = extractHikeNumber(t);
                 const metrics =
@@ -329,7 +329,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
                 const cancelUserRatioPct = validApps > 0 ? ((cancelUserCount / validApps) * 100).toFixed(1) : '0.0';
 
                 return (
-                  <tr key={t.id} className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer">
+                  <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-[#FF6600]/15 transition-colors cursor-pointer`}>
                     <td className="p-4 font-bold text-[#1F1F1F]">
                       <div className="text-xs text-[#E08828] font-extrabold">Hike #{t.hike_number || t.id}</div>
                       <div className="text-sm font-black text-[#1F1F1F]">{t.name}</div>

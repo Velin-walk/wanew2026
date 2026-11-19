@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Bell,
   AlertTriangle,
@@ -28,7 +28,7 @@ import {
   deleteArchivedNotice,
   DEFAULT_NOTICE,
 } from '../../services/noticeService';
-import { recordAdminAuditLog } from '../../services/api';
+import { buildAuditChanges, recordAdminAuditLog } from '../../services/api';
 import { NoticeBoardModal } from '../NoticeBoardModal';
 
 interface NoticeBoardManagerProps {
@@ -44,6 +44,7 @@ export const NoticeBoardManager: React.FC<NoticeBoardManagerProps> = ({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const prevNoticeRef = useRef<SiteNotice>(DEFAULT_NOTICE);
 
   useEffect(() => {
     const loadNotice = async () => {
@@ -52,6 +53,7 @@ export const NoticeBoardManager: React.FC<NoticeBoardManagerProps> = ({
         const remote = await fetchSiteNotice(true);
         if (remote) {
           setNotice(remote);
+          prevNoticeRef.current = remote;
         }
       } catch (err) {
         console.warn('Failed to load notice in admin:', err);
@@ -84,6 +86,27 @@ export const NoticeBoardManager: React.FC<NoticeBoardManagerProps> = ({
       };
 
       const result = await saveSiteNotice(payload);
+      const noticeChanges = buildAuditChanges(
+        {
+          title: prevNoticeRef.current.title,
+          message: prevNoticeRef.current.message,
+          type: prevNoticeRef.current.type,
+          enabled: prevNoticeRef.current.enabled,
+          cta_text: prevNoticeRef.current.ctaText || '',
+          cta_link: prevNoticeRef.current.ctaLink || '',
+          expires_at: prevNoticeRef.current.expiresAt || '',
+        },
+        {
+          title: result.title,
+          message: result.message,
+          type: result.type,
+          enabled: result.enabled,
+          cta_text: result.ctaText || '',
+          cta_link: result.ctaLink || '',
+          expires_at: result.expiresAt || '',
+        }
+      );
+      prevNoticeRef.current = result;
       setNotice(result);
 
       // Record in Admin Audit Trail
@@ -98,6 +121,7 @@ export const NoticeBoardManager: React.FC<NoticeBoardManagerProps> = ({
           cta_link: result.ctaLink || '',
           expires_at: result.expiresAt || '',
           force_pop: forcePop,
+          ...(Object.keys(noticeChanges).length > 0 ? { changes: noticeChanges } : {}),
         },
         adminEmail: currentUserEmail,
       });
@@ -124,6 +148,7 @@ export const NoticeBoardManager: React.FC<NoticeBoardManagerProps> = ({
     setSaving(true);
     try {
       const result = await saveSiteNotice(updated);
+      prevNoticeRef.current = result;
       setNotice(result);
 
       // Record in Admin Audit Trail
@@ -134,6 +159,7 @@ export const NoticeBoardManager: React.FC<NoticeBoardManagerProps> = ({
           title: result.title,
           enabled: nextState,
           type: result.type,
+          changes: { enabled: { before: !nextState, after: nextState } },
         },
         adminEmail: currentUserEmail,
       });

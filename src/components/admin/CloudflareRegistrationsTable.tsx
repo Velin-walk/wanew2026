@@ -537,19 +537,20 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
                 paginatedRecords.map((record, index) => {
                   const globalRowNumber = (currentPage - 1) * pageSize + index + 1;
                   const recordId = String(record.id || index);
+                  const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]';
 
                   return (
                     <tr
                       key={recordId}
-                      className="hover:bg-[#FF6600]/15 transition-colors cursor-pointer group"
+                      className={`${rowBg} hover:bg-[#FF6600]/15 transition-colors cursor-pointer group`}
                     >
                       {/* Row Index */}
-                      <td className="py-2 px-3 text-[10px] text-stone-400 font-mono text-center border-r border-[#EFEAE4] bg-[#FBF9F6] sticky left-0 z-10 group-hover:bg-[#F3EFE9]">
+                      <td className={`py-2 px-3 text-[10px] text-stone-400 font-mono text-center border-r border-[#EFEAE4] ${rowBg} sticky left-0 z-10 group-hover:bg-[#F3EFE9]`}>
                         {globalRowNumber}
                       </td>
 
                       {/* View / Inspect Row Trigger */}
-                      <td className="py-2 px-2 text-center border-r border-[#EFEAE4] bg-[#FBF9F6] sticky left-12 z-10 group-hover:bg-[#F3EFE9]">
+                      <td className={`py-2 px-2 text-center border-r border-[#EFEAE4] ${rowBg} sticky left-12 z-10 group-hover:bg-[#F3EFE9]`}>
                         <button
                           type="button"
                           onClick={() => setSelectedRecord(record)}

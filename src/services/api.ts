@@ -1233,6 +1233,22 @@ export function saveLocalAuditLog(log: any) {
   } catch (_) {}
 }
 
+export function buildAuditChanges(
+  beforeObj: Record<string, any> = {},
+  afterObj: Record<string, any> = {}
+): Record<string, { before: any; after: any }> {
+  const changes: Record<string, { before: any; after: any }> = {};
+  const keys = new Set([...Object.keys(beforeObj || {}), ...Object.keys(afterObj || {})]);
+  for (const key of keys) {
+    const beforeVal = beforeObj[key] === undefined ? null : beforeObj[key];
+    const afterVal = afterObj[key] === undefined ? null : afterObj[key];
+    if (JSON.stringify(beforeVal) !== JSON.stringify(afterVal)) {
+      changes[key] = { before: beforeVal, after: afterVal };
+    }
+  }
+  return changes;
+}
+
 export async function recordAdminAuditLog(payload: AdminAuditLogPayload): Promise<boolean> {
   const { actionType, description, metadata = {}, adminEmail } = payload;
   let devMeta: any = {};

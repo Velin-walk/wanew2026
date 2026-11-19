@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Eye,
   EyeOff,
@@ -28,7 +28,7 @@ import {
   fetchSiteVisibilitySettings,
   saveSiteVisibilitySettings,
 } from '../../services/siteVisibilityService';
-import { apiFetch, recordAdminAuditLog } from '../../services/api';
+import { apiFetch, buildAuditChanges, recordAdminAuditLog } from '../../services/api';
 
 interface SiteVisibilityManagerProps {
   currentUserEmail?: string;
@@ -43,6 +43,7 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [clearingPhotos, setClearingPhotos] = useState(false);
+  const prevSettingsRef = useRef<SiteVisibilitySettings>(DEFAULT_VISIBILITY_SETTINGS);
 
   const handleClearOldPhotos = async () => {
     if (!window.confirm('Are you sure you want to remove all old Cloudinary photo links from the database? Non-Cloudinary R2 photos will be preserved.')) {
@@ -81,6 +82,7 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
       try {
         const data = await fetchSiteVisibilitySettings();
         setSettings(data);
+        prevSettingsRef.current = data;
       } catch (err) {
         console.warn('Failed to load visibility settings:', err);
       } finally {
@@ -104,6 +106,8 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
 
     try {
       const saved = await saveSiteVisibilitySettings(settings, currentUserEmail);
+      const visibilityChanges = buildAuditChanges(prevSettingsRef.current, saved);
+      prevSettingsRef.current = saved;
       setSettings(saved);
 
       // Summarize hidden vs visible sections for audit log description & metadata
@@ -129,6 +133,7 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
           hidden_count: hiddenSections.length,
           maintenance_title: saved.maintenanceNoticeTitle,
           maintenance_message: saved.maintenanceNoticeMessage,
+          ...(Object.keys(visibilityChanges).length > 0 ? { changes: visibilityChanges } : {}),
         },
         adminEmail: currentUserEmail,
       });

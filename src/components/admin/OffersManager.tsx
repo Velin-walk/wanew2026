@@ -22,7 +22,7 @@ import {
   Edit,
   EyeOff,
 } from 'lucide-react';
-import { apiFetch, uploadImageToR2WithProgress, recordAdminAuditLog } from '../../services/api';
+import { apiFetch, buildAuditChanges, uploadImageToR2WithProgress, recordAdminAuditLog } from '../../services/api';
 import {
   useSiteVisibility,
   saveSiteVisibilitySettings,
@@ -401,6 +401,10 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
           color: cardColor,
           expires_at: expiresAtIso || 'None',
           url: finalImageUrl,
+          changes: {
+            title: { before: null, after: offerTitle },
+            color: { before: null, after: cardColor },
+          },
         },
         adminEmail: currentUserEmail,
       });
@@ -527,6 +531,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
           offer_id: item.id,
           title: offerTitle,
           action: 'archive',
+          changes: { status: { before: 'Active', after: 'Archived' } },
         },
         adminEmail: currentUserEmail,
       });
@@ -582,6 +587,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
           offer_id: restoredRecord.id,
           title: offerTitle,
           action: 'restore',
+          changes: { status: { before: 'Archived', after: 'Active' } },
         },
         adminEmail: currentUserEmail,
       });
@@ -647,6 +653,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
         description: `${nextState ? 'Turned ON' : 'Turned OFF'} Homepage Flashcards public display`,
         metadata: {
           public_visible: nextState,
+          changes: { public_visible: { before: !nextState, after: nextState } },
         },
         adminEmail: currentUserEmail,
       });
@@ -796,6 +803,22 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
       // Broadcast update to live homepage banner
       window.dispatchEvent(new CustomEvent('wnw-offers-updated'));
 
+      const prevOfferMeta = parseOfferMetadata(editingOffer);
+      const offerEditChanges = buildAuditChanges(
+        {
+          title: cleanOfferCaption(editingOffer.caption),
+          color: prevOfferMeta.color || editingOffer.color || 'orange',
+          expires_at: prevOfferMeta.expiresAt || editingOffer.expiresAt || 'None',
+          url: editingOffer.url || '',
+        },
+        {
+          title: editOfferText,
+          color: editCardColor,
+          expires_at: expiresAtIso || 'None',
+          url: finalImageUrl,
+        }
+      );
+
       recordAdminAuditLog({
         actionType: 'UPDATE_OFFERS',
         description: `Edited offer flashcard: "${editOfferText.slice(0, 45)}"`,
@@ -805,6 +828,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
           color: editCardColor,
           expires_at: expiresAtIso || 'None',
           url: finalImageUrl,
+          ...(Object.keys(offerEditChanges).length > 0 ? { changes: offerEditChanges } : {}),
         },
         adminEmail: currentUserEmail,
       });
@@ -902,6 +926,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({
           offer_id: id,
           title: offerTitle,
           action: 'delete',
+          changes: { title: { before: offerTitle, after: null } },
         },
         adminEmail: currentUserEmail,
       });

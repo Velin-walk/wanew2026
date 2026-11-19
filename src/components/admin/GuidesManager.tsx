@@ -24,7 +24,7 @@ import {
   saveGuidesSettings,
   deduplicateGuides,
 } from '../../services/guidesService';
-import { recordAdminAuditLog } from '../../services/api';
+import { buildAuditChanges, recordAdminAuditLog } from '../../services/api';
 
 interface GuidesManagerProps {
   currentUserEmail?: string;
@@ -59,6 +59,12 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
     setSettings(updated);
     saveGuidesSettings(updated);
 
+    const rowBefore: Record<string, any> = {};
+    for (const k of Object.keys(draft)) {
+      rowBefore[k] = targetGuide ? (targetGuide as any)[k] : null;
+    }
+    const rowChanges = buildAuditChanges(rowBefore, draft);
+
     // Record in Admin Audit Trail
     recordAdminAuditLog({
       actionType: 'UPDATE_GUIDES',
@@ -67,6 +73,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
         guide_id: id,
         name: targetGuide?.name,
         changed_fields: draft,
+        ...(Object.keys(rowChanges).length > 0 ? { changes: rowChanges } : {}),
       },
       adminEmail: currentUserEmail,
     });
@@ -157,6 +164,9 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
       description: `${nextState ? 'Enabled' : 'Disabled'} public Trek Leaders tab`,
       metadata: {
         show_trek_leaders_tab: nextState,
+        changes: {
+          show_trek_leaders_tab: { before: !nextState, after: nextState },
+        },
       },
       adminEmail: currentUserEmail,
     });
@@ -191,6 +201,9 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
         guide_id: id,
         name,
         is_visible: nextVis,
+        changes: {
+          is_visible: { before: !nextVis, after: nextVis },
+        },
       },
       adminEmail: currentUserEmail,
     });
@@ -209,6 +222,28 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
     setSettings(updated);
     saveGuidesSettings(updated);
 
+    const prevGuide = settings.custom_guides.find((g) => g.id === editingGuide.id);
+    const guideChanges = prevGuide
+      ? buildAuditChanges(
+          {
+            name: prevGuide.name,
+            role: prevGuide.role,
+            gender: prevGuide.gender,
+            specialty: prevGuide.specialty || '',
+            badge: prevGuide.badge || '',
+            is_visible: prevGuide.is_visible,
+          },
+          {
+            name: editingGuide.name,
+            role: editingGuide.role,
+            gender: editingGuide.gender,
+            specialty: editingGuide.specialty || '',
+            badge: editingGuide.badge || '',
+            is_visible: editingGuide.is_visible,
+          }
+        )
+      : {};
+
     // Record in Admin Audit Trail
     recordAdminAuditLog({
       actionType: 'UPDATE_GUIDES',
@@ -221,6 +256,7 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
         specialty: editingGuide.specialty,
         badge: editingGuide.badge,
         is_visible: editingGuide.is_visible,
+        ...(Object.keys(guideChanges).length > 0 ? { changes: guideChanges } : {}),
       },
       adminEmail: currentUserEmail,
     });
@@ -276,6 +312,10 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
         gender: created.gender,
         experience_km: created.experienceKm,
         specialty: created.specialty,
+        changes: {
+          name: { before: null, after: created.name },
+          role: { before: null, after: created.role },
+        },
       },
       adminEmail: currentUserEmail,
     });
@@ -309,6 +349,9 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
         guide_id: id,
         name,
         action: 'delete',
+        changes: {
+          name: { before: name, after: null },
+        },
       },
       adminEmail: currentUserEmail,
     });

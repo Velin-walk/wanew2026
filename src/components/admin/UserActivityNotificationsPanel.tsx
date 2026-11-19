@@ -416,7 +416,7 @@ export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsP
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFEAE4]">
-              {filteredActivities.slice(0, visibleCount).map((item) => {
+              {filteredActivities.slice(0, visibleCount).map((item, idx) => {
                 const style = getTypeStyle(item.type);
                 const itemTime = new Date(item.createdAt || 0).getTime() || 0;
                 const isNew = !lastSeenAt || itemTime > lastSeenAt;
@@ -446,8 +446,8 @@ export const UserActivityNotificationsPanel: React.FC<UserActivityNotificationsP
                 return (
                   <tr
                     key={item.id}
-                    className={`transition-colors hover:bg-[#FAF8F5] ${
-                      isNew ? 'bg-[#FFFDF9]' : 'bg-white'
+                    className={`transition-colors hover:bg-[#EFEAE4]/60 ${
+                      isNew ? 'bg-[#FFFDF9]' : idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'
                     }`}
                   >
                     {/* Activity Type */}

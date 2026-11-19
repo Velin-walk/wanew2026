@@ -408,7 +408,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0EBE5]">
-                {displayedTreks.map((t) => {
+                {displayedTreks.map((t, idx) => {
                   const draft = rowDrafts[t.id] || {};
 
                   const curCapacity = draft.capacity !== undefined ? draft.capacity : t.capacity || 25;
@@ -436,7 +436,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
                     <tr
                       key={t.id}
                       className={`hover:bg-[#FF6600]/15 transition-colors cursor-pointer ${
-                        isCancelled ? 'bg-rose-50/20' : ''
+                        isCancelled ? 'bg-rose-50/20' : idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'
                       }`}
                     >
                       {/* Hike Event & Date */}

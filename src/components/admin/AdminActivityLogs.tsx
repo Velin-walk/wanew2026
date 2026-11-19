@@ -510,7 +510,7 @@ export function AdminActivityLogs() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F5F2EE]">
-                {logs.map((log) => {
+                {logs.map((log, idx) => {
                   const isExpanded = expandedLogId === log.id;
                   let meta: Record<string, any> | null = null;
                   try {
@@ -526,7 +526,7 @@ export function AdminActivityLogs() {
                       <tr
                         onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
                         className={`transition-colors cursor-pointer ${
-                          isExpanded ? 'bg-[#FAF8F5]' : 'hover:bg-[#FF6600]/15'
+                          isExpanded ? 'bg-[#FAF8F5]' : `${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-[#FF6600]/15`
                         }`}
                       >
                         {/* 1. Action Type & ID */}
@@ -714,22 +714,70 @@ export function AdminActivityLogs() {
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-stone-100">
-                                        {Object.entries(meta).map(([key, val]) => (
-                                          <tr key={key} className="hover:bg-stone-50/50">
-                                            <td className="py-1.5 px-3 font-mono text-[11px] font-bold text-stone-700">
-                                              {key}
-                                            </td>
-                                            <td className="py-1.5 px-3 font-mono text-[11px] text-stone-900">
-                                              {val === null || val === undefined || val === '' ? (
-                                                <span className="text-stone-400 italic font-sans text-[10px]">None / Empty</span>
-                                              ) : typeof val === 'object' ? (
-                                                <pre className="inline font-mono">{JSON.stringify(val)}</pre>
-                                              ) : (
-                                                String(val)
-                                              )}
-                                            </td>
-                                          </tr>
-                                        ))}
+                                        {(() => {
+                                          const changesMap =
+                                            meta.changes && typeof meta.changes === 'object' && !Array.isArray(meta.changes)
+                                              ? (meta.changes as Record<string, { before?: any; after?: any }>)
+                                              : null;
+
+                                          const formatSingleVal = (v: any) => {
+                                            if (v === null || v === undefined || v === '') {
+                                              return <span className="text-stone-400 italic font-sans text-[10px]">None / Empty</span>;
+                                            }
+                                            if (typeof v === 'object') {
+                                              return <pre className="inline font-mono whitespace-pre-wrap break-all">{JSON.stringify(v)}</pre>;
+                                            }
+                                            return String(v);
+                                          };
+
+                                          const isDiffObj = (v: any): v is { before?: any; after?: any } =>
+                                            Boolean(v && typeof v === 'object' && !Array.isArray(v) && ('before' in v || 'after' in v));
+
+                                          const rows: Array<{ key: string; val: any; diff?: { before?: any; after?: any } }> = [];
+                                          const seenKeys = new Set<string>();
+
+                                          for (const [key, val] of Object.entries(meta)) {
+                                            if (key === 'changes' && changesMap) continue;
+                                            seenKeys.add(key);
+                                            const diff = changesMap && isDiffObj(changesMap[key])
+                                              ? changesMap[key]
+                                              : isDiffObj(val)
+                                                ? val
+                                                : undefined;
+                                            rows.push({ key, val, diff });
+                                          }
+
+                                          if (changesMap) {
+                                            for (const [cKey, cVal] of Object.entries(changesMap)) {
+                                              if (!seenKeys.has(cKey) && isDiffObj(cVal)) {
+                                                rows.push({ key: cKey, val: cVal, diff: cVal });
+                                              }
+                                            }
+                                          }
+
+                                          return rows.map(({ key, val, diff }, idx) => (
+                                            <tr key={key} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-stone-100/60`}>
+                                              <td className="py-1.5 px-3 font-mono text-[11px] font-bold text-stone-700 align-top">
+                                                {key}
+                                              </td>
+                                              <td className="py-1.5 px-3 font-mono text-[11px] text-stone-900 align-top">
+                                                {diff ? (
+                                                  <div className="flex flex-wrap items-center gap-1.5">
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 line-through decoration-rose-400">
+                                                      {formatSingleVal(diff.before)}
+                                                    </span>
+                                                    <span className="text-stone-400 font-sans font-bold">→</span>
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
+                                                      {formatSingleVal(diff.after)}
+                                                    </span>
+                                                  </div>
+                                                ) : (
+                                                  formatSingleVal(val)
+                                                )}
+                                              </td>
+                                            </tr>
+                                          ));
+                                        })()}
                                       </tbody>
                                     </table>
                                   </div>

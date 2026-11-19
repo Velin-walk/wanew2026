@@ -1305,10 +1305,6 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                 </tr>
               ) : (
                 paginatedRegistrations.map((r, index) => {
-                  const isFemale =
-                    (r.gender || '').toLowerCase().includes('female') ||
-                    (r.gender || '').toLowerCase() === 'f';
-
                   const pastHikes = r._isSyntheticGuide
                     ? null
                     : getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name);
@@ -1323,9 +1319,9 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                           ? 'bg-amber-50/40 hover:bg-amber-100/40'
                           : r._guideRole === 'assistant'
                           ? 'bg-sky-50/35 hover:bg-sky-100/35'
-                          : isFemale
-                          ? 'bg-pink-50/50 hover:bg-pink-100/50'
-                          : 'hover:bg-stone-50/80'
+                          : index % 2 === 0
+                          ? 'bg-white hover:bg-stone-50/80'
+                          : 'bg-[#FAF8F5] hover:bg-stone-100/70'
                       }`}
                     >
                       {/* S.N. */}
