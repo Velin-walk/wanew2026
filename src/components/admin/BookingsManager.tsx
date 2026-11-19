@@ -570,12 +570,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         });
       }
 
-      const regPaxSum = matchedActiveRegs.reduce((sum, r) => {
-        const rawPax = rowDrafts[r.id]?.paxCount !== undefined ? rowDrafts[r.id]?.paxCount : (r.paxCount ?? (r as any).pax ?? 1);
-        const p = Number(rawPax);
-        return sum + (isNaN(p) || p <= 0 ? 1 : p);
-      }, 0);
-      const tRegsCount = regPaxSum + extraGuidesCount;
+      const tRegsCount = matchedActiveRegs.length + extraGuidesCount;
 
       return {
         trek: t,
@@ -698,14 +693,8 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
       });
     }
 
-    const regPaxSum = matchedActiveRegs.reduce((sum, r) => {
-      const rawPax = rowDrafts[r.id]?.paxCount !== undefined ? rowDrafts[r.id]?.paxCount : (r.paxCount ?? (r as any).pax ?? 1);
-      const p = Number(rawPax);
-      return sum + (isNaN(p) || p <= 0 ? 1 : p);
-    }, 0);
-
     const participantsCount =
-      matchedActiveRegs.length > 0 ? regPaxSum + extraGuidesCount : Number(execTrek.participants || 0);
+      matchedActiveRegs.length > 0 ? matchedActiveRegs.length + extraGuidesCount : Number(execTrek.participants || 0);
 
     const capacity = Number(execTrek.capacity || 25);
     const savedStatus = execTrek.data?.execution_status;
@@ -1263,14 +1252,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
   );
 
   // Calculate totals
-  const totalPax =
-    filteredRegistrations.reduce((acc, r) => {
-      const rawPax = rowDrafts[r.id]?.paxCount !== undefined ? rowDrafts[r.id]?.paxCount : (r.paxCount ?? (r as any).pax ?? 1);
-      const p = Number(rawPax);
-      const paxVal = isNaN(p) || p <= 0 ? 1 : p;
-      const team = 1 + (Array.isArray(r.team_members) ? r.team_members.length : 0);
-      return acc + Math.max(paxVal, team);
-    }, 0) + syntheticGuideCount;
+  const totalPax = filteredRegistrations.length + syntheticGuideCount;
 
   const confirmedCount =
     filteredRegistrations.filter((r) => (r.status || 'Confirmed') === 'Confirmed').length +
@@ -2933,15 +2915,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
         <div className="p-4 border-t border-[#F0EBE5] bg-[#FAF8F5] flex items-center justify-between flex-wrap gap-3">
           <div className="text-[11px] font-semibold text-[#8B8680]">
             Showing <strong className="text-[#1F1F1F]">{displayRegistrations.length}</strong> participant row(s) •{' '}
-            <strong className="text-[#1F1F1F]">
-              {displayRegistrations.reduce((acc, r) => {
-                if (r._isSyntheticGuide) return acc + 1;
-                const rawPax = rowDrafts[r.id]?.paxCount !== undefined ? rowDrafts[r.id]?.paxCount : (r.paxCount ?? (r as any).pax ?? 1);
-                const p = Number(rawPax);
-                return acc + (isNaN(p) || p <= 0 ? 1 : p);
-              }, 0)}
-            </strong>{' '}
-            total pax
+            <strong className="text-[#1F1F1F]">{displayRegistrations.length}</strong> total hikers
           </div>
           <div className="flex items-center gap-2">
             {pendingDraftCount > 0 && (

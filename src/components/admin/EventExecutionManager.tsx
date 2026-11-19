@@ -170,11 +170,7 @@ export const EventExecutionManager: React.FC<EventExecutionManagerProps> = ({
           extraGuidesCount++;
         }
       });
-      const regPaxSum = matchedActiveRegs.reduce((sum, r) => {
-        const p = Number(r.paxCount ?? (r as any).pax ?? 1);
-        return sum + (isNaN(p) || p <= 0 ? 1 : p);
-      }, 0);
-      const total = regPaxSum + extraGuidesCount;
+      const total = matchedActiveRegs.length + extraGuidesCount;
       cache.set(t.id, total);
       return total;
     };

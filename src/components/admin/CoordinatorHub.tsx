@@ -68,11 +68,6 @@ type SortCol =
   | 'medical'
   | 'totalHikes';
 
-const getRegPax = (r: AdminRegistration): number => {
-  const p = Number(r.paxCount ?? (r as any).pax ?? 1);
-  return isNaN(p) || p <= 0 ? 1 : p;
-};
-
 const getRegPaxDisplay = (r: AdminRegistration): string | number => {
   const raw = r.paxCount !== undefined && r.paxCount !== '' ? r.paxCount : (r as any).pax;
   if (raw === undefined || raw === null || String(raw).trim() === '') return 1;
@@ -339,10 +334,9 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           }
         });
       }
-      const matchedPaxSum = matchedRegs.reduce((sum, r) => sum + getRegPax(r), 0);
       return {
         trek: t,
-        regsCount: matchedRegs.length > 0 ? matchedPaxSum + extraGuidesCount : fallbackParticipants,
+        regsCount: matchedRegs.length > 0 ? matchedRegs.length + extraGuidesCount : fallbackParticipants,
       };
     });
   }, [upcomingTreks, registrations]);
@@ -567,21 +561,21 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return 1;
   };
 
-  // Metrics Calculations (Confirmed pax from roster + assigned guides)
-  const hikerCount = trekRegistrations.reduce((acc, r) => acc + getRegPax(r), 0);
+  // Metrics Calculations (Confirmed individual hikers from roster + assigned guides)
+  const hikerCount = trekRegistrations.length;
   const totalRegistered =
     trekRegistrations.length > 0
-      ? trekRosterWithGuides.reduce((acc, r) => acc + getRegPax(r), 0)
-      : Number(currentTrek?.participants) || trekRosterWithGuides.reduce((acc, r) => acc + getRegPax(r), 0) || 0;
+      ? trekRosterWithGuides.length
+      : Number(currentTrek?.participants) || trekRosterWithGuides.length || 0;
   const paidCount = trekRegistrations
     .filter((r) => r.payment_status?.toLowerCase() === 'fully paid' || (r.paid_amount || 0) > 0)
-    .reduce((acc, r) => acc + getRegPax(r), 0);
+    .length;
   const totalRevenue = trekRegistrations.reduce((acc, r) => acc + (r.paid_amount || 0), 0);
   const dueCount = trekRegistrations.filter((r) => r.due_amount > 0).length;
 
   const returningCount = trekRegistrations
     .filter((r) => getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name) > 1)
-    .reduce((acc, r) => acc + getRegPax(r), 0);
+    .length;
   const firstTimersCount = hikerCount - returningCount;
 
   // Demographic Calculations
@@ -590,11 +584,10 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     let male = 0;
     let other = 0;
     trekRegistrations.forEach((r) => {
-      const pax = getRegPax(r);
       const g = (r.gender || '').toLowerCase().trim();
-      if (g.includes('female') || g === 'f') female += pax;
-      else if (g.includes('male') || g === 'm') male += pax;
-      else other += pax;
+      if (g.includes('female') || g === 'f') female += 1;
+      else if (g.includes('male') || g === 'm') male += 1;
+      else other += 1;
     });
     const total = female + male + other || 1;
     return {
@@ -610,10 +603,9 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     const groups: Record<string, number> = {};
     let total = 0;
     trekRegistrations.forEach((r) => {
-      const pax = getRegPax(r);
       const a = (r.age_group || 'Unspecified').trim();
-      groups[a] = (groups[a] || 0) + pax;
-      total += pax;
+      groups[a] = (groups[a] || 0) + 1;
+      total += 1;
     });
     const denom = total || 1;
     return Object.entries(groups).map(([group, count]) => ({
@@ -1498,7 +1490,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                   Total
                 </td>
                 <td className="py-2.5 px-2.5 text-center text-stone-800 font-black text-xs">
-                  {filteredAndSortedRegistrations.reduce((acc, r) => acc + getRegPax(r), 0)}
+                  {filteredAndSortedRegistrations.length}
                 </td>
                 <td className="py-2.5 px-2.5 text-emerald-700 font-black text-xs">
                   Rs {filteredAndSortedRegistrations.reduce((acc, r) => acc + (r.paid_amount || 0), 0).toLocaleString()}

@@ -132,8 +132,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
       };
     }
 
-    const companionCount = Array.isArray(reg.team_members) ? reg.team_members.length : 0;
-    const pax = Math.max(Number(reg.paxCount) || 1, 1 + companionCount);
+    const pax = 1;
 
     trekSalesMap[key].totalAppsPax += pax;
 
@@ -312,7 +311,7 @@ export const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({
                 };
 
                 const cap = t.capacity || 25;
-                const pax = t.participants || metrics.confirmedPax;
+                const pax = metrics.totalRegs > 0 ? metrics.confirmedPax : (t.recent_participants?.length || t.participants || 0);
                 const pct = Math.min(Math.round((pax / cap) * 100), 100);
                 const isCancelled = !!t.data?.is_cancelled || !!t.is_cancelled;
 
