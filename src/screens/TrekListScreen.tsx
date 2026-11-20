@@ -8,6 +8,7 @@ import { OffersBanner } from '../components/OffersBanner';
 import { BookingProcessBanner } from '../components/BookingProcessBanner';
 import { HomeGalleryReviewsSection } from '../components/HomeGalleryReviewsSection';
 import { CommunityMilestoneCard } from '../components/CommunityMilestoneCard';
+import { TrekCalendar } from '../components/TrekCalendar';
 
 import { SubPageType } from '../components/InfoPagesModal';
 import { trackFilterChange, trackSearchQuery } from '../services/behaviorTracker';
@@ -78,6 +79,21 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
     if (onViewItinerary) {
       onViewItinerary(trek);
+    }
+
+    setTimeout(() => {
+      setHighlightedTrekId((curr) => (curr === targetId ? null : curr));
+    }, 2500);
+  };
+
+  const handleCalendarTrekSelect = (trek: Trek) => {
+    const idx = upcomingTreks.findIndex((t) => (t.id && trek.id ? t.id === trek.id : t === trek));
+    const targetId = String(trek.id || (idx >= 0 ? idx : ''));
+    setHighlightedTrekId(targetId);
+
+    const cardElement = document.getElementById(`trek-card-${targetId}`);
+    if (cardElement) {
+      cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     setTimeout(() => {
@@ -590,59 +606,16 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Ultra-Compact Structured Upcoming Treks Summary */}
+          {/* Simple Calendar above upcoming treks */}
           {upcomingTreks.length > 0 && (
-            <div className="bg-white rounded-xl border border-[#F0EBE5] p-2 sm:p-2.5 shadow-xs space-y-1.5">
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-1.5">
-                  <Mountain className="w-3.5 h-3.5 text-[#7ABA42] shrink-0" />
-                  <span className="text-[11px] sm:text-xs font-bold text-[#1F1F1F] uppercase tracking-wide">
-                    Upcoming Treks Summary
-                  </span>
-                  <span className="text-[10px] font-bold text-[#7ABA42] bg-[#7ABA42]/10 border border-[#7ABA42]/20 px-1.5 py-0.2 rounded-full leading-none">
-                    {upcomingTreks.length}
-                  </span>
-                </div>
-                <span className="text-[10px] text-[#8B8680] font-medium hidden sm:inline">
-                  Click to view card
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1 sm:gap-1.5 max-h-56 overflow-y-auto pr-0.5">
-                {upcomingTreks.map((trek, idx) => {
-                  const trekDateStr = trek.date || trek.data?.hikeDate || trek.hike_date || '';
-                  const compactDate = formatCompactDate(trekDateStr);
-                  const trekName = trek.name || trek.title || 'Untitled Trek';
-                  const rawHikeNum = String(trek.hike_number || trek.data?.hikeNumber || '').replace(/[^\d]/g, '');
-                  const hikeBadge = rawHikeNum ? `#${rawHikeNum}` : `#${idx + 1}`;
-                  const daysBadge = getDaysBadge(trek);
-
-                  return (
-                    <div
-                      key={trek.id ? `summary-${trek.id}-${idx}` : `summary-${idx}`}
-                      onClick={() => handleSummaryClick(trek, idx)}
-                      title={`${hikeBadge}: ${trekName} (${trekDateStr || compactDate}) - Click to view card`}
-                      className="flex items-center gap-1.5 px-2 py-1 bg-[#FAF8F5] hover:bg-white border border-[#EBE6DF] hover:border-[#7ABA42] rounded-lg transition-all cursor-pointer group shadow-3xs select-none"
-                    >
-                      <span className="shrink-0 text-[10px] font-mono font-bold text-[#5A5551] bg-[#EDE9E3] px-1.5 py-0.5 rounded text-center min-w-[34px] sm:min-w-[36px]">
-                        {hikeBadge}
-                      </span>
-                      <span className="shrink-0 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/70 px-1.5 py-0.5 rounded text-center whitespace-nowrap min-w-[54px] sm:min-w-[58px]">
-                        {compactDate}
-                      </span>
-                      <span className="text-[11px] sm:text-xs font-semibold text-[#1F1F1F] truncate flex-1 group-hover:text-[#7ABA42] transition-colors">
-                        {trekName}
-                      </span>
-                      {daysBadge && (
-                        <span className="shrink-0 text-[9px] font-medium text-[#7D7771] bg-white border border-[#E5E1DB] px-1 py-0.5 rounded whitespace-nowrap hidden xs:inline-block">
-                          {daysBadge}
-                        </span>
-                      )}
-                      <ChevronRight className="w-3 h-3 text-[#B8B1A8] group-hover:text-[#7ABA42] group-hover:translate-x-0.5 transition-all shrink-0" />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <TrekCalendar
+              treks={upcomingTreks}
+              onSelectTrek={handleCalendarTrekSelect}
+              onViewItinerary={onViewItinerary}
+              parseTrekDate={parseTrekDate}
+              parseTrekEndDate={parseTrekEndDate}
+              getEventDurationDays={getEventDurationDays}
+            />
           )}
 
           {/* 1. UPCOMING HIKES */}

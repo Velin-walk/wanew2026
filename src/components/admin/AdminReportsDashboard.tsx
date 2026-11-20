@@ -52,6 +52,8 @@ import {
   matchesPhone,
   normalizePhoneLast10,
 } from '../../utils/matchingUtils';
+import { ParticipantsPerHikeChart } from './ParticipantsPerHikeChart';
+import { RevenuePerHikeChart } from './RevenuePerHikeChart';
 
 interface AdminReportsDashboardProps {
   treks: Trek[];
@@ -1566,6 +1568,12 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
         </div>
       </div>
 
+      {/* FULL WIDTH CARD: PARTICIPANTS PER HIKE CHART (SOURCE: PER EVENT REPORT) */}
+      <ParticipantsPerHikeChart events={metrics.perEventList} />
+
+      {/* FULL WIDTH CARD: REVENUE PER HIKE CHART (SOURCE: PER EVENT REPORT) */}
+      <RevenuePerHikeChart events={metrics.perEventList} />
+
       {/* FULL WIDTH CARD: PER EVENT REPORT TABLE (ONLY ONE ROW PER EVENT) */}
       <div className="bg-white rounded-2xl border border-[#E5E1DB] p-5 shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1896,7 +1904,7 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                 </tr>
               ) : (
                 sortedEventList.map((item, idx) => (
-                  <tr key={item.hikeNumber} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-[#EFEAE4]/60 transition-colors`}>
+                  <tr key={`${item.hikeNumber}-${item.title}-${item.date}-${idx}`} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F5]'} hover:bg-[#EFEAE4]/60 transition-colors`}>
                     {/* 1. Hike Number */}
                     <td className="py-3 px-3">
                       <span className="px-2 py-0.5 rounded-md bg-stone-900 text-white font-mono text-[10px] font-extrabold inline-block">

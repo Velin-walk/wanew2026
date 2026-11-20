@@ -21,6 +21,11 @@ import {
   AlertTriangle,
   Lock,
   Tag,
+  MessageSquare,
+  Shield,
+  CheckCircle,
+  Link2,
+  Zap,
 } from 'lucide-react';
 import {
   SiteVisibilitySettings,
@@ -115,7 +120,8 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
       const sectionKeys: (keyof SiteVisibilitySettings)[] = [
         'gallery', 'vouchers', 'mapminers', 'leaderboard', 'saved',
         'heroBanner', 'upcomingHikes', 'pastEvents', 'prayerFlags',
-        'paymentInfo', 'reviews', 'blogs', 'trekTips', 'safetyPolicy', 'privateTrek'
+        'paymentInfo', 'reviews', 'blogs', 'trekTips', 'safetyPolicy', 'privateTrek',
+        'adminChat', 'adminCoordinatorHub', 'adminExecution', 'adminLinks', 'adminActivity'
       ];
       sectionKeys.forEach((key) => {
         if (saved[key] === false) hiddenSections.push(String(key));
@@ -183,9 +189,10 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
     title: string,
     description: string,
     icon: React.ReactNode,
-    warningTag?: string
+    warningTag?: string,
+    isAdminTab?: boolean
   ) => {
-    const isVisible = Boolean(settings[key]);
+    const isVisible = settings[key] !== false;
     return (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white hover:bg-[#FAF8F5]/60 rounded-2xl border border-[#EFEAE4] transition-all gap-3">
         <div className="flex items-start gap-3">
@@ -211,7 +218,7 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
                     : 'bg-rose-100 text-rose-800'
                 }`}
               >
-                {isVisible ? 'Public' : 'Hidden (Maintenance)'}
+                {isVisible ? (isAdminTab ? 'Visible in Admin' : 'Public') : (isAdminTab ? 'Hidden from Admin' : 'Hidden (Maintenance)')}
               </span>
             </div>
             <p className="text-xs text-[#8B8680] leading-relaxed max-w-lg">{description}</p>
@@ -228,7 +235,7 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
           }`}
         >
           {isVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-          <span>{isVisible ? 'Visible to Public' : 'Hidden from Public'}</span>
+          <span>{isVisible ? (isAdminTab ? 'Visible in Admin' : 'Visible to Public') : (isAdminTab ? 'Hidden in Admin' : 'Hidden from Public')}</span>
         </button>
       </div>
     );
@@ -448,12 +455,64 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
           </div>
         </div>
 
+        {/* Group 5: Admin Panel Tabs Visibility */}
+        <div className="space-y-3 pt-4 border-t border-[#EFEAE4]">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-xs font-black text-[#6A645D] uppercase tracking-wider">
+              5. Admin Panel Tabs Visibility
+            </h3>
+          </div>
+          <div className="space-y-2">
+            {renderToggleRow(
+              'adminChat',
+              'Team Chat Tab',
+              'Internal live coordinator and team chat tab in the Admin Panel. Turn off to hide Team Chat from the admin navigation bar.',
+              <MessageSquare className="w-5 h-5" />,
+              undefined,
+              true
+            )}
+            {renderToggleRow(
+              'adminCoordinatorHub',
+              'Coordinator Hub Tab',
+              'Trek assignments and coordinator checklist hub in the Admin Panel.',
+              <Shield className="w-5 h-5" />,
+              undefined,
+              true
+            )}
+            {renderToggleRow(
+              'adminExecution',
+              'Event Execution Tab',
+              'On-site event check-in, capacity, and live hike execution dashboard.',
+              <CheckCircle className="w-5 h-5" />,
+              undefined,
+              true
+            )}
+            {renderToggleRow(
+              'adminLinks',
+              'Admin Quick Links Tab',
+              'Public and internal quick link generator library in the Admin Panel.',
+              <Link2 className="w-5 h-5" />,
+              undefined,
+              true
+            )}
+            {renderToggleRow(
+              'adminActivity',
+              'User Activity Tab',
+              'Live user registrations, uploads, and activity notifications panel in the Admin Panel.',
+              <Zap className="w-5 h-5" />,
+              undefined,
+              true
+            )}
+          </div>
+        </div>
+
         {/* Maintenance Copy Customizer */}
         <div className="pt-4 border-t border-[#EFEAE4] space-y-4">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-[#E08828]" />
             <h3 className="text-xs font-black text-[#6A645D] uppercase tracking-wider">
-              5. Maintenance Notice Customizer
+              6. Maintenance Notice Customizer
             </h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#FAF8F5] p-5 rounded-2xl border border-[#EFEAE4]">

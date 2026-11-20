@@ -25,6 +25,13 @@ export interface SiteVisibilitySettings {
   safetyPolicy: boolean;   // Safety & Refund Policy
   privateTrek: boolean;    // Request Private Trek
 
+  // Admin Panel Tabs Visibility
+  adminChat?: boolean;           // Team Chat Tab
+  adminCoordinatorHub?: boolean; // Coordinator Hub Tab
+  adminExecution?: boolean;      // Event Execution Tab
+  adminLinks?: boolean;          // Links Tab
+  adminActivity?: boolean;       // User Activity Notifications Tab
+
   // Maintenance custom copy
   maintenanceNoticeTitle: string;
   maintenanceNoticeMessage: string;
@@ -51,6 +58,12 @@ export const DEFAULT_VISIBILITY_SETTINGS: SiteVisibilitySettings = {
   trekTips: true,
   safetyPolicy: true,
   privateTrek: true,
+
+  adminChat: true,
+  adminCoordinatorHub: true,
+  adminExecution: true,
+  adminLinks: true,
+  adminActivity: true,
 
   maintenanceNoticeTitle: 'Under Scheduled Maintenance',
   maintenanceNoticeMessage: 'This section is currently undergoing maintenance and upgrades. Please check back soon!',

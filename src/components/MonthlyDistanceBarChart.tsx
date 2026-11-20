@@ -359,10 +359,10 @@ export const MonthlyDistanceBarChart: React.FC<MonthlyDistanceBarChartProps> = (
                           </span>
                         </div>
 
-                        {/* Solid Angular (rounded-none) Orange Distance Bar */}
+                        {/* Orange Distance Bar with slight curve on top edges */}
                         <div
                           style={{ height: `${barHeightPx}px` }}
-                          className={`w-full max-w-[34px] sm:max-w-[42px] rounded-none transition-all duration-200 relative ${
+                          className={`w-full max-w-[34px] sm:max-w-[42px] rounded-t-sm transition-all duration-200 relative ${
                             isSelected
                               ? 'bg-orange-600 ring-2 ring-orange-500 shadow-[0_4px_12px_rgba(249,115,22,0.45)]'
                               : 'bg-orange-500 hover:bg-orange-600'

@@ -64,6 +64,7 @@ import { PWAInstallStats } from './PWAInstallStats';
 import { HomepageHeroManager } from './HomepageHeroManager';
 import { NoticeBoardManager } from './NoticeBoardManager';
 import { SiteVisibilityManager } from './SiteVisibilityManager';
+import { useSiteVisibility } from '../../services/siteVisibilityService';
 import { UserActivityNotificationsPanel } from './UserActivityNotificationsPanel';
 import { AdminAccessManager } from './AdminAccessManager';
 import { OffersManager } from './OffersManager';
@@ -93,9 +94,10 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps) {
   const isFullAdmin = isFullAdminEmail(currentUserEmail);
   const isCoordinatorOnly = !isFullAdmin && isCoordinatorEmail(currentUserEmail);
+  const { visibility } = useSiteVisibility();
 
   const [activeTab, setActiveTab] = useState<
-    'bookings' | 'execution' | 'coordinator' | 'chat' | 'library' | 'editor' | 'maps' | 'notifications' | 'system' | 'links' | 'reports'
+    'bookings' | 'execution' | 'coordinator' | 'chat' | 'library' | 'editor' | 'notifications' | 'system' | 'links'
   >(() => {
     if (isCoordinatorOnly) {
       try {
@@ -108,6 +110,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
     }
     try {
       const saved = sessionStorage.getItem('wnw_admin_active_tab');
+      if (saved === 'maps' || saved === 'reports') {
+        return 'system';
+      }
       if (
         saved === 'bookings' ||
         saved === 'execution' ||
@@ -115,11 +120,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'chat' ||
         saved === 'library' ||
         saved === 'editor' ||
-        saved === 'maps' ||
         saved === 'notifications' ||
         saved === 'system' ||
-        saved === 'links' ||
-        saved === 'reports'
+        saved === 'links'
       ) {
         return saved as any;
       }
@@ -132,8 +135,40 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
       setActiveTab('coordinator');
     }
   }, [isCoordinatorOnly, activeTab]);
-  const [systemSubTab, setSystemSubTab] = useState<'roles' | 'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales' | 'offers' | 'guides'>(() => {
+
+  useEffect(() => {
+    if (isCoordinatorOnly) {
+      if (activeTab === 'chat' && visibility.adminChat === false) {
+        if (visibility.adminCoordinatorHub !== false) setActiveTab('coordinator');
+        else if (visibility.adminLinks !== false) setActiveTab('links');
+      } else if (activeTab === 'coordinator' && visibility.adminCoordinatorHub === false) {
+        if (visibility.adminLinks !== false) setActiveTab('links');
+        else if (visibility.adminChat !== false) setActiveTab('chat');
+      } else if (activeTab === 'links' && visibility.adminLinks === false) {
+        if (visibility.adminCoordinatorHub !== false) setActiveTab('coordinator');
+        else if (visibility.adminChat !== false) setActiveTab('chat');
+      }
+    } else {
+      if (
+        (activeTab === 'chat' && visibility.adminChat === false) ||
+        (activeTab === 'coordinator' && visibility.adminCoordinatorHub === false) ||
+        (activeTab === 'execution' && visibility.adminExecution === false) ||
+        (activeTab === 'links' && visibility.adminLinks === false) ||
+        (activeTab === 'notifications' && visibility.adminActivity === false)
+      ) {
+        setActiveTab('bookings');
+      }
+    }
+  }, [visibility, activeTab, isCoordinatorOnly]);
+  const [systemSubTab, setSystemSubTab] = useState<'roles' | 'applications' | 'audit' | 'leaderboard' | 'pwa' | 'hero' | 'notice' | 'visibility' | 'sales' | 'offers' | 'guides' | 'maps' | 'reports'>(() => {
     try {
+      const savedActive = sessionStorage.getItem('wnw_admin_active_tab');
+      if (savedActive === 'maps') {
+        return 'maps';
+      }
+      if (savedActive === 'reports') {
+        return 'reports';
+      }
       const saved = sessionStorage.getItem('wnw_admin_system_subtab');
       if (
         saved === 'roles' ||
@@ -146,7 +181,9 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
         saved === 'visibility' ||
         saved === 'sales' ||
         saved === 'offers' ||
-        saved === 'guides'
+        saved === 'guides' ||
+        saved === 'maps' ||
+        saved === 'reports'
       ) {
         return saved;
       }
@@ -414,10 +451,10 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
   }, [currentUserEmail]);
 
   useEffect(() => {
-    if (activeTab === 'maps') {
+    if (activeTab === 'system' && systemSubTab === 'maps') {
       fetchPendingTrails();
     }
-  }, [activeTab]);
+  }, [activeTab, systemSubTab]);
 
   const fetchRegistrations = async () => {
     setLoadingRegistrations(true);
@@ -2081,60 +2118,66 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           {isCoordinatorOnly ? (
             <>
               {/* Coordinator Hub Tab */}
-              <button
-                id="admin-tab-coordinator"
-                type="button"
-                onClick={() => setActiveTab('coordinator')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'coordinator'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <Shield className="w-4 h-4" />
-                <span>Coordinator Hub</span>
-              </button>
+              {visibility.adminCoordinatorHub !== false && (
+                <button
+                  id="admin-tab-coordinator"
+                  type="button"
+                  onClick={() => setActiveTab('coordinator')}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'coordinator'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                  }`}
+                >
+                  <Shield className="w-4 h-4" />
+                  <span>Coordinator Hub</span>
+                </button>
+              )}
 
               {/* Team Chat Tab */}
-              <button
-                id="admin-tab-chat"
-                type="button"
-                onClick={() => setActiveTab('chat')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'chat'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Team Chat</span>
-                {unreadChatCount > 0 && (
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
-                      activeTab === 'chat'
-                        ? 'bg-white text-indigo-700'
-                        : 'bg-rose-500 text-white animate-pulse shadow-xs'
-                    }`}
-                  >
-                    {unreadChatCount}
-                  </span>
-                )}
-              </button>
+              {visibility.adminChat !== false && (
+                <button
+                  id="admin-tab-chat"
+                  type="button"
+                  onClick={() => setActiveTab('chat')}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'chat'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                  }`}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Team Chat</span>
+                  {unreadChatCount > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                        activeTab === 'chat'
+                          ? 'bg-white text-indigo-700'
+                          : 'bg-rose-500 text-white animate-pulse shadow-xs'
+                      }`}
+                    >
+                      {unreadChatCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {/* Links Tab */}
-              <button
-                id="admin-tab-links"
-                type="button"
-                onClick={() => setActiveTab('links')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'links'
-                    ? 'bg-sky-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <Link2 className="w-4 h-4" />
-                <span>Links</span>
-              </button>
+              {visibility.adminLinks !== false && (
+                <button
+                  id="admin-tab-links"
+                  type="button"
+                  onClick={() => setActiveTab('links')}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'links'
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                  }`}
+                >
+                  <Link2 className="w-4 h-4" />
+                  <span>Links</span>
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -2161,75 +2204,83 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               </button>
 
               {/* Event Execution Tab */}
-              <button
-                id="admin-tab-execution"
-                type="button"
-                onClick={() => setActiveTab('execution')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'execution'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <CheckCircle className="w-4 h-4" />
-                <span>Event Execution</span>
-              </button>
+              {visibility.adminExecution !== false && (
+                <button
+                  id="admin-tab-execution"
+                  type="button"
+                  onClick={() => setActiveTab('execution')}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'execution'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                  }`}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Event Execution</span>
+                </button>
+              )}
 
               {/* Coordinator Hub Tab */}
-              <button
-                id="admin-tab-coordinator"
-                type="button"
-                onClick={() => setActiveTab('coordinator')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'coordinator'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <Shield className="w-4 h-4" />
-                <span>Coordinator Hub</span>
-              </button>
+              {visibility.adminCoordinatorHub !== false && (
+                <button
+                  id="admin-tab-coordinator"
+                  type="button"
+                  onClick={() => setActiveTab('coordinator')}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'coordinator'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                  }`}
+                >
+                  <Shield className="w-4 h-4" />
+                  <span>Coordinator Hub</span>
+                </button>
+              )}
 
               {/* Team Chat Tab */}
-              <button
-                id="admin-tab-chat"
-                type="button"
-                onClick={() => setActiveTab('chat')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'chat'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Team Chat</span>
-                {unreadChatCount > 0 && (
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
-                      activeTab === 'chat'
-                        ? 'bg-white text-indigo-700'
-                        : 'bg-rose-500 text-white animate-pulse shadow-xs'
-                    }`}
-                  >
-                    {unreadChatCount}
-                  </span>
-                )}
-              </button>
+              {visibility.adminChat !== false && (
+                <button
+                  id="admin-tab-chat"
+                  type="button"
+                  onClick={() => setActiveTab('chat')}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'chat'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                  }`}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Team Chat</span>
+                  {unreadChatCount > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                        activeTab === 'chat'
+                          ? 'bg-white text-indigo-700'
+                          : 'bg-rose-500 text-white animate-pulse shadow-xs'
+                      }`}
+                    >
+                      {unreadChatCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {/* Links Tab */}
-              <button
-                id="admin-tab-links"
-                type="button"
-                onClick={() => setActiveTab('links')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'links'
-                    ? 'bg-sky-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <Link2 className="w-4 h-4" />
-                <span>Links</span>
-              </button>
+              {visibility.adminLinks !== false && (
+                <button
+                  id="admin-tab-links"
+                  type="button"
+                  onClick={() => setActiveTab('links')}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'links'
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                  }`}
+                >
+                  <Link2 className="w-4 h-4" />
+                  <span>Links</span>
+                </button>
+              )}
 
               {/* Library Tab */}
               <button
@@ -2246,64 +2297,33 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 <span>Itinerary Library</span>
               </button>
 
-              {/* Map Moderation Tab */}
-              <button
-                id="admin-tab-maps"
-                type="button"
-                onClick={() => setActiveTab('maps')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'maps'
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <MapPin className="w-4 h-4" />
-                <span>Map Moderation</span>
-                {trails.filter(t => t.status === 'pending').length > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                )}
-              </button>
-
               {/* User Activity Notifications Tab */}
-              <button
-                id="admin-tab-notifications"
-                type="button"
-                onClick={() => setActiveTab('notifications')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'notifications'
-                    ? 'bg-[#E08828] text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <Zap className={`w-4 h-4 ${activeTab === 'notifications' ? 'text-white' : 'text-[#E08828]'}`} />
-                <span>User Activity</span>
-                {unreadActivityCount > 0 && (
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
-                      activeTab === 'notifications'
-                        ? 'bg-white text-[#E08828]'
-                        : 'bg-[#E08828] text-white'
-                    }`}
-                  >
-                    {unreadActivityCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Reports & Analytics Tab */}
-              <button
-                id="admin-tab-reports"
-                type="button"
-                onClick={() => setActiveTab('reports')}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'reports'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <BarChart3 className="w-4 h-4" />
-                <span>Reports</span>
-              </button>
+              {visibility.adminActivity !== false && (
+                <button
+                  id="admin-tab-notifications"
+                  type="button"
+                  onClick={() => setActiveTab('notifications')}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'notifications'
+                      ? 'bg-[#E08828] text-white shadow-xs'
+                      : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
+                  }`}
+                >
+                  <Zap className={`w-4 h-4 ${activeTab === 'notifications' ? 'text-white' : 'text-[#E08828]'}`} />
+                  <span>User Activity</span>
+                  {unreadActivityCount > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                        activeTab === 'notifications'
+                          ? 'bg-white text-[#E08828]'
+                          : 'bg-[#E08828] text-white'
+                      }`}
+                    >
+                      {unreadActivityCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {/* System Zone Tab */}
               <button
@@ -2426,182 +2446,17 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
           />
         )}
 
-        {activeTab === 'maps' && (
-          <div className="w-full bg-white rounded-2xl shadow-sm border border-[#E5E1DB] p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-[#F0EBE5] pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center shrink-0">
-                  <MapPin className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-[#1F1F1F] tracking-tight">Community Map Moderation</h2>
-                  <p className="text-xs text-[#8B8680] mt-0.5">
-                    {mapModerationSubTab === 'trails'
-                      ? 'Review and approve trails submitted via MapMiners'
-                      : 'Hide or show public visibility of user comments and reviews'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setMapModerationSubTab('trails')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    mapModerationSubTab === 'trails'
-                      ? 'bg-purple-600 text-white shadow-xs'
-                      : 'text-[#5A5551] hover:bg-white'
-                  }`}
-                >
-                  <MapPin className="w-3.5 h-3.5" />
-                  <span>Trail Submissions ({trails.length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMapModerationSubTab('comments')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    mapModerationSubTab === 'comments'
-                      ? 'bg-purple-600 text-white shadow-xs'
-                      : 'text-[#5A5551] hover:bg-white'
-                  }`}
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Comments &amp; Reviews</span>
-                  {hiddenContentCount > 0 && (
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                        mapModerationSubTab === 'comments'
-                          ? 'bg-white text-purple-700'
-                          : 'bg-rose-100 text-rose-700'
-                      }`}
-                    >
-                      {hiddenContentCount} hidden
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {mapModerationSubTab === 'comments' ? (
-              <CommentsReviewsModerationPanel
-                currentUserEmail={currentUserEmail}
-                trails={trails}
-              />
-            ) : (
-              <>
-                {moderationMessage && (
-                  <div className={`mb-6 p-4 rounded-xl flex items-center justify-between gap-3 text-sm font-bold border animate-in fade-in slide-in-from-top-2 ${
-                    moderationMessage.type === 'success'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : moderationMessage.type === 'error'
-                      ? 'bg-rose-50 text-rose-700 border-rose-200'
-                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      {moderationMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                      <span>{moderationMessage.text}</span>
-                    </div>
-                    <button
-                      onClick={() => setModerationMessage(null)}
-                      className="text-xs hover:underline"
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                )}
-
-                {loadingTrails ? (
-                  <div className="flex justify-center items-center h-32">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
-                  </div>
-                ) : trails.length === 0 ? (
-              <div className="text-center py-12 text-[#8B8680]">
-                <p>No trails pending review.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {trails.map((trail) => (
-                  <div
-                    key={trail.id || trail.fileName}
-                    className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center p-4 bg-[#F9F7F5] rounded-xl border border-[#E5E1DB]"
-                  >
-                    <div>
-                      <h3 className="font-bold text-sm text-[#1F1F1F]">{trail.name}</h3>
-                      <p className="text-[11px] text-[#5A5551] mt-0.5">Submitted by {trail.contributorEmail || 'Community'}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        {trail.status === 'approved' ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                            Approved & Live
-                          </span>
-                        ) : trail.status === 'rejected' ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-800">
-                            Rejected
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-yellow-100 text-yellow-800">
-                            Pending Review
-                          </span>
-                        )}
-                        <span className="text-[10px] text-[#8B8680]">{trail.fileName}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <button
-                        onClick={() => handlePreviewTrail(trail)}
-                        className="px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        Preview
-                      </button>
-                      {trail.status !== 'approved' && (
-                        <button
-                          onClick={() => handleApproveTrail(trail.id)}
-                          className="px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          Approve
-                        </button>
-                      )}
-                      {trail.status !== 'rejected' && (
-                        <button
-                          onClick={() => handleRejectTrail(trail.id)}
-                          className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          Reject
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDeleteTrailRecord(trail.id)}
-                        className="px-3 py-1.5 bg-neutral-100 text-neutral-700 border border-neutral-200 hover:bg-rose-600 hover:text-white hover:border-rose-600 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                        title="Permanently delete trail from R2 and D1"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
         {activeTab === 'notifications' && (
           <UserActivityNotificationsPanel
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            onUnreadCountChange={(count) => setUnreadActivityCount(count)}
-          />
-        )}
-
-        {activeTab === 'reports' && (
-          <AdminReportsDashboard
-            treks={enrichedTreks}
-            registrations={registrations}
-            feedback={feedback}
-            leaderboard={leaderboardData}
-            onSelectTrekRoster={(hikeNum) => {
-              setSelectedBookingsTrekFilter(hikeNum);
-              setActiveTab('bookings');
+            onNavigateTab={(tab) => {
+              if (tab === 'maps') {
+                setActiveTab('system');
+                setSystemSubTab('maps');
+              } else {
+                setActiveTab(tab);
+              }
             }}
+            onUnreadCountChange={(count) => setUnreadActivityCount(count)}
           />
         )}
 
@@ -2694,39 +2549,79 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
             {/* System Zone Sub-navigation */}
             <div className="flex items-center gap-2 border-b border-[#E5E1DB] pb-4 flex-wrap">
+              {/* Group 1: Coordinator Controls, Guide Intros & Toggles */}
               <button
-                id="admin-system-subtab-roles"
-                onClick={() => setSystemSubTab('roles')}
+                id="admin-system-tab-coordinators-guides"
+                type="button"
+                onClick={() => {
+                  if (systemSubTab !== 'roles' && systemSubTab !== 'guides') {
+                    setSystemSubTab('roles');
+                  }
+                }}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'roles'
+                  systemSubTab === 'roles' || systemSubTab === 'guides'
                     ? 'bg-red-600 text-white shadow-xs'
                     : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
-                <Shield className="w-3.5 h-3.5" />
-                <span>Admin & Coordinator Roles</span>
+                <Users className="w-3.5 h-3.5" />
+                <span>Coordinators &amp; Guides</span>
               </button>
+
+              {/* Group 2: Homepage Hero, Notice Board, Page Visibility, Offers Flashcards */}
               <button
-                onClick={() => setSystemSubTab('applications')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'applications'
-                    ? 'bg-red-600 text-white'
+                id="admin-system-tab-homepage-content"
+                type="button"
+                onClick={() => {
+                  if (
+                    systemSubTab !== 'hero' &&
+                    systemSubTab !== 'notice' &&
+                    systemSubTab !== 'visibility' &&
+                    systemSubTab !== 'offers'
+                  ) {
+                    setSystemSubTab('hero');
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'hero' ||
+                  systemSubTab === 'notice' ||
+                  systemSubTab === 'visibility' ||
+                  systemSubTab === 'offers'
+                    ? 'bg-red-600 text-white shadow-xs'
                     : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
-                Applications
+                <Layers className="w-3.5 h-3.5" />
+                <span>Homepage &amp; Content</span>
               </button>
+
+              {/* Group 3: Data & System Audit (Applications, Audit Trail, PWA Installations) */}
               <button
-                onClick={() => setSystemSubTab('audit')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'audit'
-                    ? 'bg-red-600 text-white'
+                id="admin-system-tab-data-audit"
+                type="button"
+                onClick={() => {
+                  if (
+                    systemSubTab !== 'applications' &&
+                    systemSubTab !== 'audit' &&
+                    systemSubTab !== 'pwa'
+                  ) {
+                    setSystemSubTab('applications');
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  systemSubTab === 'applications' ||
+                  systemSubTab === 'audit' ||
+                  systemSubTab === 'pwa'
+                    ? 'bg-red-600 text-white shadow-xs'
                     : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
-                Audit Trail
+                <Database className="w-3.5 h-3.5" />
+                <span>Data &amp; System Audit</span>
               </button>
+
               <button
+                id="admin-system-subtab-leaderboard"
                 onClick={() => setSystemSubTab('leaderboard')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   systemSubTab === 'leaderboard'
@@ -2735,50 +2630,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 }`}
               >
                 Leaderboard Manager
-              </button>
-              <button
-                onClick={() => setSystemSubTab('pwa')}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'pwa'
-                    ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>PWA Installations</span>
-              </button>
-              <button
-                onClick={() => setSystemSubTab('hero')}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'hero'
-                    ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <span>Homepage Hero</span>
-              </button>
-              <button
-                onClick={() => setSystemSubTab('notice')}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'notice'
-                    ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <Bell className="w-3.5 h-3.5" />
-                <span>Notice Board</span>
-              </button>
-              <button
-                id="admin-system-subtab-visibility"
-                onClick={() => setSystemSubTab('visibility')}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'visibility'
-                    ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
-                }`}
-              >
-                <EyeOff className="w-3.5 h-3.5" />
-                <span>Page Visibility</span>
               </button>
               <button
                 id="admin-system-subtab-sales"
@@ -2793,32 +2644,166 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 <span>Sales Analytics</span>
               </button>
               <button
-                id="admin-system-subtab-offers"
-                onClick={() => setSystemSubTab('offers')}
+                id="admin-system-subtab-maps"
+                onClick={() => setSystemSubTab('maps')}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'offers'
+                  systemSubTab === 'maps'
                     ? 'bg-red-600 text-white shadow-xs'
                     : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
-                <Tag className="w-3.5 h-3.5" />
-                <span>Offers / Flashcards</span>
+                <MapPin className="w-3.5 h-3.5" />
+                <span>Map Moderation</span>
+                {trails.filter(t => t.status === 'pending').length > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                )}
               </button>
               <button
-                id="admin-system-subtab-guides"
-                onClick={() => setSystemSubTab('guides')}
+                id="admin-system-subtab-reports"
+                onClick={() => setSystemSubTab('reports')}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  systemSubTab === 'guides'
+                  systemSubTab === 'reports'
                     ? 'bg-red-600 text-white shadow-xs'
                     : 'text-[#5A5551] hover:bg-[#FF6600]/15 hover:text-[#D85500]'
                 }`}
               >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>Guide Intros &amp; Toggles</span>
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Reports</span>
               </button>
             </div>
 
             <div className="mt-6">
+              {/* Secondary sub-navigation for Group 1: Coordinator Controls, Guide Intros & Toggles */}
+              {(systemSubTab === 'roles' || systemSubTab === 'guides') && (
+                <div className="flex items-center gap-1.5 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-fit mb-6">
+                  <button
+                    id="admin-system-subtab-roles"
+                    type="button"
+                    onClick={() => setSystemSubTab('roles')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'roles'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Coordinator Controls</span>
+                  </button>
+                  <button
+                    id="admin-system-subtab-guides"
+                    type="button"
+                    onClick={() => setSystemSubTab('guides')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'guides'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Guide Intros &amp; Toggles</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Secondary sub-navigation for Group 2: Homepage Hero, Notice Board, Page Visibility, Offers Flashcards */}
+              {(systemSubTab === 'hero' || systemSubTab === 'notice' || systemSubTab === 'visibility' || systemSubTab === 'offers') && (
+                <div className="flex items-center gap-1.5 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-fit mb-6 flex-wrap">
+                  <button
+                    id="admin-system-subtab-hero"
+                    type="button"
+                    onClick={() => setSystemSubTab('hero')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'hero'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <span>Homepage Hero</span>
+                  </button>
+                  <button
+                    id="admin-system-subtab-notice"
+                    type="button"
+                    onClick={() => setSystemSubTab('notice')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'notice'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <Bell className="w-3.5 h-3.5" />
+                    <span>Notice Board</span>
+                  </button>
+                  <button
+                    id="admin-system-subtab-visibility"
+                    type="button"
+                    onClick={() => setSystemSubTab('visibility')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'visibility'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    <span>Page Visibility</span>
+                  </button>
+                  <button
+                    id="admin-system-subtab-offers"
+                    type="button"
+                    onClick={() => setSystemSubTab('offers')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'offers'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>Offers / Flashcards</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Secondary sub-navigation for Group 3: Data & System Audit (Applications, Audit Trail, PWA Installations) */}
+              {(systemSubTab === 'applications' || systemSubTab === 'audit' || systemSubTab === 'pwa') && (
+                <div className="flex items-center gap-1.5 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-fit mb-6 flex-wrap">
+                  <button
+                    id="admin-system-subtab-applications"
+                    type="button"
+                    onClick={() => setSystemSubTab('applications')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'applications'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <span>Applications</span>
+                  </button>
+                  <button
+                    id="admin-system-subtab-audit"
+                    type="button"
+                    onClick={() => setSystemSubTab('audit')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'audit'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <span>Audit Trail</span>
+                  </button>
+                  <button
+                    id="admin-system-subtab-pwa"
+                    type="button"
+                    onClick={() => setSystemSubTab('pwa')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      systemSubTab === 'pwa'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-[#5A5551] hover:bg-white'
+                    }`}
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>PWA Installations</span>
+                  </button>
+                </div>
+              )}
               {systemSubTab === 'roles' && (
                 <AdminAccessManager currentUserEmail={currentUserEmail} />
               )}
@@ -2954,6 +2939,178 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
               {systemSubTab === 'guides' && (
                 <GuidesManager currentUserEmail={currentUserEmail} treks={enrichedTreks} />
+              )}
+
+              {systemSubTab === 'reports' && (
+                <AdminReportsDashboard
+                  treks={enrichedTreks}
+                  registrations={registrations}
+                  feedback={feedback}
+                  leaderboard={leaderboardData}
+                  onSelectTrekRoster={(hikeNum) => {
+                    setSelectedBookingsTrekFilter(hikeNum);
+                    setActiveTab('bookings');
+                  }}
+                />
+              )}
+
+              {systemSubTab === 'maps' && (
+                <div className="w-full bg-white rounded-2xl shadow-sm border border-[#E5E1DB] p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-[#F0EBE5] pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center shrink-0">
+                        <MapPin className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-[#1F1F1F] tracking-tight">Community Map Moderation</h2>
+                        <p className="text-xs text-[#8B8680] mt-0.5">
+                          {mapModerationSubTab === 'trails'
+                            ? 'Review and approve trails submitted via MapMiners'
+                            : 'Hide or show public visibility of user comments and reviews'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setMapModerationSubTab('trails')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          mapModerationSubTab === 'trails'
+                            ? 'bg-purple-600 text-white shadow-xs'
+                            : 'text-[#5A5551] hover:bg-white'
+                        }`}
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>Trail Submissions ({trails.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapModerationSubTab('comments')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          mapModerationSubTab === 'comments'
+                            ? 'bg-purple-600 text-white shadow-xs'
+                            : 'text-[#5A5551] hover:bg-white'
+                        }`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Comments &amp; Reviews</span>
+                        {hiddenContentCount > 0 && (
+                          <span
+                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                              mapModerationSubTab === 'comments'
+                                ? 'bg-white text-purple-700'
+                                : 'bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {hiddenContentCount} hidden
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {mapModerationSubTab === 'comments' ? (
+                    <CommentsReviewsModerationPanel
+                      currentUserEmail={currentUserEmail}
+                      trails={trails}
+                    />
+                  ) : (
+                    <>
+                      {moderationMessage && (
+                        <div className={`mb-6 p-4 rounded-xl flex items-center justify-between gap-3 text-sm font-bold border animate-in fade-in slide-in-from-top-2 ${
+                          moderationMessage.type === 'success'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : moderationMessage.type === 'error'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          <div className="flex items-center gap-2">
+                            {moderationMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                            <span>{moderationMessage.text}</span>
+                          </div>
+                          <button
+                            onClick={() => setModerationMessage(null)}
+                            className="text-xs hover:underline"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      )}
+
+                      {loadingTrails ? (
+                        <div className="flex justify-center items-center h-32">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                        </div>
+                      ) : trails.length === 0 ? (
+                        <div className="text-center py-12 text-[#8B8680]">
+                          <p>No trails pending review.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {trails.map((trail) => (
+                            <div
+                              key={trail.id || trail.fileName}
+                              className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center p-4 bg-[#F9F7F5] rounded-xl border border-[#E5E1DB]"
+                            >
+                              <div>
+                                <h3 className="font-bold text-sm text-[#1F1F1F]">{trail.name}</h3>
+                                <p className="text-[11px] text-[#5A5551] mt-0.5">Submitted by {trail.contributorEmail || 'Community'}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {trail.status === 'approved' ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                                      Approved & Live
+                                    </span>
+                                  ) : trail.status === 'rejected' ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-800">
+                                      Rejected
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-yellow-100 text-yellow-800">
+                                      Pending Review
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] text-[#8B8680]">{trail.fileName}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <button
+                                  onClick={() => handlePreviewTrail(trail)}
+                                  className="px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  Preview
+                                </button>
+                                {trail.status !== 'approved' && (
+                                  <button
+                                    onClick={() => handleApproveTrail(trail.id)}
+                                    className="px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                  >
+                                    Approve
+                                  </button>
+                                )}
+                                {trail.status !== 'rejected' && (
+                                  <button
+                                    onClick={() => handleRejectTrail(trail.id)}
+                                    className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteTrailRecord(trail.id)}
+                                  className="px-3 py-1.5 bg-neutral-100 text-neutral-700 border border-neutral-200 hover:bg-rose-600 hover:text-white hover:border-rose-600 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                  title="Permanently delete trail from R2 and D1"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
             </div>
           </div>
