@@ -2462,91 +2462,6 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
         {activeTab === 'system' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            {/* Cloudflare D1 Database Connectivity Diagnostic Widget */}
-            <div className="bg-stone-50 border border-[#E5E1DB] rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl flex items-center justify-center ${
-                  d1Status === 'healthy' 
-                    ? 'bg-emerald-100 text-emerald-700' 
-                    : d1Status === 'error' 
-                    ? 'bg-rose-100 text-rose-700' 
-                    : 'bg-amber-100 text-amber-700 animate-pulse'
-                }`}>
-                  <Database className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-black text-stone-800 tracking-tight">Cloudflare D1 & Worker Connection</h3>
-                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase ${
-                      d1Status === 'healthy' 
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                        : d1Status === 'error' 
-                        ? 'bg-rose-50 text-rose-700 border border-rose-200' 
-                        : 'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}>
-                      <Wifi className="w-2.5 h-2.5" />
-                      <span>{d1Status === 'healthy' ? 'Connected' : d1Status === 'error' ? 'Failed' : 'Checking'}</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-stone-500 mt-0.5">
-                    {d1Status === 'healthy' && d1Stats
-                      ? `System is online. Verified active connection to Cloudflare D1 with ${d1Stats.treks} treks and ${d1Stats.bookings} bookings synchronized successfully.`
-                      : d1Status === 'error'
-                      ? `Connection error: ${d1ErrorMsg || 'API offline'}. Verify Cloudflare worker routing settings.`
-                      : 'Diagnosing connectivity with walk-nepal-walk-api.workers.dev...'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 self-stretch md:self-auto justify-between md:justify-end border-t border-[#E5E1DB] md:border-none pt-3 md:pt-0 flex-wrap sm:flex-nowrap">
-                {d1Stats && (
-                  <div className="text-right text-[11px] font-semibold text-stone-500 hidden lg:block mr-1">
-                    <span>Last verified: {d1Stats.lastChecked}</span>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={runD1Diagnostic}
-                  disabled={d1Status === 'testing'}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#D5D1CB] text-stone-700 rounded-xl text-xs font-bold shadow-2xs hover:bg-[#FAF8F5] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${d1Status === 'testing' ? 'animate-spin text-[#E08828]' : ''}`} />
-                  <span>{d1Status === 'testing' ? 'Testing...' : 'Test D1 Connection'}</span>
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={handleForceLeaderboardSync}
-                  disabled={syncingLeaderboard}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFDFB] border border-[#E08828]/40 hover:border-[#E08828]/80 text-[#9E4700] rounded-xl text-xs font-bold shadow-2xs hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  title="Purge CDN caches and rebuild the leaderboard stats instantly from active Firestore logs"
-                >
-                  <Trophy className={`w-3.5 h-3.5 text-[#E08828] ${syncingLeaderboard ? 'animate-bounce' : ''}`} />
-                  <span>{syncingLeaderboard ? 'Syncing...' : 'Force Leaderboard Sync'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Homepage & Admin Trek Data Source Engine */}
-            <div className="bg-white border border-[#E5E1DB] rounded-2xl p-4 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl flex items-center justify-center bg-[#FFF3E6] text-[#E08828]">
-                  <Layers className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-black text-stone-800 tracking-tight">Trek Data Source Engine</h3>
-                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Cloudflare D1 (Active)
-                    </div>
-                  </div>
-                  <p className="text-xs text-stone-500 mt-0.5">
-                    Homepage &amp; app load trek cards directly from Cloudflare Worker &amp; D1 edge cache. Zero Firestore read quota consumed.
-                  </p>
-                </div>
-              </div>
-            </div>
-
             {/* System Zone Sub-navigation */}
             <div className="flex items-center gap-2 border-b border-[#E5E1DB] pb-4 flex-wrap">
               {/* Group 1: Coordinator Controls, Guide Intros & Toggles */}
@@ -2653,7 +2568,7 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
                 }`}
               >
                 <MapPin className="w-3.5 h-3.5" />
-                <span>Map Moderation</span>
+                <span>Moderation</span>
                 {trails.filter(t => t.status === 'pending').length > 0 && (
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                 )}
@@ -2764,45 +2679,112 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
 
               {/* Secondary sub-navigation for Group 3: Data & System Audit (Applications, Audit Trail, PWA Installations) */}
               {(systemSubTab === 'applications' || systemSubTab === 'audit' || systemSubTab === 'pwa') && (
-                <div className="flex items-center gap-1.5 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-fit mb-6 flex-wrap">
-                  <button
-                    id="admin-system-subtab-applications"
-                    type="button"
-                    onClick={() => setSystemSubTab('applications')}
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      systemSubTab === 'applications'
-                        ? 'bg-red-600 text-white shadow-xs'
-                        : 'text-[#5A5551] hover:bg-white'
-                    }`}
-                  >
-                    <span>Applications</span>
-                  </button>
-                  <button
-                    id="admin-system-subtab-audit"
-                    type="button"
-                    onClick={() => setSystemSubTab('audit')}
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      systemSubTab === 'audit'
-                        ? 'bg-red-600 text-white shadow-xs'
-                        : 'text-[#5A5551] hover:bg-white'
-                    }`}
-                  >
-                    <span>Audit Trail</span>
-                  </button>
-                  <button
-                    id="admin-system-subtab-pwa"
-                    type="button"
-                    onClick={() => setSystemSubTab('pwa')}
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      systemSubTab === 'pwa'
-                        ? 'bg-red-600 text-white shadow-xs'
-                        : 'text-[#5A5551] hover:bg-white'
-                    }`}
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>PWA Installations</span>
-                  </button>
-                </div>
+                <>
+                  <div className="flex items-center gap-1.5 bg-[#FAF8F5] p-1 rounded-xl border border-[#E5E1DB] w-fit mb-6 flex-wrap">
+                    <button
+                      id="admin-system-subtab-applications"
+                      type="button"
+                      onClick={() => setSystemSubTab('applications')}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        systemSubTab === 'applications'
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'text-[#5A5551] hover:bg-white'
+                      }`}
+                    >
+                      <span>Applications</span>
+                    </button>
+                    <button
+                      id="admin-system-subtab-audit"
+                      type="button"
+                      onClick={() => setSystemSubTab('audit')}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        systemSubTab === 'audit'
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'text-[#5A5551] hover:bg-white'
+                      }`}
+                    >
+                      <span>Audit Trail</span>
+                    </button>
+                    <button
+                      id="admin-system-subtab-pwa"
+                      type="button"
+                      onClick={() => setSystemSubTab('pwa')}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        systemSubTab === 'pwa'
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'text-[#5A5551] hover:bg-white'
+                      }`}
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>PWA Installations</span>
+                    </button>
+                  </div>
+
+                  {/* Cloudflare D1 Database Connectivity Diagnostic Widget */}
+                  <div className="bg-stone-50 border border-[#E5E1DB] rounded-2xl p-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-xl flex items-center justify-center ${
+                        d1Status === 'healthy'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : d1Status === 'error'
+                          ? 'bg-rose-100 text-rose-700'
+                          : 'bg-amber-100 text-amber-700 animate-pulse'
+                      }`}>
+                        <Database className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-black text-stone-800 tracking-tight">Cloudflare D1 &amp; Worker Connection</h3>
+                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase ${
+                            d1Status === 'healthy'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : d1Status === 'error'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}>
+                            <Wifi className="w-2.5 h-2.5" />
+                            <span>{d1Status === 'healthy' ? 'Connected' : d1Status === 'error' ? 'Failed' : 'Checking'}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-stone-500 mt-0.5">
+                          {d1Status === 'healthy' && d1Stats
+                            ? `System is online. Verified active connection to Cloudflare D1 with ${d1Stats.treks} treks and ${d1Stats.bookings} bookings synchronized successfully.`
+                            : d1Status === 'error'
+                            ? `Connection error: ${d1ErrorMsg || 'API offline'}. Verify Cloudflare worker routing settings.`
+                            : 'Diagnosing connectivity with walk-nepal-walk-api.workers.dev...'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 self-stretch md:self-auto justify-between md:justify-end border-t border-[#E5E1DB] md:border-none pt-3 md:pt-0 flex-wrap sm:flex-nowrap">
+                      {d1Stats && (
+                        <div className="text-right text-[11px] font-semibold text-stone-500 hidden lg:block mr-1">
+                          <span>Last verified: {d1Stats.lastChecked}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={runD1Diagnostic}
+                        disabled={d1Status === 'testing'}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#D5D1CB] text-stone-700 rounded-xl text-xs font-bold shadow-2xs hover:bg-[#FAF8F5] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${d1Status === 'testing' ? 'animate-spin text-[#E08828]' : ''}`} />
+                        <span>{d1Status === 'testing' ? 'Testing...' : 'Test D1 Connection'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleForceLeaderboardSync}
+                        disabled={syncingLeaderboard}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFDFB] border border-[#E08828]/40 hover:border-[#E08828]/80 text-[#9E4700] rounded-xl text-xs font-bold shadow-2xs hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        title="Purge CDN caches and rebuild the leaderboard stats instantly from Cloudflare D1"
+                      >
+                        <Trophy className={`w-3.5 h-3.5 text-[#E08828] ${syncingLeaderboard ? 'animate-bounce' : ''}`} />
+                        <span>{syncingLeaderboard ? 'Syncing...' : 'Force Leaderboard Sync'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
               {systemSubTab === 'roles' && (
                 <AdminAccessManager currentUserEmail={currentUserEmail} />

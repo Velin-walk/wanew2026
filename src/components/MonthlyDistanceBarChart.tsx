@@ -259,7 +259,7 @@ export const MonthlyDistanceBarChart: React.FC<MonthlyDistanceBarChartProps> = (
       {/* Main Sideways Continuous Scrollable Track (Continuous Bars with Month Header Info at Beginning of Each Month) */}
       <div
         ref={scrollContainerRef}
-        className="-mx-3.5 w-[calc(100%+1.75rem)] sm:mx-0 sm:w-full overflow-x-auto pb-3 pt-10 no-scrollbar sm:scroll-smooth touch-pan-x bg-white rounded-none sm:rounded-3xl p-3.5 sm:p-5 border-y border-x-0 sm:border border-slate-200/90 shadow-[4px_4px_16px_#d1d9e6,-4px_-4px_16px_#ffffff]"
+        className="-mx-3.5 w-[calc(100%+1.75rem)] sm:mx-0 sm:w-full overflow-x-auto pb-3 pt-10 no-scrollbar sm:scroll-smooth bg-white rounded-none sm:rounded-3xl p-3.5 sm:p-5 border-y border-x-0 sm:border border-slate-200/90 shadow-[4px_4px_16px_#d1d9e6,-4px_-4px_16px_#ffffff]"
       >
         <div className="inline-flex items-stretch min-w-full">
           {displayedMonthGroups.map((group, groupIdx) => {
