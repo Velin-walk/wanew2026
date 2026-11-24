@@ -1,5 +1,15 @@
 import { db } from './lib/firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import {
+  RESTRICTED_ADMIN_EMAIL,
+  isCurrentDeviceAuthorizedForRestrictedAdmin,
+  getCachedHighEntropyModel,
+  initDeviceModelDetection,
+} from './services/deviceLockService';
+
+if (typeof window !== 'undefined') {
+  void initDeviceModelDetection();
+}
 
 const FULL_ADMINS_STORAGE_KEY = 'wnw_full_admin_emails';
 const COORDINATORS_STORAGE_KEY = 'wnw_coordinator_emails';
@@ -158,12 +168,19 @@ export const removeCoordinatorEmail = (email: string): boolean => {
 export const isFullAdminEmail = (email?: string | null): boolean => {
   if (!email) return false;
   const clean = email.toLowerCase().trim();
-  return getFullAdminEmails().includes(clean);
+  if (!getFullAdminEmails().includes(clean)) return false;
+  if (clean === RESTRICTED_ADMIN_EMAIL) {
+    return isCurrentDeviceAuthorizedForRestrictedAdmin();
+  }
+  return true;
 };
 
 export const isCoordinatorEmail = (email?: string | null): boolean => {
   if (!email) return false;
   const clean = email.toLowerCase().trim();
+  if (clean === RESTRICTED_ADMIN_EMAIL && !isCurrentDeviceAuthorizedForRestrictedAdmin()) {
+    return false;
+  }
   return getCoordinatorEmails().includes(clean);
 };
 
@@ -254,6 +271,10 @@ const detectBrowser = (ua: string): string => {
 };
 
 const extractHardwareModel = (ua: string, gpuRenderer: string): { modelName: string; tagPrefix: string } => {
+  const highEntropyModel = getCachedHighEntropyModel();
+  if (highEntropyModel && (/SM-S938/i.test(highEntropyModel) || /S25\s*Ultra/i.test(highEntropyModel))) {
+    return { modelName: 'Samsung S25 Ultra', tagPrefix: 'S25' };
+  }
   // 1. Android model from User-Agent (e.g., SM-S938B, SM-S928B, Pixel 8)
   const androidModelMatch = ua.match(/;\s*([^;]+?)\s+Build\//i) || ua.match(/Android[^;]+;\s*([^;)]+)\)/i);
   if (androidModelMatch && androidModelMatch[1]) {

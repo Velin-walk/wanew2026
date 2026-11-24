@@ -3,6 +3,7 @@ import { Send, MessageSquare, Sparkles, RotateCcw, Trash2 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 import { logUserActivity } from '../../services/userActivityNotifier';
 import { useContentModeration, isTrailCommentHidden } from '../../services/contentModerationService';
+import { isAdminEmail } from '../../adminUtils';
 
 const GLOBAL_CHAT_TRAIL_ID = 'global_trail_chat';
 
@@ -294,7 +295,7 @@ export default function MapChat({ currentUserEmail }: MapChatProps) {
           visibleMessages.map((msg) => {
             const isMe = (currentUserEmail && msg.senderEmail === currentUserEmail) || 
                          (!currentUserEmail && (msg.guestSessionId === currentSessionId || (msg.senderName === guestName && guestName.trim() !== '')));
-            const isAdminUser = currentUserEmail?.toLowerCase() === 'walknepalwalk@gmail.com';
+            const isAdminUser = isAdminEmail(currentUserEmail);
             const canDelete = !msg.id.startsWith('seed-') && (isMe || isAdminUser);
             return (
               <div

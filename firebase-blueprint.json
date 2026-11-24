@@ -9,7 +9,8 @@
         "email": { "type": "string", "maxLength": 256 },
         "displayName": { "type": "string", "maxLength": 128 },
         "photoURL": { "type": "string", "maxLength": 512 },
-        "createdAt": { "type": "string", "maxLength": 64 }
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "restrictedAdminDevices": { "type": "object", "description": "Bound device slots (Acer Nitro V16 AI and Samsung S25 Ultra) for walknepalwalk@gmail.com" }
       },
       "required": ["email"]
     },

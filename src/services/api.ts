@@ -2,6 +2,7 @@ import { Trek, PhotoComment } from "../types";
 import { auth, db } from "../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { isAdminEmail, isFullAdminEmail, getAdminDeviceMetadata } from "../adminUtils";
+import { isRestrictedAdminEmail, isCurrentDeviceAuthorizedForRestrictedAdmin } from "./deviceLockService";
 import { doesRegistrationMatchTrek } from "../utils/matchingUtils";
 
 export const CLOUDFLARE_WORKER_URL =
@@ -135,6 +136,11 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
           }
         } catch (_) {}
       }
+      if (userEmail && isRestrictedAdminEmail(userEmail) && !isCurrentDeviceAuthorizedForRestrictedAdmin()) {
+        userEmail = undefined;
+        headers.delete("X-Admin-Email");
+        headers.delete("X-Admin-Role");
+      }
       if (userEmail) {
         headers.set("X-Admin-Email", userEmail);
         if (!isMapMinersPath && isAdminEmail(userEmail)) {
@@ -161,14 +167,19 @@ export async function apiFetch(path: string, options?: ApiFetchOptions): Promise
         }
         const currentUser = auth.currentUser;
         if (currentUser) {
-          const token = await currentUser.getIdToken();
-          if (token) {
-            headers.set("Authorization", `Bearer ${token}`);
-          }
-          if (!headers.has("X-Admin-Email") && currentUser.email) {
-            headers.set("X-Admin-Email", currentUser.email);
-            if (!isMapMinersPath && isAdminEmail(currentUser.email)) {
-              headers.set("X-Admin-Role", isFullAdminEmail(currentUser.email) ? "full" : "coordinator");
+          const blockedRestricted =
+            isRestrictedAdminEmail(currentUser.email) &&
+            !isCurrentDeviceAuthorizedForRestrictedAdmin();
+          if (!blockedRestricted) {
+            const token = await currentUser.getIdToken();
+            if (token) {
+              headers.set("Authorization", `Bearer ${token}`);
+            }
+            if (!headers.has("X-Admin-Email") && currentUser.email) {
+              headers.set("X-Admin-Email", currentUser.email);
+              if (!isMapMinersPath && isAdminEmail(currentUser.email)) {
+                headers.set("X-Admin-Role", isFullAdminEmail(currentUser.email) ? "full" : "coordinator");
+              }
             }
           }
         }

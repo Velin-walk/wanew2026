@@ -34,6 +34,7 @@ import { useSiteVisibility } from './services/siteVisibilityService';
 import { MaintenanceStateCard } from './components/MaintenanceStateCard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
+import { DeviceAuthorizationModal } from './components/DeviceAuthorizationModal';
 import { ProfileModal } from './components/ProfileModal';
 import { db } from './lib/firebase';
 import { logUserActivity } from './services/userActivityNotifier';
@@ -2029,6 +2030,7 @@ function MainApp() {
 
         {/* Firebase Authentication Modal */}
         <AuthModal />
+        <DeviceAuthorizationModal />
 
         {/* Site Notice Board Pop-up Modal */}
         <NoticeBoardModal />

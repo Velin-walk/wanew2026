@@ -6,12 +6,22 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut as firebaseSignOut,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import { isAdminEmail } from '../adminUtils';
+import {
+  isRestrictedAdminEmail,
+  verifyRestrictedAdminDevice,
+  bindRestrictedAdminDevice,
+  unbindRestrictedAdminSlot,
+  verifyAndBindDevFallbackDevice,
+  clearRestrictedAdminVerificationState,
+  initDeviceModelDetection,
+  DeviceVerificationStatus,
+  DeviceVerificationResult,
+  AllowedDeviceSlot,
+} from '../services/deviceLockService';
 
 interface AuthContextType {
   user: User | null;
@@ -23,13 +33,19 @@ interface AuthContextType {
   setShowProfileImage: (show: boolean) => void;
   updateUserProfile: (data: { displayName?: string; showProfileImage?: boolean; phone?: string }) => Promise<void>;
   signInWithGoogle: () => Promise<User | null>;
-  signInWithDevAccount: (email: string, displayName?: string, phone?: string) => User;
+  signInWithDevAccount: (email: string, displayName?: string, phone?: string) => Promise<User>;
   signOutUser: () => Promise<void>;
   authModalOpen: boolean;
   authModalReason: string;
   openAuthModal: (reason?: string, onSuccess?: () => void) => void;
   closeAuthModal: () => void;
   executePendingAction: () => void;
+  deviceAuthStatus: DeviceVerificationStatus;
+  deviceAuthInfo: DeviceVerificationResult | null;
+  deviceAuthBusy: boolean;
+  authorizeCurrentDeviceSlot: () => Promise<void>;
+  unbindDeviceSlot: (slot: AllowedDeviceSlot) => Promise<void>;
+  dismissDeviceAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -63,21 +79,102 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authModalReason, setAuthModalReason] = useState('');
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
+  const [rolesRevision, setRolesRevision] = useState(0);
+  const [deviceAuthStatus, setDeviceAuthStatus] = useState<DeviceVerificationStatus>('idle');
+  const [deviceAuthInfo, setDeviceAuthInfo] = useState<DeviceVerificationResult | null>(null);
+  const [deviceAuthBusy, setDeviceAuthBusy] = useState(false);
+
   useEffect(() => {
+    const handleRolesUpdated = () => setRolesRevision((r) => r + 1);
+    window.addEventListener('wnw-admin-roles-updated', handleRolesUpdated);
+    return () => window.removeEventListener('wnw-admin-roles-updated', handleRolesUpdated);
+  }, []);
+
+  useEffect(() => {
+    void initDeviceModelDetection();
+
     getRedirectResult(auth).catch((err) => {
       console.warn('Google Sign-In redirect notice:', err?.code || err?.message || err);
     });
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    let activeCheckToken = 0;
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      const checkId = ++activeCheckToken;
+
       if (currentUser) {
-        setUser(currentUser);
         safeLocalStorage.removeItem('wnw_dev_user');
-      } else if (import.meta.env.DEV) {
+
+        if (isRestrictedAdminEmail(currentUser.email)) {
+          setDeviceAuthStatus('checking');
+          setUser(currentUser);
+
+          try {
+            const verification = await verifyRestrictedAdminDevice(
+              currentUser.uid,
+              currentUser.email || ''
+            );
+            if (checkId !== activeCheckToken) return;
+
+            setDeviceAuthInfo(verification);
+            if (verification.status === 'denied') {
+              clearRestrictedAdminVerificationState();
+              setDeviceAuthStatus('denied');
+              setUser(null);
+              setPendingAction(null);
+              try {
+                await firebaseSignOut(auth);
+              } catch {}
+            } else if (verification.status === 'needs_binding') {
+              setDeviceAuthStatus('needs_binding');
+            } else {
+              setDeviceAuthStatus('authorized');
+            }
+          } catch (err) {
+            if (checkId !== activeCheckToken) return;
+            clearRestrictedAdminVerificationState();
+            setDeviceAuthStatus('denied');
+            setUser(null);
+            try {
+              await firebaseSignOut(auth);
+            } catch {}
+          } finally {
+            if (checkId === activeCheckToken) {
+              setLoading(false);
+            }
+          }
+          return;
+        }
+
+        clearRestrictedAdminVerificationState();
+        setDeviceAuthStatus('idle');
+        setDeviceAuthInfo(null);
+        setUser(currentUser);
+        setLoading(false);
+        return;
+      }
+
+      clearRestrictedAdminVerificationState();
+
+      if (import.meta.env.DEV) {
         const savedDevUser = safeLocalStorage.getItem('wnw_dev_user');
         if (savedDevUser) {
           try {
             const parsed = JSON.parse(savedDevUser);
             if (parsed?.email) {
+              if (isRestrictedAdminEmail(parsed.email)) {
+                const check = await verifyAndBindDevFallbackDevice(parsed.email);
+                if (checkId !== activeCheckToken) return;
+                if (!check.allowed) {
+                  safeLocalStorage.removeItem('wnw_dev_user');
+                  setUser(null);
+                  setDeviceAuthStatus('denied');
+                  setLoading(false);
+                  return;
+                }
+                setDeviceAuthStatus('authorized');
+              }
+
               setUser({
                 uid: parsed.uid || 'dev-user-saved',
                 email: parsed.email,
@@ -90,7 +187,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 safeLocalStorage.setItem('wnw_user_phone', parsed.phone);
               }
             }
-          } catch (e) {
+          } catch {
             setUser(null);
           }
         } else {
@@ -99,9 +196,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setUser(null);
       }
-      setLoading(false);
+
+      if (checkId === activeCheckToken) {
+        setLoading(false);
+      }
     });
-    return () => unsubscribe();
+
+    return () => {
+      activeCheckToken++;
+      unsubscribe();
+    };
   }, []);
 
   // Load saved phone number from registration profile if not set
@@ -190,18 +294,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const isAdmin = user?.email ? isAdminEmail(user.email) : false;
+  // Depend on rolesRevision + deviceAuthStatus so isAdmin updates immediately on verification
+  const isAdmin = React.useMemo(() => {
+    void rolesRevision;
+    void deviceAuthStatus;
+    return user?.email ? isAdminEmail(user.email) : false;
+  }, [user?.email, rolesRevision, deviceAuthStatus]);
+
   const userEmail = user?.email || '';
 
   const signInWithGoogle = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
+      const signedInUser = result.user;
+
+      if (isRestrictedAdminEmail(signedInUser.email)) {
+        setDeviceAuthStatus('checking');
+        const verification = await verifyRestrictedAdminDevice(
+          signedInUser.uid,
+          signedInUser.email || ''
+        );
+        setDeviceAuthInfo(verification);
+
+        if (verification.status === 'denied') {
+          clearRestrictedAdminVerificationState();
+          setDeviceAuthStatus('denied');
+          setUser(null);
+          setPendingAction(null);
+          setAuthModalOpen(false);
+          try {
+            await firebaseSignOut(auth);
+          } catch {}
+          return null;
+        }
+
+        if (verification.status === 'needs_binding') {
+          setDeviceAuthStatus('needs_binding');
+          setAuthModalOpen(false);
+          return signedInUser;
+        }
+
+        setDeviceAuthStatus('authorized');
+      }
+
       if (pendingAction) {
         pendingAction();
         setPendingAction(null);
       }
       setAuthModalOpen(false);
-      return result.user;
+      return signedInUser;
     } catch (error: any) {
       const isInAppBrowser =
         typeof navigator !== 'undefined' &&
@@ -221,11 +362,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInWithDevAccount = (email: string, displayName?: string, phone?: string) => {
+  const signInWithDevAccount = async (email: string, displayName?: string, phone?: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (isRestrictedAdminEmail(cleanEmail)) {
+      const check = await verifyAndBindDevFallbackDevice(cleanEmail);
+      if (!check.allowed) {
+        setDeviceAuthStatus('denied');
+        throw new Error(check.reason || 'This device is not authorized for walknepalwalk@gmail.com.');
+      }
+      setDeviceAuthStatus('authorized');
+    }
+
     const mockUser = {
       uid: 'dev-user-' + Date.now(),
-      email: email,
-      displayName: displayName || email.split('@')[0],
+      email: cleanEmail,
+      displayName: displayName || cleanEmail.split('@')[0],
       photoURL: '',
       emailVerified: true,
     } as unknown as User;
@@ -255,11 +407,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOutUser = async () => {
     safeLocalStorage.removeItem('wnw_dev_user');
+    clearRestrictedAdminVerificationState();
+    setDeviceAuthStatus('idle');
+    setDeviceAuthInfo(null);
     setUser(null);
     try {
       await firebaseSignOut(auth);
     } catch (error) {
       console.error('Sign-Out error:', error);
+    }
+  };
+
+  const authorizeCurrentDeviceSlot = async () => {
+    if (!user || !isRestrictedAdminEmail(user.email)) return;
+    setDeviceAuthBusy(true);
+    try {
+      const res = await bindRestrictedAdminDevice(user.uid, user.email || '');
+      setDeviceAuthInfo(res);
+      if (res.status === 'authorized') {
+        setDeviceAuthStatus('authorized');
+        if (pendingAction) {
+          pendingAction();
+          setPendingAction(null);
+        }
+      } else {
+        clearRestrictedAdminVerificationState();
+        setDeviceAuthStatus('denied');
+        setUser(null);
+        setPendingAction(null);
+        try {
+          await firebaseSignOut(auth);
+        } catch {}
+      }
+    } finally {
+      setDeviceAuthBusy(false);
+    }
+  };
+
+  const unbindDeviceSlot = async (slot: AllowedDeviceSlot) => {
+    if (!user || !isRestrictedAdminEmail(user.email)) return;
+    setDeviceAuthBusy(true);
+    try {
+      const updatedSlots = await unbindRestrictedAdminSlot(user.uid, user.email || '', slot);
+      setDeviceAuthInfo((prev) =>
+        prev
+          ? {
+              ...prev,
+              slots: updatedSlots,
+            }
+          : prev
+      );
+      if (deviceAuthInfo?.slot === slot) {
+        setDeviceAuthStatus('needs_binding');
+      }
+    } finally {
+      setDeviceAuthBusy(false);
+    }
+  };
+
+  const dismissDeviceAuthError = () => {
+    if (deviceAuthStatus === 'denied') {
+      setDeviceAuthStatus('idle');
+      setDeviceAuthInfo(null);
     }
   };
 
@@ -304,6 +513,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         openAuthModal,
         closeAuthModal,
         executePendingAction,
+        deviceAuthStatus,
+        deviceAuthInfo,
+        deviceAuthBusy,
+        authorizeCurrentDeviceSlot,
+        unbindDeviceSlot,
+        dismissDeviceAuthError,
       }}
     >
       {children}

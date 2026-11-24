@@ -5,6 +5,7 @@ import { routeToGPX } from './kmlParser';
 import { apiFetch } from '../../services/api';
 import { logUserActivity } from '../../services/userActivityNotifier';
 import { useContentModeration, isTrailCommentHidden } from '../../services/contentModerationService';
+import { isAdminEmail } from '../../adminUtils';
 
 interface RouteDetailProps {
   route: any;
@@ -620,7 +621,7 @@ export default function RouteDetail({ route, onClose, currentUserEmail, isSaved 
                   visibleComments.map((comm) => {
                     const isMyComment = (currentUserEmail && comm.authorEmail === currentUserEmail) ||
                                         (!currentUserEmail && comm.guestSessionId === currentSessionId);
-                    const isAdmin = currentUserEmail === 'walknepalwalk@gmail.com';
+                    const isAdmin = isAdminEmail(currentUserEmail);
                     return (
                       <div key={comm.id} className="p-1.5 bg-white border border-neutral-150 rounded-lg flex items-start justify-between gap-1.5 shadow-3xs">
                         <div className="flex-1 min-w-0">

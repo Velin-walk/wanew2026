@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ShieldCheck, Compass, Sparkles, User, AlertTriangle, Copy, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { detectHardwareEligibility, RESTRICTED_ADMIN_EMAIL } from '../services/deviceLockService';
 
 export const AuthModal: React.FC = () => {
   const { authModalOpen, authModalReason, closeAuthModal, signInWithGoogle, signInWithDevAccount } = useAuth();
@@ -28,8 +29,9 @@ export const AuthModal: React.FC = () => {
 
       if (isDomainErr) {
         setIsUnauthorizedDomain(true);
-        if (!fallbackEmail && authModalReason.toLowerCase().includes('admin')) {
-          setFallbackEmail('walknepalwalk@gmail.com');
+        const hw = detectHardwareEligibility();
+        if (!fallbackEmail && authModalReason.toLowerCase().includes('admin') && hw.eligible) {
+          setFallbackEmail(RESTRICTED_ADMIN_EMAIL);
           setFallbackName('WNW Admin');
         }
         setError(`Firebase Auth: The domain "${window.location.hostname}" is not authorized in your Firebase console settings.`);
@@ -41,17 +43,25 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  const handleFallbackSignIn = (e: React.FormEvent) => {
+  const handleFallbackSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = fallbackEmail.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setError('Please enter a valid email address.');
       return;
     }
-    signInWithDevAccount(
-      cleanEmail,
-      fallbackName.trim() || cleanEmail.split('@')[0]
-    );
+    try {
+      setLoading(true);
+      setError('');
+      await signInWithDevAccount(
+        cleanEmail,
+        fallbackName.trim() || cleanEmail.split('@')[0]
+      );
+    } catch (err: any) {
+      setError(err?.message || 'Access denied for this device.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Determine modal icon and header color based on context
