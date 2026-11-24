@@ -773,42 +773,58 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
               <div className="space-y-3.5 pt-1">
                 {/* Connected Horizontal Days Timeline */}
                 <div className="flex items-center overflow-x-auto pb-1.5 pt-0.5 scrollbar-none">
-                  {dbData.itineraryDays.map((day, idx) => {
-                    const isSelected = (activeDay?.id === day.id);
-                    const dayDate = formatDayDate(dbData?.hikeDate || trek.date, idx);
-                    const label = dayDate ? `D${day.dayNumber}: ${dayDate}` : `D${day.dayNumber}`;
+                  {(() => {
+                    let dateOffset = 0;
+                    return dbData.itineraryDays.map((day, idx) => {
+                      if (idx > 0) {
+                        const prevDay = dbData.itineraryDays[idx - 1];
+                        if (day.type !== 'night' || prevDay.type === 'night') {
+                          dateOffset += 1;
+                        }
+                      }
+                      const isSelected = activeDay?.id === day.id;
+                      const isNight = day.type === 'night';
+                      const shortPrefix = isNight ? 'N' : 'D';
+                      const fullPrefix = isNight ? 'Night' : 'Day';
+                      const dayDate = formatDayDate(dbData?.hikeDate || trek.date, dateOffset);
+                      const label = dayDate ? `${shortPrefix}${day.dayNumber}: ${dayDate}` : `${shortPrefix}${day.dayNumber}`;
 
-                    return (
-                      <React.Fragment key={day.id}>
-                        <button
-                          type="button"
-                          id={`schedule-day-btn-${day.dayNumber}`}
-                          onClick={() => {
-                            if (selectedDayId === day.id) {
-                              setIsDayExpanded(!isDayExpanded);
-                            } else {
-                              setSelectedDayId(day.id);
-                              setIsDayExpanded(true);
-                            }
-                          }}
-                          className={`px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black font-mono tabular-nums tracking-tighter sm:tracking-tight transition-all cursor-pointer shrink-0 select-none shadow-2xs border ${
-                            isSelected
-                              ? 'bg-[#E08828] text-white border-[#E08828] ring-1 sm:ring-1.5 ring-[#E08828]/30'
-                              : 'bg-[#FFF8F0] text-[#E08828] border-[#E08828]/35 hover:bg-[#FFEEDD] hover:border-[#E08828]/60'
-                          }`}
-                          title={`Day ${day.dayNumber}: ${day.title}`}
-                        >
-                          <span className="hidden sm:inline">{label}</span>
-                          <span className="sm:hidden">{dayDate ? `D${day.dayNumber}:${dayDate}` : `D${day.dayNumber}`}</span>
-                        </button>
+                      return (
+                        <React.Fragment key={day.id}>
+                          <button
+                            type="button"
+                            id={`schedule-day-btn-${day.id}`}
+                            onClick={() => {
+                              if (selectedDayId === day.id) {
+                                setIsDayExpanded(!isDayExpanded);
+                              } else {
+                                setSelectedDayId(day.id);
+                                setIsDayExpanded(true);
+                              }
+                            }}
+                            className={`px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black font-mono tabular-nums tracking-tighter sm:tracking-tight transition-all cursor-pointer shrink-0 select-none shadow-2xs border ${
+                              isNight
+                                ? isSelected
+                                  ? 'bg-indigo-700 text-white border-indigo-700 ring-1 sm:ring-1.5 ring-indigo-500/30'
+                                  : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100 hover:border-indigo-400'
+                                : isSelected
+                                  ? 'bg-[#E08828] text-white border-[#E08828] ring-1 sm:ring-1.5 ring-[#E08828]/30'
+                                  : 'bg-[#FFF8F0] text-[#E08828] border-[#E08828]/35 hover:bg-[#FFEEDD] hover:border-[#E08828]/60'
+                            }`}
+                            title={`${fullPrefix} ${day.dayNumber}: ${day.title}`}
+                          >
+                            <span className="hidden sm:inline">{label}</span>
+                            <span className="sm:hidden">{dayDate ? `${shortPrefix}${day.dayNumber}:${dayDate}` : `${shortPrefix}${day.dayNumber}`}</span>
+                          </button>
 
-                        {/* Connector line between days */}
-                        {idx < dbData.itineraryDays.length - 1 && (
-                          <div className="w-1.5 sm:w-3.5 h-[1.5px] sm:h-0.5 bg-[#E08828]/40 shrink-0" />
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                          {/* Connector line between days */}
+                          {idx < dbData.itineraryDays.length - 1 && (
+                            <div className="w-1.5 sm:w-3.5 h-[1.5px] sm:h-0.5 bg-[#E08828]/40 shrink-0" />
+                          )}
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
                 </div>
 
                 {/* Selected Day Full Day Itinerary - Expanded Vertically */}
@@ -821,12 +837,12 @@ export const ItineraryModal: React.FC<ItineraryModalProps> = ({
                       className="w-full flex items-center justify-between p-3.5 sm:p-4 bg-[#FAF8F5] hover:bg-[#F2ECE5] transition-all cursor-pointer text-left select-none"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-8 h-8 rounded-lg bg-[#E08828] text-white flex items-center justify-center text-xs font-black shadow-2xs shrink-0">
-                          D{activeDay.dayNumber}
+                        <span className={`w-8 h-8 rounded-lg text-white flex items-center justify-center text-xs font-black shadow-2xs shrink-0 ${activeDay.type === 'night' ? 'bg-indigo-700' : 'bg-[#E08828]'}`}>
+                          {activeDay.type === 'night' ? 'N' : 'D'}{activeDay.dayNumber}
                         </span>
                         <div className="min-w-0">
                           <h4 className="text-xs sm:text-sm font-black text-[#1F1F1F]">
-                            Day {activeDay.dayNumber}
+                            {activeDay.type === 'night' ? 'Night' : 'Day'} {activeDay.dayNumber}
                           </h4>
                           <p className="text-[11px] text-[#6A645D] font-medium whitespace-normal">
                             {activeDay.title}

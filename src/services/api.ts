@@ -508,7 +508,8 @@ export function normalizeTrek(row: any): Trek {
     if (resolvedItineraryDays && resolvedItineraryDays.length > 0) {
       return resolvedItineraryDays
         .map((day: any) => {
-          const dayHeader = day.title ? `Day ${day.dayNumber || 1}: ${day.title}` : `Day ${day.dayNumber || 1}`;
+          const prefix = day.type === 'night' ? 'Night' : 'Day';
+          const dayHeader = day.title ? `${prefix} ${day.dayNumber || 1}: ${day.title}` : `${prefix} ${day.dayNumber || 1}`;
           const itemsStr = Array.isArray(day.items)
             ? day.items.map((it: any) => `${it.time ? it.time + ' ' : ''}${it.activity || ''}`.trim()).filter(Boolean).join(' -> ')
             : '';

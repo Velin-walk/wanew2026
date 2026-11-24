@@ -14,6 +14,7 @@ export interface AddOnItem {
 export interface ItineraryDay {
   id: string;
   dayNumber: number;
+  type?: 'day' | 'night';
   title: string;
   items: Array<{
     id: string;
@@ -634,7 +635,7 @@ export function generateWhatsAppSummary(hike: SavedHikeRecord | TrekItineraryDat
   const schedule = (data.itineraryDays || [])
     .map(
       (day) =>
-        `*Day ${day.dayNumber}: ${day.title}*\n` +
+        `*${day.type === 'night' ? 'Night' : 'Day'} ${day.dayNumber}: ${day.title}*\n` +
         (day.items || []).map((it) => `  ⏱ ${it.time} - ${it.activity}`).join('\n')
     )
     .join('\n\n');

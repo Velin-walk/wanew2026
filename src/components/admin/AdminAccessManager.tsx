@@ -353,7 +353,7 @@ export function AdminAccessManager({ currentUserEmail }: AdminAccessManagerProps
           </div>
         </div>
 
-        {isRestrictedAccount && (
+        {false && isRestrictedAccount && (
           <div className="mt-6 bg-[#FAF8F5] rounded-2xl p-5 sm:p-6 border border-[#EFEAE4] space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E5E1DB] pb-3">
               <div className="flex items-center gap-2">

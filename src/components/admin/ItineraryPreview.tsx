@@ -41,22 +41,82 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
 }) => {
   const data = normalizeItineraryData(rawData);
   const [selectedLightboxImage, setSelectedLightboxImage] = useState<string | null>(null);
-  const handleDownloadPDF = () => {
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const loadImageForPdf = (url: string): Promise<{ dataUrl: string; width: number; height: number } | null> => {
+    return new Promise((resolve) => {
+      if (!url) {
+        resolve(null);
+        return;
+      }
+      const timeout = setTimeout(() => resolve(null), 3000);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        clearTimeout(timeout);
+        try {
+          const maxW = 1200;
+          const scale = img.width > maxW ? maxW / img.width : 1;
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(null);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.85), width: w, height: h });
+        } catch {
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        clearTimeout(timeout);
+        resolve(null);
+      };
+      img.src = url;
+    });
+  };
+
+  const handleDownloadPDF = async () => {
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
     try {
       const doc = new jsPDF('p', 'mm', 'a4');
-      let y = 20;
+      const pageBottom = 276;
+      let y = 18;
 
-      const checkPageOverflow = (increment: number) => {
-        if (y + increment > 275) {
+      const checkPageOverflow = (neededHeight: number) => {
+        if (y + neededHeight > pageBottom) {
           doc.addPage();
-          y = 20;
-          // Footer
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8);
-          doc.setTextColor(140, 135, 130);
-          doc.text(`Walk Nepal Walk • Hike #${data.hikeNumber || '---'} Itinerary`, 15, 287);
-          doc.text(`Page ${doc.getNumberOfPages()}`, 190, 287);
+          y = 18;
         }
+      };
+
+      const drawWrappedText = (
+        lines: string[],
+        x: number,
+        lineHeight: number,
+        bottomGap = 0
+      ) => {
+        lines.forEach((line) => {
+          checkPageOverflow(lineHeight + 1);
+          doc.text(line, x, y);
+          y += lineHeight;
+        });
+        y += bottomGap;
+      };
+
+      const drawSectionHeading = (title: string, r = 31, g = 31, b = 31) => {
+        checkPageOverflow(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(r, g, b);
+        doc.text(title, 15, y);
+        y += 6;
       };
 
       // Header Banner
@@ -66,13 +126,17 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
       doc.setFontSize(9);
       doc.setTextColor(255, 255, 255);
       doc.text('WALK NEPAL WALK • OFFICIAL TRIP ITINERARY', 20, y + 6.5);
-      y += 18;
+      y += 16;
 
-      // Category and Hike Tag
+      // Category, Hike Tag & Date
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);
       doc.setTextColor(224, 136, 40); // Brand Orange
-      doc.text(`HIKE #${data.hikeNumber || '---'}  •  ${(data.category || 'OVERNIGHT HIKES').toUpperCase()}`, 15, y);
+      doc.text(
+        `HIKE #${data.hikeNumber || '---'}  •  ${(data.category || 'OVERNIGHT HIKES').toUpperCase()}  •  ${data.hikeDate || 'Date to be announced'}`,
+        15,
+        y
+      );
       y += 6;
 
       // Trip Title
@@ -80,197 +144,396 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
       doc.setFontSize(16);
       doc.setTextColor(31, 31, 31);
       const titleLines = doc.splitTextToSize(data.title || 'Untitled Hike Itinerary', 180);
-      doc.text(titleLines, 15, y);
-      y += (titleLines.length * 6) + 4;
+      drawWrappedText(titleLines, 15, 6.5, 3);
 
-      // Overview Metrics Box
-      checkPageOverflow(50);
-      doc.setFillColor(250, 248, 245);
-      doc.rect(15, y, 180, 36, 'F');
-      doc.setDrawColor(239, 234, 228);
-      doc.rect(15, y, 180, 36, 'D');
+      // Cover & Preview Photos (if loadable via CORS/data URL)
+      const photos = getEventPhotos(data.coverImageUrl);
+      if (photos.length > 0) {
+        const loadedPhotos = await Promise.all(photos.map((p) => loadImageForPdf(p.url)));
+        const coverLoaded = loadedPhotos[0];
+        if (coverLoaded) {
+          const maxImgW = 180;
+          const imgH = Math.min(82, (coverLoaded.height / coverLoaded.width) * maxImgW);
+          checkPageOverflow(imgH + (photos[0].caption ? 8 : 4));
+          doc.addImage(coverLoaded.dataUrl, 'JPEG', 15, y, maxImgW, imgH);
+          y += imgH + 3;
+          if (photos[0].caption) {
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8);
+            doc.setTextColor(100, 95, 90);
+            const capLines = doc.splitTextToSize(photos[0].caption, 180);
+            drawWrappedText(capLines, 15, 4, 2);
+          } else {
+            y += 2;
+          }
+        }
 
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(120, 115, 110);
-      
-      // Col 1 label
-      doc.text('Date:', 20, y + 6);
-      doc.text('Duration:', 20, y + 14);
-      doc.text('Difficulty:', 20, y + 22);
-      doc.text('Meeting Point:', 20, y + 30);
+        // Additional preview thumbnails (4 per row)
+        const extraPhotos = photos
+          .slice(1)
+          .map((p, i) => ({ photo: p, loaded: loadedPhotos[i + 1] }))
+          .filter((item) => Boolean(item.loaded));
+        if (extraPhotos.length > 0) {
+          const thumbW = 42;
+          const thumbH = 28;
+          const gap = 4;
+          for (let i = 0; i < extraPhotos.length; i += 4) {
+            const rowItems = extraPhotos.slice(i, i + 4);
+            const hasCaption = rowItems.some((it) => Boolean(it.photo.caption));
+            checkPageOverflow(thumbH + (hasCaption ? 10 : 5));
+            const rowStartY = y;
+            let maxCapH = 0;
+            rowItems.forEach((item, colIdx) => {
+              const xPos = 15 + colIdx * (thumbW + gap);
+              if (item.loaded) {
+                doc.addImage(item.loaded.dataUrl, 'JPEG', xPos, rowStartY, thumbW, thumbH);
+              }
+              if (item.photo.caption) {
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7);
+                doc.setTextColor(90, 85, 81);
+                const cLines = doc.splitTextToSize(item.photo.caption, thumbW).slice(0, 2);
+                doc.text(cLines, xPos, rowStartY + thumbH + 3.5);
+                maxCapH = Math.max(maxCapH, cLines.length * 3.5 + 2);
+              }
+            });
+            y = rowStartY + thumbH + maxCapH + 4;
+          }
+        }
+      }
 
-      // Col 2 label
-      doc.text('Meeting Time:', 110, y + 6);
-      doc.text('Ending Point:', 110, y + 14);
-      doc.text('Team Leader:', 110, y + 22);
-      doc.text('Elevation Range:', 110, y + 30);
+      // Pricing Tiers & Pricing Notes
+      if ((data.priceTiers && data.priceTiers.length > 0) || data.pricingNotes) {
+        drawSectionHeading('Available Package Pricing');
 
-      // Col 1 values
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(40, 40, 40);
-      doc.text(data.hikeDate || 'Date to be announced', 45, y + 6);
-      doc.text(data.overview.expectedDuration || '---', 45, y + 14);
-      doc.text(data.overview.difficulty || '---', 45, y + 22);
-      doc.text(data.overview.meetingPoint || '---', 45, y + 30);
+        if (data.priceTiers && data.priceTiers.length > 0) {
+          data.priceTiers.forEach((tier) => {
+            checkPageOverflow(10);
+            doc.setFillColor(250, 248, 245);
+            doc.rect(15, y, 180, 8, 'F');
+            doc.setDrawColor(239, 234, 228);
+            doc.rect(15, y, 180, 8, 'D');
 
-      // Col 2 values
-      doc.text(data.overview.meetingTime || '---', 145, y + 6);
-      doc.text(data.overview.endingPoint || '---', 145, y + 14);
-      doc.text(data.teamLeader || '---', 145, y + 22);
-      doc.text(data.overview.elevationRange || '---', 145, y + 30);
-      y += 44;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(60, 60, 60);
+            doc.text(tier.label || 'Standard Package', 20, y + 5.3);
 
-      // Pricing Tiers
-      if (data.priceTiers && data.priceTiers.length > 0) {
-        checkPageOverflow(25);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(224, 136, 40);
+            doc.text(`${data.currency} ${Number(tier.price).toLocaleString()} / person`, 135, y + 5.3);
+            y += 9.5;
+          });
+        }
+
+        if (data.pricingNotes) {
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(8.5);
+          doc.setTextColor(120, 115, 110);
+          const noteLines = doc.splitTextToSize(`Note: ${data.pricingNotes}`, 180);
+          drawWrappedText(noteLines, 15, 4.2, 2);
+        } else {
+          y += 3;
+        }
+      }
+
+      // Hike Overview & Metrics (Full 2-column dynamic box)
+      drawSectionHeading('Hike Overview & Metrics');
+      const elevationSummary = [data.overview.elevationRange, data.overview.elevationGross]
+        .filter(Boolean)
+        .join(' • ') || '---';
+      const durationSummary = [data.overview.expectedDuration, data.overview.days]
+        .filter(Boolean)
+        .join(' • ') || '---';
+      const meetingPointVal = data.overview.meetingPointLink
+        ? `${data.overview.meetingPoint || '---'} (${data.overview.meetingPointLink})`
+        : (data.overview.meetingPoint || '---');
+      const endingPointVal = data.overview.endingPointLink
+        ? `${data.overview.endingPoint || '---'} (${data.overview.endingPointLink})`
+        : (data.overview.endingPoint || '---');
+
+      const overviewRows: Array<[string, string, string, string]> = [
+        ['Date:', data.hikeDate || 'Date to be announced', 'Meeting Time:', data.overview.meetingTime || '---'],
+        ['Duration:', durationSummary, 'Difficulty:', data.overview.difficulty || '---'],
+        ['Distance:', data.overview.approxDistance || '---', 'Elevation:', elevationSummary],
+        ['Meeting Point:', meetingPointVal, 'Ending Point:', endingPointVal],
+        ['Team Leader:', data.teamLeader || '---', 'Max Capacity:', data.maxCapacity ? `${data.maxCapacity} Trekkers` : '---'],
+      ];
+
+      overviewRows.forEach(([l1, v1, l2, v2]) => {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        const v1Lines = doc.splitTextToSize(v1, 57);
+        const v2Lines = doc.splitTextToSize(v2, 57);
+        const rowLines = Math.max(v1Lines.length, v2Lines.length);
+        const rowHeight = Math.max(8, rowLines * 4.2 + 3.5);
+        checkPageOverflow(rowHeight + 1);
+
+        doc.setFillColor(250, 248, 245);
+        doc.rect(15, y, 180, rowHeight, 'F');
+        doc.setDrawColor(239, 234, 228);
+        doc.rect(15, y, 180, rowHeight, 'D');
+
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(31, 31, 31);
-        doc.text('Package Pricing Details', 15, y);
-        y += 6;
+        doc.setTextColor(120, 115, 110);
+        doc.text(l1, 18, y + 5);
+        doc.text(l2, 108, y + 5);
 
-        data.priceTiers.forEach((tier) => {
-          checkPageOverflow(10);
-          doc.setFillColor(250, 248, 245);
-          doc.rect(15, y, 180, 8, 'F');
-          
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.setTextColor(60, 60, 60);
-          doc.text(tier.label || 'Standard Package', 20, y + 5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(40, 40, 40);
+        doc.text(v1Lines, 46, y + 5);
+        doc.text(v2Lines, 134, y + 5);
 
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(224, 136, 40);
-          doc.text(`${data.currency} ${Number(tier.price).toLocaleString()} per person`, 130, y + 5);
-          y += 10;
-        });
-        y += 4;
+        y += rowHeight;
+      });
+      y += 6;
+
+      // External Resources Quick Links
+      if (data.whatsappLink || data.itineraryLink) {
+        drawSectionHeading('Quick Links & Resources');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        if (data.whatsappLink) {
+          const waLines = doc.splitTextToSize(`WhatsApp Group: ${data.whatsappLink}`, 176);
+          doc.setTextColor(18, 140, 126);
+          drawWrappedText(waLines, 15, 4.5, 1.5);
+        }
+        if (data.itineraryLink) {
+          const linkLines = doc.splitTextToSize(`Full Itinerary Link: ${data.itineraryLink}`, 176);
+          doc.setTextColor(29, 78, 216);
+          drawWrappedText(linkLines, 15, 4.5, 1.5);
+        }
+        y += 3;
       }
 
       // Cost Includes
       if (data.costIncludes && data.costIncludes.length > 0) {
-        checkPageOverflow(30);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(31, 31, 31);
-        doc.text('What is Included (Cost Includes)', 15, y);
-        y += 6;
-
+        drawSectionHeading('Cost Includes (What is Included)', 6, 95, 70);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(50, 50, 50);
         data.costIncludes.forEach((inc) => {
-          checkPageOverflow(10);
           const splitInc = doc.splitTextToSize(`• ${inc}`, 175);
-          doc.text(splitInc, 15, y);
-          y += (splitInc.length * 5) + 1;
+          drawWrappedText(splitInc, 15, 4.8, 1);
         });
         y += 4;
       }
 
       // Cost Excludes
       if (data.costExcludes && data.costExcludes.length > 0) {
-        checkPageOverflow(30);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(31, 31, 31);
-        doc.text('What is Excluded (Cost Excludes)', 15, y);
-        y += 6;
-
+        drawSectionHeading('Cost Excludes (What is Excluded)', 159, 18, 57);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(50, 50, 50);
         data.costExcludes.forEach((exc) => {
-          checkPageOverflow(10);
           const splitExc = doc.splitTextToSize(`• ${exc}`, 175);
-          doc.text(splitExc, 15, y);
-          y += (splitExc.length * 5) + 1;
+          drawWrappedText(splitExc, 15, 4.8, 1);
         });
         y += 4;
+      }
+
+      // Optional Add-Ons & Room Customizations
+      if (data.addOns && data.addOns.length > 0) {
+        drawSectionHeading('Optional Add-Ons & Room Customizations');
+        data.addOns.forEach((addon) => {
+          checkPageOverflow(9);
+          doc.setFillColor(250, 248, 245);
+          doc.rect(15, y, 180, 7.5, 'F');
+          doc.setDrawColor(239, 234, 228);
+          doc.rect(15, y, 180, 7.5, 'D');
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.8);
+          doc.setTextColor(31, 31, 31);
+          doc.text(addon.name || 'Add-on', 19, y + 5);
+
+          doc.setTextColor(224, 136, 40);
+          const addonPriceText = `${data.currency} ${Number(addon.price || 0).toLocaleString()}${addon.unit ? ` ${addon.unit}` : ''}`;
+          doc.text(addonPriceText, 130, y + 5);
+          y += 9;
+        });
+        if (data.addOnsNotice) {
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(8.2);
+          doc.setTextColor(120, 115, 110);
+          const noticeLines = doc.splitTextToSize(data.addOnsNotice, 180);
+          drawWrappedText(noticeLines, 15, 4.2, 2);
+        } else {
+          y += 3;
+        }
       }
 
       // Day-by-day Itinerary
       if (data.itineraryDays && data.itineraryDays.length > 0) {
-        checkPageOverflow(30);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(31, 31, 31);
-        doc.text('Day-by-Day Detailed Itinerary', 15, y);
-        y += 8;
+        drawSectionHeading('Itinerary Details & Schedule');
 
         data.itineraryDays.forEach((day) => {
-          checkPageOverflow(25);
+          checkPageOverflow(16);
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(10);
-          doc.setTextColor(224, 136, 40);
-          doc.text(`DAY ${day.dayNumber}: ${day.title}`, 15, y);
-          y += 5;
+          doc.setTextColor(day.type === 'night' ? 67 : 224, day.type === 'night' ? 56 : 136, day.type === 'night' ? 202 : 40);
+          const dayHeaderLines = doc.splitTextToSize(
+            `${day.type === 'night' ? 'NIGHT' : 'DAY'} ${day.dayNumber}: ${day.title || ''}`,
+            180
+          );
+          drawWrappedText(dayHeaderLines, 15, 5, 1.5);
 
           if (day.items && day.items.length > 0) {
             day.items.forEach((item) => {
-              checkPageOverflow(12);
               doc.setFont('helvetica', 'bold');
-              doc.setFontSize(9);
+              doc.setFontSize(8.8);
+              const timeLines = doc.splitTextToSize(item.time || '---', 27);
+              doc.setFont('helvetica', 'normal');
+              const activityLines = doc.splitTextToSize(item.activity || '', 142);
+              const needed = Math.max(timeLines.length, activityLines.length) * 4.6 + 1.5;
+              checkPageOverflow(needed);
+
+              doc.setFont('helvetica', 'bold');
               doc.setTextColor(122, 186, 66);
-              doc.text(item.time || '---', 20, y);
-              
+              doc.text(timeLines, 18, y);
+
               doc.setFont('helvetica', 'normal');
               doc.setTextColor(50, 50, 50);
-              const activityLines = doc.splitTextToSize(item.activity || '', 145);
-              doc.text(activityLines, 45, y);
-              y += (activityLines.length * 5) + 1;
+              doc.text(activityLines, 48, y);
+              y += needed;
             });
           }
-          y += 4;
+          y += 3.5;
         });
       }
 
-      // Booking Guidelines
-      if (data.bookingProcessSteps && data.bookingProcessSteps.length > 0) {
-        checkPageOverflow(30);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(31, 31, 31);
-        doc.text('Booking Process & Policy Notes', 15, y);
-        y += 6;
+      // Booking Process & Policy Notes
+      const hasSection8 =
+        (data.bookingProcessSteps && data.bookingProcessSteps.length > 0) ||
+        (data.bookingNotes && data.bookingNotes.length > 0) ||
+        Boolean(data.participationGuidelines) ||
+        (data.safetyRules && data.safetyRules.length > 0) ||
+        (data.helpContacts && data.helpContacts.length > 0);
 
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(50, 50, 50);
-        data.bookingProcessSteps.forEach((step, idx) => {
+      if (hasSection8) {
+        drawSectionHeading('Booking Process & Policy Notes');
+
+        if (data.bookingProcessSteps && data.bookingProcessSteps.length > 0) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(50, 50, 50);
+          data.bookingProcessSteps.forEach((step, idx) => {
+            const splitStep = doc.splitTextToSize(`${idx + 1}. ${step}`, 175);
+            drawWrappedText(splitStep, 15, 4.8, 1);
+          });
+          y += 2;
+        }
+
+        if (data.bookingNotes && data.bookingNotes.length > 0) {
+          checkPageOverflow(14);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.setTextColor(146, 64, 14);
+          doc.text('Important Booking Notes:', 15, y);
+          y += 5;
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.8);
+          doc.setTextColor(120, 53, 15);
+          data.bookingNotes.forEach((note) => {
+            const noteLines = doc.splitTextToSize(`• ${note}`, 175);
+            drawWrappedText(noteLines, 15, 4.6, 1);
+          });
+          y += 2.5;
+        }
+
+        if (data.participationGuidelines) {
+          checkPageOverflow(14);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9.5);
+          doc.setTextColor(31, 31, 31);
+          doc.text('Participation & Age Guidelines', 15, y);
+          y += 5;
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.8);
+          doc.setTextColor(70, 66, 62);
+          const guideLines = doc.splitTextToSize(data.participationGuidelines, 178);
+          drawWrappedText(guideLines, 15, 4.6, 3);
+        }
+
+        if (data.safetyRules && data.safetyRules.length > 0) {
+          checkPageOverflow(14);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9.5);
+          doc.setTextColor(31, 31, 31);
+          doc.text('Participation, Safety & Trail Ethics', 15, y);
+          y += 5;
+
+          data.safetyRules.forEach((rule) => {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8.8);
+            const titleLinesRule = doc.splitTextToSize(`• ${rule.title}`, 176);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            const descLinesRule = doc.splitTextToSize(rule.description || '', 172);
+            checkPageOverflow(titleLinesRule.length * 4.5 + descLinesRule.length * 4.2 + 3);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8.8);
+            doc.setTextColor(31, 31, 31);
+            drawWrappedText(titleLinesRule, 15, 4.5, 0.5);
+
+            if (rule.description) {
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(8.5);
+              doc.setTextColor(90, 85, 81);
+              drawWrappedText(descLinesRule, 19, 4.2, 2);
+            }
+          });
+          y += 2;
+        }
+
+        if (data.helpContacts && data.helpContacts.length > 0) {
           checkPageOverflow(12);
-          const splitStep = doc.splitTextToSize(`${idx + 1}. ${step}`, 175);
-          doc.text(splitStep, 15, y);
-          y += (splitStep.length * 5) + 1;
-        });
+          doc.setFillColor(242, 249, 236);
+          doc.rect(15, y, 180, 10, 'F');
+          doc.setDrawColor(194, 224, 168);
+          doc.rect(15, y, 180, 10, 'D');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(31, 31, 31);
+          doc.text('Need help or custom coordination? Direct WhatsApp assistance:', 19, y + 4.3);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(70, 110, 40);
+          doc.text(data.helpContacts.filter(Boolean).join('  •  '), 19, y + 8.3);
+          y += 14;
+        }
       }
 
       // FAQs
       if (data.faqs && data.faqs.length > 0) {
-        checkPageOverflow(25);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(31, 31, 31);
-        doc.text('Frequently Asked Questions (FAQ)', 15, y);
-        y += 6;
+        drawSectionHeading('Trek-Specific Frequently Asked Questions (FAQ)');
 
-        data.faqs.forEach((faq) => {
-          checkPageOverflow(18);
+        data.faqs.forEach((faq, idx) => {
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(9);
           doc.setTextColor(224, 136, 40);
-          const qLines = doc.splitTextToSize(`Q: ${faq.question}`, 175);
-          doc.text(qLines, 15, y);
-          y += (qLines.length * 4.5) + 1;
+          const qLines = doc.splitTextToSize(`Q${idx + 1}: ${faq.question}`, 175);
+          drawWrappedText(qLines, 15, 4.6, 1);
 
           doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.8);
           doc.setTextColor(60, 60, 60);
           const aLines = doc.splitTextToSize(`A: ${faq.answer}`, 175);
-          doc.text(aLines, 15, y);
-          y += (aLines.length * 4.5) + 3;
+          drawWrappedText(aLines, 15, 4.5, 3);
         });
-        y += 4;
+      }
+
+      // Add footer to every page
+      const totalPages = doc.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(140, 135, 130);
+        doc.text(`Walk Nepal Walk • Hike #${data.hikeNumber || '---'} Itinerary`, 15, 287);
+        doc.text(`Page ${p} of ${totalPages}`, 180, 287);
       }
 
       // Save PDF document
@@ -281,6 +544,8 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
     } catch (err) {
       console.error('PDF Generation Failed:', err);
       window.print();
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -305,12 +570,13 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
             </span>
             <button
               type="button"
+              disabled={isGeneratingPdf}
               onClick={handleDownloadPDF}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-sky-50 hover:bg-sky-600 border border-sky-200 hover:border-sky-600 text-sky-700 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-sky-50 hover:bg-sky-600 border border-sky-200 hover:border-sky-600 text-sky-700 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95 disabled:opacity-60"
               title="Download full itinerary as PDF"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Download PDF</span>
+              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}</span>
             </button>
             {onShare && (
               <button
@@ -664,14 +930,16 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
           </h2>
 
           <div className="space-y-6">
-            {data.itineraryDays.map((day) => (
-              <div key={day.id} className="border-l-2 border-[#E08828]/40 pl-4 sm:pl-6 space-y-3 relative">
-                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-[#E08828] text-white flex items-center justify-center text-[9px] font-bold">
-                  {day.dayNumber}
+            {data.itineraryDays.map((day) => {
+              const isNight = day.type === 'night';
+              return (
+              <div key={day.id} className={`border-l-2 pl-4 sm:pl-6 space-y-3 relative ${isNight ? 'border-indigo-400/50' : 'border-[#E08828]/40'}`}>
+                <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold ${isNight ? 'bg-indigo-700' : 'bg-[#E08828]'}`}>
+                  {isNight ? `N` : day.dayNumber}
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-[#1F1F1F]">
-                    Day {day.dayNumber}: {day.title}
+                    {isNight ? 'Night' : 'Day'} {day.dayNumber}: {day.title}
                   </h3>
                 </div>
 
@@ -689,7 +957,8 @@ export const ItineraryPreview: React.FC<ItineraryPreviewProps> = ({
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

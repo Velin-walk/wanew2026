@@ -49,7 +49,10 @@ import {
   RefreshCw,
   Image as ImageIcon,
   Upload,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Moon,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 
 interface ItineraryBuilderProps {
@@ -478,8 +481,22 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
   };
 
   // Section 7: Itinerary Days Helpers
+  const renumberSchedule = (days: ItineraryDay[]): ItineraryDay[] => {
+    let dayCount = 0;
+    let nightCount = 0;
+    return days.map((d) => {
+      if (d.type === 'night') {
+        nightCount += 1;
+        return { ...d, dayNumber: nightCount };
+      }
+      dayCount += 1;
+      return { ...d, dayNumber: dayCount };
+    });
+  };
+
   const handleAddDay = () => {
-    const nextDayNum = (formData.itineraryDays || []).length + 1;
+    const existingDays = (formData.itineraryDays || []).filter((d) => d.type !== 'night');
+    const nextDayNum = existingDays.length + 1;
     const newDayId = `day-${Date.now()}`;
     const defaultText = `06:30 AM - Morning gathering & briefing\n07:00 AM - Departure towards destination\n01:00 PM - Lunch & scenic exploration\n05:00 PM - Arrive at destination / Teahouse check-in`;
     const defaultItems = parseScheduleLines(defaultText, newDayId);
@@ -491,16 +508,60 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
 
     updateData((prev) => ({
       ...prev,
-      itineraryDays: [
+      itineraryDays: renumberSchedule([
         ...(prev.itineraryDays || []),
         {
           id: newDayId,
           dayNumber: nextDayNum,
+          type: 'day',
           title: `Day ${nextDayNum}: Trek Stage`,
           items: defaultItems,
         },
-      ],
+      ]),
     }));
+  };
+
+  const handleAddNight = () => {
+    const existingNights = (formData.itineraryDays || []).filter((d) => d.type === 'night');
+    const nextNightNum = existingNights.length + 1;
+    const newNightId = `night-${Date.now()}`;
+    const defaultText = `08:00 PM - Gathering & attendance at meeting point\n08:30 PM - Overnight bus / vehicle departs\n11:30 PM - Highway refreshment break`;
+    const defaultItems = parseScheduleLines(defaultText, newNightId);
+
+    setDayScheduleTexts((prev) => ({
+      ...prev,
+      [newNightId]: defaultText,
+    }));
+
+    updateData((prev) => ({
+      ...prev,
+      itineraryDays: renumberSchedule([
+        ...(prev.itineraryDays || []),
+        {
+          id: newNightId,
+          dayNumber: nextNightNum,
+          type: 'night',
+          title: `Night ${nextNightNum}: Overnight Departure`,
+          items: defaultItems,
+        },
+      ]),
+    }));
+  };
+
+  const handleMoveDay = (dayId: string, direction: 'up' | 'down') => {
+    updateData((prev) => {
+      const list = [...(prev.itineraryDays || [])];
+      const idx = list.findIndex((d) => d.id === dayId);
+      if (idx === -1) return prev;
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= list.length) return prev;
+      const [moved] = list.splice(idx, 1);
+      list.splice(targetIdx, 0, moved);
+      return {
+        ...prev,
+        itineraryDays: renumberSchedule(list),
+      };
+    });
   };
 
   const handleRemoveDay = (dayId: string) => {
@@ -511,9 +572,9 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
     });
     updateData((prev) => ({
       ...prev,
-      itineraryDays: (prev.itineraryDays || [])
-        .filter((d) => d.id !== dayId)
-        .map((d, idx) => ({ ...d, dayNumber: idx + 1 })),
+      itineraryDays: renumberSchedule(
+        (prev.itineraryDays || []).filter((d) => d.id !== dayId)
+      ),
     }));
   };
 
@@ -999,12 +1060,12 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         {/* ========================================================
             SECTION 1: Basic Information (Marketing & Pricing Data)
         ======================================================== */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#EFEAE4] shadow-2xs">
-          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-[#F5F2ED]">
-            <span className="w-6 h-6 rounded-lg bg-[#E08828]/10 text-[#E08828] flex items-center justify-center text-xs font-black">
+        <div className="bg-gradient-to-br from-white to-orange-50/40 p-5 sm:p-6 rounded-2xl border-2 border-orange-200/80 border-l-4 border-l-[#E08828] shadow-2xs">
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-orange-100">
+            <span className="w-6 h-6 rounded-lg bg-[#E08828] text-white flex items-center justify-center text-xs font-black shadow-2xs">
               1
             </span>
-            <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">
+            <h3 className="text-sm sm:text-base font-bold text-orange-950">
               Section 1: Basic Information & Pricing Strategy
             </h3>
           </div>
@@ -1452,12 +1513,12 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         {/* ========================================================
             SECTION 2 & 3: Hike Date & Hike Overview
         ======================================================== */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#EFEAE4] shadow-2xs">
-          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-[#F5F2ED]">
-            <span className="w-6 h-6 rounded-lg bg-[#E08828]/10 text-[#E08828] flex items-center justify-center text-xs font-black">
+        <div className="bg-gradient-to-br from-white to-sky-50/45 p-5 sm:p-6 rounded-2xl border-2 border-sky-200/80 border-l-4 border-l-sky-500 shadow-2xs">
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-sky-100">
+            <span className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center text-xs font-black shadow-2xs">
               2-3
             </span>
-            <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">
+            <h3 className="text-sm sm:text-base font-bold text-sky-950">
               Section 2 & 3: Hike Date & Overview Metrics
             </h3>
           </div>
@@ -1839,13 +1900,13 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         ======================================================== */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Section 4: Cost Includes */}
-          <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-emerald-50">
+          <div className="bg-gradient-to-br from-white to-emerald-50/50 p-5 rounded-2xl border-2 border-emerald-200/80 border-l-4 border-l-emerald-500 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-emerald-100">
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-black">
+                <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-black shadow-2xs">
                   4
                 </span>
-                <h3 className="text-sm font-bold text-[#1F1F1F]">Cost Includes</h3>
+                <h3 className="text-sm font-bold text-emerald-950">Cost Includes</h3>
               </div>
               <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                 {(formData.costIncludes || []).length} Items Listed
@@ -1870,13 +1931,13 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
           </div>
 
           {/* Section 5: Cost Excludes */}
-          <div className="bg-white p-5 rounded-2xl border border-rose-100 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-rose-50">
+          <div className="bg-gradient-to-br from-white to-rose-50/50 p-5 rounded-2xl border-2 border-rose-200/80 border-l-4 border-l-rose-500 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-rose-100">
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-lg bg-rose-100 text-rose-800 flex items-center justify-center text-xs font-black">
+                <span className="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-xs font-black shadow-2xs">
                   5
                 </span>
-                <h3 className="text-sm font-bold text-[#1F1F1F]">Cost Excludes</h3>
+                <h3 className="text-sm font-bold text-rose-950">Cost Excludes</h3>
               </div>
               <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
                 {(formData.costExcludes || []).length} Items Listed
@@ -1904,20 +1965,20 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         {/* ========================================================
             SECTION 6: Additional Add Ons
         ======================================================== */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#EFEAE4] shadow-2xs">
-          <div className="flex items-center justify-between pb-2 mb-4 border-b border-[#F5F2ED]">
+        <div className="bg-gradient-to-br from-white to-violet-50/45 p-5 sm:p-6 rounded-2xl border-2 border-violet-200/80 border-l-4 border-l-violet-500 shadow-2xs">
+          <div className="flex items-center justify-between pb-2 mb-4 border-b border-violet-100">
             <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-[#E08828]/10 text-[#E08828] flex items-center justify-center text-xs font-black">
+              <span className="w-6 h-6 rounded-lg bg-violet-600 text-white flex items-center justify-center text-xs font-black shadow-2xs">
                 6
               </span>
-              <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">
+              <h3 className="text-sm sm:text-base font-bold text-violet-950">
                 Section 6: Additional Add Ons
               </h3>
             </div>
             <button
               type="button"
               onClick={handleAddAddOn}
-              className="flex items-center gap-1 text-xs font-bold text-[#E08828] hover:text-[#C86B1A]"
+              className="flex items-center gap-1 text-xs font-bold text-violet-700 hover:text-violet-900"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Add-on Item</span>
@@ -1987,14 +2048,14 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         {/* ========================================================
             SECTION 7: Itinerary Details (Day-by-Day Schedule)
         ======================================================== */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#EFEAE4] shadow-2xs space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-[#F5F2ED]">
+        <div className="bg-gradient-to-br from-white to-teal-50/45 p-5 sm:p-6 rounded-2xl border-2 border-teal-200/80 border-l-4 border-l-teal-600 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-teal-100">
             <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-[#E08828]/10 text-[#E08828] flex items-center justify-center text-xs font-black">
+              <span className="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-black shadow-2xs">
                 7
               </span>
               <div>
-                <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">
+                <h3 className="text-sm sm:text-base font-bold text-teal-950">
                   Section 7: Day-by-Day Itinerary Schedule
                 </h3>
                 <p className="text-[11px] text-[#8B8680]">
@@ -2002,26 +2063,49 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleAddDay}
-              className="flex items-center gap-1 text-xs font-bold text-[#E08828] hover:text-[#C86B1A] bg-[#FAF8F5] px-3 py-1.5 rounded-xl border border-[#E5E1DB] cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Another Day</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleAddNight}
+                className="flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50/80 px-3 py-1.5 rounded-xl border border-indigo-200 cursor-pointer"
+              >
+                <Moon className="w-3.5 h-3.5" />
+                <span>Add Night</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAddDay}
+                className="flex items-center gap-1 text-xs font-bold text-teal-700 hover:text-teal-900 bg-teal-50/70 px-3 py-1.5 rounded-xl border border-teal-200 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Another Day</span>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-5">
-            {(formData.itineraryDays || []).map((day) => (
+            {(formData.itineraryDays || []).map((day, dayIndex, allDays) => {
+              const isNight = day.type === 'night';
+              return (
               <div
                 key={day.id}
-                className="p-4 sm:p-5 bg-[#FAF8F5] rounded-2xl border border-[#E5E1DB] space-y-3"
+                className={`p-4 sm:p-5 rounded-2xl border space-y-3 ${
+                  isNight
+                    ? 'bg-indigo-50/40 border-indigo-200'
+                    : 'bg-[#FAF8F5] border-[#E5E1DB]'
+                }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 flex-1">
-                    <span className="px-2.5 py-1 rounded-lg bg-[#E08828] text-white text-xs font-bold shrink-0">
-                      Day {day.dayNumber}
+                    <span
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 inline-flex items-center gap-1 ${
+                        isNight
+                          ? 'bg-indigo-900 text-indigo-100'
+                          : 'bg-[#E08828] text-white'
+                      }`}
+                    >
+                      {isNight && <Moon className="w-3 h-3" />}
+                      <span>{isNight ? `Night ${day.dayNumber}` : `Day ${day.dayNumber}`}</span>
                     </span>
                     <input
                       type="text"
@@ -2034,20 +2118,48 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                           )
                         }))
                       }
-                      placeholder="Day Title e.g. Day 1: Kathmandu to Trailhead & Hike to Lodge"
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-[#E5E1DB] rounded-xl font-bold text-[#1F1F1F] focus:outline-[#E08828]"
+                      placeholder={
+                        isNight
+                          ? 'Night Title e.g. Night 1: Kathmandu Departure & Overnight Bus'
+                          : 'Day Title e.g. Day 1: Kathmandu to Trailhead & Hike to Lodge'
+                      }
+                      className={`w-full px-3 py-1.5 text-xs bg-white border rounded-xl font-bold text-[#1F1F1F] ${
+                        isNight
+                          ? 'border-indigo-200 focus:outline-indigo-600'
+                          : 'border-[#E5E1DB] focus:outline-[#E08828]'
+                      }`}
                     />
                   </div>
 
-                  {(formData.itineraryDays || []).length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveDay(day.id)}
-                      className="text-neutral-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-rose-100 transition-colors cursor-pointer"
-                      title="Remove Day"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  {allDays.length > 1 && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={dayIndex === 0}
+                        onClick={() => handleMoveDay(day.id, 'up')}
+                        className="text-neutral-400 hover:text-[#1F1F1F] p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-[#E5E1DB] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Move up"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={dayIndex === allDays.length - 1}
+                        onClick={() => handleMoveDay(day.id, 'down')}
+                        className="text-neutral-400 hover:text-[#1F1F1F] p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-[#E5E1DB] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Move down"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDay(day.id)}
+                        className="text-neutral-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-rose-100 transition-colors cursor-pointer"
+                        title={isNight ? 'Remove Night' : 'Remove Day'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -2065,8 +2177,16 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                     rows={6}
                     value={dayScheduleTexts[day.id] || ''}
                     onChange={(e) => handleDayScheduleTextChange(day.id, e.target.value)}
-                    placeholder={`e.g.\n06:30 AM - Meeting at Sundhara & Attendance\n07:00 AM - Vehicle departs sharp for trailhead\n08:30 AM - Highway breakfast stop\n12:30 PM - Arrive at starting point & start trek\n04:30 PM - Reach ridge viewpoint & photo session\n06:30 PM - Check-in at teahouse, dinner & trail briefing`}
-                    className="w-full px-3.5 py-2.5 text-xs bg-white border border-[#E5E1DB] rounded-xl focus:outline-[#E08828] font-normal leading-relaxed text-[#1F1F1F]"
+                    placeholder={
+                      isNight
+                        ? `e.g.\n08:00 PM - Meeting at Sundhara & Attendance\n08:30 PM - Overnight bus departs Kathmandu\n11:30 PM - Highway tea & refreshment break`
+                        : `e.g.\n06:30 AM - Meeting at Sundhara & Attendance\n07:00 AM - Vehicle departs sharp for trailhead\n08:30 AM - Highway breakfast stop\n12:30 PM - Arrive at starting point & start trek\n04:30 PM - Reach ridge viewpoint & photo session\n06:30 PM - Check-in at teahouse, dinner & trail briefing`
+                    }
+                    className={`w-full px-3.5 py-2.5 text-xs bg-white border rounded-xl font-normal leading-relaxed text-[#1F1F1F] ${
+                      isNight
+                        ? 'border-indigo-200 focus:outline-indigo-600'
+                        : 'border-[#E5E1DB] focus:outline-[#E08828]'
+                    }`}
                   />
                 </div>
 
@@ -2092,20 +2212,21 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         {/* ========================================================
             SECTION 8: Standard Booking Process & Safety Guidelines
         ======================================================== */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#EFEAE4] shadow-2xs">
-          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#F5F2ED]">
-            <span className="w-6 h-6 rounded-lg bg-[#7ABA42]/15 text-[#5B8F2D] flex items-center justify-center text-xs font-black">
+        <div className="bg-gradient-to-br from-white to-lime-50/50 p-5 sm:p-6 rounded-2xl border-2 border-lime-200/90 border-l-4 border-l-[#7ABA42] shadow-2xs">
+          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-lime-100">
+            <span className="w-6 h-6 rounded-lg bg-[#65A332] text-white flex items-center justify-center text-xs font-black shadow-2xs">
               8
             </span>
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">
+              <h3 className="text-sm sm:text-base font-bold text-lime-950">
                 Section 8: Booking Process & Participation Guidelines (Standard Policies)
               </h3>
               <p className="text-[11px] text-[#8B8680]">
@@ -2152,18 +2273,18 @@ export const ItineraryBuilder: React.FC<ItineraryBuilderProps> = ({
         {/* ========================================================
             SECTION 9: Trek-Specific Frequently Asked Questions (FAQ)
         ======================================================== */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#EFEAE4] shadow-2xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F5F2ED]">
+        <div className="bg-gradient-to-br from-white to-indigo-50/45 p-5 sm:p-6 rounded-2xl border-2 border-indigo-200/80 border-l-4 border-l-indigo-500 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100">
             <div className="flex items-center gap-2.5">
-              <span className="w-6 h-6 rounded-lg bg-[#E08828]/10 text-[#E08828] flex items-center justify-center text-xs font-black shrink-0">
+              <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-2xs">
                 9
               </span>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-bold text-[#1F1F1F]">
+                  <h3 className="text-sm sm:text-base font-bold text-indigo-950">
                     Section 9: Trek-Specific FAQ (Questions & Answers)
                   </h3>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200">
                     Private by default
                   </span>
                 </div>
