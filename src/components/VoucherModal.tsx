@@ -32,9 +32,6 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
   userEmail = '',
   onVoucherUploaded,
 }) => {
-  const CLOUD_NAME = 'mx7cxnsf';
-  const UPLOAD_PRESET = 'walknepalwalk';
-
   const [selectedBookingId, setSelectedBookingId] = useState<string>(
     booking ? String(booking.id) : allBookings[0] ? String(allBookings[0].id) : ''
   );

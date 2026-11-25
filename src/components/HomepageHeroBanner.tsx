@@ -24,7 +24,7 @@ interface HomepageHeroBannerProps {
 export const HERO_TREK_ID = 'HOMEPAGE_HERO';
 export const HERO_STORAGE_KEY = 'wnw_homepage_hero_images';
 
-export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
+export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = React.memo(({
   upcomingCount,
   completedCount,
   onOpenReviews,
@@ -306,7 +306,7 @@ export const HomepageHeroBanner: React.FC<HomepageHeroBannerProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export interface HeroStatsBarProps {
   upcomingCount: number;
@@ -314,7 +314,7 @@ export interface HeroStatsBarProps {
   onOpenReviews?: () => void;
 }
 
-export const HeroStatsBar: React.FC<HeroStatsBarProps> = ({
+export const HeroStatsBar: React.FC<HeroStatsBarProps> = React.memo(({
   upcomingCount,
   completedCount,
   onOpenReviews,
@@ -403,5 +403,5 @@ export const HeroStatsBar: React.FC<HeroStatsBarProps> = ({
       </button>
     </div>
   );
-};
+});
 

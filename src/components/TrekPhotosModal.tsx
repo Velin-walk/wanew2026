@@ -30,14 +30,6 @@ interface TrekPhotosModalProps {
   trek: Trek;
 }
 
-const optimizeCloudinaryUrl = (url?: string, width = 600): string => {
-  if (!url) return '';
-  if (url.includes('res.cloudinary.com') && url.includes('/upload/') && !url.includes('/f_auto')) {
-    return url.replace('/upload/', `/upload/f_auto,q_auto,w_${width}/`);
-  }
-  return url;
-};
-
 interface TrekPhoto {
   id: string;
   trekId: string;
@@ -65,18 +57,6 @@ const safeSetItem = (key: string, value: string): void => {
   } catch (e) {}
 };
 
-function uploadToCloudinaryWithProgress(
-  formData: FormData,
-  _cloudName?: string,
-  onProgress?: (percent: number) => void
-): Promise<any> {
-  const file = formData.get('file') as (File | Blob);
-  if (!file) {
-    return Promise.reject(new Error('No file found to upload'));
-  }
-  return uploadImageToR2WithProgress(file, 'gallery', onProgress);
-}
-
 export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   isOpen,
   onClose,
@@ -102,10 +82,6 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
   const [uploadCaption, setUploadCaption] = useState('');
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Exact Cloudinary credentials for the walknepalwalk preset
-  const CLOUD_NAME = 'mx7cxnsf';
-  const UPLOAD_PRESET = 'walknepalwalk';
 
   // 1. Prevent background page scrolling when modal is open
   useEffect(() => {
@@ -320,12 +296,12 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
         setUploadProgress(Math.round(((i + 0.1) / totalFiles) * 100));
         const compressedBlob = await compressImage(staged.file);
 
-        // 2. Upload directly to Cloudinary with real-time percentage
-        const formData = new FormData();
-        formData.append('file', compressedBlob, staged.file.name);
-        formData.append('upload_preset', UPLOAD_PRESET);
+        // 2. Upload directly to Cloudflare R2 with real-time percentage
+        const fileToUpload = new File([compressedBlob], staged.file.name, {
+          type: compressedBlob.type || staged.file.type || 'image/jpeg',
+        });
 
-        const resData = await uploadToCloudinaryWithProgress(formData, CLOUD_NAME, (filePct) => {
+        const resData = await uploadImageToR2WithProgress(fileToUpload, 'gallery', (filePct) => {
           const currentOverall = Math.round(((i + 0.15 + (filePct / 100) * 0.75) / totalFiles) * 100);
           setUploadProgress(Math.min(99, Math.max(1, currentOverall)));
         });
@@ -836,7 +812,7 @@ export const TrekPhotosModal: React.FC<TrekPhotosModalProps> = React.memo(({
                     onClick={() => handleOpenLightbox(photo, idx)}
                   >
                     <img
-                      src={optimizeCloudinaryUrl(photo.url, 600)}
+                      src={photo.url}
                       alt={`${photo.trekName} photo by ${photo.uploadedBy}`}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"

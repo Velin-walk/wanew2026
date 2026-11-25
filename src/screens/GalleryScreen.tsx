@@ -69,26 +69,6 @@ interface GalleryScreenProps {
   onOpenAuthModal?: (reason?: string) => void;
 }
 
-function uploadToCloudinaryWithProgress(
-  formData: FormData,
-  _cloudName?: string,
-  onProgress?: (percent: number) => void
-): Promise<any> {
-  const file = formData.get('file') as (File | Blob);
-  if (!file) {
-    return Promise.reject(new Error('No file found to upload'));
-  }
-  return uploadImageToR2WithProgress(file, 'gallery', onProgress);
-}
-
-export const optimizeCloudinaryUrl = (url?: string, width = 800): string => {
-  if (!url) return '';
-  if (url.includes('res.cloudinary.com') && url.includes('/upload/') && !url.includes('/f_auto')) {
-    return url.replace('/upload/', `/upload/f_auto,q_auto,w_${width}/`);
-  }
-  return url;
-};
-
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   treks,
   onOpenAuthModal,
@@ -279,9 +259,6 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     window.addEventListener('wnw-likes-updated', handleLikesSync);
     return () => window.removeEventListener('wnw-likes-updated', handleLikesSync);
   }, []);
-
-  const CLOUD_NAME = 'mx7cxnsf';
-  const UPLOAD_PRESET = 'walknepalwalk';
 
   // Fetch all community photos & flashcards/offers from Cloudflare D1 (for both desktop and mobile)
   const fetchAllPhotos = useCallback(async () => {
@@ -608,12 +585,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         setUploadProgress(Math.round(((i + 0.1) / totalFiles) * 100));
         const compressedBlob = await compressImage(staged.file);
 
-        // 2. Upload to Cloudinary with real-time percentage
-        const formData = new FormData();
-        formData.append('file', compressedBlob, staged.file.name);
-        formData.append('upload_preset', UPLOAD_PRESET);
+        // 2. Upload to Cloudflare R2 with real-time percentage
+        const fileToUpload = new File([compressedBlob], staged.file.name, {
+          type: compressedBlob.type || staged.file.type || 'image/jpeg',
+        });
 
-        const resData = await uploadToCloudinaryWithProgress(formData, CLOUD_NAME, (filePct) => {
+        const resData = await uploadImageToR2WithProgress(fileToUpload, 'gallery', (filePct) => {
           const currentOverall = Math.round(((i + 0.15 + (filePct / 100) * 0.75) / totalFiles) * 100);
           setUploadProgress(Math.min(99, Math.max(1, currentOverall)));
         });
@@ -1220,7 +1197,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       onClick={() => handleOpenLightbox(photo, globalIdx >= 0 ? globalIdx : 0)}
                     >
                       <img
-                        src={optimizeCloudinaryUrl(photo.url, 600)}
+                        src={photo.url}
                         alt={`${photo.trekName || 'Trek'} photo by ${photo.uploadedBy}`}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"

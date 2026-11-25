@@ -18,7 +18,7 @@ import {
   Bell,
   UserCheck,
 } from 'lucide-react';
-import { SubPageType } from './InfoPagesModal';
+import type { SubPageType } from './InfoPagesModal';
 import { isAdminEmail } from '../adminUtils';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, User as UserIcon, Settings } from 'lucide-react';
@@ -39,7 +39,7 @@ interface NavbarProps {
   notifications?: NavigationNotifications;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
+export const Navbar: React.FC<NavbarProps> = React.memo(({
   currentTab,
   activeInfoPage,
   onTabChange,
@@ -625,7 +625,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
     </header>
   );
-};
+});
 
 export const DesktopResourcesBar: React.FC<{
   activeInfoPage?: SubPageType | null;

@@ -19,9 +19,6 @@ import {
   HERO_STORAGE_KEY,
 } from '../HomepageHeroBanner';
 
-const CLOUD_NAME = 'mx7cxnsf';
-const UPLOAD_PRESET = 'walknepalwalk';
-
 interface HomepageHeroManagerProps {
   currentUserEmail?: string;
 }
@@ -111,7 +108,7 @@ export const HomepageHeroManager: React.FC<HomepageHeroManagerProps> = ({
   };
 
   const optimizeHeroImage = async (blob: Blob): Promise<Blob> => {
-    // If already safely under Cloudinary's 10MB limit (e.g. <= 8MB), keep original
+    // If already <= 8MB, keep original
     if (blob.size <= 8 * 1024 * 1024) {
       return blob;
     }

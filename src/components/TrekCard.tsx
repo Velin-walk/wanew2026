@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Trek } from '../types';
 import { ParticipantStack } from './ParticipantStack';
 import { enrichWithGuide } from './ParticipantsModal';
 import { useAuth } from '../context/AuthContext';
 import { useCitizenPricing } from '../hooks/useCitizenPricing';
-import { TrekPhotosModal } from './TrekPhotosModal';
-import { GuideProfileModal } from './GuideProfileModal';
 import { MiniPrayerFlags } from './NepaliPrayerFlags';
 import { getEventPhotos } from '../data/defaultItineraryTemplate';
+
+const TrekPhotosModal = lazy(() =>
+  import('./TrekPhotosModal').then((m) => ({ default: m.TrekPhotosModal }))
+);
+const GuideProfileModal = lazy(() =>
+  import('./GuideProfileModal').then((m) => ({ default: m.GuideProfileModal }))
+);
 import {
   Calendar,
   Clock,
@@ -36,7 +41,7 @@ interface TrekCardProps {
   onViewGallery?: (trek?: Trek) => void;
 }
 
-export const TrekCard: React.FC<TrekCardProps> = ({
+export const TrekCard: React.FC<TrekCardProps> = React.memo(({
   trek,
   isFavorited = false,
   onToggleFavorite,
@@ -181,13 +186,17 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 
   const badge = getDifficultyBadge(effectiveDifficulty);
   const rawRecent = syncedRoster?.recentParticipants ?? (trek.recent_participants || []);
-  const rosterList = rawRecent.length > 0
-    ? enrichWithGuide(
-        rawRecent,
-        trek.leader || trek.team_leader,
-        trek.assistant_guides || trek.assistant_guide
-      )
-    : [];
+  const rosterList = useMemo(
+    () =>
+      rawRecent.length > 0
+        ? enrichWithGuide(
+            rawRecent,
+            trek.leader || trek.team_leader,
+            trek.assistant_guides || trek.assistant_guide
+          )
+        : [],
+    [rawRecent, trek.leader, trek.team_leader, trek.assistant_guides, trek.assistant_guide]
+  );
 
   const pg = syncedRoster ?? trek.participants_by_gender;
   const fallbackTotal = syncedRoster
@@ -324,6 +333,7 @@ export const TrekCard: React.FC<TrekCardProps> = ({
         <img
           src={resolveCardImageUrl()}
           alt={trek.name}
+          decoding="async"
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           referrerPolicy="no-referrer"
           onError={(e) => {
@@ -549,19 +559,25 @@ export const TrekCard: React.FC<TrekCardProps> = ({
 
       </div>
 
-      <TrekPhotosModal
-        isOpen={photosOpen}
-        onClose={() => setPhotosOpen(false)}
-        trek={trek}
-      />
+      {photosOpen && (
+        <Suspense fallback={null}>
+          <TrekPhotosModal
+            isOpen={photosOpen}
+            onClose={() => setPhotosOpen(false)}
+            trek={trek}
+          />
+        </Suspense>
+      )}
 
-      {trek.leader && (
-        <GuideProfileModal
-          isOpen={guideModalOpen}
-          onClose={() => setGuideModalOpen(false)}
-          guideName={trek.leader}
-          currentTrek={trek}
-        />
+      {guideModalOpen && trek.leader && (
+        <Suspense fallback={null}>
+          <GuideProfileModal
+            isOpen={guideModalOpen}
+            onClose={() => setGuideModalOpen(false)}
+            guideName={trek.leader}
+            currentTrek={trek}
+          />
+        </Suspense>
       )}
 
       {/* Action Buttons */}
@@ -616,4 +632,4 @@ export const TrekCard: React.FC<TrekCardProps> = ({
       </div>
     </div>
   );
-};
+});

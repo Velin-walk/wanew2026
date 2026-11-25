@@ -320,7 +320,6 @@ export function AdminActivityLogs() {
       .replace(/^(?:activated|deactivated)\s+notice\s+board\s+pop-up\s*/i, 'Notice Board: ')
       .replace(/^deleted\s+archived\s+notice\s+from\s+history\s*/i, 'Archived Notice: ')
       .replace(/^updated\s+site\s+(?:section\s+)?visibility(?:\s+settings)?:\s*/i, 'Visibility: ')
-      .replace(/^cleared\s+legacy\s+cloudinary\s+photo\s+links\s+from\s+database/i, 'Photos: Cleared Old Links')
       .replace(/^published\s+(?:special\s+)?offer\s+flashcard:\s*/i, 'Offer: ')
       .replace(/^(?:archived|restored|deleted)\s+offer\s+flashcard:\s*/i, 'Offer: ')
       .replace(/^cleared\s+all\s+archived\s+past\s+offers/i, 'Archived Offers: Cleared All')

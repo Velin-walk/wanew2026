@@ -11,7 +11,7 @@ import {
   cleanOfferCaption,
 } from './admin/OffersManager';
 
-export const OffersBanner: React.FC = () => {
+export const OffersBanner: React.FC = React.memo(() => {
   const isNotExpired = (item: OfferItem) => {
     const meta = parseOfferMetadata(item);
     const expStr = meta.expiresAt || item.expiresAt;
@@ -262,4 +262,4 @@ export const OffersBanner: React.FC = () => {
       )}
     </div>
   );
-};
+});

@@ -10,7 +10,7 @@ interface CommunityMilestoneCardProps {
   variant?: 'full' | 'chartOnly';
 }
 
-export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ data: externalData, variant = 'full' }) => {
+export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = React.memo(({ data: externalData, variant = 'full' }) => {
   const [internalData, setInternalData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(!externalData);
   const [journeyPeriod, setJourneyPeriod] = useState<TimePeriod>('overall');
@@ -256,4 +256,4 @@ export const CommunityMilestoneCard: React.FC<CommunityMilestoneCardProps> = ({ 
       )}
     </div>
   );
-};
+});

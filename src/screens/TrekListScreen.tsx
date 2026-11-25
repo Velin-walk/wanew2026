@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useDeferredValue } from 'react';
 import { Trek } from '../types';
 import { TrekCard } from '../components/TrekCard';
 import { PastEventListItem } from '../components/PastEventListItem';
@@ -10,7 +10,7 @@ import { HomeGalleryReviewsSection } from '../components/HomeGalleryReviewsSecti
 import { CommunityMilestoneCard } from '../components/CommunityMilestoneCard';
 import { TrekCalendar } from '../components/TrekCalendar';
 
-import { SubPageType } from '../components/InfoPagesModal';
+import type { SubPageType } from '../components/InfoPagesModal';
 import { trackFilterChange, trackSearchQuery } from '../services/behaviorTracker';
 import {
   Search,
@@ -45,7 +45,162 @@ interface TrekListScreenProps {
   onOpenInfoPage?: (page: SubPageType) => void;
 }
 
-export const TrekListScreen: React.FC<TrekListScreenProps> = ({
+// Pure module-level date helpers (stable references so TrekCalendar memos never invalidate)
+const parseTrekDate = (dateStr?: string): Date | null => {
+  if (!dateStr) return null;
+  const trimmed = dateStr.trim();
+
+  // 1. Slash format: DD/MM/YYYY or YYYY/MM/DD
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      } else {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+  }
+
+  // 2. Dash/Dot format: DD-MM-YYYY or DD.MM.YYYY
+  if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
+    const delimiter = trimmed.includes('-') ? '-' : '.';
+    const parts = trimmed.split(delimiter);
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) return d;
+        }
+      } else if (parts[0].length === 4) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+  }
+
+  // 3. Direct JS Date constructor
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime())) return d;
+
+  // 4. Handle range formats like "Wed 14 Oct – Sun 18 Oct 2026 (5 Days)" or "14 Oct - 18 Oct 2026"
+  try {
+    const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+    const year = yearMatch ? yearMatch[1] : '';
+    const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+    const parts = cleanRange.split(/[–—\-]/);
+    if (parts.length > 1 && year) {
+      const firstPart = parts[0].replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '').trim();
+      const testStr = `${firstPart} ${year}`;
+      const rangeDate = new Date(testStr);
+      if (!isNaN(rangeDate.getTime())) return rangeDate;
+    }
+  } catch {}
+
+  return null;
+};
+
+const parseTrekEndDate = (dateStr?: string): Date | null => {
+  if (!dateStr) return null;
+  const trimmed = String(dateStr).trim();
+  try {
+    const yearMatch = trimmed.match(/\b(20\d\d)\b/);
+    const year = yearMatch ? yearMatch[1] : '';
+    const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
+    const parts = cleanRange.split(/[–—\-]/);
+    if (parts.length > 1 && year) {
+      const secondPart = parts[1]
+        .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
+        .trim();
+      const testStr = secondPart.includes(year) ? secondPart : `${secondPart} ${year}`;
+      const rangeDate = new Date(testStr);
+      if (!isNaN(rangeDate.getTime())) return rangeDate;
+    }
+  } catch {}
+  return null;
+};
+
+const getEventDurationDays = (trek: Trek): number => {
+  const daysStr = String(
+    trek.days ||
+    trek.days_label ||
+    (trek as any).days_label ||
+    (trek as any).expected_duration ||
+    trek.data?.days ||
+    trek.data?.overview?.days ||
+    ''
+  ).toLowerCase();
+
+  const m = daysStr.match(/(\d+)\s*(?:d|day)/i) || daysStr.match(/^(\d+)$/);
+  if (m) return Math.max(1, parseInt(m[1], 10));
+  if (daysStr.includes('overnight') || daysStr.includes('1n') || daysStr.includes('2d')) return 2;
+  return 1;
+};
+
+const isSaturdayTrek = (trek: Trek): boolean => {
+  const rawDate = String(
+    trek.date ||
+    trek.hike_date ||
+    (trek as any).hike_date ||
+    trek.data?.hikeDate ||
+    trek.data?.date ||
+    trek.data?.hike_date ||
+    ''
+  ).trim();
+
+  const startDate = parseTrekDate(rawDate);
+
+  if (startDate && !isNaN(startDate.getTime())) {
+    if (startDate.getDay() === 6) {
+      return true;
+    }
+
+    const endDate = parseTrekEndDate(rawDate);
+    if (endDate && !isNaN(endDate.getTime()) && endDate >= startDate) {
+      const cur = new Date(startDate);
+      let count = 0;
+      while (cur <= endDate && count < 30) {
+        if (cur.getDay() === 6) return true;
+        cur.setDate(cur.getDate() + 1);
+        count++;
+      }
+    } else {
+      const durationDays = getEventDurationDays(trek);
+      if (durationDays > 1) {
+        const cur = new Date(startDate);
+        for (let i = 1; i < durationDays && i < 30; i++) {
+          cur.setDate(cur.getDate() + 1);
+          if (cur.getDay() === 6) return true;
+        }
+      }
+    }
+  }
+
+  const textToCheck = `${rawDate} ${trek.days || (trek as any).expected_duration || ''} ${trek.name || trek.title || ''}`.toLowerCase();
+  if (/\b(sat|saturday)\b/i.test(textToCheck)) {
+    return true;
+  }
+
+  return false;
+};
+
+export const TrekListScreen: React.FC<TrekListScreenProps> = React.memo(({
   treks,
   loading,
   favorites,
@@ -68,201 +223,14 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
   const [showPastEvents, setShowPastEvents] = useState(false);
   const [highlightedTrekId, setHighlightedTrekId] = useState<string | null>(null);
 
-  const handleSummaryClick = (trek: Trek, idx: number) => {
-    const targetId = String(trek.id || idx);
-    setHighlightedTrekId(targetId);
+  // Defer heavy list filtering so button highlights & typing paint immediately on the next frame
+  const deferredTripTypeFilter = useDeferredValue(tripTypeFilter);
+  const deferredSaturdayOnly = useDeferredValue(saturdayOnly);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
-    const cardElement = document.getElementById(`trek-card-${targetId}`);
-    if (cardElement) {
-      cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    if (onViewItinerary) {
-      onViewItinerary(trek);
-    }
-
-    setTimeout(() => {
-      setHighlightedTrekId((curr) => (curr === targetId ? null : curr));
-    }, 2500);
-  };
-
-  const handleCalendarTrekSelect = (trek: Trek) => {
-    const idx = upcomingTreks.findIndex((t) => (t.id && trek.id ? t.id === trek.id : t === trek));
-    const targetId = String(trek.id || (idx >= 0 ? idx : ''));
-    setHighlightedTrekId(targetId);
-
-    const cardElement = document.getElementById(`trek-card-${targetId}`);
-    if (cardElement) {
-      cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    setTimeout(() => {
-      setHighlightedTrekId((curr) => (curr === targetId ? null : curr));
-    }, 2500);
-  };
-
-  // Helper to accurately parse trek date
-  const parseTrekDate = (dateStr?: string): Date | null => {
-    if (!dateStr) return null;
-    const trimmed = dateStr.trim();
-
-    // 1. Slash format: DD/MM/YYYY or YYYY/MM/DD
-    if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          const year = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10) - 1;
-          const day = parseInt(parts[2], 10);
-          const d = new Date(year, month, day);
-          if (!isNaN(d.getTime())) return d;
-        } else {
-          const day = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10) - 1;
-          const year = parseInt(parts[2], 10);
-          const d = new Date(year, month, day);
-          if (!isNaN(d.getTime())) return d;
-        }
-      }
-    }
-
-    // 2. Dash/Dot format: DD-MM-YYYY or DD.MM.YYYY
-    if ((trimmed.includes('-') || trimmed.includes('.')) && !trimmed.match(/[a-zA-Z]/)) {
-      const delimiter = trimmed.includes('-') ? '-' : '.';
-      const parts = trimmed.split(delimiter);
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          const day = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10) - 1;
-          const year = parseInt(parts[2], 10);
-          if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-            const d = new Date(year, month, day);
-            if (!isNaN(d.getTime())) return d;
-          }
-        } else if (parts[0].length === 4) {
-          const year = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10) - 1;
-          const day = parseInt(parts[2], 10);
-          if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-            const d = new Date(year, month, day);
-            if (!isNaN(d.getTime())) return d;
-          }
-        }
-      }
-    }
-
-    // 3. Direct JS Date constructor
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d;
-
-    // 4. Handle range formats like "Wed 14 Oct – Sun 18 Oct 2026 (5 Days)" or "14 Oct - 18 Oct 2026"
-    try {
-      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-      const year = yearMatch ? yearMatch[1] : '';
-      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-      const parts = cleanRange.split(/[–—\-]/);
-      if (parts.length > 1 && year) {
-        const firstPart = parts[0].replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '').trim();
-        const testStr = `${firstPart} ${year}`;
-        const rangeDate = new Date(testStr);
-        if (!isNaN(rangeDate.getTime())) return rangeDate;
-      }
-    } catch {}
-
-    return null;
-  };
-
-  // Helper to extract end date from a range date string (e.g. "Wed 14 Oct – Sun 18 Oct 2026")
-  const parseTrekEndDate = (dateStr?: string): Date | null => {
-    if (!dateStr) return null;
-    const trimmed = String(dateStr).trim();
-    try {
-      const yearMatch = trimmed.match(/\b(20\d\d)\b/);
-      const year = yearMatch ? yearMatch[1] : '';
-      const cleanRange = trimmed.replace(/\(.*?\)/g, '').trim();
-      const parts = cleanRange.split(/[–—\-]/);
-      if (parts.length > 1 && year) {
-        const secondPart = parts[1]
-          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+/i, '')
-          .trim();
-        const testStr = secondPart.includes(year) ? secondPart : `${secondPart} ${year}`;
-        const rangeDate = new Date(testStr);
-        if (!isNaN(rangeDate.getTime())) return rangeDate;
-      }
-    } catch {}
-    return null;
-  };
-
-  // Helper to calculate event duration in calendar days
-  const getEventDurationDays = (trek: Trek): number => {
-    const daysStr = String(
-      trek.days ||
-      trek.days_label ||
-      (trek as any).days_label ||
-      (trek as any).expected_duration ||
-      trek.data?.days ||
-      trek.data?.overview?.days ||
-      ''
-    ).toLowerCase();
-
-    const m = daysStr.match(/(\d+)\s*(?:d|day)/i) || daysStr.match(/^(\d+)$/);
-    if (m) return Math.max(1, parseInt(m[1], 10));
-    if (daysStr.includes('overnight') || daysStr.includes('1n') || daysStr.includes('2d')) return 2;
-    return 1;
-  };
-
-  // Helper to determine if an event happens on a Saturday on the calendar
-  const isSaturdayTrek = (trek: Trek): boolean => {
-    const rawDate = String(
-      trek.date ||
-      trek.hike_date ||
-      (trek as any).hike_date ||
-      trek.data?.hikeDate ||
-      trek.data?.date ||
-      trek.data?.hike_date ||
-      ''
-    ).trim();
-
-    const startDate = parseTrekDate(rawDate);
-
-    // If we have a valid calendar start date
-    if (startDate && !isNaN(startDate.getTime())) {
-      // 1. Direct check: Start date is a Saturday
-      if (startDate.getDay() === 6) {
-        return true;
-      }
-
-      // 2. Check if a range end date exists in the date string (e.g. "Wed 14 Oct – Sun 18 Oct 2026")
-      const endDate = parseTrekEndDate(rawDate);
-      if (endDate && !isNaN(endDate.getTime()) && endDate >= startDate) {
-        const cur = new Date(startDate);
-        let count = 0;
-        while (cur <= endDate && count < 30) {
-          if (cur.getDay() === 6) return true;
-          cur.setDate(cur.getDate() + 1);
-          count++;
-        }
-      } else {
-        // 3. Check event duration (e.g. 2D 1N, 3D 3N, 5 Days)
-        const durationDays = getEventDurationDays(trek);
-        if (durationDays > 1) {
-          const cur = new Date(startDate);
-          for (let i = 1; i < durationDays && i < 30; i++) {
-            cur.setDate(cur.getDate() + 1);
-            if (cur.getDay() === 6) return true;
-          }
-        }
-      }
-    }
-
-    // 4. Fallback check: does raw date string, duration, or title explicitly mention Saturday or Sat
-    const textToCheck = `${rawDate} ${trek.days || (trek as any).expected_duration || ''} ${trek.name || trek.title || ''}`.toLowerCase();
-    if (/\b(sat|saturday)\b/i.test(textToCheck)) {
-      return true;
-    }
-
-    return false;
-  };
+  const handleOpenReviews = useCallback(() => {
+    onOpenInfoPage?.('reviews');
+  }, [onOpenInfoPage]);
 
   // Base filtering logic
   const filteredTreks = useMemo(() => {
@@ -299,16 +267,16 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
           daysStr.includes('1 day') ||
           daysStr === '1');
 
-      if (tripTypeFilter === 'treks' && !isMultiDayTrek) return false;
-      if (tripTypeFilter === 'overnight' && !isOvernight) return false;
-      if (tripTypeFilter === 'day' && !isDayHike) return false;
+      if (deferredTripTypeFilter === 'treks' && !isMultiDayTrek) return false;
+      if (deferredTripTypeFilter === 'overnight' && !isOvernight) return false;
+      if (deferredTripTypeFilter === 'day' && !isDayHike) return false;
 
-      if (saturdayOnly && !isSaturdayTrek(trek)) {
+      if (deferredSaturdayOnly && !isSaturdayTrek(trek)) {
         return false;
       }
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (deferredSearchQuery.trim()) {
+        const q = deferredSearchQuery.toLowerCase();
         const matchName = trek.name.toLowerCase().includes(q);
         const matchHikeNum = trek.hike_number?.toLowerCase().includes(q) || false;
         const matchLoc = trek.start_location?.toLowerCase().includes(q) || false;
@@ -318,7 +286,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
       return true;
     });
-  }, [treks, savedOnly, favorites, tripTypeFilter, saturdayOnly, searchQuery]);
+  }, [treks, savedOnly, favorites, deferredTripTypeFilter, deferredSaturdayOnly, deferredSearchQuery]);
 
   // Separate upcoming vs past events based on calendar date
   const { upcomingTreks, pastTreks } = useMemo(() => {
@@ -373,6 +341,21 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
     return { upcomingTreks: upcoming, pastTreks: past };
   }, [filteredTreks]);
 
+  const handleCalendarTrekSelect = useCallback((trek: Trek) => {
+    const idx = upcomingTreks.findIndex((t) => (t.id && trek.id ? t.id === trek.id : t === trek));
+    const targetId = String(trek.id || (idx >= 0 ? idx : ''));
+    setHighlightedTrekId(targetId);
+
+    const cardElement = document.getElementById(`trek-card-${targetId}`);
+    if (cardElement) {
+      cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    setTimeout(() => {
+      setHighlightedTrekId((curr) => (curr === targetId ? null : curr));
+    }, 2500);
+  }, [upcomingTreks]);
+
   // Debounced search query telemetry
   React.useEffect(() => {
     if (!searchQuery.trim() || searchQuery.trim().length < 2) return;
@@ -420,7 +403,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         <HomepageHeroBanner
           upcomingCount={upcomingTreks.length}
           completedCount={pastTreks.length}
-          onOpenReviews={() => onOpenInfoPage?.('reviews')}
+          onOpenReviews={handleOpenReviews}
         />
       )}
 
@@ -429,7 +412,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
         <HeroStatsBar
           upcomingCount={upcomingTreks.length}
           completedCount={pastTreks.length}
-          onOpenReviews={() => onOpenInfoPage?.('reviews')}
+          onOpenReviews={handleOpenReviews}
         />
       )}
 
@@ -677,7 +660,7 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
 
           {/* 2. PAST HIKES */}
           {pastTreks.length > 0 && (() => {
-            const isCategoryActive = tripTypeFilter !== 'all';
+            const isCategoryActive = deferredTripTypeFilter !== 'all';
             const isArchiveOpen = isCategoryActive || showPastEvents || upcomingTreks.length === 0;
             return (
               <div className="pt-3 border-t border-[#F0EBE5] space-y-3">
@@ -776,4 +759,4 @@ export const TrekListScreen: React.FC<TrekListScreenProps> = ({
       )}
     </div>
   );
-};
+});

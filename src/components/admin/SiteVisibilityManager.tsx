@@ -33,7 +33,7 @@ import {
   fetchSiteVisibilitySettings,
   saveSiteVisibilitySettings,
 } from '../../services/siteVisibilityService';
-import { apiFetch, buildAuditChanges, recordAdminAuditLog } from '../../services/api';
+import { buildAuditChanges, recordAdminAuditLog } from '../../services/api';
 
 interface SiteVisibilityManagerProps {
   currentUserEmail?: string;
@@ -47,39 +47,7 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [clearingPhotos, setClearingPhotos] = useState(false);
   const prevSettingsRef = useRef<SiteVisibilitySettings>(DEFAULT_VISIBILITY_SETTINGS);
-
-  const handleClearOldPhotos = async () => {
-    if (!window.confirm('Are you sure you want to remove all old Cloudinary photo links from the database? Non-Cloudinary R2 photos will be preserved.')) {
-      return;
-    }
-    setClearingPhotos(true);
-    setSuccessMsg(null);
-    setErrorMsg(null);
-    try {
-      const res = await apiFetch('admin/clear-trek-photos', {
-        method: 'POST',
-        forceFresh: true,
-      });
-      if (res.ok) {
-        setSuccessMsg('All old Cloudinary photo links were successfully removed from the database.');
-        recordAdminAuditLog({
-          actionType: 'UPDATE_PAGE_VISIBILITY',
-          description: 'Cleared legacy Cloudinary photo links from database',
-          metadata: { action: 'clear_cloudinary_photos' },
-          adminEmail: currentUserEmail,
-        });
-        setTimeout(() => setSuccessMsg(null), 6000);
-      } else {
-        throw new Error('Failed to clear photos from server.');
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to clear old photos.');
-    } finally {
-      setClearingPhotos(false);
-    }
-  };
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -151,19 +119,6 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
     } finally {
       setSaving(false);
     }
-  };
-
-  // Quick Preset: Cloudinary Outage Mode (Hide broken media immediately)
-  const applyCloudinaryIncidentPreset = () => {
-    setSettings((prev) => ({
-      ...prev,
-      gallery: false,
-      vouchers: false,
-      maintenanceNoticeTitle: 'Media Server Upgrades in Progress',
-      maintenanceNoticeMessage:
-        'We are currently migrating our photo and media storage. Gallery and direct voucher uploads will return shortly. Thank you for your patience!',
-    }));
-    setSuccessMsg('Preset applied: Gallery and Voucher uploads set to Hidden. Tap "Save Settings" below to publish.');
   };
 
   // Quick Preset: Restore Everything Public
@@ -262,14 +217,6 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={applyCloudinaryIncidentPreset}
-              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-3xs"
-              title="One-click hide gallery and voucher upload during Cloudinary outage"
-            >
-              ⚠️ Cloudinary Incident Preset
-            </button>
-            <button
-              type="button"
               onClick={applyRestoreAllPreset}
               className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-3xs"
               title="Restore all sections to public"
@@ -305,33 +252,15 @@ export const SiteVisibilityManager: React.FC<SiteVisibilityManagerProps> = ({
             {renderToggleRow(
               'gallery',
               'Community Gallery (Trek Photos)',
-              'Public photo wall displaying attendee trek photos. Hide this while migrating photos away from Cloudinary to avoid broken image displays.',
-              <Camera className="w-5 h-5" />,
-              'Cloudinary Critical'
+              'Public photo wall displaying attendee trek photos stored on Cloudflare R2.',
+              <Camera className="w-5 h-5" />
             )}
             {renderToggleRow(
               'vouchers',
               'Payment Voucher Upload Form',
-              'Payment voucher receipt uploader during trek booking. When hidden, users are directed to verify payments via WhatsApp or bank confirmation instead of broken Cloudinary uploads.',
-              <CreditCard className="w-5 h-5" />,
-              'Cloudinary Critical'
+              'Payment voucher receipt uploader during trek booking. When hidden, users are directed to verify payments via WhatsApp or bank confirmation.',
+              <CreditCard className="w-5 h-5" />
             )}
-
-            {/* Clear Old Gallery Photos Action */}
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 mt-3">
-              <div className="space-y-0.5 text-left">
-                <h4 className="text-sm font-bold text-rose-900">Remove All Old Gallery Photo Links</h4>
-                <p className="text-xs text-rose-700">Clear all legacy Cloudinary photo links from the database to prepare for fresh reuploads.</p>
-              </div>
-              <button
-                type="button"
-                onClick={handleClearOldPhotos}
-                disabled={clearingPhotos}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-stone-300 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
-              >
-                {clearingPhotos ? 'Clearing...' : '🗑️ Remove Old Cloudinary Links Only'}
-              </button>
-            </div>
           </div>
         </div>
 

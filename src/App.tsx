@@ -1,24 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { Trek, Booking, TeamMember, BookingFormData } from './types';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { TrekListScreen } from './screens/TrekListScreen';
-import { MyBookingsScreen } from './screens/MyBookingsScreen';
-import { GalleryScreen } from './screens/GalleryScreen';
-import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { RegistrationModal } from './components/RegistrationModal';
 import { InviteModal } from './components/InviteModal';
 import { ItineraryModal } from './components/ItineraryModal';
-import { TrekFeedbackModal } from './components/TrekFeedbackModal';
-import { InfoPagesModal, SubPageType } from './components/InfoPagesModal';
-import { VoucherModal } from './components/VoucherModal';
+import type { SubPageType } from './components/InfoPagesModal';
 import { NoticeBoardModal } from './components/NoticeBoardModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { SocialLinksFooter } from './components/SocialLinksFooter';
 import { FALLBACK_TREKS } from './data/fallbackTreks';
 import { CheckCircle2, AlertCircle, Mountain, Heart, RefreshCw, ShieldCheck } from 'lucide-react';
-import MapMinersDashboard from './components/mapminers/MapMinersDashboard';
 import {
   apiFetch,
   normalizeTrek,
@@ -29,14 +23,43 @@ import {
   fetchUserBookings,
 } from './services/api';
 import { isAdminEmail } from './adminUtils';
-import AdminDashboard from './components/admin/AdminDashboard';
 import { useSiteVisibility } from './services/siteVisibilityService';
 import { MaintenanceStateCard } from './components/MaintenanceStateCard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
-import { ProfileModal } from './components/ProfileModal';
 import { db } from './lib/firebase';
 import { logUserActivity } from './services/userActivityNotifier';
+
+const MyBookingsScreen = lazy(() =>
+  import('./screens/MyBookingsScreen').then((m) => ({ default: m.MyBookingsScreen }))
+);
+const GalleryScreen = lazy(() =>
+  import('./screens/GalleryScreen').then((m) => ({ default: m.GalleryScreen }))
+);
+const LeaderboardScreen = lazy(() =>
+  import('./screens/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen }))
+);
+const TrekFeedbackModal = lazy(() =>
+  import('./components/TrekFeedbackModal').then((m) => ({ default: m.TrekFeedbackModal }))
+);
+const InfoPagesModal = lazy(() =>
+  import('./components/InfoPagesModal').then((m) => ({ default: m.InfoPagesModal }))
+);
+const VoucherModal = lazy(() =>
+  import('./components/VoucherModal').then((m) => ({ default: m.VoucherModal }))
+);
+const ProfileModal = lazy(() =>
+  import('./components/ProfileModal').then((m) => ({ default: m.ProfileModal }))
+);
+const MapMinersDashboard = lazy(() => import('./components/mapminers/MapMinersDashboard'));
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
+
+const TabSuspenseFallback = () => (
+  <div className="w-full py-16 flex flex-col items-center justify-center gap-2.5 text-xs font-semibold text-[#8B8680]">
+    <RefreshCw className="w-5 h-5 text-[#E08828] animate-spin" />
+    <span>Loading view...</span>
+  </div>
+);
 import {
   trackItineraryView,
   trackFaqView,
@@ -1224,20 +1247,22 @@ function MainApp() {
     }
   };
 
-  const toggleFavorite = (trekId: string) => {
+  const toggleFavorite = useCallback((trekId: string) => {
     triggerHaptic(20);
     setFavorites((prev) => {
       const next = prev.includes(trekId)
         ? prev.filter((id) => id !== trekId)
         : [...prev, trekId];
-      try {
-        localStorage.setItem('wnw_favorites', JSON.stringify(next));
-      } catch (e) {
-        // ignore storage errors
-      }
+      setTimeout(() => {
+        try {
+          localStorage.setItem('wnw_favorites', JSON.stringify(next));
+        } catch (e) {
+          // ignore storage errors
+        }
+      }, 0);
       return next;
     });
-  };
+  }, []);
 
   const handleRegisterSubmit = async (formData: BookingFormData) => {
     const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1601,6 +1626,106 @@ function MainApp() {
     await refreshData({ force: true });
   };
 
+  // Stable callbacks so TrekCard / TrekListScreen / Navbar / BottomNav memoization holds across taps
+  const handleRegisterTrek = useCallback((trek: Trek) => {
+    setSelectedTrekForRegister(trek);
+    setNotifications((prev) =>
+      prev.treks?.hasUnread ? { ...prev, treks: { hasUnread: false, count: 0 } } : prev
+    );
+    setTimeout(() => {
+      markNotificationAsRead('treks', trek.hike_number || trek.id);
+    }, 0);
+    trackRegistrationStart(trek.hike_number || trek.id, trek.name);
+  }, []);
+
+  const handleShareTrek = useCallback((trek: Trek) => {
+    setSelectedTrekForInvite(trek);
+    setShowInviteModal(true);
+  }, []);
+
+  const handleViewItinerary = useCallback((trek: Trek) => {
+    setItineraryModalTrek(trek);
+    setItineraryModalType('itinerary');
+    setNotifications((prev) =>
+      prev.treks?.hasUnread ? { ...prev, treks: { hasUnread: false, count: 0 } } : prev
+    );
+    setTimeout(() => {
+      markNotificationAsRead('treks', trek.hike_number || trek.id);
+    }, 0);
+    trackItineraryView(trek.hike_number || trek.id, trek.name);
+  }, []);
+
+  const handleViewFaq = useCallback((trek: Trek) => {
+    setItineraryModalTrek(trek);
+    setItineraryModalType('faq');
+    trackFaqView(trek.hike_number || trek.id, trek.name);
+  }, []);
+
+  const handleViewGallery = useCallback(
+    (trek?: Trek) => {
+      handleMainTabChange('gallery', trek?.id);
+    },
+    [handleMainTabChange]
+  );
+
+  const handleLeaveFeedback = useCallback((trek: Trek) => {
+    setFeedbackModalTrek(trek);
+    setFeedbackModalBooking(null);
+    setShowFeedbackModal(true);
+  }, []);
+
+  const handleExploreAllTreks = useCallback(() => {
+    setCurrentTab('treks');
+  }, []);
+
+  const handleOpenContribute = useCallback(() => {
+    closeAllOverlays();
+    setShowMapMinerContribute(true);
+  }, [closeAllOverlays]);
+
+  const handleOpenProfile = useCallback(
+    (tab?: 'hikes' | 'bookings' | 'saved' | 'settings') => {
+      closeAllOverlays();
+      setProfileModalTab(tab || 'hikes');
+      setProfileModalOpen(true);
+    },
+    [closeAllOverlays]
+  );
+
+  const feedbackCurrentUser = useMemo(() => {
+    if (!showFeedbackModal) {
+      return { name: '', email: activeUserEmail };
+    }
+    let resolvedName = '';
+    if (feedbackModalBooking?.full_name?.trim() && !/nepal hiker/i.test(feedbackModalBooking.full_name)) {
+      resolvedName = feedbackModalBooking.full_name.trim();
+    } else if (user?.displayName?.trim() && !/nepal hiker/i.test(user.displayName)) {
+      resolvedName = user.displayName.trim();
+    } else {
+      try {
+        const reg =
+          localStorage.getItem('wnw_user_registration_profile') ||
+          localStorage.getItem('wnw_last_registration_data');
+        if (reg) {
+          const parsed = JSON.parse(reg);
+          const name = parsed.fullName || parsed.full_name || parsed.name;
+          if (name?.trim() && !/nepal hiker/i.test(name)) resolvedName = name.trim();
+        }
+        if (!resolvedName) {
+          const savedName = localStorage.getItem('wnw_user_name');
+          if (savedName?.trim() && !/nepal hiker/i.test(savedName)) resolvedName = savedName.trim();
+        }
+      } catch {}
+    }
+    if (!resolvedName && activeUserEmail) {
+      const prefix = activeUserEmail.split('@')[0].replace(/[._-]/g, ' ').trim();
+      if (prefix && !/nepal hiker/i.test(prefix)) {
+        resolvedName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+      }
+    }
+    return { name: resolvedName, email: activeUserEmail };
+  }, [showFeedbackModal, feedbackModalBooking?.full_name, user?.displayName, activeUserEmail]);
+
   return (
     <div
       className="min-h-screen bg-[#F0EBE5] md:bg-[#F2ECE5] flex flex-col items-center justify-start w-full"
@@ -1661,17 +1786,10 @@ function MainApp() {
           onTabChange={handleMainTabChange}
           bookingCount={bookings.length}
           savedCount={favorites.length}
-          onOpenContribute={() => {
-            closeAllOverlays();
-            setShowMapMinerContribute(true);
-          }}
+          onOpenContribute={handleOpenContribute}
           onOpenInfoPage={handleOpenInfoPage}
           userEmail={activeUserEmail}
-          onOpenProfile={(tab?: 'hikes' | 'bookings' | 'saved' | 'settings') => {
-            closeAllOverlays();
-            setProfileModalTab(tab || 'hikes');
-            setProfileModalOpen(true);
-          }}
+          onOpenProfile={handleOpenProfile}
           notifications={notifications}
         />
 
@@ -1683,36 +1801,12 @@ function MainApp() {
               loading={loadingTreks}
               favorites={favorites}
               onToggleFavorite={toggleFavorite}
-              onRegister={(trek) => {
-                markNotificationAsRead('treks', trek.hike_number || trek.id);
-                setNotifications((prev) => ({ ...prev, treks: { hasUnread: false, count: 0 } }));
-                trackRegistrationStart(trek.hike_number || trek.id, trek.name);
-                setSelectedTrekForRegister(trek);
-              }}
-              onShare={(trek) => {
-                setSelectedTrekForInvite(trek);
-                setShowInviteModal(true);
-              }}
-              onViewItinerary={(trek) => {
-                markNotificationAsRead('treks', trek.hike_number || trek.id);
-                setNotifications((prev) => ({ ...prev, treks: { hasUnread: false, count: 0 } }));
-                trackItineraryView(trek.hike_number || trek.id, trek.name);
-                setItineraryModalTrek(trek);
-                setItineraryModalType('itinerary');
-              }}
-              onViewFaq={(trek) => {
-                trackFaqView(trek.hike_number || trek.id, trek.name);
-                setItineraryModalTrek(trek);
-                setItineraryModalType('faq');
-              }}
-              onViewGallery={(trek) => {
-                handleMainTabChange('gallery', trek?.id);
-              }}
-              onLeaveFeedback={(trek) => {
-                setFeedbackModalTrek(trek);
-                setFeedbackModalBooking(null);
-                setShowFeedbackModal(true);
-              }}
+              onRegister={handleRegisterTrek}
+              onShare={handleShareTrek}
+              onViewItinerary={handleViewItinerary}
+              onViewFaq={handleViewFaq}
+              onViewGallery={handleViewGallery}
+              onLeaveFeedback={handleLeaveFeedback}
               activeInfoPage={infoModalPage}
               onOpenInfoPage={handleOpenInfoPage}
             />
@@ -1727,76 +1821,60 @@ function MainApp() {
                 loading={loadingTreks}
                 favorites={favorites}
                 onToggleFavorite={toggleFavorite}
-                onRegister={(trek) => {
-                  trackRegistrationStart(trek.hike_number || trek.id, trek.name);
-                  setSelectedTrekForRegister(trek);
-                }}
-                onShare={(trek) => {
-                  setSelectedTrekForInvite(trek);
-                  setShowInviteModal(true);
-                }}
-                onViewItinerary={(trek) => {
-                  trackItineraryView(trek.hike_number || trek.id, trek.name);
-                  setItineraryModalTrek(trek);
-                  setItineraryModalType('itinerary');
-                }}
-                onViewFaq={(trek) => {
-                  trackFaqView(trek.hike_number || trek.id, trek.name);
-                  setItineraryModalTrek(trek);
-                  setItineraryModalType('faq');
-                }}
-                onViewGallery={(trek) => {
-                  handleMainTabChange('gallery', trek?.id);
-                }}
+                onRegister={handleRegisterTrek}
+                onShare={handleShareTrek}
+                onViewItinerary={handleViewItinerary}
+                onViewFaq={handleViewFaq}
+                onViewGallery={handleViewGallery}
                 savedOnly={true}
-                onExploreAll={() => setCurrentTab('treks')}
-                onLeaveFeedback={(trek) => {
-                  setFeedbackModalTrek(trek);
-                  setFeedbackModalBooking(null);
-                  setShowFeedbackModal(true);
-                }}
+                onExploreAll={handleExploreAllTreks}
+                onLeaveFeedback={handleLeaveFeedback}
                 activeInfoPage={infoModalPage}
                 onOpenInfoPage={handleOpenInfoPage}
               />
             )}
 
           {currentTab === 'bookings' && (
-            <MyBookingsScreen
-              bookings={bookings}
-              loading={loadingBookings}
-              onCancelBooking={handleCancelBooking}
-              onExploreTreks={() => setCurrentTab('treks')}
-              onViewMyHikes={() => {
-                setProfileModalTab('hikes');
-                setProfileModalOpen(true);
-              }}
-              onShare={(booking) => {
-                setSelectedTrekForInvite(findTrekForBooking(booking));
-                setShowInviteModal(true);
-              }}
-              onLeaveFeedback={(booking) => {
-                setFeedbackModalBooking(booking);
-                setFeedbackModalTrek(findTrekForBooking(booking));
-                setShowFeedbackModal(true);
-              }}
-              onViewItinerary={(booking) => {
-                const matchedTrek = findTrekForBooking(booking);
-                if (matchedTrek) {
-                  setItineraryModalTrek(matchedTrek);
-                  setItineraryModalType('itinerary');
-                }
-              }}
-              onOpenPaymentPage={() => setInfoModalPage('payment')}
-              onUploadVoucher={(booking) => {
-                setVoucherTargetBooking(booking);
-                setShowVoucherModal(true);
-              }}
-            />
+            <Suspense fallback={<TabSuspenseFallback />}>
+              <MyBookingsScreen
+                bookings={bookings}
+                loading={loadingBookings}
+                onCancelBooking={handleCancelBooking}
+                onExploreTreks={handleExploreAllTreks}
+                onViewMyHikes={() => {
+                  setProfileModalTab('hikes');
+                  setProfileModalOpen(true);
+                }}
+                onShare={(booking) => {
+                  setSelectedTrekForInvite(findTrekForBooking(booking));
+                  setShowInviteModal(true);
+                }}
+                onLeaveFeedback={(booking) => {
+                  setFeedbackModalBooking(booking);
+                  setFeedbackModalTrek(findTrekForBooking(booking));
+                  setShowFeedbackModal(true);
+                }}
+                onViewItinerary={(booking) => {
+                  const matchedTrek = findTrekForBooking(booking);
+                  if (matchedTrek) {
+                    setItineraryModalTrek(matchedTrek);
+                    setItineraryModalType('itinerary');
+                  }
+                }}
+                onOpenPaymentPage={() => setInfoModalPage('payment')}
+                onUploadVoucher={(booking) => {
+                  setVoucherTargetBooking(booking);
+                  setShowVoucherModal(true);
+                }}
+              />
+            </Suspense>
           )}
 
           {currentTab === 'admin' && (
             isAdmin || isAdminEmail(activeUserEmail) ? (
-              <AdminDashboard currentUserEmail={activeUserEmail} />
+              <Suspense fallback={<TabSuspenseFallback />}>
+                <AdminDashboard currentUserEmail={activeUserEmail} />
+              </Suspense>
             ) : (
               <div className="max-w-md mx-auto my-12 p-8 bg-white border border-[#E5E1DB] rounded-3xl shadow-xl text-center space-y-5 animate-in fade-in zoom-in-95">
                 <div className="w-16 h-16 mx-auto rounded-2xl bg-[#FFF3E6] border border-[#FFE0BA] flex items-center justify-center text-[#E08828] shadow-xs">
@@ -1835,26 +1913,32 @@ function MainApp() {
             renderProtectedTab(
               'mapminers',
               'MapMiners GPS Trails',
-              <MapMinersDashboard
-                currentUserEmail={activeUserEmail}
-                isContributionOpen={showMapMinerContribute}
-                onOpenContribution={() => setShowMapMinerContribute(true)}
-                onCloseContribution={() => setShowMapMinerContribute(false)}
-              />
+              <Suspense fallback={<TabSuspenseFallback />}>
+                <MapMinersDashboard
+                  currentUserEmail={activeUserEmail}
+                  isContributionOpen={showMapMinerContribute}
+                  onOpenContribution={() => setShowMapMinerContribute(true)}
+                  onCloseContribution={() => setShowMapMinerContribute(false)}
+                />
+              </Suspense>
             )}
 
           {currentTab === 'gallery' &&
             renderProtectedTab(
               'gallery',
               'Community Gallery',
-              <GalleryScreen treks={treks} onOpenAuthModal={openAuthModal} />
+              <Suspense fallback={<TabSuspenseFallback />}>
+                <GalleryScreen treks={treks} onOpenAuthModal={openAuthModal} />
+              </Suspense>
             )}
 
           {currentTab === 'leaderboard' &&
             renderProtectedTab(
               'leaderboard',
               'Community Leaderboard',
-              <LeaderboardScreen onNavigateToMapMiners={() => handleMainTabChange('mapminers')} />
+              <Suspense fallback={<TabSuspenseFallback />}>
+                <LeaderboardScreen onNavigateToMapMiners={() => handleMainTabChange('mapminers')} />
+              </Suspense>
             )}
 
           {/* Micro App Footer inside shell */}
@@ -1879,11 +1963,7 @@ function MainApp() {
             bookingCount={bookings.length}
             savedCount={favorites.length}
             onOpenInfoPage={handleOpenInfoPage}
-            onOpenProfile={(tab?: 'hikes' | 'bookings' | 'saved' | 'settings') => {
-              closeAllOverlays();
-              setProfileModalTab(tab || 'hikes');
-              setProfileModalOpen(true);
-            }}
+            onOpenProfile={handleOpenProfile}
             notifications={notifications}
           />
         )}
@@ -1939,135 +2019,120 @@ function MainApp() {
 
         {/* Trek Feedback Modal */}
         {showFeedbackModal && (
-          <TrekFeedbackModal
-            isOpen={showFeedbackModal}
-            onClose={() => {
-              setShowFeedbackModal(false);
-              setFeedbackModalTrek(null);
-              setFeedbackModalBooking(null);
-            }}
-            trek={feedbackModalTrek}
-            booking={feedbackModalBooking}
-            currentUser={{
-              name: (() => {
-                if (feedbackModalBooking?.full_name?.trim() && !/nepal hiker/i.test(feedbackModalBooking.full_name)) {
-                  return feedbackModalBooking.full_name.trim();
-                }
-                if (user?.displayName?.trim() && !/nepal hiker/i.test(user.displayName)) {
-                  return user.displayName.trim();
-                }
-                try {
-                  const reg = localStorage.getItem('wnw_user_registration_profile') || localStorage.getItem('wnw_last_registration_data');
-                  if (reg) {
-                    const parsed = JSON.parse(reg);
-                    const name = parsed.fullName || parsed.full_name || parsed.name;
-                    if (name?.trim() && !/nepal hiker/i.test(name)) return name.trim();
-                  }
-                  const savedName = localStorage.getItem('wnw_user_name');
-                  if (savedName?.trim() && !/nepal hiker/i.test(savedName)) return savedName.trim();
-                } catch {}
-                if (activeUserEmail) {
-                  const prefix = activeUserEmail.split('@')[0].replace(/[._-]/g, ' ').trim();
-                  if (prefix && !/nepal hiker/i.test(prefix)) {
-                    return prefix.charAt(0).toUpperCase() + prefix.slice(1);
-                  }
-                }
-                return '';
-              })(),
-              email: activeUserEmail,
-            }}
-            onSubmitSuccess={() => {
-              showToast('Thank you for your feedback! Review saved.', 'success');
-            }}
-            recentHikes={recentFeedbackHikes}
-          />
+          <Suspense fallback={null}>
+            <TrekFeedbackModal
+              isOpen={showFeedbackModal}
+              onClose={() => {
+                setShowFeedbackModal(false);
+                setFeedbackModalTrek(null);
+                setFeedbackModalBooking(null);
+              }}
+              trek={feedbackModalTrek}
+              booking={feedbackModalBooking}
+              currentUser={feedbackCurrentUser}
+              onSubmitSuccess={() => {
+                showToast('Thank you for your feedback! Review saved.', 'success');
+              }}
+              recentHikes={recentFeedbackHikes}
+            />
+          </Suspense>
         )}
 
         {/* Info Pages Modal (Payment, Tips, Safety, Reviews, Private Trek, Contact, Trek Leaders) */}
         {Boolean(infoModalPage) && (
-          <InfoPagesModal
-            isOpen={Boolean(infoModalPage)}
-            onClose={() => setInfoModalPage(null)}
-            initialPage={infoModalPage || 'payment'}
-            treks={treks}
-            onNavigateToBookings={() => {
-              setInfoModalPage(null);
-              setCurrentTab('bookings');
-            }}
-            onOpenVoucherUpload={() => {
-              setVoucherTargetBooking(bookings[0] || null);
-              setShowVoucherModal(true);
-            }}
-            onLeaveFeedback={() => {
-              const latestBooking = bookings[0] || latestUserBooking || null;
-              setFeedbackModalBooking(latestBooking);
-              setFeedbackModalTrek(latestBooking ? findTrekForBooking(latestBooking) : null);
-              setShowFeedbackModal(true);
-            }}
-            onSuccessSubmitted={async () => {
-              await refreshData({ force: true });
-              showToast('Private Trek Request saved to Cloudflare!', 'success');
-            }}
-          />
+          <Suspense fallback={null}>
+            <InfoPagesModal
+              isOpen={Boolean(infoModalPage)}
+              onClose={() => setInfoModalPage(null)}
+              initialPage={infoModalPage || 'payment'}
+              treks={treks}
+              onNavigateToBookings={() => {
+                setInfoModalPage(null);
+                setCurrentTab('bookings');
+              }}
+              onOpenVoucherUpload={() => {
+                setVoucherTargetBooking(bookings[0] || null);
+                setShowVoucherModal(true);
+              }}
+              onLeaveFeedback={() => {
+                const latestBooking = bookings[0] || latestUserBooking || null;
+                setFeedbackModalBooking(latestBooking);
+                setFeedbackModalTrek(latestBooking ? findTrekForBooking(latestBooking) : null);
+                setShowFeedbackModal(true);
+              }}
+              onSuccessSubmitted={async () => {
+                await refreshData({ force: true });
+                showToast('Private Trek Request saved to Cloudflare!', 'success');
+              }}
+            />
+          </Suspense>
         )}
 
         {/* Payment Voucher Upload Modal */}
-        <VoucherModal
-          isOpen={showVoucherModal}
-          onClose={() => {
-            setShowVoucherModal(false);
-            setVoucherTargetBooking(null);
-          }}
-          booking={voucherTargetBooking}
-          allBookings={bookings}
-          userEmail={activeUserEmail}
-          onVoucherUploaded={async () => {
-            await refreshData({ force: true });
-            showToast('Payment voucher forwarded successfully!', 'success');
-          }}
-        />
+        {showVoucherModal && (
+          <Suspense fallback={null}>
+            <VoucherModal
+              isOpen={showVoucherModal}
+              onClose={() => {
+                setShowVoucherModal(false);
+                setVoucherTargetBooking(null);
+              }}
+              booking={voucherTargetBooking}
+              allBookings={bookings}
+              userEmail={activeUserEmail}
+              onVoucherUploaded={async () => {
+                await refreshData({ force: true });
+                showToast('Payment voucher forwarded successfully!', 'success');
+              }}
+            />
+          </Suspense>
+        )}
 
         {/* Firebase Authentication Modal */}
-        <AuthModal />
+        {authModalOpen && <AuthModal />}
 
         {/* Site Notice Board Pop-up Modal */}
         <NoticeBoardModal />
 
         {/* Hiker Profile & Booking History Modal */}
-        <ProfileModal
-          isOpen={profileModalOpen}
-          onClose={() => setProfileModalOpen(false)}
-          userBookings={bookings}
-          loadingBookings={loadingBookings}
-          allTreks={treks}
-          favorites={favorites}
-          onToggleFavorite={toggleFavorite}
-          onOpenTrek={(t) => setItineraryModalTrek(t)}
-          initialTab={profileModalTab}
-          onCancelBooking={handleCancelBooking}
-          onExploreTreks={() => setCurrentTab('treks')}
-          onShareBooking={(booking) => {
-            setSelectedTrekForInvite(findTrekForBooking(booking));
-            setShowInviteModal(true);
-          }}
-          onLeaveFeedbackBooking={(booking) => {
-            setFeedbackModalBooking(booking);
-            setFeedbackModalTrek(findTrekForBooking(booking));
-            setShowFeedbackModal(true);
-          }}
-          onViewItineraryBooking={(booking) => {
-            const matchedTrek = findTrekForBooking(booking);
-            if (matchedTrek) {
-              setItineraryModalTrek(matchedTrek);
-              setItineraryModalType('itinerary');
-            }
-          }}
-          onOpenPaymentPage={() => setInfoModalPage('payment')}
-          onUploadVoucher={(booking) => {
-            setVoucherTargetBooking(booking);
-            setShowVoucherModal(true);
-          }}
-        />
+        {profileModalOpen && (
+          <Suspense fallback={null}>
+            <ProfileModal
+              isOpen={profileModalOpen}
+              onClose={() => setProfileModalOpen(false)}
+              userBookings={bookings}
+              loadingBookings={loadingBookings}
+              allTreks={treks}
+              favorites={favorites}
+              onToggleFavorite={toggleFavorite}
+              onOpenTrek={(t) => setItineraryModalTrek(t)}
+              initialTab={profileModalTab}
+              onCancelBooking={handleCancelBooking}
+              onExploreTreks={() => setCurrentTab('treks')}
+              onShareBooking={(booking) => {
+                setSelectedTrekForInvite(findTrekForBooking(booking));
+                setShowInviteModal(true);
+              }}
+              onLeaveFeedbackBooking={(booking) => {
+                setFeedbackModalBooking(booking);
+                setFeedbackModalTrek(findTrekForBooking(booking));
+                setShowFeedbackModal(true);
+              }}
+              onViewItineraryBooking={(booking) => {
+                const matchedTrek = findTrekForBooking(booking);
+                if (matchedTrek) {
+                  setItineraryModalTrek(matchedTrek);
+                  setItineraryModalType('itinerary');
+                }
+              }}
+              onOpenPaymentPage={() => setInfoModalPage('payment')}
+              onUploadVoucher={(booking) => {
+                setVoucherTargetBooking(booking);
+                setShowVoucherModal(true);
+              }}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   );

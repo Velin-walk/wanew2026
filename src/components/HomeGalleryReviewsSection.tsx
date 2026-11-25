@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Camera, Star, ArrowRight, Sparkles, MessageSquare, Image as ImageIcon } from 'lucide-react';
 import { Trek } from '../types';
-import { SubPageType } from './InfoPagesModal';
+import type { SubPageType } from './InfoPagesModal';
 import { HISTORIC_COMMUNITY_REVIEWS, StaticReview } from '../data/historicReviews';
 import { apiFetch } from '../services/api';
 import { triggerHaptic } from '../utils/haptics';
@@ -147,7 +147,7 @@ const VERIFIED_5STAR_NAMED_REVIEWS: StaticReview[] = [
   },
 ];
 
-export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps> = ({
+export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps> = React.memo(({
   treks: _treks,
   onViewGallery,
   onOpenInfoPage,
@@ -561,4 +561,4 @@ export const HomeGalleryReviewsSection: React.FC<HomeGalleryReviewsSectionProps>
       </div>
     </div>
   );
-};
+});

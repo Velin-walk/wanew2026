@@ -20,7 +20,29 @@ interface TrekCalendarProps {
   getEventDurationDays?: (trek: Trek) => number;
 }
 
-export const TrekCalendar: React.FC<TrekCalendarProps> = ({
+const EMPTY_TREKS: Trek[] = [];
+const formatDayKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const getMonthKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const isSameDay = (d1: Date, d2: Date) =>
+  d1.getFullYear() === d2.getFullYear() &&
+  d1.getMonth() === d2.getMonth() &&
+  d1.getDate() === d2.getDate();
+
+const getMainTrekName = (trek: Trek): string => {
+  const raw = (trek.name || trek.title || 'Trek').trim();
+  const cleaned = raw
+    .replace(/^(?:hike|trek)\s*#?\s*\d*\s*[:\-–—]?\s*/i, '')
+    .replace(/^#\d+\s*[:\-–—]?\s*/i, '')
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s+(?:sat(?:urday)?\s+subs(?:cription)?\s+hike|subscription\s+hike|overnight\s+hike|day\s+hike|hike|trek)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return cleaned || raw;
+};
+
+export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
   treks,
   onSelectTrek,
   onViewItinerary,
@@ -88,13 +110,6 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = ({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const isSameDay = (d1: Date, d2: Date) =>
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate();
-
-  const getMonthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-
   // Scroll to a specific month inside the horizontal container
   const scrollToMonth = (targetMonth: Date, behavior: ScrollBehavior = 'smooth') => {
     const container = scrollContainerRef.current;
@@ -116,124 +131,120 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = ({
     }
   }, [initialMonth, isCollapsed]);
 
-  // Check if a trek occurs on a specific day
-  const isTrekOnDay = (trek: Trek, day: Date): boolean => {
-    const dStr = trek.date || trek.data?.hikeDate || (trek as any).hike_date || '';
-    if (!dStr) return false;
-    const start = parseTrekDate(dStr);
-    if (!start || isNaN(start.getTime())) return false;
+  // Precompute day-to-treks map & month counts once per treks change (O(T * duration) instead of O(months * 31 * T))
+  const { treksByDayMap, monthTrekCounts } = useMemo(() => {
+    const dayMap = new Map<string, Trek[]>();
+    const monthCounts = new Map<string, number>();
 
-    const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-    const dayEnd = dayStart + 86400000 - 1;
+    for (const trek of treks) {
+      const dStr = trek.date || trek.data?.hikeDate || (trek as any).hike_date || '';
+      if (!dStr) continue;
+      const start = parseTrekDate(dStr);
+      if (!start || isNaN(start.getTime())) continue;
 
-    const startMs = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
-    const end = parseTrekEndDate ? parseTrekEndDate(dStr) : null;
-    let endMs: number;
-    if (end && !isNaN(end.getTime())) {
-      endMs = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime() + 86400000 - 1;
-    } else {
-      const duration = getEventDurationDays ? getEventDurationDays(trek) : 1;
-      endMs = startMs + duration * 86400000 - 1;
+      const mKey = getMonthKey(start);
+      monthCounts.set(mKey, (monthCounts.get(mKey) || 0) + 1);
+
+      const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const end = parseTrekEndDate ? parseTrekEndDate(dStr) : null;
+      let totalDays = 1;
+      if (end && !isNaN(end.getTime())) {
+        const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+        const diff = Math.round((endDay.getTime() - startDay.getTime()) / 86400000) + 1;
+        totalDays = Math.min(60, Math.max(1, diff));
+      } else {
+        const duration = getEventDurationDays ? getEventDurationDays(trek) : 1;
+        totalDays = Math.min(60, Math.max(1, duration));
+      }
+
+      const cursor = new Date(startDay);
+      for (let i = 0; i < totalDays; i++) {
+        const dKey = formatDayKey(cursor);
+        const existing = dayMap.get(dKey);
+        if (existing) {
+          existing.push(trek);
+        } else {
+          dayMap.set(dKey, [trek]);
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
     }
 
-    return dayEnd >= startMs && dayStart <= endMs;
-  };
+    return { treksByDayMap: dayMap, monthTrekCounts: monthCounts };
+  }, [treks, parseTrekDate, parseTrekEndDate, getEventDurationDays]);
 
   const getTreksOnDay = (day: Date): Trek[] => {
-    return treks.filter((trek) => isTrekOnDay(trek, day));
+    return treksByDayMap.get(formatDayKey(day)) || EMPTY_TREKS;
   };
 
-  // Extract concise main text representing the trek name
-  const getMainTrekName = (trek: Trek): string => {
-    const raw = (trek.name || trek.title || 'Trek').trim();
-    const cleaned = raw
-      .replace(/^(?:hike|trek)\s*#?\s*\d*\s*[:\-–—]?\s*/i, '')
-      .replace(/^#\d+\s*[:\-–—]?\s*/i, '')
-      .replace(/\s*\([^)]*\)\s*/g, ' ')
-      .replace(/\s+(?:sat(?:urday)?\s+subs(?:cription)?\s+hike|subscription\s+hike|overnight\s+hike|day\s+hike|hike|trek)\b/gi, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-    return cleaned || raw;
-  };
-
-  // Build grid cells for a given month
-  const buildMonthGrid = (monthDate: Date) => {
-    const year = monthDate.getFullYear();
-    const month = monthDate.getMonth();
-
-    const firstDayOfMonth = new Date(year, month, 1);
-    const startingDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday
-
-    const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
-
+  // Precompute all month grids once per monthsList/treks change
+  const monthCardsData = useMemo(() => {
     const today = new Date();
-
-    const cells: {
-      date: Date;
-      isCurrentMonth: boolean;
-      isToday: boolean;
-      isSaturday: boolean;
-      dayNumber: number;
-      treks: Trek[];
-    }[] = [];
-
-    // Previous month padding
-    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-      const dayNum = daysInPrevMonth - i;
-      const date = new Date(year, month - 1, dayNum);
-      cells.push({
-        date,
-        isCurrentMonth: false,
-        isToday: isSameDay(date, today),
-        isSaturday: date.getDay() === 6,
-        dayNumber: dayNum,
-        treks: [],
+    return monthsList.map((monthDate) => {
+      const year = monthDate.getFullYear();
+      const month = monthDate.getMonth();
+      const monthKey = getMonthKey(monthDate);
+      const monthLabel = monthDate.toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric',
       });
-    }
+      const monthTrekCount = monthTrekCounts.get(monthKey) || 0;
 
-    // Current month days
-    for (let dayNum = 1; dayNum <= daysInCurrentMonth; dayNum++) {
-      const date = new Date(year, month, dayNum);
-      cells.push({
-        date,
-        isCurrentMonth: true,
-        isToday: isSameDay(date, today),
-        isSaturday: date.getDay() === 6,
-        dayNumber: dayNum,
-        treks: getTreksOnDay(date),
-      });
-    }
+      const firstDayOfMonth = new Date(year, month, 1);
+      const startingDayOfWeek = firstDayOfMonth.getDay();
+      const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
+      const daysInPrevMonth = new Date(year, month, 0).getDate();
 
-    // Next month padding to complete final week row
-    const remaining = (7 - (cells.length % 7)) % 7;
-    for (let dayNum = 1; dayNum <= remaining; dayNum++) {
-      const date = new Date(year, month + 1, dayNum);
-      cells.push({
-        date,
-        isCurrentMonth: false,
-        isToday: isSameDay(date, today),
-        isSaturday: date.getDay() === 6,
-        dayNumber: dayNum,
-        treks: [],
-      });
-    }
+      const cells: {
+        date: Date;
+        isCurrentMonth: boolean;
+        isToday: boolean;
+        isSaturday: boolean;
+        dayNumber: number;
+        treks: Trek[];
+      }[] = [];
 
-    return cells;
-  };
+      for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+        const dayNum = daysInPrevMonth - i;
+        const date = new Date(year, month - 1, dayNum);
+        cells.push({
+          date,
+          isCurrentMonth: false,
+          isToday: isSameDay(date, today),
+          isSaturday: date.getDay() === 6,
+          dayNumber: dayNum,
+          treks: EMPTY_TREKS,
+        });
+      }
 
-  // Count treks starting in a given month
-  const getTreksCountForMonth = (monthDate: Date): number => {
-    const year = monthDate.getFullYear();
-    const month = monthDate.getMonth();
-    return treks.filter((trek) => {
-      const dStr = trek.date || trek.data?.hikeDate || (trek as any).hike_date || '';
-      if (!dStr) return false;
-      const start = parseTrekDate(dStr);
-      if (!start || isNaN(start.getTime())) return false;
-      return start.getFullYear() === year && start.getMonth() === month;
-    }).length;
-  };
+      for (let dayNum = 1; dayNum <= daysInCurrentMonth; dayNum++) {
+        const date = new Date(year, month, dayNum);
+        cells.push({
+          date,
+          isCurrentMonth: true,
+          isToday: isSameDay(date, today),
+          isSaturday: date.getDay() === 6,
+          dayNumber: dayNum,
+          treks: treksByDayMap.get(formatDayKey(date)) || EMPTY_TREKS,
+        });
+      }
+
+      const remaining = (7 - (cells.length % 7)) % 7;
+      for (let dayNum = 1; dayNum <= remaining; dayNum++) {
+        const date = new Date(year, month + 1, dayNum);
+        cells.push({
+          date,
+          isCurrentMonth: false,
+          isToday: isSameDay(date, today),
+          isSaturday: date.getDay() === 6,
+          dayNumber: dayNum,
+          treks: EMPTY_TREKS,
+        });
+      }
+
+      return { monthKey, monthLabel, monthTrekCount, gridDays: cells };
+    });
+  }, [monthsList, treksByDayMap, monthTrekCounts]);
 
   // Horizontal scroll handlers
   const handleScrollByStep = (direction: -1 | 1) => {
@@ -260,7 +271,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = ({
     }
   };
 
-  const selectedDayTreks = selectedDate ? getTreksOnDay(selectedDate) : [];
+  const selectedDayTreks = selectedDate ? getTreksOnDay(selectedDate) : EMPTY_TREKS;
 
   return (
     <div className="bg-white rounded-xl border border-[#F0EBE5] p-2 sm:p-2.5 shadow-xs space-y-2">
@@ -329,16 +340,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = ({
             ref={scrollContainerRef}
             className="relative flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scroll-smooth"
           >
-            {monthsList.map((monthDate) => {
-              const monthKey = getMonthKey(monthDate);
-              const monthLabel = monthDate.toLocaleDateString('en-US', {
-                month: 'long',
-                year: 'numeric',
-              });
-              const monthTrekCount = getTreksCountForMonth(monthDate);
-              const gridDays = buildMonthGrid(monthDate);
-
-              return (
+            {monthCardsData.map(({ monthKey, monthLabel, monthTrekCount, gridDays }) => (
                 <div
                   key={monthKey}
                   data-month-key={monthKey}
@@ -468,8 +470,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = ({
                     </div>
                   </div>
                 </div>
-              );
-            })}
+            ))}
           </div>
 
           {/* Selected Date Details Strip */}
@@ -586,4 +587,4 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = ({
       )}
     </div>
   );
-};
+});

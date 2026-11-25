@@ -18,7 +18,7 @@ import {
   UserCheck,
   Settings,
 } from 'lucide-react';
-import { SubPageType } from './InfoPagesModal';
+import type { SubPageType } from './InfoPagesModal';
 import { useAuth } from '../context/AuthContext';
 import { User, LogOut } from 'lucide-react';
 import { NavigationNotifications } from '../services/notificationService';
@@ -35,7 +35,7 @@ interface BottomNavProps {
   notifications?: NavigationNotifications;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({
+export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   currentTab,
   onTabChange,
   bookingCount,
@@ -408,4 +408,4 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       </div>
     </nav>
   );
-};
+});

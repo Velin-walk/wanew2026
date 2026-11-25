@@ -19,7 +19,7 @@ interface ParticipantStackProps {
   }) => void;
 }
 
-export const ParticipantStack: React.FC<ParticipantStackProps> = ({
+export const ParticipantStack: React.FC<ParticipantStackProps> = React.memo(({
   participantsCount = { total: 0, male: 0, female: 0 },
   recentParticipants = [],
   totalCount,
@@ -147,19 +147,21 @@ export const ParticipantStack: React.FC<ParticipantStackProps> = ({
         </div>
       </div>
 
-      <ParticipantsModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        trekName={trekName}
-        hikeNumber={hikeNumber}
-        trekId={trekId}
-        totalCount={totalParticipants}
-        participantsCount={participantsCount}
-        recentParticipants={recentParticipants}
-        guideName={guideName}
-        assistantGuides={assistantGuides}
-        onRosterSynced={onRosterSynced}
-      />
+      {isModalOpen && (
+        <ParticipantsModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          trekName={trekName}
+          hikeNumber={hikeNumber}
+          trekId={trekId}
+          totalCount={totalParticipants}
+          participantsCount={participantsCount}
+          recentParticipants={recentParticipants}
+          guideName={guideName}
+          assistantGuides={assistantGuides}
+          onRosterSynced={onRosterSynced}
+        />
+      )}
     </>
   );
-};
+});

@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { Trek } from '../types';
 import { Calendar, UserCheck, FileText, ExternalLink, CheckCircle, Star, Ban, Camera } from 'lucide-react';
-import { TrekPhotosModal } from './TrekPhotosModal';
-import { GuideProfileModal } from './GuideProfileModal';
 import { useAuth } from '../context/AuthContext';
+
+const TrekPhotosModal = lazy(() =>
+  import('./TrekPhotosModal').then((m) => ({ default: m.TrekPhotosModal }))
+);
+const GuideProfileModal = lazy(() =>
+  import('./GuideProfileModal').then((m) => ({ default: m.GuideProfileModal }))
+);
 
 interface PastEventListItemProps {
   trek: Trek;
@@ -13,7 +18,7 @@ interface PastEventListItemProps {
   onLeaveFeedback?: (trek: Trek) => void;
 }
 
-export const PastEventListItem: React.FC<PastEventListItemProps> = ({
+export const PastEventListItem: React.FC<PastEventListItemProps> = React.memo(({
   trek,
   onViewItinerary,
   onLeaveFeedback,
@@ -159,20 +164,26 @@ export const PastEventListItem: React.FC<PastEventListItemProps> = ({
         )}
       </div>
 
-      <TrekPhotosModal
-        isOpen={photosOpen}
-        onClose={() => setPhotosOpen(false)}
-        trek={trek}
-      />
+      {photosOpen && (
+        <Suspense fallback={null}>
+          <TrekPhotosModal
+            isOpen={photosOpen}
+            onClose={() => setPhotosOpen(false)}
+            trek={trek}
+          />
+        </Suspense>
+      )}
 
-      {trek.leader && (
-        <GuideProfileModal
-          isOpen={guideModalOpen}
-          onClose={() => setGuideModalOpen(false)}
-          guideName={trek.leader}
-          currentTrek={trek}
-        />
+      {guideModalOpen && trek.leader && (
+        <Suspense fallback={null}>
+          <GuideProfileModal
+            isOpen={guideModalOpen}
+            onClose={() => setGuideModalOpen(false)}
+            guideName={trek.leader}
+            currentTrek={trek}
+          />
+        </Suspense>
       )}
     </div>
   );
-};
+});

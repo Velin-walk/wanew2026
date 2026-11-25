@@ -25,27 +25,33 @@ const FLUSH_INTERVAL_MS = 25000;          // Flush queue every 25 seconds
 const MAX_QUEUE_SIZE = 8;                 // Or immediately when 8 events accumulate
 const MAX_BACKLOG_SIZE = 30;              // Max re-queued items on network failure
 
-// In-memory queue
+// In-memory queue & cached device info
 let eventQueue: BehaviorEvent[] = [];
 let flushTimer: any = null;
+let cachedStaticDeviceInfo: Record<string, any> | null = null;
 
 export function getDeviceInfo(): Record<string, any> {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return {};
-  const ua = navigator.userAgent || '';
-  const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-  const isTablet = /iPad|Tablet|(Android(?!.*Mobile))/i.test(ua) || isIPadOS;
-  const isMobile = !isTablet && /Mobi|iPhone|Android/i.test(ua);
+  if (!cachedStaticDeviceInfo) {
+    const ua = navigator.userAgent || '';
+    const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const isTablet = /iPad|Tablet|(Android(?!.*Mobile))/i.test(ua) || isIPadOS;
+    const isMobile = !isTablet && /Mobi|iPhone|Android/i.test(ua);
+    const adminMeta = getAdminDeviceMetadata();
 
-  const adminMeta = getAdminDeviceMetadata();
+    cachedStaticDeviceInfo = {
+      deviceType: isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
+      screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+      lang: navigator.language || 'en',
+      user_agent: ua,
+      device_id: adminMeta.device_id,
+      device_name: adminMeta.device_name,
+    };
+  }
 
   return {
-    deviceType: isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
-    screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+    ...cachedStaticDeviceInfo,
     viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`,
-    lang: navigator.language || 'en',
-    user_agent: ua,
-    device_id: adminMeta.device_id,
-    device_name: adminMeta.device_name
   };
 }
 
@@ -138,10 +144,7 @@ export async function flushBehaviorEvents(): Promise<void> {
   }
 }
 
-/**
- * Main tracking dispatcher. Enqueues an event and schedules background flush.
- */
-export function trackEvent(
+function enqueueTrackEvent(
   eventType: string,
   category: BehaviorEvent['category'],
   targetId?: string | null,
@@ -171,6 +174,22 @@ export function trackEvent(
       }, FLUSH_INTERVAL_MS);
     }
   } catch {}
+}
+
+/**
+ * Main tracking dispatcher. Defers non-visual work off the interaction frame so
+ * taps paint immediately before telemetry runs.
+ */
+export function trackEvent(
+  eventType: string,
+  category: BehaviorEvent['category'],
+  targetId?: string | null,
+  metadata?: Record<string, any>
+): void {
+  if (typeof window === 'undefined') return;
+  setTimeout(() => {
+    enqueueTrackEvent(eventType, category, targetId, metadata);
+  }, 0);
 }
 
 // Convenience Helpers

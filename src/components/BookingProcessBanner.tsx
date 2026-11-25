@@ -7,7 +7,7 @@ const steps = [
   { title: 'Come to meetup point', body: 'Hike with the Team.' },
 ];
 
-export const BookingProcessBanner: React.FC = () => {
+export const BookingProcessBanner: React.FC = React.memo(() => {
   return (
     <section
       aria-label="How to Join Walk Nepal Treks"
@@ -102,4 +102,4 @@ export const BookingProcessBanner: React.FC = () => {
       </div>
     </section>
   );
-};
+});

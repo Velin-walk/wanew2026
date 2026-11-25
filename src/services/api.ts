@@ -1153,7 +1153,6 @@ export async function likeBlog(blogId: number) {
 
 /**
  * Upload an image directly to Cloudflare R2 Storage with progress tracking.
- * Eliminates dependency on Cloudinary with zero third-party lock-in.
  */
 export function uploadImageToR2WithProgress(
   fileOrBlob: File | Blob,
