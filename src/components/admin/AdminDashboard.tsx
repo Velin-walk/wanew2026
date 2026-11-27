@@ -2375,6 +2375,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
               registrations={registrations}
               loading={loadingRegistrations}
               onRefresh={fetchRegistrations}
+              currentUserEmail={currentUserEmail}
+              restrictToAssignedEvents={isCoordinatorOnly}
             />
           )
         ) : (
@@ -2411,6 +2413,8 @@ export default function AdminDashboard({ currentUserEmail }: AdminDashboardProps
             registrations={registrations}
             loading={loadingRegistrations}
             onRefresh={fetchRegistrations}
+            currentUserEmail={currentUserEmail}
+            restrictToAssignedEvents={isCoordinatorOnly}
           />
         )}
 

@@ -425,3 +425,20 @@ export const parseEventDate = (dateStr?: string): Date | null => {
 
 export const parseTrekDate = parseEventDate;
 
+export const getGenderCategory = (gender?: string | null): 'female' | 'male' | 'other' => {
+  const g = String(gender || '').toLowerCase().trim();
+  if (!g) return 'other';
+  if (g === 'f' || g.includes('female') || g.includes('woman')) return 'female';
+  if (g === 'm' || g.includes('male') || g.includes('man')) return 'male';
+  return 'other';
+};
+
+export const getGenderTextColorClass = (
+  gender?: string | null,
+  fallback = 'text-stone-700'
+): string => {
+  const cat = getGenderCategory(gender);
+  if (cat === 'female') return 'text-purple-700';
+  if (cat === 'male') return 'text-blue-700';
+  return fallback;
+};

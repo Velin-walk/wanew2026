@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { jsPDF } from 'jspdf';
 import {
   FileSpreadsheet,
   Printer,
@@ -34,14 +35,23 @@ import {
   useResolvedGuideProfiles,
 } from './BookingsManager';
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
-import { fetchLeaderboardData } from '../../services/api';
+import { apiFetch, fetchLeaderboardData } from '../../services/api';
+import { getGuidesSettings, EVENT_NAME as GUIDES_UPDATED_EVENT } from '../../services/guidesService';
 import { HikerStats } from '../../types/leaderboard';
 import { AdminHikerProfileModal } from './AdminHikerProfileModal';
-import { parseTrekDate } from '../../adminUtils';
+import { useAuth } from '../../context/AuthContext';
+import {
+  getGenderCategory,
+  getGenderTextColorClass,
+  isCoordinatorEmail,
+  isFullAdminEmail,
+  parseTrekDate,
+} from '../../adminUtils';
 import {
   cleanPhoneDigits,
   extractHikeNumber,
   getRegistrationEventKey,
+  guideNamesMatch,
   matchesPhone,
   normalizePhoneLast10,
 } from '../../utils/matchingUtils';
@@ -51,6 +61,8 @@ interface CoordinatorHubProps {
   registrations: AdminRegistration[];
   loading: boolean;
   onRefresh: () => void;
+  currentUserEmail?: string;
+  restrictToAssignedEvents?: boolean;
 }
 
 type FilterType = 'all' | 'paid' | 'pending' | 'due';
@@ -116,10 +128,73 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   registrations: rawRegistrations,
   loading,
   onRefresh,
+  currentUserEmail,
+  restrictToAssignedEvents,
 }) => {
+  const { user, userEmail: authEmail, userPhone: authPhone } = useAuth();
+  const effectiveEmail = (currentUserEmail || authEmail || user?.email || '').toLowerCase().trim();
+  const isRestrictedGuide = Boolean(
+    restrictToAssignedEvents ??
+      (effectiveEmail && !isFullAdminEmail(effectiveEmail) && isCoordinatorEmail(effectiveEmail))
+  );
+
   // Exclude Cancelled, Waitlisted, and Cancelled by User from Coordinator Hub
   const [leaderboardHikers, setLeaderboardHikers] = useState<HikerStats[]>([]);
   const [activeProfileHiker, setActiveProfileHiker] = useState<{ name: string; phone?: string; email?: string } | null>(null);
+  const [guideIdentityInfo, setGuideIdentityInfo] = useState<{ names: string[]; phones: string[] }>({
+    names: [],
+    phones: [],
+  });
+  const [customGuidesList, setCustomGuidesList] = useState(() => {
+    try {
+      return getGuidesSettings().custom_guides || [];
+    } catch {
+      return [];
+    }
+  });
+
+  React.useEffect(() => {
+    const handleGuidesUpdated = () => {
+      try {
+        setCustomGuidesList(getGuidesSettings().custom_guides || []);
+      } catch {}
+    };
+    window.addEventListener(GUIDES_UPDATED_EVENT, handleGuidesUpdated);
+    return () => window.removeEventListener(GUIDES_UPDATED_EVENT, handleGuidesUpdated);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isRestrictedGuide || !effectiveEmail) {
+      setGuideIdentityInfo({ names: [], phones: [] });
+      return;
+    }
+    let cancelled = false;
+    apiFetch(`admin/user-identity?email=${encodeURIComponent(effectiveEmail)}`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const json = await res.json();
+        const data = json?.data;
+        if (!data || cancelled) return;
+        const profile = data.profile || {};
+        const contacts: Array<{ type: string; value: string }> = Array.isArray(data.contacts)
+          ? data.contacts
+          : [];
+        const names = [profile.full_name, profile.display_name]
+          .map((n) => String(n || '').trim())
+          .filter(Boolean);
+        const phones = [
+          profile.whatsapp_number,
+          ...contacts.filter((c) => c.type === 'phone').map((c) => c.value),
+        ]
+          .map((p) => String(p || '').trim())
+          .filter(Boolean);
+        setGuideIdentityInfo({ names, phones });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isRestrictedGuide, effectiveEmail]);
 
   // Load Leaderboard data for lifetime hikes and phone matching
   React.useEffect(() => {
@@ -220,7 +295,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
 
 
   // 2. Filter for upcoming events + events in last 1 month
-  const upcomingTreks = useMemo(() => {
+  const unscopedUpcomingTreks = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayMs = today.getTime();
@@ -264,6 +339,122 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       });
   }, [allAvailableTreks, registrations]);
 
+  // Resolve guide profiles across all candidate upcoming events when restricting visibility for guides
+  const allUpcomingGuideNames = useMemo(() => {
+    if (!isRestrictedGuide) return [] as string[];
+    const set = new Set<string>();
+    unscopedUpcomingTreks.forEach((t) => {
+      const mRegs = registrations.filter((r) => doesRegistrationMatchTrek(r, t));
+      const { leadName, asstNames } = resolveTrekGuides(t, mRegs);
+      if (leadName) set.add(leadName);
+      asstNames.forEach((a) => {
+        if (a) set.add(a);
+      });
+    });
+    return Array.from(set);
+  }, [isRestrictedGuide, unscopedUpcomingTreks, registrations]);
+
+  const upcomingGuideProfiles = useResolvedGuideProfiles(
+    allUpcomingGuideNames,
+    rawRegistrations,
+    leaderboardHikers
+  );
+
+  const upcomingTreks = useMemo(() => {
+    if (!isRestrictedGuide) return unscopedUpcomingTreks;
+    if (!effectiveEmail) return [];
+
+    const emailMatchesGuideName = (guideName: string, email: string): boolean => {
+      if (!guideName || !email) return false;
+      const local = (email.split('@')[0] || '').toLowerCase().replace(/[^a-z]/g, '');
+      if (local.length < 3) return false;
+      const tokens = normalizeGuideCompare(guideName)
+        .split(' ')
+        .map((t) => t.replace(/[^a-z]/g, ''))
+        .filter((t) => t.length >= 3);
+      if (tokens.length === 0) return false;
+      if (tokens.length === 1) {
+        return tokens[0].length >= 4 && (local === tokens[0] || (tokens[0].length >= 5 && local.includes(tokens[0])));
+      }
+      return tokens.every((t) => local.includes(t));
+    };
+
+    const guideNamesForUser = new Set<string>();
+    const guidePhonesForUser = new Set<string>();
+
+    if (user?.displayName && user.displayName.trim()) {
+      guideNamesForUser.add(user.displayName.trim());
+    }
+    guideIdentityInfo.names.forEach((n) => guideNamesForUser.add(n));
+    guideIdentityInfo.phones.forEach((p) => guidePhonesForUser.add(p));
+    if (authPhone && authPhone.trim()) guidePhonesForUser.add(authPhone.trim());
+
+    rawRegistrations.forEach((r) => {
+      const rEmails = [r.email, r.user_email, r.email_address]
+        .map((e) => String(e || '').toLowerCase().trim())
+        .filter(Boolean);
+      if (rEmails.includes(effectiveEmail)) {
+        if (r.full_name) guideNamesForUser.add(r.full_name.trim());
+        const ph = r.phone || r.whatsapp || (r as any).whatsapp_number;
+        if (ph) guidePhonesForUser.add(String(ph).trim());
+      }
+    });
+
+    leaderboardHikers.forEach((h) => {
+      if (String(h.e || '').toLowerCase().trim() === effectiveEmail) {
+        if (h.n) guideNamesForUser.add(h.n.trim());
+        const ph = h.phone || h.p;
+        if (ph) guidePhonesForUser.add(String(ph).trim());
+      }
+    });
+
+    customGuidesList.forEach((cg) => {
+      if (emailMatchesGuideName(cg.name, effectiveEmail)) {
+        guideNamesForUser.add(cg.name.trim());
+        if (cg.phone) guidePhonesForUser.add(cg.phone.trim());
+      }
+    });
+
+    const userNamesArr = Array.from(guideNamesForUser);
+    const userPhonesArr = Array.from(guidePhonesForUser);
+
+    return unscopedUpcomingTreks.filter((t) => {
+      const mRegs = registrations.filter((r) => doesRegistrationMatchTrek(r, t));
+      const { leadName, asstNames } = resolveTrekGuides(t, mRegs);
+      const allottedGuides = [leadName, ...asstNames].filter(Boolean);
+      if (allottedGuides.length === 0) return false;
+
+      return allottedGuides.some((gName) => {
+        if (emailMatchesGuideName(gName, effectiveEmail)) return true;
+        if (userNamesArr.some((myName) => guideNamesMatch(gName, myName, { allowSingleWordFirstName: true }))) {
+          return true;
+        }
+        const profile = upcomingGuideProfiles.get(normalizeGuideCompare(gName));
+        if (profile) {
+          if (profile.email && profile.email.toLowerCase().trim() === effectiveEmail) {
+            return true;
+          }
+          if (profile.phone && userPhonesArr.some((myPh) => matchesPhone(profile.phone, myPh))) {
+            return true;
+          }
+        }
+        return false;
+      });
+    });
+  }, [
+    isRestrictedGuide,
+    unscopedUpcomingTreks,
+    effectiveEmail,
+    user?.displayName,
+    authPhone,
+    guideIdentityInfo,
+    rawRegistrations,
+    registrations,
+    leaderboardHikers,
+    customGuidesList,
+    upcomingGuideProfiles,
+  ]);
+
   const [selectedTrekId, setSelectedTrekId] = useState<string>('');
   const [showZeroParticipants, setShowZeroParticipants] = useState<boolean>(false);
 
@@ -288,6 +479,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         const chosen = trekWithBookings || upcomingTreks[0];
         setSelectedTrekId(chosen.id || chosen.hike_number || '');
       }
+    } else if (selectedTrekId) {
+      setSelectedTrekId('');
     }
   }, [upcomingTreks, selectedTrekId, registrations]);
 
@@ -855,7 +1048,553 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
   };
 
   const handlePrintManifest = () => {
-    window.print();
+    if (!currentTrek) return;
+
+    try {
+      const doc = new jsPDF('l', 'mm', 'a4');
+      const pageW = doc.internal.pageSize.getWidth(); // 297
+      const pageH = doc.internal.pageSize.getHeight(); // 210
+      const margin = 10;
+      const contentW = pageW - margin * 2; // 277
+
+      const rows = filteredAndSortedRegistrations;
+      const guideCount = rows.filter((r) => Boolean(r._guideRole)).length;
+      const guestCount = rows.filter((r) => !r._guideRole).length;
+      const totalPaidAmt = rows.reduce((acc, r) => acc + (r.paid_amount || 0), 0);
+      const totalDueAmt = rows.reduce((acc, r) => acc + (r.due_amount || 0), 0);
+
+      const hikeNumPrefix =
+        currentTrek.hike_number && currentTrek.hike_number !== 'TBD'
+          ? `Hike #${currentTrek.hike_number} — `
+          : '';
+      const titleText = `${hikeNumPrefix}${currentTrek.name || 'Trek Roster'}`;
+      const dateText = currentTrek.date || 'Flexible Date';
+
+      const cols = [
+        { label: 'S.N.', w: 9, align: 'center' as const },
+        { label: 'NAME', w: 44, align: 'left' as const },
+        { label: 'PHONE', w: 24, align: 'left' as const },
+        { label: 'PICKUP', w: 30, align: 'left' as const },
+        { label: 'PAX', w: 12, align: 'center' as const },
+        { label: 'PAID', w: 18, align: 'left' as const },
+        { label: 'DUE', w: 18, align: 'left' as const },
+        { label: 'AGE', w: 14, align: 'left' as const },
+        { label: 'GENDER', w: 15, align: 'left' as const },
+        { label: 'SUGGESTIONS', w: 29, align: 'left' as const },
+        { label: 'UPDATES', w: 28, align: 'left' as const },
+        { label: 'MEDICAL', w: 23, align: 'left' as const },
+        { label: 'HIKES', w: 13, align: 'center' as const },
+      ];
+
+      const colXs: number[] = [];
+      let accX = margin;
+      for (const c of cols) {
+        colXs.push(accX);
+        accX += c.w;
+      }
+
+      const drawHeaderBanner = () => {
+        doc.setFillColor(22, 163, 74);
+        doc.rect(margin, 8, contentW, 1.5, 'F');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(31, 41, 55);
+        doc.text(titleText, margin, 16);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(107, 114, 128);
+        doc.text(
+          `${dateText}   •   ${rows.length} Listed (Guides ${guideCount}, Guests ${guestCount})   •   Collected: Rs ${totalPaidAmt.toLocaleString()}   •   Due: Rs ${totalDueAmt.toLocaleString()}`,
+          margin,
+          21.5
+        );
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(21, 128, 61);
+        doc.text('Walk Nepal Walk — Coordinator Manifest', pageW - margin, 16, { align: 'right' });
+      };
+
+      const drawTableHeader = (yPos: number): number => {
+        const thH = 7;
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(229, 231, 235);
+        doc.rect(margin, yPos, contentW, thH, 'FD');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        cols.forEach((c, i) => {
+          const x = c.align === 'center' ? colXs[i] + c.w / 2 : colXs[i] + 1.5;
+          doc.text(c.label, x, yPos + 4.7, { align: c.align });
+        });
+        return yPos + thH;
+      };
+
+      drawHeaderBanner();
+      let y = drawTableHeader(25);
+
+      const lineH = 3.6;
+
+      if (rows.length === 0) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(156, 163, 175);
+        doc.text('No registered hikers found matching criteria', pageW / 2, y + 10, {
+          align: 'center',
+        });
+      } else {
+        rows.forEach((r, idx) => {
+          const pastHikes = r._isSyntheticGuide
+            ? '—'
+            : String(getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name));
+
+          const roleLabel =
+            r._guideRole === 'leader'
+              ? ' (Leader)'
+              : r._guideRole === 'assistant'
+              ? ' (Asst. Leader)'
+              : '';
+          const nameVal = `${r.full_name || 'Participant'}${roleLabel}`;
+          const phoneVal = r.phone || '—';
+          const pickupVal = r.pickup_point || '—';
+          const paxVal = String(getRegPaxDisplay(r));
+          const paidVal = r._isSyntheticGuide
+            ? '—'
+            : r.paid_amount > 0
+            ? `Rs ${r.paid_amount}`
+            : '-';
+          const dueVal = r.due_amount > 0 ? `Rs ${r.due_amount}` : '—';
+          const ageVal = r.age_group || '—';
+          const genderVal = r.gender || '—';
+          const suggVal = r.suggestions || '—';
+          const updVal = r.admin_notes || r.person_remarks || '—';
+          const hasMed =
+            Boolean(r.has_medical) &&
+            r.has_medical!.toLowerCase() !== 'no' &&
+            r.has_medical!.toLowerCase() !== 'none';
+          const medVal = hasMed ? r.specify_medical || r.has_medical || 'Yes' : 'None';
+
+          const cellTexts = [
+            String(idx + 1),
+            nameVal,
+            phoneVal,
+            pickupVal,
+            paxVal,
+            paidVal,
+            dueVal,
+            ageVal,
+            genderVal,
+            suggVal,
+            updVal,
+            medVal,
+            pastHikes,
+          ];
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          const wrappedCells = cellTexts.map((txt, ci) =>
+            doc.splitTextToSize(String(txt), Math.max(4, cols[ci].w - 3))
+          );
+          const maxLines = Math.max(1, ...wrappedCells.map((lines) => lines.length));
+          const rowH = Math.max(7, maxLines * lineH + 3);
+
+          if (y + rowH > pageH - 14) {
+            doc.addPage();
+            drawHeaderBanner();
+            y = drawTableHeader(25);
+          }
+
+          if (r._guideRole === 'leader') {
+            doc.setFillColor(255, 251, 235);
+          } else if (r._guideRole === 'assistant') {
+            doc.setFillColor(240, 249, 255);
+          } else if (idx % 2 === 1) {
+            doc.setFillColor(250, 248, 245);
+          } else {
+            doc.setFillColor(255, 255, 255);
+          }
+          doc.rect(margin, y, contentW, rowH, 'F');
+          doc.setDrawColor(243, 244, 246);
+          doc.line(margin, y + rowH, margin + contentW, y + rowH);
+
+          wrappedCells.forEach((lines, ci) => {
+            if (ci === 1) {
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(17, 24, 39);
+            } else if (ci === 8) {
+              const gCat = getGenderCategory(r.gender);
+              doc.setFont('helvetica', 'bold');
+              if (gCat === 'female') doc.setTextColor(126, 34, 206);
+              else if (gCat === 'male') doc.setTextColor(29, 78, 216);
+              else doc.setTextColor(55, 65, 81);
+            } else if (ci === 6 && r.due_amount > 0) {
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(190, 18, 60);
+            } else if (ci === 11 && hasMed) {
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(225, 29, 72);
+            } else if (ci === 0 || ci === 4 || ci === 12) {
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(55, 65, 81);
+            } else {
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(75, 85, 99);
+            }
+
+            const align = cols[ci].align;
+            const x = align === 'center' ? colXs[ci] + cols[ci].w / 2 : colXs[ci] + 1.5;
+            doc.text(lines, x, y + 4.4, { align });
+          });
+
+          y += rowH;
+        });
+
+        // Total summary row
+        if (y + 8 > pageH - 12) {
+          doc.addPage();
+          drawHeaderBanner();
+          y = drawTableHeader(25);
+        }
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(229, 231, 235);
+        doc.rect(margin, y, contentW, 8, 'FD');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text('TOTAL', colXs[3] + cols[3].w - 2, y + 5.2, { align: 'right' });
+
+        doc.setTextColor(31, 41, 55);
+        doc.text(String(rows.length), colXs[4] + cols[4].w / 2, y + 5.2, { align: 'center' });
+
+        doc.setTextColor(4, 120, 87);
+        doc.text(`Rs ${totalPaidAmt.toLocaleString()}`, colXs[5] + 1.5, y + 5.2);
+
+        doc.setTextColor(190, 18, 60);
+        doc.text(`Rs ${totalDueAmt.toLocaleString()}`, colXs[6] + 1.5, y + 5.2);
+      }
+
+      const pageCount = doc.getNumberOfPages();
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(156, 163, 175);
+        doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageH - 5);
+        doc.text(`Page ${p} of ${pageCount}`, pageW - margin, pageH - 5, { align: 'right' });
+      }
+
+      const safeFileBase = (currentTrek.name || 'Trek')
+        .trim()
+        .replace(/[^a-z0-9\-_ ]/gi, '')
+        .replace(/\s+/g, '_');
+      doc.save(`${safeFileBase || 'Trek'}_Coordinator_Manifest.pdf`);
+    } catch (err) {
+      console.error('Coordinator Manifest PDF generation failed:', err);
+      window.print();
+    }
+  };
+
+  const handleExportParticipantViewPng = () => {
+    if (!currentTrek) return;
+
+    const orderedRoster = [...trekRosterWithGuides].sort((a, b) => {
+      const rank = (r: CoordinatorRow) =>
+        r._guideRole === 'leader' ? 0 : r._guideRole === 'assistant' ? 1 : 2;
+      return rank(a) - rank(b);
+    });
+
+    const guideCount = orderedRoster.filter((r) => Boolean(r._guideRole)).length;
+    const guestCount = orderedRoster.filter((r) => !r._guideRole).length;
+    const totalCount = orderedRoster.length;
+
+    const scale = 2;
+    const pad = 24;
+    const width = 1000;
+    const cardW = width - pad * 2;
+    const headerH = 92;
+    const thH = 38;
+    const rowH = 40;
+    const footerH = 44;
+    const bodyRows = Math.max(1, orderedRoster.length);
+    const height = pad * 2 + headerH + thH + bodyRows * rowH + footerH;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.scale(scale, scale);
+
+    const drawRoundRect = (x: number, y: number, w: number, h: number, r: number) => {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    };
+
+    const fitText = (text: string, maxW: number): string => {
+      const str = String(text || '');
+      if (ctx.measureText(str).width <= maxW) return str;
+      let cut = str;
+      while (cut.length > 1 && ctx.measureText(cut + '…').width > maxW) {
+        cut = cut.slice(0, -1);
+      }
+      return cut + '…';
+    };
+
+    // Outer background
+    ctx.fillStyle = '#FAF8F5';
+    ctx.fillRect(0, 0, width, height);
+
+    // Main card container
+    ctx.save();
+    drawRoundRect(pad, pad, cardW, height - pad * 2, 16);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#E7E5E4';
+    ctx.stroke();
+    ctx.clip();
+
+    // Top green accent bar
+    ctx.fillStyle = '#16A34A';
+    ctx.fillRect(pad, pad, cardW, 5);
+
+    // Header text
+    const hikeNum =
+      currentTrek.hike_number && currentTrek.hike_number !== 'TBD'
+        ? `Hike #${currentTrek.hike_number} — `
+        : '';
+    const titleText = `${hikeNum}${currentTrek.name || 'Trek Roster'}`;
+    const dateText = currentTrek.date || 'Flexible Date';
+
+    ctx.fillStyle = '#1F2937';
+    ctx.font = '800 20px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fitText(titleText, cardW - 180), pad + 20, pad + 34);
+
+    ctx.fillStyle = '#6B7280';
+    ctx.font = '600 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText(
+      fitText(`${dateText}   •   ${totalCount} Participants (Guides ${guideCount}, Guests ${guestCount})`, cardW - 180),
+      pad + 20,
+      pad + 60
+    );
+
+    // Right brand pill in header
+    const brandText = 'Walk Nepal Walk';
+    ctx.font = '700 11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    const brandW = ctx.measureText(brandText).width + 20;
+    drawRoundRect(pad + cardW - brandW - 20, pad + 24, brandW, 24, 12);
+    ctx.fillStyle = '#ECFDF5';
+    ctx.fill();
+    ctx.strokeStyle = '#A7F3D0';
+    ctx.stroke();
+    ctx.fillStyle = '#15803D';
+    ctx.textAlign = 'center';
+    ctx.fillText(brandText, pad + cardW - brandW / 2 - 20, pad + 36);
+    ctx.textAlign = 'left';
+
+    // Divider under header
+    const thY = pad + headerH;
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(pad, thY, cardW, thH);
+    ctx.strokeStyle = '#E5E7EB';
+    ctx.beginPath();
+    ctx.moveTo(pad, thY);
+    ctx.lineTo(pad + cardW, thY);
+    ctx.moveTo(pad, thY + thH);
+    ctx.lineTo(pad + cardW, thY + thH);
+    ctx.stroke();
+
+    // Column geometry (S.N., NAME, GENDER, PICKUP POINT, PAX, TOTAL HIKES)
+    const colSnX = pad + 28;
+    const colNameX = pad + 70;
+    const colGenderX = pad + 470;
+    const colPickupX = pad + 528;
+    const colPaxX = pad + 802;
+    const colHikesX = pad + 898;
+
+    ctx.fillStyle = '#64748B';
+    ctx.font = '800 10px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    const thMidY = thY + thH / 2;
+    ctx.textAlign = 'center';
+    ctx.fillText('S.N.', colSnX, thMidY);
+    ctx.textAlign = 'left';
+    ctx.fillText('NAME', colNameX, thMidY);
+    ctx.textAlign = 'center';
+    ctx.fillText('GENDER', colGenderX, thMidY);
+    ctx.textAlign = 'left';
+    ctx.fillText('PICKUP POINT', colPickupX, thMidY);
+    ctx.textAlign = 'center';
+    ctx.fillText('PAX', colPaxX, thMidY);
+    ctx.fillText('TOTAL HIKES', colHikesX, thMidY);
+    ctx.textAlign = 'left';
+
+    // Rows
+    if (orderedRoster.length === 0) {
+      ctx.fillStyle = '#9CA3AF';
+      ctx.font = '600 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('No registered participants found', pad + cardW / 2, thY + thH + rowH / 2);
+      ctx.textAlign = 'left';
+    } else {
+      orderedRoster.forEach((r, idx) => {
+        const y = thY + thH + idx * rowH;
+        const midY = y + rowH / 2;
+
+        // Row background
+        if (r._guideRole === 'leader') {
+          ctx.fillStyle = '#FFFBEB';
+        } else if (r._guideRole === 'assistant') {
+          ctx.fillStyle = '#F0F9FF';
+        } else {
+          ctx.fillStyle = idx % 2 === 0 ? '#FFFFFF' : '#FAF8F5';
+        }
+        ctx.fillRect(pad, y, cardW, rowH);
+
+        // Row bottom border
+        ctx.strokeStyle = '#F3F4F6';
+        ctx.beginPath();
+        ctx.moveTo(pad, y + rowH);
+        ctx.lineTo(pad + cardW, y + rowH);
+        ctx.stroke();
+
+        // S.N.
+        ctx.fillStyle = '#4B5563';
+        ctx.font = '700 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(idx + 1), colSnX, midY);
+        ctx.textAlign = 'left';
+
+        // NAME + optional role badge
+        const badgeText =
+          r._guideRole === 'leader'
+            ? 'LEADER'
+            : r._guideRole === 'assistant'
+            ? 'ASST. LEADER'
+            : '';
+        let badgeSpace = 0;
+        if (badgeText) {
+          ctx.font = '800 9px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+          badgeSpace = ctx.measureText(badgeText).width + 22;
+        }
+
+        ctx.fillStyle = '#111827';
+        ctx.font = '700 12.5px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+        const displayName = fitText(r.full_name || 'Participant', colGenderX - colNameX - 58 - badgeSpace);
+        ctx.fillText(displayName, colNameX, midY);
+
+        if (badgeText) {
+          const nameW = ctx.measureText(displayName).width;
+          ctx.font = '800 9px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+          const pillW = ctx.measureText(badgeText).width + 12;
+          const pillX = colNameX + nameW + 8;
+          const pillY = midY - 9;
+          drawRoundRect(pillX, pillY, pillW, 18, 9);
+          ctx.fillStyle = r._guideRole === 'leader' ? '#FEF3C7' : '#E0F2FE';
+          ctx.fill();
+          ctx.strokeStyle = r._guideRole === 'leader' ? '#FCD34D' : '#7DD3FC';
+          ctx.stroke();
+          ctx.fillStyle = r._guideRole === 'leader' ? '#92400E' : '#075985';
+          ctx.textAlign = 'center';
+          ctx.fillText(badgeText, pillX + pillW / 2, midY + 0.5);
+          ctx.textAlign = 'left';
+        }
+
+        // GENDER
+        const gCat = getGenderCategory(r.gender);
+        ctx.fillStyle =
+          gCat === 'female' ? '#7E22CE' : gCat === 'male' ? '#1D4ED8' : '#4B5563';
+        ctx.font = '700 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(fitText(r.gender || '—', 84), colGenderX, midY);
+        ctx.textAlign = 'left';
+
+        // PICKUP POINT
+        ctx.fillStyle = '#4B5563';
+        ctx.font = '500 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+        ctx.fillText(fitText(r.pickup_point || '—', colPaxX - colPickupX - 36), colPickupX, midY);
+
+        // PAX
+        ctx.fillStyle = '#1F2937';
+        ctx.font = '700 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(getRegPaxDisplay(r)), colPaxX, midY);
+
+        // TOTAL HIKES
+        const hikesVal = r._isSyntheticGuide
+          ? '—'
+          : String(getHikerPastCount(r.phone || r.whatsapp || (r as any).whatsapp_number || '', r.full_name));
+        ctx.fillStyle = '#374151';
+        ctx.fillText(hikesVal, colHikesX, midY);
+        ctx.textAlign = 'left';
+      });
+    }
+
+    // Footer bar
+    const footerY = thY + thH + bodyRows * rowH;
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(pad, footerY, cardW, footerH);
+    ctx.strokeStyle = '#E5E7EB';
+    ctx.beginPath();
+    ctx.moveTo(pad, footerY);
+    ctx.lineTo(pad + cardW, footerY);
+    ctx.stroke();
+
+    ctx.fillStyle = '#6B7280';
+    ctx.font = '600 11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText('Participant Roster • Shared Event List', pad + 20, footerY + footerH / 2);
+
+    ctx.fillStyle = '#1F2937';
+    ctx.font = '700 11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`Total Participants: ${totalCount}`, pad + cardW - 20, footerY + footerH / 2);
+    ctx.textAlign = 'left';
+
+    ctx.restore();
+
+    const safeFileBase = (currentTrek.name || 'Trek')
+      .trim()
+      .replace(/[^a-z0-9\-_ ]/gi, '')
+      .replace(/\s+/g, '_');
+    const fileName = `${safeFileBase || 'Trek'}_Participant_View.png`;
+
+    const triggerDownload = (href: string, revokeAfter: boolean) => {
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      if (revokeAfter) {
+        setTimeout(() => URL.revokeObjectURL(href), 1000);
+      }
+    };
+
+    if (canvas.toBlob) {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          triggerDownload(URL.createObjectURL(blob), true);
+        } else {
+          triggerDownload(canvas.toDataURL('image/png'), false);
+        }
+      }, 'image/png');
+    } else {
+      triggerDownload(canvas.toDataURL('image/png'), false);
+    }
   };
 
   return (
@@ -900,6 +1639,16 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           >
             <Printer className="w-4 h-4 text-stone-600" />
             <span>Print / PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportParticipantViewPng}
+            title="Download shareable participant roster PNG (excludes phone, payments, medical & admin notes)"
+            className="px-3.5 py-2 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Users className="w-4 h-4 text-sky-600" />
+            <span>Participant View</span>
           </button>
         </div>
       </div>
@@ -1021,7 +1770,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       )}
 
       {/* ── COMPACT KPI & DEMOGRAPHICS SUMMARY (SINGLE ROW, ZERO DUPLICATION) ── */}
-      {(() => {
+      {!(isRestrictedGuide && upcomingTreks.length === 0) && (() => {
         const newPct = hikerCount > 0 ? Math.round((firstTimersCount / hikerCount) * 100) : 0;
         const retPct = hikerCount > 0 ? Math.round((returningCount / hikerCount) * 100) : 0;
         const guideCount = trekRosterWithGuides.filter((r) => Boolean(r._guideRole)).length;
@@ -1100,19 +1849,19 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                 <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden flex">
                   <div
                     style={{ width: `${genderBreakdown.femalePct}%` }}
-                    className="bg-[#E11D48] h-full transition-all"
+                    className="bg-purple-600 h-full transition-all"
                   />
                   <div
                     style={{ width: `${genderBreakdown.malePct}%` }}
-                    className="bg-[#2563EB] h-full transition-all"
+                    className="bg-blue-600 h-full transition-all"
                   />
                 </div>
-                <div className="flex items-center gap-2.5 text-[11px] font-semibold text-stone-600 flex-wrap">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-xs bg-[#E11D48]" /> F {genderBreakdown.female} ({genderBreakdown.femalePct}%)
+                <div className="flex items-center gap-2.5 text-[11px] font-semibold flex-wrap">
+                  <span className="flex items-center gap-1 text-purple-700">
+                    <span className="w-2 h-2 rounded-xs bg-purple-600" /> F {genderBreakdown.female} ({genderBreakdown.femalePct}%)
                   </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-xs bg-[#2563EB]" /> M {genderBreakdown.male} ({genderBreakdown.malePct}%)
+                  <span className="flex items-center gap-1 text-blue-700">
+                    <span className="w-2 h-2 rounded-xs bg-blue-600" /> M {genderBreakdown.male} ({genderBreakdown.malePct}%)
                   </span>
                 </div>
               </div>
@@ -1142,13 +1891,23 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         );
       })()}
 
+      {isRestrictedGuide && upcomingTreks.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-stone-200 p-8 text-center shadow-2xs space-y-2">
+          <Compass className="w-8 h-8 text-stone-400 mx-auto" />
+          <h3 className="text-base font-bold text-[#1F2937]">No Events Allotted to You</h3>
+          <p className="text-xs font-medium text-stone-500 max-w-md mx-auto">
+            Only events where you are allotted as the Lead Guide or Assistant Guide appear here.
+          </p>
+        </div>
+      ) : (
+        <>
       {/* ── HIKER ROSTER TABLE WRAP ── */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-2xs overflow-hidden">
         {/* Table Header Bar */}
         <div className="p-2.5 sm:p-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <h2 className="text-sm sm:text-base font-bold text-[#1F2937]">
             {currentTrek?.hike_number && currentTrek.hike_number !== 'TBD' ? `Hike #${currentTrek.hike_number} - ` : ''}
-            {currentTrek?.name || 'Pachpokhari'} ({currentTrek?.date || 'Flexible'}) — {totalRegistered} hikers
+            {currentTrek?.name || 'Event'} ({currentTrek?.date || 'Flexible'}) — {totalRegistered} hikers
           </h2>
 
           {/* Filter Chips */}
@@ -1420,7 +2179,7 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
                       </td>
 
                       {/* GENDER */}
-                      <td className="py-2 px-2.5 font-medium text-stone-700 text-xs">
+                      <td className={`py-2 px-2.5 font-semibold text-xs ${getGenderTextColorClass(r.gender)}`}>
                         {r.gender || '—'}
                       </td>
 
@@ -1500,6 +2259,8 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {/* Lightbox Modal for Admin/Coordinator Viewing Payment Voucher */}
       {viewingVoucherUrl && (

@@ -44,7 +44,7 @@ import {
   EVENT_NAME as GUIDES_UPDATED_EVENT,
   getGuidesSettings,
 } from '../../services/guidesService';
-import { parseTrekDate } from '../../adminUtils';
+import { getGenderTextColorClass, parseTrekDate } from '../../adminUtils';
 import {
   cleanPhoneDigits,
   doesRegistrationMatchTrek,
@@ -2753,7 +2753,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
                             </td>
 
                             {/* Gender */}
-                            <td className="py-1.5 px-2 align-middle text-[11px] font-medium text-stone-700 whitespace-nowrap">
+                            <td className={`py-1.5 px-2 align-middle text-[11px] font-semibold whitespace-nowrap ${getGenderTextColorClass(reg.gender)}`}>
                               {reg.gender || '—'}
                             </td>
 

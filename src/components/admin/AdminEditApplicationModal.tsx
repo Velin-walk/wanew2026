@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Trek, TeamMember } from '../../types';
 import { AdminRegistration } from './BookingsManager';
 import { MiniPrayerFlags } from '../NepaliPrayerFlags';
+import { getGenderTextColorClass } from '../../adminUtils';
 import {
   X,
   User,
@@ -491,10 +492,13 @@ export const AdminEditApplicationModal: React.FC<AdminEditApplicationModalProps>
                   <select
                     value={gender}
                     onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] text-[#1F1F1F] focus:outline-none focus:ring-1 focus:ring-[#7ABA42]"
+                    className={`w-full px-2 py-1 text-xs font-semibold border border-[#D6D3CD] rounded-lg bg-[#FAF9F6] focus:outline-none focus:ring-1 focus:ring-[#7ABA42] ${getGenderTextColorClass(
+                      gender,
+                      'text-[#1F1F1F]'
+                    )}`}
                   >
                     {genderOptions.map((g) => (
-                      <option key={g} value={g}>
+                      <option key={g} value={g} className={getGenderTextColorClass(g, 'text-[#1F1F1F]')}>
                         {g}
                       </option>
                     ))}
@@ -567,10 +571,13 @@ export const AdminEditApplicationModal: React.FC<AdminEditApplicationModalProps>
                           <select
                             value={tm.gender}
                             onChange={(e) => handleUpdateTeamMember(idx, 'gender', e.target.value)}
-                            className="px-1.5 py-1 text-xs border border-[#D6D3CD] rounded bg-white"
+                            className={`px-1.5 py-1 text-xs font-semibold border border-[#D6D3CD] rounded bg-white ${getGenderTextColorClass(
+                              tm.gender,
+                              'text-[#1F1F1F]'
+                            )}`}
                           >
                             {genderOptions.map((g) => (
-                              <option key={g} value={g}>
+                              <option key={g} value={g} className={getGenderTextColorClass(g, 'text-[#1F1F1F]')}>
                                 {g}
                               </option>
                             ))}

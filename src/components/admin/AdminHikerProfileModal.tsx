@@ -31,6 +31,7 @@ import { Trek } from '../../types';
 import { HikerStats, HikerCompletedEvent } from '../../types/leaderboard';
 import { apiFetch, fetchLeaderboardData } from '../../services/api';
 import { cleanPhoneDigits, matchesPhone } from '../../utils/matchingUtils';
+import { getGenderTextColorClass } from '../../adminUtils';
 
 /**
  * Match a hiker/guide name to their Leaderboard record without loose substring collisions
@@ -730,7 +731,12 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
                   </span>
                 )}
                 {genderAgeLabel && (
-                  <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#EFEAE4] text-[#4A4541] border border-[#D5D0C9] whitespace-nowrap shadow-3xs">
+                  <span
+                    className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#EFEAE4] border border-[#D5D0C9] whitespace-nowrap shadow-3xs ${getGenderTextColorClass(
+                      primaryGender,
+                      'text-[#4A4541]'
+                    )}`}
+                  >
                     {genderAgeLabel}
                   </span>
                 )}
@@ -1106,15 +1112,21 @@ export const AdminHikerProfileModal: React.FC<AdminHikerProfileModalProps> = ({
                           <div>
                             <strong className="text-stone-900">Companions:</strong>{' '}
                             {reg.team_members
-                              .map((m) =>
-                                m.full_name
-                                  ? m.gender
-                                    ? `${m.full_name} (${m.gender})`
-                                    : m.full_name
-                                  : m.gender || ''
-                              )
-                              .filter(Boolean)
-                              .join(', ')}
+                              .map((m, mIdx, arr) => {
+                                if (!m.full_name && !m.gender) return null;
+                                return (
+                                  <React.Fragment key={mIdx}>
+                                    {m.full_name && <span>{m.full_name}</span>}
+                                    {m.gender && (
+                                      <span className={`font-semibold ${getGenderTextColorClass(m.gender, '')}`}>
+                                        {m.full_name ? ` (${m.gender})` : m.gender}
+                                      </span>
+                                    )}
+                                    {mIdx < arr.length - 1 ? ', ' : ''}
+                                  </React.Fragment>
+                                );
+                              })
+                              .filter(Boolean)}
                           </div>
                         </div>
                       )}

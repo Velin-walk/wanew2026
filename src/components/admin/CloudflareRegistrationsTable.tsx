@@ -20,6 +20,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
+import { getGenderTextColorClass } from '../../adminUtils';
 
 interface CloudflareRegistrationsTableProps {
   registrations: any[];
@@ -578,7 +579,13 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
                             }`}
                           >
                             <div className="flex items-center justify-between gap-1 group/cell">
-                              <span className="truncate">
+                              <span
+                                className={`truncate ${
+                                  col.key === 'gender' && !isNull
+                                    ? `font-semibold ${getGenderTextColorClass(String(rawVal), '')}`
+                                    : ''
+                                }`}
+                              >
                                 {isNull ? (
                                   <span className="text-stone-300 italic font-sans text-[11px]">
                                     null
@@ -688,7 +695,13 @@ export const CloudflareRegistrationsTable: React.FC<CloudflareRegistrationsTable
                         </span>
                       </div>
                       <div className="col-span-8 text-stone-900 break-all select-text font-sans flex items-start justify-between gap-2">
-                        <span>
+                        <span
+                          className={
+                            col.key === 'gender' && !isNull
+                              ? `font-semibold ${getGenderTextColorClass(String(val), '')}`
+                              : ''
+                          }
+                        >
                           {isNull ? (
                             <span className="text-stone-300 italic font-mono text-xs">
                               null

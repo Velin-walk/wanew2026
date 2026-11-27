@@ -25,6 +25,7 @@ import {
   deduplicateGuides,
 } from '../../services/guidesService';
 import { buildAuditChanges, recordAdminAuditLog } from '../../services/api';
+import { getGenderTextColorClass } from '../../adminUtils';
 
 interface GuidesManagerProps {
   currentUserEmail?: string;
@@ -536,8 +537,8 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
             onClick={() => setFilterGender('Male')}
             className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               filterGender === 'Male'
-                ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-sm'
-                : 'bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200'
+                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-sm'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
             }`}
           >
             Male
@@ -547,8 +548,8 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
             onClick={() => setFilterGender('Female')}
             className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               filterGender === 'Female'
-                ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-sm'
-                : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-sm'
+                : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
             }`}
           >
             Female
@@ -586,8 +587,8 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                       : !guide.is_visible
                       ? 'bg-rose-50/35 border-l-neutral-300 text-neutral-500'
                       : idx % 2 === 0
-                      ? `bg-white hover:bg-amber-50/50 text-[#1F1F1F] ${isFemale ? 'border-l-rose-400' : 'border-l-sky-400'}`
-                      : `bg-sky-50/35 hover:bg-amber-50/50 text-[#1F1F1F] ${isFemale ? 'border-l-rose-400' : 'border-l-teal-400'}`
+                      ? `bg-white hover:bg-amber-50/50 text-[#1F1F1F] ${isFemale ? 'border-l-purple-400' : 'border-l-blue-400'}`
+                      : `bg-sky-50/35 hover:bg-amber-50/50 text-[#1F1F1F] ${isFemale ? 'border-l-purple-400' : 'border-l-blue-500'}`
                   }`}
                 >
                   <td className="p-3 text-center align-middle">
@@ -596,8 +597,8 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                         !guide.is_visible
                           ? 'bg-neutral-200 text-neutral-600'
                           : isFemale
-                          ? 'bg-gradient-to-br from-rose-500 to-pink-500 text-white'
-                          : 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white'
+                          ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white'
+                          : 'bg-gradient-to-br from-blue-500 to-blue-600 text-white'
                       }`}
                     >
                       {idx + 1}
@@ -765,10 +766,13 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   <select
                     value={editingGuide.gender}
                     onChange={(e) => setEditingGuide({ ...editingGuide, gender: e.target.value as 'Male' | 'Female' })}
-                    className="w-full px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/30 focus:bg-white focus:outline-none focus:border-sky-500 text-[#1F1F1F]"
+                    className={`w-full px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/30 focus:bg-white focus:outline-none focus:border-sky-500 font-bold ${getGenderTextColorClass(
+                      editingGuide.gender,
+                      'text-[#1F1F1F]'
+                    )}`}
                   >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
+                    <option value="Male" className="text-blue-700 font-bold">Male</option>
+                    <option value="Female" className="text-purple-700 font-bold">Female</option>
                   </select>
                 </div>
               </div>
@@ -897,10 +901,13 @@ export const GuidesManager: React.FC<GuidesManagerProps> = ({
                   <select
                     value={newGuide.gender}
                     onChange={(e) => setNewGuide({ ...newGuide, gender: e.target.value as 'Male' | 'Female' })}
-                    className="w-full px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/30 focus:bg-white focus:outline-none focus:border-sky-500 text-[#1F1F1F]"
+                    className={`w-full px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/30 focus:bg-white focus:outline-none focus:border-sky-500 font-bold ${getGenderTextColorClass(
+                      newGuide.gender,
+                      'text-[#1F1F1F]'
+                    )}`}
                   >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
+                    <option value="Male" className="text-blue-700 font-bold">Male</option>
+                    <option value="Female" className="text-purple-700 font-bold">Female</option>
                   </select>
                 </div>
               </div>

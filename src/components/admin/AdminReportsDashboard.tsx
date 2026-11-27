@@ -45,6 +45,7 @@ import { AdminRegistration } from './BookingsManager';
 import { HISTORICAL_TREKS } from '../../data/historicalTreks';
 import { fetchLeaderboardData } from '../../services/api';
 import { DEFAULT_GUIDES, getGuidesSettings } from '../../services/guidesService';
+import { getGenderTextColorClass } from '../../adminUtils';
 import {
   cleanPhoneDigits,
   doesRegistrationMatchTrek,
@@ -1548,21 +1549,21 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
               <div className="space-y-3">
                 <div className="flex items-center h-3 rounded-full overflow-hidden bg-[#F0EBE5]">
                   <div
-                    className="bg-indigo-600 h-full"
+                    className="bg-blue-600 h-full"
                     style={{ width: `${Math.round((metrics.genderCounts.male / metrics.genderCounts.total) * 100)}%` }}
                   />
                   <div
-                    className="bg-rose-500 h-full"
+                    className="bg-purple-600 h-full"
                     style={{ width: `${Math.round((metrics.genderCounts.female / metrics.genderCounts.total) * 100)}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[11px] font-bold text-[#1F1F1F]">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+                <div className="flex items-center justify-between text-[11px] font-bold">
+                  <span className="flex items-center gap-1 text-blue-700">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
                     Male ({Math.round((metrics.genderCounts.male / metrics.genderCounts.total) * 100)}%)
                   </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                  <span className="flex items-center gap-1 text-purple-700">
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-600" />
                     Female ({Math.round((metrics.genderCounts.female / metrics.genderCounts.total) * 100)}%)
                   </span>
                 </div>
@@ -1793,22 +1794,22 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                 </th>
               </tr>
               <tr className="bg-[#FAF8F5] border-b border-[#EFEAE4] text-[10px] font-bold text-[#8B8680] tracking-wider whitespace-nowrap">
-                <th className="py-1.5 px-2 text-center border-l border-l-[#E5E1DB] border-r border-[#EFEAE4]/60 bg-sky-50/35 text-sky-700">
+                <th className="py-1.5 px-2 text-center border-l border-l-[#E5E1DB] border-r border-[#EFEAE4]/60 bg-blue-50/40 text-blue-700">
                   <button
                     type="button"
                     onClick={() => handleSortToggle('gender_m', 'desc')}
-                    className="group inline-flex items-center justify-center gap-0.5 hover:text-sky-900 cursor-pointer"
+                    className="group inline-flex items-center justify-center gap-0.5 hover:text-blue-900 cursor-pointer"
                     title="Sort by Male count"
                   >
                     <span>M</span>
                     {renderSortIcon('gender_m')}
                   </button>
                 </th>
-                <th className="py-1.5 px-2 text-center border-r border-[#EFEAE4]/60 bg-pink-50/45 text-pink-600">
+                <th className="py-1.5 px-2 text-center border-r border-[#EFEAE4]/60 bg-purple-50/45 text-purple-700">
                   <button
                     type="button"
                     onClick={() => handleSortToggle('gender_f', 'desc')}
-                    className="group inline-flex items-center justify-center gap-0.5 hover:text-pink-800 cursor-pointer"
+                    className="group inline-flex items-center justify-center gap-0.5 hover:text-purple-900 cursor-pointer"
                     title="Sort by Female count"
                   >
                     <span>F</span>
@@ -1982,16 +1983,16 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                     </td>
 
                     {/* 6. Gender Sub-columns (M, F, NB) */}
-                    <td className="py-3 px-2 text-center whitespace-nowrap border-l border-l-[#E5E1DB] border-r border-[#EFEAE4]/40 bg-sky-50/15">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-l border-l-[#E5E1DB] border-r border-[#EFEAE4]/40 bg-blue-50/15">
                       {item.genders && item.genders.male.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'gender_male' })}
-                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50/90 hover:bg-sky-100 border border-sky-200/80 text-sky-700 font-bold cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-blue-50/90 hover:bg-blue-100 border border-blue-200/80 text-blue-700 font-bold cursor-pointer transition-colors"
                           title="View male hikers"
                         >
                           <span>{item.genders.male.count}</span>
-                          <span className="text-[10px] text-sky-600/80 font-normal">
+                          <span className="text-[10px] text-blue-600/80 font-normal">
                             ({item.genders.male.pct}%)
                           </span>
                         </button>
@@ -1999,16 +2000,16 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                         <span className="text-[#BDB8B0] font-normal">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-[#EFEAE4]/40 bg-pink-50/20">
+                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-[#EFEAE4]/40 bg-purple-50/20">
                       {item.genders && item.genders.female.count > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailModal({ item, type: 'gender_female' })}
-                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-600 font-bold cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold cursor-pointer transition-colors"
                           title="View female hikers"
                         >
-                          <span className="text-pink-600 font-extrabold">{item.genders.female.count}</span>
-                          <span className="text-[10px] text-pink-500/80 font-normal">
+                          <span className="text-purple-700 font-extrabold">{item.genders.female.count}</span>
+                          <span className="text-[10px] text-purple-600/80 font-normal">
                             ({item.genders.female.pct}%)
                           </span>
                         </button>
@@ -2279,7 +2280,11 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                             {r.email || r.user_email || r.email_address}
                           </span>
                         )}
-                        {r.gender && <span>{r.gender}</span>}
+                        {r.gender && (
+                          <span className={`font-semibold ${getGenderTextColorClass(r.gender, 'text-[#8B8680]')}`}>
+                            {r.gender}
+                          </span>
+                        )}
                         {r.age_group && <span>{r.age_group}</span>}
                       </div>
                       {(r.admin_notes || r.person_remarks) && (
@@ -2323,7 +2328,17 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
                     <span className="px-2 py-0.5 rounded-md bg-stone-900 text-white font-mono text-[10px] font-extrabold">
                       #{item.hikeNumber}
                     </span>
-                    <h3 className="text-base font-black text-[#1F1F1F]">{getTitle()}</h3>
+                    <h3
+                      className={`text-base font-black ${
+                        type === 'gender_female'
+                          ? 'text-purple-700'
+                          : type === 'gender_male'
+                          ? 'text-blue-700'
+                          : 'text-[#1F1F1F]'
+                      }`}
+                    >
+                      {getTitle()}
+                    </h3>
                   </div>
                   <p className="text-xs text-[#8B8680] mt-0.5 font-medium">
                     {item.title} • {item.date}
