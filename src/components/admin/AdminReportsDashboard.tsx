@@ -49,6 +49,7 @@ import {
   cleanPhoneDigits,
   doesRegistrationMatchTrek,
   extractHikeNumber,
+  getRegistrationEventKey,
   matchesPhone,
   normalizePhoneLast10,
 } from '../../utils/matchingUtils';
@@ -391,9 +392,9 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
     return { phoneMap, nameMap };
   }, [leaderboardHikers]);
 
-  // Lifetime Hike Count Map from local registrations (excluding duplicate/cancelled applications)
+  // Lifetime Hike Count Map from local registrations (unique events only, excluding duplicate/cancelled applications)
   const hikerPastHikesMap = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, Set<string>>();
     registrations.forEach((r) => {
       const st = safeTrimLower(r.status || (r as any).registration_status);
       if (
@@ -408,11 +409,18 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
       const rawPh = r.phone || r.whatsapp || (r as any).whatsapp_number || '';
       const phKey = cleanPhoneDigits(rawPh).length >= 7 ? normalizePhoneLast10(rawPh) : '';
       const nameKey = (r.full_name || '').toLowerCase().trim();
+      const eventKey = getRegistrationEventKey(r);
+      if (!eventKey) return;
       if (phKey) {
-        map.set(phKey, (map.get(phKey) || 0) + 1);
+        const existing = map.get(phKey);
+        if (existing) existing.add(eventKey);
+        else map.set(phKey, new Set([eventKey]));
       }
       if (nameKey) {
-        map.set(`name:${nameKey}`, (map.get(`name:${nameKey}`) || 0) + 1);
+        const nKey = `name:${nameKey}`;
+        const existing = map.get(nKey);
+        if (existing) existing.add(eventKey);
+        else map.set(nKey, new Set([eventKey]));
       }
     });
     return map;
@@ -443,13 +451,13 @@ export const AdminReportsDashboard: React.FC<AdminReportsDashboardProps> = ({
       return leaderboardPhoneMap.nameMap.get(cleanName)!;
     }
 
-    // 3. Fallback: Local registrations count (normalized phone key)
+    // 3. Fallback: Local registrations unique event count (normalized phone key)
     const nameKey = `name:${cleanName}`;
     if (last10.length >= 7 && hikerPastHikesMap.has(last10)) {
-      return hikerPastHikesMap.get(last10) || 1;
+      return hikerPastHikesMap.get(last10)?.size || 1;
     }
     if (nameKey && hikerPastHikesMap.has(nameKey)) {
-      return hikerPastHikesMap.get(nameKey) || 1;
+      return hikerPastHikesMap.get(nameKey)?.size || 1;
     }
     return 1;
   };

@@ -90,6 +90,42 @@ const normalizeExplicitHikeToken = (val?: unknown): string => {
   return raw.replace(/^hike-/, '').replace(/^#/, '').replace(/\s+/g, ' ').trim();
 };
 
+/**
+ * Produces a canonical event key for a registration so multiple submissions
+ * by the same hiker for the same hike/trek collapse to 1 unique event.
+ */
+export const getRegistrationEventKey = (r: any): string => {
+  if (!r) return '';
+  const rawHikeNum = String(r.hike_number || '').trim();
+  const isPriv =
+    rawHikeNum.toUpperCase() === 'PRIVATE' ||
+    String(r.trek_name || '').toLowerCase().includes('private');
+
+  const nameNorm = normAlnum(r.trek_name);
+  const dateNorm = normAlnum(r.trek_date || r.date);
+
+  if (isPriv) {
+    if (nameNorm || dateNorm) return `private:${nameNorm}:${dateNorm}`;
+    return `private:row:${String(r.id || '')}`;
+  }
+
+  const hDigits = extractHikeNumber(r);
+  if (hDigits) {
+    return `hike:${hDigits}`;
+  }
+
+  const trekId = String(r.trek_id || '').trim().toLowerCase();
+  if (trekId && !isPlaceholderHikeValue(trekId)) {
+    return `trek:${trekId}`;
+  }
+
+  if (nameNorm || dateNorm) {
+    return `name:${nameNorm}:${dateNorm}`;
+  }
+
+  return `row:${String(r.id || '')}`;
+};
+
 const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 const parseDayMonth = (d?: string): { day: number; month: string } | null => {

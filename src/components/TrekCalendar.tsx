@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Trek } from '../types';
+import { getNepalHoliday } from '../data/nepalHolidays';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -131,47 +132,47 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
     }
   }, [initialMonth, isCollapsed]);
 
-  // Precompute day-to-treks map & month counts once per treks change (O(T * duration) instead of O(months * 31 * T))
+  // Precompute day-to-treks map & month counts once per treks change
   const { treksByDayMap, monthTrekCounts } = useMemo(() => {
     const dayMap = new Map<string, Trek[]>();
     const monthCounts = new Map<string, number>();
+    const seenKeys = new Set<string>();
 
     for (const trek of treks) {
+      if (!trek) continue;
+      const tid = String(trek.id || '').trim();
+      const hNum = String(trek.hike_number || trek.data?.hikeNumber || '').trim();
       const dStr = trek.date || trek.data?.hikeDate || (trek as any).hike_date || '';
       if (!dStr) continue;
       const start = parseTrekDate(dStr);
       if (!start || isNaN(start.getTime())) continue;
 
+      const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const dKey = formatDayKey(startDay);
+      const dedupeKey = tid ? `id:${tid}` : (hNum && hNum !== 'TBD' ? `num:${hNum}:${dKey}` : '');
+      if (dedupeKey && seenKeys.has(dedupeKey)) continue;
+      if (dedupeKey) seenKeys.add(dedupeKey);
+
       const mKey = getMonthKey(start);
       monthCounts.set(mKey, (monthCounts.get(mKey) || 0) + 1);
 
-      const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      const end = parseTrekEndDate ? parseTrekEndDate(dStr) : null;
-      let totalDays = 1;
-      if (end && !isNaN(end.getTime())) {
-        const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-        const diff = Math.round((endDay.getTime() - startDay.getTime()) / 86400000) + 1;
-        totalDays = Math.min(60, Math.max(1, diff));
-      } else {
-        const duration = getEventDurationDays ? getEventDurationDays(trek) : 1;
-        totalDays = Math.min(60, Math.max(1, duration));
-      }
-
-      const cursor = new Date(startDay);
-      for (let i = 0; i < totalDays; i++) {
-        const dKey = formatDayKey(cursor);
-        const existing = dayMap.get(dKey);
-        if (existing) {
+      const existing = dayMap.get(dKey);
+      if (existing) {
+        const alreadyOnDay = existing.some(
+          (t) =>
+            (tid && String(t.id || '').trim() === tid) ||
+            (hNum && hNum !== 'TBD' && String(t.hike_number || t.data?.hikeNumber || '').trim() === hNum)
+        );
+        if (!alreadyOnDay) {
           existing.push(trek);
-        } else {
-          dayMap.set(dKey, [trek]);
         }
-        cursor.setDate(cursor.getDate() + 1);
+      } else {
+        dayMap.set(dKey, [trek]);
       }
     }
 
     return { treksByDayMap: dayMap, monthTrekCounts: monthCounts };
-  }, [treks, parseTrekDate, parseTrekEndDate, getEventDurationDays]);
+  }, [treks, parseTrekDate]);
 
   const getTreksOnDay = (day: Date): Trek[] => {
     return treksByDayMap.get(formatDayKey(day)) || EMPTY_TREKS;
@@ -200,6 +201,8 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
         isCurrentMonth: boolean;
         isToday: boolean;
         isSaturday: boolean;
+        isSunday: boolean;
+        holidayName?: string;
         dayNumber: number;
         treks: Trek[];
       }[] = [];
@@ -212,6 +215,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
           isCurrentMonth: false,
           isToday: isSameDay(date, today),
           isSaturday: date.getDay() === 6,
+          isSunday: date.getDay() === 0,
           dayNumber: dayNum,
           treks: EMPTY_TREKS,
         });
@@ -219,13 +223,16 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
 
       for (let dayNum = 1; dayNum <= daysInCurrentMonth; dayNum++) {
         const date = new Date(year, month, dayNum);
+        const dayKey = formatDayKey(date);
         cells.push({
           date,
           isCurrentMonth: true,
           isToday: isSameDay(date, today),
           isSaturday: date.getDay() === 6,
+          isSunday: date.getDay() === 0,
+          holidayName: getNepalHoliday(dayKey),
           dayNumber: dayNum,
-          treks: treksByDayMap.get(formatDayKey(date)) || EMPTY_TREKS,
+          treks: treksByDayMap.get(dayKey) || EMPTY_TREKS,
         });
       }
 
@@ -237,6 +244,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
           isCurrentMonth: false,
           isToday: isSameDay(date, today),
           isSaturday: date.getDay() === 6,
+          isSunday: date.getDay() === 0,
           dayNumber: dayNum,
           treks: EMPTY_TREKS,
         });
@@ -272,6 +280,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
   };
 
   const selectedDayTreks = selectedDate ? getTreksOnDay(selectedDate) : EMPTY_TREKS;
+  const selectedHolidayName = selectedDate ? getNepalHoliday(formatDayKey(selectedDate)) : undefined;
 
   return (
     <div className="bg-white rounded-xl border border-[#F0EBE5] p-2 sm:p-2.5 shadow-xs space-y-2">
@@ -370,7 +379,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
                         <div
                           key={d}
                           className={`text-[9px] font-bold py-0.5 uppercase ${
-                            i === 6 ? 'text-amber-800 bg-amber-50/80 rounded' : 'text-[#8B8680]'
+                            i === 0 || i === 6 ? 'text-red-600 bg-red-50/80 rounded' : 'text-[#8B8680]'
                           }`}
                         >
                           {d}
@@ -382,6 +391,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
                     <div className="grid grid-cols-7 gap-0.5">
                       {gridDays.map((cell, idx) => {
                         const hasTreks = cell.isCurrentMonth && cell.treks.length > 0;
+                        const isHoliday = cell.isSaturday || cell.isSunday || Boolean(cell.holidayName);
                         const isSelected = selectedDate ? isSameDay(cell.date, selectedDate) : false;
 
                         let cellStyle = 'bg-white border-[#F0EBE5] text-[#1F1F1F] hover:border-[#D1C9BF]';
@@ -391,8 +401,8 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
                         } else if (hasTreks) {
                           cellStyle =
                             'bg-[#7ABA42]/15 border-[#7ABA42]/45 text-[#2C5712] font-bold hover:bg-[#7ABA42]/25 hover:border-[#7ABA42]';
-                        } else if (cell.isSaturday) {
-                          cellStyle = 'bg-amber-50/40 border-amber-100/80 text-[#5A5551] hover:bg-amber-50/70';
+                        } else if (isHoliday) {
+                          cellStyle = 'bg-red-50/50 border-red-200/70 text-red-600 hover:bg-red-50/80';
                         }
 
                         if (cell.isToday && cell.isCurrentMonth) {
@@ -403,6 +413,15 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
                           cellStyle += ' ring-2 ring-[#7ABA42] shadow-3xs';
                         }
 
+                        const trekTooltip = hasTreks
+                          ? cell.treks
+                              .map((t) => {
+                                const rawNum = String(t.hike_number || t.data?.hikeNumber || '').replace(/[^\d]/g, '');
+                                return `Hike #${rawNum || '•'}: ${t.name || t.title}`;
+                              })
+                              .join('\n')
+                          : '';
+
                         return (
                           <div
                             key={`${monthKey}-day-${idx}`}
@@ -412,14 +431,13 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
                             } ${cellStyle}`}
                             title={
                               hasTreks
-                                ? cell.treks
-                                    .map((t) => {
-                                      const rawNum = String(t.hike_number || t.data?.hikeNumber || '').replace(/[^\d]/g, '');
-                                      return `Hike #${rawNum || '•'}: ${t.name || t.title}`;
-                                    })
-                                    .join('\n')
+                                ? cell.holidayName
+                                  ? `${cell.holidayName}\n${trekTooltip}`
+                                  : trekTooltip
                                 : cell.isCurrentMonth
-                                ? cell.date.toLocaleDateString()
+                                ? cell.holidayName
+                                  ? `${cell.date.toLocaleDateString()} — ${cell.holidayName}`
+                                  : cell.date.toLocaleDateString()
                                 : undefined
                             }
                           >
@@ -430,7 +448,11 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
                                   cell.isToday && cell.isCurrentMonth
                                     ? 'w-3.5 h-3.5 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-[9px]'
                                     : hasTreks
-                                    ? 'font-black text-[#264D0F]'
+                                    ? isHoliday
+                                      ? 'font-black text-red-600'
+                                      : 'font-black text-[#264D0F]'
+                                    : isHoliday && cell.isCurrentMonth
+                                    ? 'font-semibold text-red-600'
                                     : ''
                                 }`}
                               >
@@ -477,7 +499,7 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
           {selectedDate && (
             <div className="mt-1 p-2 sm:p-2.5 bg-[#FAF8F5] border border-[#EBE6DF] rounded-lg">
               <div className="flex items-center justify-between pb-1.5 border-b border-[#EBE6DF]/70">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-[11px] sm:text-xs font-bold text-[#1F1F1F]">
                     {selectedDate.toLocaleDateString('en-US', {
                       weekday: 'short',
@@ -486,6 +508,11 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
                       year: 'numeric',
                     })}
                   </span>
+                  {selectedHolidayName && (
+                    <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                      {selectedHolidayName}
+                    </span>
+                  )}
                   <span className="text-[10px] font-medium text-[#8B8680]">
                     ({selectedDayTreks.length} {selectedDayTreks.length === 1 ? 'trek scheduled' : 'treks scheduled'})
                   </span>
@@ -576,8 +603,8 @@ export const TrekCalendar: React.FC<TrekCalendarProps> = React.memo(({
                 Scheduled Trek
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded bg-amber-100 border border-amber-200" />
-                Saturday
+                <span className="w-2 h-2 rounded bg-red-100 border border-red-300" />
+                <span className="text-red-600 font-medium">Holiday (Sat/Sun & Nepal Public)</span>
               </span>
             </div>
             <span className="hidden sm:inline">Scroll horizontally to browse months • Click a trek date to jump</span>

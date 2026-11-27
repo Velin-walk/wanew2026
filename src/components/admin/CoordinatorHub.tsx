@@ -41,6 +41,7 @@ import { parseTrekDate } from '../../adminUtils';
 import {
   cleanPhoneDigits,
   extractHikeNumber,
+  getRegistrationEventKey,
   matchesPhone,
   normalizePhoneLast10,
 } from '../../utils/matchingUtils';
@@ -506,20 +507,27 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
     return { phoneMap, nameMap };
   }, [leaderboardHikers]);
 
-  // Lifetime Hike Count Map from local registrations (excluding duplicate/cancelled applications)
+  // Lifetime Hike Count Map from local registrations (unique events only, excluding duplicate/cancelled applications)
   const hikerPastHikesMap = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, Set<string>>();
     registrations.forEach((r) => {
       const st = String(r.status || (r as any).registration_status || '').trim().toLowerCase();
       if (st.includes('duplicate') || st.includes('double') || st.includes('cancel') || st === 'waitlisted') return;
       const rawPh = r.phone || r.whatsapp || (r as any).whatsapp_number || '';
       const phKey = cleanPhoneDigits(rawPh).length >= 7 ? normalizePhoneLast10(rawPh) : '';
       const nameKey = (r.full_name || '').toLowerCase().trim();
+      const eventKey = getRegistrationEventKey(r);
+      if (!eventKey) return;
       if (phKey) {
-        map.set(phKey, (map.get(phKey) || 0) + 1);
+        const existing = map.get(phKey);
+        if (existing) existing.add(eventKey);
+        else map.set(phKey, new Set([eventKey]));
       }
       if (nameKey) {
-        map.set(`name:${nameKey}`, (map.get(`name:${nameKey}`) || 0) + 1);
+        const nKey = `name:${nameKey}`;
+        const existing = map.get(nKey);
+        if (existing) existing.add(eventKey);
+        else map.set(nKey, new Set([eventKey]));
       }
     });
     return map;
@@ -550,13 +558,13 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
       return leaderboardPhoneMap.nameMap.get(cleanName)!;
     }
 
-    // 3. Fallback: Local registrations count (normalized phone key)
+    // 3. Fallback: Local registrations unique event count (normalized phone key)
     const nameKey = `name:${cleanName}`;
     if (last10.length >= 7 && hikerPastHikesMap.has(last10)) {
-      return hikerPastHikesMap.get(last10) || 1;
+      return hikerPastHikesMap.get(last10)?.size || 1;
     }
     if (nameKey && hikerPastHikesMap.has(nameKey)) {
-      return hikerPastHikesMap.get(nameKey) || 1;
+      return hikerPastHikesMap.get(nameKey)?.size || 1;
     }
     return 1;
   };
@@ -1012,160 +1020,127 @@ export const CoordinatorHub: React.FC<CoordinatorHubProps> = ({
         </div>
       )}
 
-      {/* ── KPI STAT CARDS (4 CARDS WITH TOP ACCENT BARS) ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Card 1: Registered */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-[#16A34A]" />
-          <div className="text-3xl font-black text-[#1F2937] mb-0.5">{totalRegistered}</div>
-          <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
-            REGISTERED
-          </div>
-          <div className="text-xs font-semibold text-stone-600 mt-1 flex items-center gap-1">
-            <Compass className="w-3.5 h-3.5 text-stone-500" /> Trek • {currentTrek?.days || 4}D 3N
-          </div>
-        </div>
+      {/* ── COMPACT KPI & DEMOGRAPHICS SUMMARY (SINGLE ROW, ZERO DUPLICATION) ── */}
+      {(() => {
+        const newPct = hikerCount > 0 ? Math.round((firstTimersCount / hikerCount) * 100) : 0;
+        const retPct = hikerCount > 0 ? Math.round((returningCount / hikerCount) * 100) : 0;
+        const guideCount = trekRosterWithGuides.filter((r) => Boolean(r._guideRole)).length;
+        const guestCount =
+          trekRegistrations.length > 0
+            ? trekRosterWithGuides.filter((r) => !r._guideRole).length
+            : Math.max(0, totalRegistered - guideCount);
+        const totalDue = trekRegistrations.reduce((acc, r) => acc + (r.due_amount || 0), 0);
+        const hikeNumLabel =
+          currentTrek?.hike_number && currentTrek.hike_number !== 'TBD'
+            ? `#${currentTrek.hike_number}`
+            : '';
+        const ageColors = ['bg-[#DC2626]', 'bg-[#EA580C]', 'bg-[#D97706]', 'bg-[#2563EB]'];
 
-        {/* Card 2: Paid */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-stone-300" />
-          <div className="text-3xl font-black text-[#1F2937] mb-0.5">{paidCount}</div>
-          <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
-            PAID
-          </div>
-          <div className="text-xs font-semibold text-stone-600 mt-1">
-            {hikerCount > 0 ? Math.round((paidCount / hikerCount) * 100) : 0}% conversion
-          </div>
-        </div>
-
-        {/* Card 3: Revenue Collected */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-[#2563EB]" />
-          <div className="text-3xl font-black text-[#1F2937] mb-0.5">
-            Rs {totalRevenue.toLocaleString()}
-          </div>
-          <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
-            REVENUE COLLECTED
-          </div>
-          <div className="text-xs font-semibold text-stone-600 mt-1">
-            {dueCount} with outstanding dues
-          </div>
-        </div>
-
-        {/* Card 4: Returning */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-[#2563EB]" />
-          <div className="text-3xl font-black text-[#1F2937] mb-0.5">{returningCount}</div>
-          <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider">
-            RETURNING
-          </div>
-          <div className="text-xs font-semibold text-stone-600 mt-1">
-            {firstTimersCount} first-timers
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3 DEMOGRAPHIC PROGRESS BAR CARDS (IN 1 ROW) ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Card 1: New vs Returning */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-extrabold text-[#1F2937]">New vs Returning</h3>
-            <div className="flex items-center gap-2 text-[10px] font-bold">
-              <span className="flex items-center gap-1 text-[#2563EB]">
-                <span className="w-2 h-2 rounded-xs bg-[#2563EB]" /> New
-              </span>
-              <span className="flex items-center gap-1 text-[#16A34A]">
-                <span className="w-2 h-2 rounded-xs bg-[#16A34A]" /> Returning
-              </span>
-            </div>
-          </div>
-
-          <div className="h-8 w-full bg-stone-100 rounded-lg overflow-hidden flex text-white text-[11px] font-extrabold">
-            <div
-              style={{ width: `${hikerCount > 0 ? (firstTimersCount / hikerCount) * 100 : 50}%` }}
-              className="bg-[#2563EB] h-full flex items-center justify-center"
-            >
-              {firstTimersCount} new
-            </div>
-            <div
-              style={{ width: `${hikerCount > 0 ? (returningCount / hikerCount) * 100 : 50}%` }}
-              className="bg-[#16A34A] h-full flex items-center justify-center"
-            >
-              {returningCount} ret.
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] font-semibold text-stone-400">
-            <span>{firstTimersCount} new hikers ({hikerCount > 0 ? Math.round((firstTimersCount / hikerCount) * 100) : 50}%)</span>
-            <span>{returningCount} returning ({hikerCount > 0 ? Math.round((returningCount / hikerCount) * 100) : 50}%)</span>
-          </div>
-        </div>
-
-        {/* Card 2: Gender Breakdown */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-extrabold text-[#1F2937]">Gender Breakdown</h3>
-          </div>
-
-          <div className="h-8 w-full bg-stone-100 rounded-lg overflow-hidden flex text-white text-[11px] font-extrabold">
-            <div
-              style={{ width: `${genderBreakdown.femalePct}%` }}
-              className="bg-[#E11D48] h-full flex items-center justify-center"
-            >
-              {genderBreakdown.female}
-            </div>
-            <div
-              style={{ width: `${genderBreakdown.malePct}%` }}
-              className="bg-[#2563EB] h-full flex items-center justify-center"
-            >
-              {genderBreakdown.male}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 text-[11px] font-semibold text-stone-600">
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-xs bg-[#E11D48]" /> Female {genderBreakdown.female} ({genderBreakdown.femalePct}%)
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-xs bg-[#2563EB]" /> Male {genderBreakdown.male} ({genderBreakdown.malePct}%)
-            </span>
-          </div>
-        </div>
-
-        {/* Card 3: Age Group Breakdown */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-extrabold text-[#1F2937]">Age Group Breakdown</h3>
-          </div>
-
-          <div className="h-8 w-full bg-stone-100 rounded-lg overflow-hidden flex text-white text-[11px] font-extrabold">
-            {ageBreakdown.map((item, idx) => {
-              const bgColors = ['bg-[#DC2626]', 'bg-[#EA580C]', 'bg-[#D97706]', 'bg-[#2563EB]'];
-              return (
-                <div
-                  key={item.group}
-                  style={{ width: `${item.pct}%` }}
-                  className={`${bgColors[idx % bgColors.length]} h-full flex items-center justify-center`}
-                >
-                  {item.count}
+        return (
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-2.5">
+            {/* Core KPIs (2 compact metrics in 1 unified card) */}
+            <div className="xl:col-span-5 bg-white rounded-xl border border-stone-200 shadow-2xs grid grid-cols-2 divide-x divide-stone-100 overflow-hidden">
+              {/* Registered */}
+              <div className="p-3 relative">
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#16A34A]" />
+                <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider truncate">
+                  Registered {hikeNumLabel ? `• ${hikeNumLabel}` : ''}
                 </div>
-              );
-            })}
-          </div>
+                <div className="text-xl sm:text-2xl font-black text-[#1F2937] leading-tight mt-0.5">
+                  {totalRegistered}
+                </div>
+                <div className="text-[11px] font-medium text-stone-500 mt-0.5 truncate">
+                  Guides {guideCount} • Guests {guestCount}
+                </div>
+              </div>
 
-          <div className="flex items-center gap-3 text-[11px] font-semibold text-stone-600 flex-wrap">
-            {ageBreakdown.map((item, idx) => {
-              const bgColors = ['bg-[#DC2626]', 'bg-[#EA580C]', 'bg-[#D97706]', 'bg-[#2563EB]'];
-              return (
-                <span key={item.group} className="flex items-center gap-1">
-                  <span className={`w-2.5 h-2.5 rounded-xs ${bgColors[idx % bgColors.length]}`} /> {item.group} {item.count} ({item.pct}%)
-                </span>
-              );
-            })}
+              {/* Revenue Collected & Due Total */}
+              <div className="p-3 relative">
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#2563EB]" />
+                <div className="text-[10px] font-extrabold uppercase text-stone-400 tracking-wider truncate">
+                  Collected
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-[#1F2937] leading-tight mt-0.5 truncate">
+                  Rs {totalRevenue.toLocaleString()}
+                </div>
+                <div className={`text-[11px] font-semibold mt-0.5 truncate ${totalDue > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  Due: Rs {totalDue.toLocaleString()}{dueCount > 0 ? ` (${dueCount})` : ''}
+                </div>
+              </div>
+            </div>
+
+            {/* Compact Demographics Strip (New vs Returning, Gender, Age Group) */}
+            <div className="xl:col-span-7 bg-white rounded-xl border border-stone-200 shadow-2xs p-3 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+              {/* New vs Returning */}
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-extrabold text-[#1F2937]">New vs Returning</div>
+                <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${hikerCount > 0 ? (firstTimersCount / hikerCount) * 100 : 0}%` }}
+                    className="bg-[#2563EB] h-full transition-all"
+                  />
+                  <div
+                    style={{ width: `${hikerCount > 0 ? (returningCount / hikerCount) * 100 : 0}%` }}
+                    className="bg-[#16A34A] h-full transition-all"
+                  />
+                </div>
+                <div className="flex items-center gap-2.5 text-[11px] font-semibold text-stone-600 flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-xs bg-[#2563EB]" /> New {firstTimersCount} ({newPct}%)
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-xs bg-[#16A34A]" /> Ret. {returningCount} ({retPct}%)
+                  </span>
+                </div>
+              </div>
+
+              {/* Gender Breakdown */}
+              <div className="space-y-1.5 sm:border-l sm:border-stone-100 sm:pl-3">
+                <div className="text-[11px] font-extrabold text-[#1F2937]">Gender</div>
+                <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${genderBreakdown.femalePct}%` }}
+                    className="bg-[#E11D48] h-full transition-all"
+                  />
+                  <div
+                    style={{ width: `${genderBreakdown.malePct}%` }}
+                    className="bg-[#2563EB] h-full transition-all"
+                  />
+                </div>
+                <div className="flex items-center gap-2.5 text-[11px] font-semibold text-stone-600 flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-xs bg-[#E11D48]" /> F {genderBreakdown.female} ({genderBreakdown.femalePct}%)
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-xs bg-[#2563EB]" /> M {genderBreakdown.male} ({genderBreakdown.malePct}%)
+                  </span>
+                </div>
+              </div>
+
+              {/* Age Group Breakdown */}
+              <div className="space-y-1.5 sm:border-l sm:border-stone-100 sm:pl-3">
+                <div className="text-[11px] font-extrabold text-[#1F2937]">Age Group</div>
+                <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden flex">
+                  {ageBreakdown.map((item, idx) => (
+                    <div
+                      key={item.group}
+                      style={{ width: `${item.pct}%` }}
+                      className={`${ageColors[idx % ageColors.length]} h-full transition-all`}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 text-[11px] font-semibold text-stone-600 flex-wrap">
+                  {ageBreakdown.map((item, idx) => (
+                    <span key={item.group} className="flex items-center gap-1">
+                      <span className={`w-2 h-2 rounded-xs ${ageColors[idx % ageColors.length]}`} /> {item.group}: {item.count} ({item.pct}%)
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* ── HIKER ROSTER TABLE WRAP ── */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-2xs overflow-hidden">
